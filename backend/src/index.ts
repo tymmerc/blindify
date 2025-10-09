@@ -1,10 +1,10 @@
-import express from "express";
 import http from "http";
 import { Server } from "socket.io";
 import SpotifyWebApi from "spotify-web-api-node";
 import cookieSession from "cookie-session";
 import cors from "cors";
 import dotenv from "dotenv";
+import express from "express";
 
 dotenv.config();
 
@@ -123,7 +123,7 @@ io.on("connection", (socket) => {
 });
 
 // Démarrer le serveur
-const PORT = process.env.PORT || 4000;
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+const PORT = parseInt(process.env.PORT || '4000', 10);
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running on http://localhost:${PORT}`);
 });
