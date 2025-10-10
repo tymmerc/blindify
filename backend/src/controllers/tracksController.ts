@@ -43,7 +43,7 @@ export const getRandomLikedTracks = async (req: Request, res: Response) => {
       .map((t) => ({
         id: t.track.id,
         name: t.track.name,
-        artist: t.track.artists.map((a) => a.name).join(", "),
+        artist: t.track.artists.map((a: any) => a.name).join(", "),
         preview_url: t.track.preview_url,
         album_cover: t.track.album.images[0]?.url,
       }));
