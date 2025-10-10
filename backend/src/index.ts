@@ -14,12 +14,10 @@ const app = express();
 app.use(express.json());
 
 // <CHANGE> CORS configuré pour accepter les requêtes depuis l'IP du frontend
-app.use(
-  cors({
-    origin: "http://localhost:3000",
-    credentials: true,
-  })
-);
+app.use(cors({
+  origin: 'http://localhost:3000', // Frontend
+  credentials: true
+}));
 
 app.use(
   cookieSession({
