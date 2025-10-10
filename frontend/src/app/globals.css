@@ -1,0 +1,127 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Vibrant pink and purple color palette */
+    --background: 0 0% 100%;
+    --foreground: 280 50% 20%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 280 50% 20%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 280 50% 20%;
+
+    /* Primary: Vibrant Purple */
+    --primary: 270 80% 60%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary: Hot Pink */
+    --secondary: 330 85% 55%;
+    --secondary-foreground: 0 0% 100%;
+
+    /* Accent: Electric Blue-Purple */
+    --accent: 260 90% 65%;
+    --accent-foreground: 0 0% 100%;
+
+    --muted: 280 20% 96%;
+    --muted-foreground: 280 30% 45%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 280 20% 90%;
+    --input: 280 20% 90%;
+    --ring: 270 80% 60%;
+
+    --chart-1: 270 80% 60%;
+    --chart-2: 330 85% 55%;
+    --chart-3: 260 90% 65%;
+    --chart-4: 290 75% 58%;
+    --chart-5: 310 80% 60%;
+
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 280 50% 5%;
+    --foreground: 0 0% 98%;
+
+    --card: 280 40% 10%;
+    --card-foreground: 0 0% 98%;
+
+    --popover: 280 40% 10%;
+    --popover-foreground: 0 0% 98%;
+
+    --primary: 270 80% 65%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 330 85% 60%;
+    --secondary-foreground: 0 0% 100%;
+
+    --accent: 260 90% 70%;
+    --accent-foreground: 0 0% 100%;
+
+    --muted: 280 30% 20%;
+    --muted-foreground: 280 20% 65%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 280 30% 25%;
+    --input: 280 30% 25%;
+    --ring: 270 80% 65%;
+
+    --chart-1: 270 80% 65%;
+    --chart-2: 330 85% 60%;
+    --chart-3: 260 90% 70%;
+    --chart-4: 290 75% 63%;
+    --chart-5: 310 80% 65%;
+  }
+
+  * {
+    border-color: hsl(var(--border));
+  }
+
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+  }
+}
+
+/* Adding gradient text utility for colorful titles */
+@layer utilities {
+  .text-gradient-purple-pink {
+    background: linear-gradient(135deg, hsl(270, 80%, 60%) 0%, hsl(330, 85%, 55%) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .text-gradient-pink-purple {
+    background: linear-gradient(135deg, hsl(330, 85%, 55%) 0%, hsl(270, 80%, 60%) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Updated wave animation to only trigger on hover */
+  @keyframes wave-hover {
+    0% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+    100% {
+      background-position: 0% 50%;
+    }
+  }
+
+  .animate-wave-hover {
+    background-size: 200% 200%;
+    animation: wave-hover 1.5s ease-in-out;
+  }
+}
