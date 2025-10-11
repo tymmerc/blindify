@@ -48,35 +48,39 @@ app.get("/auth/callback", async (req, res) => {
 
   try {
     const data = await spotifyApi.authorizationCodeGrant(code as string);
-    req.session!.access_token = data.body.access_token;
-    req.session!.refresh_token = data.body.refresh_token;
+    const access_token = data.body.access_token;
+    const refresh_token = data.body.refresh_token;
 
-    res.redirect(`${process.env.FRONTEND_URL}/menu`);
+    // Envoyer les tokens dans l'URL au lieu des cookies
+    res.redirect(`${process.env.FRONTEND_URL}/menu?access_token=${access_token}&refresh_token=${refresh_token}`);
   } catch (err) {
     console.error("Error during Spotify callback:", err);
     res.redirect(`${process.env.FRONTEND_URL}?error=auth_failed`);
   }
 });
-
 // Routes API
 app.get("/api/auth/me", (req, res) => {
-  if (!req.session?.access_token) {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  
+  if (!token) {
     return res.status(401).json({ error: "Not authenticated" });
   }
   
   res.json({
     authenticated: true,
-    access_token: req.session.access_token,
+    access_token: token,
   });
 });
 
 app.get("/api/user/tracks", async (req, res) => {
-  if (!req.session?.access_token) {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  
+  if (!token) {
     return res.status(401).json({ error: "Not authenticated" });
   }
 
   try {
-    spotifyApi.setAccessToken(req.session.access_token);
+    spotifyApi.setAccessToken(token);
     const data = await spotifyApi.getMySavedTracks({ limit: 50 });
     
     const tracks = data.body.items.map((item: any) => ({
@@ -95,7 +99,9 @@ app.get("/api/user/tracks", async (req, res) => {
 });
 
 app.post("/api/games/solo/start", async (req, res) => {
-  if (!req.session?.access_token) {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  
+  if (!token) {
     return res.status(401).json({ error: "Not authenticated" });
   }
 
