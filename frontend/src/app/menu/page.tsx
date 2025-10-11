@@ -32,7 +32,7 @@ function MenuContent() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-pink-50 via-purple-50 to-pink-100">
+      <div className="min-h-screen flex items-center justify-center bg-white dark:bg-gradient-to-br dark:from-purple-950 dark:via-pink-950 dark:to-purple-900">
         <div className="text-2xl font-bold text-primary">Chargement...</div>
       </div>
     )
@@ -44,12 +44,12 @@ function MenuContent() {
 
     return (
       <PageTransition>
-        <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-pink-50 via-purple-50 to-pink-100 dark:from-purple-950 dark:via-pink-950 dark:to-purple-900 px-4 transition-colors duration-300">
+        <div className="min-h-screen flex flex-col items-center justify-center bg-white dark:bg-gradient-to-br dark:from-purple-950 dark:via-pink-950 dark:to-purple-900 px-4 transition-colors duration-300">
           <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
             <h1 className="text-6xl md:text-8xl font-bold mb-8 bg-gradient-to-r from-purple-400 via-pink-500 to-purple-600 bg-clip-text text-transparent">
               Blindify
             </h1>
-            <p className="text-xl text-gray-700 mb-8">Connecte-toi avec Spotify pour commencer</p>
+            <p className="text-xl text-gray-700 dark:text-gray-300 mb-8">Connecte-toi avec Spotify pour commencer</p>
             <a
               href={api.getLoginUrl()}
               onClick={(e) => {
@@ -67,19 +67,23 @@ function MenuContent() {
 
   return (
     <PageTransition>
-      <main className="min-h-screen flex flex-col relative overflow-hidden bg-gradient-to-br from-pink-50 via-purple-50 to-pink-100 dark:from-purple-950 dark:via-pink-950 dark:to-purple-900 transition-colors duration-300">
-        <div className="absolute inset-0 opacity-10 pointer-events-none">
+      <main className="min-h-screen flex flex-col relative overflow-hidden bg-white dark:bg-gradient-to-br dark:from-purple-950 dark:via-pink-950 dark:to-purple-900 transition-colors duration-300">
+        <div className="absolute inset-0 opacity-0 dark:opacity-10 pointer-events-none transition-opacity duration-300">
           <div className="absolute top-0 left-0 w-1/3 h-full bg-gradient-to-br from-purple-500 to-pink-500 blur-3xl" />
           <div className="absolute bottom-0 right-0 w-1/3 h-full bg-gradient-to-tl from-pink-500 to-purple-500 blur-3xl" />
         </div>
 
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-20 left-10 text-9xl text-purple-300/20 font-bold">♪</div>
-          <div className="absolute top-40 right-20 text-7xl text-pink-300/20 font-bold">♫</div>
-          <div className="absolute bottom-40 left-20 text-8xl text-purple-300/20 font-bold">♬</div>
-          <div className="absolute bottom-20 right-32 text-6xl text-pink-300/20 font-bold">♩</div>
-          <div className="absolute top-1/2 left-1/4 text-5xl text-purple-300/15 font-bold">♪</div>
-          <div className="absolute top-1/3 right-1/4 text-6xl text-pink-300/15 font-bold">♫</div>
+          <div className="absolute top-20 left-10 text-9xl text-purple-200/30 dark:text-purple-300/20 font-bold">♪</div>
+          <div className="absolute top-40 right-20 text-7xl text-pink-200/30 dark:text-pink-300/20 font-bold">♫</div>
+          <div className="absolute bottom-40 left-20 text-8xl text-purple-200/30 dark:text-purple-300/20 font-bold">
+            ♬
+          </div>
+          <div className="absolute bottom-20 right-32 text-6xl text-pink-200/30 dark:text-pink-300/20 font-bold">♩</div>
+          <div className="absolute top-1/2 left-1/4 text-5xl text-purple-200/20 dark:text-purple-300/15 font-bold">
+            ♪
+          </div>
+          <div className="absolute top-1/3 right-1/4 text-6xl text-pink-200/20 dark:text-pink-300/15 font-bold">♫</div>
         </div>
 
         <Navbar />
@@ -95,9 +99,9 @@ function MenuContent() {
               Blindify
             </h1>
 
-            <p className="text-xl sm:text-2xl text-muted-foreground font-medium max-w-2xl mx-auto leading-relaxed">
-              Le seul site de blind test où c&apos;est <span className="font-bold text-primary">ta musique</span> et
-              celle de tes potes
+            <p className="text-xl sm:text-2xl text-gray-700 dark:text-gray-300 font-medium max-w-2xl mx-auto leading-relaxed">
+              Le seul site de blind test où c&apos;est{" "}
+              <span className="font-bold text-purple-600 dark:text-purple-400">ta musique</span> et celle de tes potes
             </p>
           </motion.div>
 
@@ -146,21 +150,23 @@ function MenuContent() {
         </div>
 
         <motion.div
-          className="w-full py-10 bg-white/80 backdrop-blur-md border-t border-border
+          className="w-full py-10 bg-gray-50/90 dark:bg-white/10 backdrop-blur-md border-t border-gray-200 dark:border-white/20
                      flex flex-col sm:flex-row justify-center items-center gap-6 sm:gap-12 
-                     text-foreground text-base sm:text-lg font-medium px-4 relative z-10"
+                     text-gray-700 dark:text-gray-200 text-base sm:text-lg font-medium px-4 relative z-10"
           initial={{ opacity: 0, y: 50 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.6, duration: 0.8 }}
         >
           <span className="flex items-center gap-3">
-            <span className="font-bold text-primary text-xl">1.</span> Connecte ton compte Spotify
+            <span className="font-bold text-purple-600 dark:text-purple-400 text-xl">1.</span> Connecte ton compte
+            Spotify
           </span>
           <span className="flex items-center gap-3">
-            <span className="font-bold text-primary text-xl">2.</span> Importe tes titres likés
+            <span className="font-bold text-purple-600 dark:text-purple-400 text-xl">2.</span> Importe tes titres likés
           </span>
           <span className="flex items-center gap-3">
-            <span className="font-bold text-primary text-xl">3.</span> Mélange-les et que le meilleur gagne
+            <span className="font-bold text-purple-600 dark:text-purple-400 text-xl">3.</span> Mélange-les et que le
+            meilleur gagne
           </span>
         </motion.div>
       </main>
@@ -172,7 +178,7 @@ export default function MenuPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-pink-50 via-purple-50 to-pink-100">
+        <div className="min-h-screen flex items-center justify-center bg-white dark:bg-gradient-to-br dark:from-purple-950 dark:via-pink-950 dark:to-purple-900">
           <div className="text-2xl font-bold text-primary">Chargement...</div>
         </div>
       }
