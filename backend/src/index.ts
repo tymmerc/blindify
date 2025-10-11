@@ -24,6 +24,8 @@ app.use(
     name: "session",
     keys: [process.env.SESSION_SECRET || "supersecret123"],
     maxAge: 24 * 60 * 60 * 1000,
+    sameSite: 'none', 
+    secure: true,    
   })
 );
 
