@@ -4,7 +4,7 @@ import Link from "next/link"
 import { useEffect, useState, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import Navbar from "@/components/Navbar"
-import { api } from "@/lib/api"
+import api from "@/lib/api"
 import { PageTransition } from "@/lib/page-transition"
 
 function MenuContent() {
@@ -13,17 +13,21 @@ function MenuContent() {
   const searchParams = useSearchParams()
 
   useEffect(() => {
-    api.checkAuth().then((data: { id: string; username: string } | null) => {
-      setIsAuthenticated(!!data)
-      setIsLoading(false)
-    })
+    const access_token = searchParams.get("access_token")
+    const refresh_token = searchParams.get("refresh_token")
 
-    const token = searchParams.get("token")
-    if (token) {
-      localStorage.setItem("spotify_token", token)
-      console.log("[v0] Token stored in localStorage")
+    if (access_token && refresh_token) {
+      localStorage.setItem("spotify_access_token", access_token)
+      localStorage.setItem("spotify_refresh_token", refresh_token)
+      console.log("[v0] Tokens stored in localStorage")
       window.history.replaceState({}, "", "/menu")
     }
+
+    // Verifier l'authentification
+    api.checkAuth().then((data: { authenticated: boolean } | null) => {
+      setIsAuthenticated(!!data?.authenticated)
+      setIsLoading(false)
+    })
   }, [searchParams])
 
   if (isLoading) {
@@ -35,6 +39,9 @@ function MenuContent() {
   }
 
   if (!isAuthenticated) {
+    console.log("[v0] Login URL:", api.getLoginUrl())
+    console.log("[v0] API_URL from env:", process.env.NEXT_PUBLIC_API_URL)
+
     return (
       <PageTransition>
         <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-pink-50 via-purple-50 to-pink-100 dark:from-purple-950 dark:via-pink-950 dark:to-purple-900 px-4 transition-colors duration-300">
@@ -45,6 +52,9 @@ function MenuContent() {
             <p className="text-xl text-gray-700 mb-8">Connecte-toi avec Spotify pour commencer</p>
             <a
               href={api.getLoginUrl()}
+              onClick={(e) => {
+                console.log("[v0] Button clicked, redirecting to:", api.getLoginUrl())
+              }}
               className="inline-block px-8 py-4 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-bold text-lg rounded-full hover:shadow-2xl transition-all duration-300"
             >
               Se connecter avec Spotify

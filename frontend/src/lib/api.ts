@@ -1,10 +1,16 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"
+console.log("[v0] API_URL initialized:", API_URL)
+
+function getAuthHeaders(): Record<string, string> {
+  const token = localStorage.getItem("spotify_access_token")
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
 
 export const api = {
   async checkAuth() {
     try {
       const response = await fetch(`${API_URL}/api/auth/me`, {
-        credentials: "include",
+        headers: getAuthHeaders(),
       })
 
       if (!response.ok) return null
@@ -18,7 +24,7 @@ export const api = {
   async importTracks() {
     try {
       const response = await fetch(`${API_URL}/api/user/tracks`, {
-        credentials: "include",
+        headers: getAuthHeaders(),
       })
 
       if (!response.ok) throw new Error("Failed to import tracks")
@@ -44,7 +50,7 @@ export const api = {
 
       while (hasMore) {
         const response = await fetch(`${API_URL}/api/user/tracks?offset=${offset}&limit=${limit}`, {
-          credentials: "include",
+          headers: getAuthHeaders(),
         })
 
         if (!response.ok) throw new Error("Failed to import tracks")
@@ -72,8 +78,8 @@ export const api = {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...getAuthHeaders(),
         },
-        credentials: "include",
         body: JSON.stringify({ difficulty }),
       })
 
@@ -91,8 +97,8 @@ export const api = {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...getAuthHeaders(),
         },
-        credentials: "include",
         body: JSON.stringify(settings),
       })
 
@@ -110,8 +116,8 @@ export const api = {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...getAuthHeaders(),
         },
-        credentials: "include",
         body: JSON.stringify({ code }),
       })
 
@@ -127,7 +133,7 @@ export const api = {
     try {
       const response = await fetch(`${API_URL}/api/rooms/${roomId}/leave`, {
         method: "POST",
-        credentials: "include",
+        headers: getAuthHeaders(),
       })
 
       if (!response.ok) throw new Error("Failed to leave room")
@@ -142,7 +148,7 @@ export const api = {
     try {
       const response = await fetch(`${API_URL}/api/rooms/${roomId}/start`, {
         method: "POST",
-        credentials: "include",
+        headers: getAuthHeaders(),
       })
 
       if (!response.ok) throw new Error("Failed to start game")
@@ -156,7 +162,7 @@ export const api = {
   async getHistory() {
     try {
       const response = await fetch(`${API_URL}/api/games/history`, {
-        credentials: "include",
+        headers: getAuthHeaders(),
       })
 
       if (!response.ok) throw new Error("Failed to fetch history")
@@ -170,7 +176,7 @@ export const api = {
   async getDetailedStats() {
     try {
       const response = await fetch(`${API_URL}/api/stats/detailed`, {
-        credentials: "include",
+        headers: getAuthHeaders(),
       })
 
       if (!response.ok) throw new Error("Failed to fetch detailed stats")
@@ -187,8 +193,8 @@ export const api = {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...getAuthHeaders(),
         },
-        credentials: "include",
         body: JSON.stringify({ trackIds }),
       })
 
@@ -204,3 +210,5 @@ export const api = {
     return `${API_URL}/auth/login`
   },
 }
+
+export default api
