@@ -1,135 +1,71 @@
-import http from "http";
-import { Server } from "socket.io";
-import SpotifyWebApi from "spotify-web-api-node";
-import cookieSession from "cookie-session";
+import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import express from "express";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
+import slowDown from "express-slow-down";
+import session from "cookie-session";
+import { json, urlencoded } from "body-parser";
+import { Pool } from "pg";
+import { Server } from "socket.io";
+import http from "http";
 
 dotenv.config();
-
 const app = express();
-
-// Middleware
-app.use(express.json());
-
-// <CHANGE> CORS configuré pour accepter les requêtes depuis l'IP du frontend
-app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  credentials: true
-}));
-
-app.use(
-  cookieSession({
-    name: "session",
-    keys: [process.env.SESSION_SECRET || "supersecret123"],
-    maxAge: 24 * 60 * 60 * 1000,
-    sameSite: 'none', 
-    secure: true,    
-  })
-);
-
-// Spotify API
-const spotifyApi = new SpotifyWebApi({
-  clientId: process.env.SPOTIFY_CLIENT_ID,
-  clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
-  redirectUri: process.env.SPOTIFY_REDIRECT_URI,
-});
-
-// Routes d'authentification
-app.get("/auth/login", (req, res) => {
-  const scopes = ["user-library-read", "user-read-email", "user-read-private"];
-  const authorizeURL = spotifyApi.createAuthorizeURL(scopes);
-  res.redirect(authorizeURL);
-});
-
-app.get("/auth/callback", async (req, res) => {
-  const { code } = req.query;
-
-  try {
-    const data = await spotifyApi.authorizationCodeGrant(code as string);
-    const access_token = data.body.access_token;
-    const refresh_token = data.body.refresh_token;
-
-    // Envoyer les tokens dans l'URL au lieu des cookies
-    res.redirect(`${process.env.FRONTEND_URL}/menu?access_token=${access_token}&refresh_token=${refresh_token}`);
-  } catch (err) {
-    console.error("Error during Spotify callback:", err);
-    res.redirect(`${process.env.FRONTEND_URL}?error=auth_failed`);
-  }
-});
-// Routes API
-app.get("/api/auth/me", (req, res) => {
-  const token = req.headers.authorization?.replace('Bearer ', '');
-  
-  if (!token) {
-    return res.status(401).json({ error: "Not authenticated" });
-  }
-  
-  res.json({
-    authenticated: true,
-    access_token: token,
-  });
-});
-
-app.get("/api/user/tracks", async (req, res) => {
-  const token = req.headers.authorization?.replace('Bearer ', '');
-  
-  if (!token) {
-    return res.status(401).json({ error: "Not authenticated" });
-  }
-
-  try {
-    spotifyApi.setAccessToken(token);
-    const data = await spotifyApi.getMySavedTracks({ limit: 50 });
-    
-    const tracks = data.body.items.map((item: any) => ({
-      id: item.track.id,
-      name: item.track.name,
-      artist: item.track.artists[0].name,
-      preview_url: item.track.preview_url,
-      album_image: item.track.album.images[0]?.url,
-    }));
-
-    res.json({ tracks });
-  } catch (err) {
-    console.error("Error fetching tracks:", err);
-    res.status(500).json({ error: "Failed to fetch tracks" });
-  }
-});
-
-app.post("/api/games/solo/start", async (req, res) => {
-  const token = req.headers.authorization?.replace('Bearer ', '');
-  
-  if (!token) {
-    return res.status(401).json({ error: "Not authenticated" });
-  }
-
-  res.json({ 
-    gameId: Date.now().toString(),
-    message: "Game started" 
-  });
-});
-
-// Socket.IO
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || "http://localhost:3000",
-    credentials: true,
-  },
+    origin: [
+      "https://blindify.vercel.app",
+      "https://blindify-git-main-tymmercier-gmailcoms-projects.vercel.app"
+    ],
+    methods: ["GET", "POST"],
+    credentials: true
+  }
 });
 
-io.on("connection", (socket) => {
-  console.log("User connected:", socket.id);
+// === Middlewares ===
+app.use(helmet());
+app.use(cors({
+  origin: [
+    "https://blindify.vercel.app",
+    "https://blindify-git-main-tymmercier-gmailcoms-projects.vercel.app"
+  ],
+  credentials: true
+}));
+app.use(json());
+app.use(urlencoded({ extended: true }));
+app.use(rateLimit({ windowMs: 60_000, max: 60 }));
+app.use(slowDown({ windowMs: 60_000, delayAfter: 30, delayMs: 200 }));
+app.use(session({
+  secret: process.env.SESSION_SECRET!,
+  maxAge: 24 * 60 * 60 * 1000
+}));
 
+// === PostgreSQL ===
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL
+});
+pool.connect()
+  .then(() => console.log("✅ Connected to PostgreSQL"))
+  .catch((err) => console.error("❌ Database connection error:", err));
+
+// === Routes ===
+app.get("/", (_, res) => res.send("Blindify backend operational."));
+app.get("/health", (_, res) => res.json({ status: "ok" }));
+app.get("/api/auth/me", (_, res) => res.json({ message: "Authenticated user endpoint reachable" }));
+app.post("/games", (req, res) => res.json({ message: "Game created", body: req.body }));
+
+// === WebSocket ===
+io.on("connection", (socket) => {
+  console.log(`🔌 Client connected: ${socket.id}`);
   socket.on("disconnect", () => {
-    console.log("User disconnected:", socket.id);
+    console.log(`❌ Client disconnected: ${socket.id}`);
   });
 });
 
-// Démarrer le serveur
-const PORT = parseInt(process.env.PORT || '4000', 10);
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+// === Server start ===
+const PORT = process.env.PORT || 4000;
+server.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
 });
