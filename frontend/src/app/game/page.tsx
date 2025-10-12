@@ -173,7 +173,8 @@ export default function GamePage() {
         clearTimeout(timer)
       }
     }
-  }, [gameState.isPlaying, gameState.timeLeft, gameState.showResult, playSound])
+  }, [gameState.isPlaying, gameState.timeLeft, gameState.showResult, playSound, handleAnswer])
+
 
   useEffect(() => {
     if (gameState.tracks.length === 0) return

@@ -85,9 +85,10 @@ function MenuContent() {
           </h1>
 
           <p className="text-xl sm:text-2xl text-gray-700 font-medium max-w-2xl mx-auto leading-relaxed">
-            Le seul site de blind test où c'est <span className="font-bold text-pink-600">ta musique</span> et celle de
-            tes potes
-          </p>
+  Le seul site de blind test où c&apos;est <span className="font-bold text-pink-600">ta musique</span> et celle de
+  tes potes
+</p>
+
         </motion.div>
 
         <motion.div

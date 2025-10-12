@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"
+const API_URL = 'https://blindify-production.up.railway.app';
 console.log("[v0] API_URL initialized:", API_URL)
 
 function getAuthHeaders(): Record<string, string> {
