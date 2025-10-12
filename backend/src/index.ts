@@ -18,6 +18,7 @@ const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
     origin: [
+      "https://blindify-zeta.vercel.app",
       "https://blindify.vercel.app",
       "https://blindify-git-main-tymmercier-gmailcoms-projects.vercel.app"
     ],
@@ -30,6 +31,7 @@ const io = new Server(server, {
 app.use(helmet());
 app.use(cors({
   origin: [
+    "https://blindify-zeta.vercel.app",
     "https://blindify.vercel.app",
     "https://blindify-git-main-tymmercier-gmailcoms-projects.vercel.app"
   ],
@@ -85,16 +87,40 @@ app.get("/auth/callback", async (req, res) => {
 
     const { access_token, refresh_token } = response.data;
     res.redirect(`${process.env.FRONTEND_URL}/menu?access_token=${access_token}&refresh_token=${refresh_token}`);
-  } catch (error) {
-    console.error("❌ Spotify callback error:", error);
+  } catch (error: any) {
+    console.error("❌ Spotify callback error:", error.response?.data || error.message);
     res.status(500).send("Authentication failed");
+  }
+});
+
+// === Auth Verification Route ===
+app.get("/api/auth/me", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) return res.status(401).json({ authenticated: false });
+
+    const token = authHeader.split(" ")[1];
+    const response = await axios.get("https://api.spotify.com/v1/me", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    res.json({
+      authenticated: true,
+      user: {
+        id: response.data.id,
+        name: response.data.display_name,
+        email: response.data.email,
+      },
+    });
+  } catch (error: any) {
+    console.error("❌ Spotify auth check failed:", error.response?.data || error.message);
+    res.status(401).json({ authenticated: false });
   }
 });
 
 // === API Routes ===
 app.get("/", (_, res) => res.send("Blindify backend operational."));
 app.get("/health", (_, res) => res.json({ status: "ok" }));
-app.get("/api/auth/me", (_, res) => res.json({ message: "Authenticated user endpoint reachable" }));
 app.post("/games", (req, res) => res.json({ message: "Game created", body: req.body }));
 
 // === WebSocket ===
@@ -104,7 +130,7 @@ io.on("connection", (socket) => {
 });
 
 // === Server start ===
-const PORT = process.env.PORT || 4000;
+const PORT = process.env.PORT || 8080;
 server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
