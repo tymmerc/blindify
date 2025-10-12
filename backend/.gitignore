@@ -1,0 +1,19 @@
+# Environnement
+.env
+.env.*
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Build
+dist/
+build/
+
+# Logs
+*.log
+logs/
+
+# DB et scripts locaux
+schemaSQL.sql
+init-db.js
