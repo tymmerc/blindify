@@ -1,6 +1,11 @@
 import { Router } from "express";
 import { authController } from "../controllers/authController";
-export const authRouter = Router();
-authRouter.get("/login", authController.login);
-authRouter.get("/callback", authController.callback);
-authRouter.get("/refresh_token", authController.refreshToken);
+
+const router = Router();
+
+router.get("/login", authController.login);
+router.get("/callback", authController.callback);
+router.get("/refresh_token", authController.refreshToken);
+router.get("/me", authController.me); // maintenant existe bien
+
+export default router;

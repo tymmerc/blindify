@@ -102,4 +102,23 @@ export const authController = {
       res.status(500).json({ error: "Cannot refresh token" });
     }
   },
+
+  /**
+   * ✅ Vérifie l’authentification utilisateur (token actuel)
+   */
+  me: async (req: Request, res: Response): Promise<void> => {
+    const token = req.headers.authorization?.replace("Bearer ", "");
+    if (!token) {
+      res.status(401).json({ authenticated: false });
+      return;
+    }
+
+    const result = await pool.query(`SELECT * FROM users WHERE access_token=$1`, [token]);
+    if (!result.rows.length) {
+      res.status(401).json({ authenticated: false });
+      return;
+    }
+
+    res.json({ authenticated: true, user: result.rows[0] });
+  },
 };
