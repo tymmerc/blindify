@@ -437,7 +437,8 @@ app.post("/api/games/solo/start", async (req: Request, res: Response) => {
       [user.id, TRACKS_NEEDED]
     );
 
-    // If database has enough tracks, use them
+
+// ==================== GAME LOGIC ====================
 
 /**
  * Start a solo game session
@@ -563,6 +564,7 @@ app.post("/api/games/solo/start", async (req: Request, res: Response) => {
     });
   }
 });
+
     if (!user) {
       return res.status(401).json({ error: "Unauthorized" });
     }

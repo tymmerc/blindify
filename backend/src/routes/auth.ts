@@ -6,6 +6,6 @@ const router = Router();
 router.get("/login", authController.login);
 router.get("/callback", authController.callback);
 router.get("/refresh_token", authController.refreshToken);
-router.get("/me", authController.me); // maintenant existe bien
+router.get("/me", authController.me); 
 
 export default router;
