@@ -46,7 +46,8 @@ export const api = {
 
   async importAllTracks() {
     const r = await fetch(`${API_URL}/api/user/tracks`, {
-      headers: authHeaders(),
+      method: "POST",  // ← CORRECTION ICI : Ajout de method: "POST"
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       credentials: "include",
     })
     if (!r.ok) throw new Error("Import failed")
