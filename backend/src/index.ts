@@ -409,6 +409,34 @@ app.post("/api/user/tracks/played", async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * Get user profile information
+ */
+app.get("/api/user/profile", async (req: Request, res: Response) => {
+  try {
+    const user = await getUserByAccessToken(req.headers.authorization);
+    
+    if (!user) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    // TODO: Get real stats from database
+    // For now, return basic profile with placeholder stats
+    res.json({
+      display_name: user.username || "Unknown User",
+      email: user.spotify_id, // Using Spotify ID as placeholder
+      image: null,
+      total_games: 0,
+      best_score: 0,
+      total_time_played: 0
+    });
+    
+  } catch (err: any) {
+    console.error("❌ Failed to fetch profile:", err.message);
+    res.status(500).json({ error: "Failed to fetch profile" });
+  }
+});
+
 // ==================== GAME LOGIC ====================
 
 /**
