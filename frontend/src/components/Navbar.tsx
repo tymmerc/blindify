@@ -7,10 +7,9 @@ export default function Navbar() {
   const pathname = usePathname()
   const nav = [
     { href: "/menu", label: "Accueil" },
-    { href: "/game", label: "Solo" },
-    { href: "/lobby", label: "Multijoueur" },
     { href: "/stats", label: "Stats" },
     { href: "/history", label: "Historique" },
+    { href: "/settings", label: "Settings" },
   ]
 
   return (
@@ -44,10 +43,10 @@ export default function Navbar() {
         </div>
 
         <Link
-          href="/profile"
+          href="/menu"
           className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-semibold shadow"
         >
-          Profil
+          Menu
         </Link>
       </div>
     </motion.nav>
