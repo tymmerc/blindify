@@ -3,8 +3,8 @@ import { gamesController } from "../controllers/gamesController";
 
 const router = express.Router();
 
-router.post("/games/solo/start", gamesController.startSoloGame);
-router.get("/games/history", gamesController.history);
-router.get("/stats/detailed", gamesController.detailedStats);
+// Enlevez le préfixe /games et /stats, ils seront ajoutés dans index.ts
+router.post("/solo/start", gamesController.startSoloGame);
+router.get("/history", gamesController.history);
 
 export default router;

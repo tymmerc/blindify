@@ -501,6 +501,82 @@ app.post("/api/games/solo/start", async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * Get user's game history
+ */
+app.get("/api/games/history", async (req: Request, res: Response) => {
+  try {
+    const user = await getUserByAccessToken(req.headers.authorization);
+    
+    if (!user) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    // TODO: Implement game history tracking in database
+    // For now, return empty array
+    res.json({ games: [] });
+    
+  } catch (err: any) {
+    console.error("❌ Failed to fetch game history:", err.message);
+    res.status(500).json({ error: "Failed to fetch history" });
+  }
+});
+
+/**
+ * Get detailed user statistics
+ */
+app.get("/api/stats/detailed", async (req: Request, res: Response) => {
+  try {
+    const user = await getUserByAccessToken(req.headers.authorization);
+    
+    if (!user) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    // TODO: Calculate real statistics from database
+    // For now, return placeholder data
+    res.json({
+      totalGames: 0,
+      totalScore: 0,
+      averageScore: 0,
+      bestScore: 0,
+      tracksPlayed: 0
+    });
+    
+  } catch (err: any) {
+    console.error("❌ Failed to fetch stats:", err.message);
+    res.status(500).json({ error: "Failed to fetch statistics" });
+  }
+});
+
+/**
+ * Create a multiplayer room
+ */
+app.post("/api/rooms/create", async (req: Request, res: Response) => {
+  try {
+    const user = await getUserByAccessToken(req.headers.authorization);
+    
+    if (!user) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    // TODO: Implement multiplayer room creation
+    // For now, return placeholder
+    const roomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+    
+    res.json({
+      roomCode,
+      host: user.username,
+      players: [user.username],
+      status: "waiting"
+    });
+    
+  } catch (err: any) {
+    console.error("❌ Failed to create room:", err.message);
+    res.status(500).json({ error: "Failed to create room" });
+  }
+});
+
 // ==================== WEBSOCKET CONNECTION ====================
 
 io.on("connection", (socket) => {
