@@ -409,34 +409,6 @@ app.post("/api/user/tracks/played", async (req: Request, res: Response) => {
   }
 });
 
-/**
- * Get user profile information
- */
-app.get("/api/user/profile", async (req: Request, res: Response) => {
-  try {
-    const user = await getUserByAccessToken(req.headers.authorization);
-    
-    if (!user) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
-
-    // TODO: Get real stats from database
-    // For now, return basic profile with placeholder stats
-    res.json({
-      display_name: user.username || "Unknown User",
-      email: user.spotify_id, // Using Spotify ID as placeholder
-      image: null,
-      total_games: 0,
-      best_score: 0,
-      total_time_played: 0
-    });
-    
-  } catch (err: any) {
-    console.error("❌ Failed to fetch profile:", err.message);
-    res.status(500).json({ error: "Failed to fetch profile" });
-  }
-});
-
 // ==================== GAME LOGIC ====================
 
 /**
@@ -466,58 +438,121 @@ app.post("/api/games/solo/start", async (req: Request, res: Response) => {
     );
 
     // If database has enough tracks, use them
-    if (dbTracks.length >= 10) {
-      const formattedTracks: FormattedTrack[] = dbTracks.map((track: DatabaseTrack) => ({
-        id: String(track.id),
-        title: track.title,
-        artist: track.artist,
-        preview_url: track.preview_url,
-        album_cover: track.album_cover
-      }));
 
-      console.log(`✅ Game started for user ${user.id} with ${formattedTracks.length} DB tracks`);
-      return res.json({ tracks: formattedTracks });
+/**
+ * Start a solo game session
+ * Returns 20 random tracks with preview URLs
+ * Strategy:
+ * - Fetch fresh tracks from Spotify on each game start
+ * - Exclude tracks already cached in database (already played)
+ * - Cache new tracks to avoid repetition in future games
+ * - No need for full import beforehand
+ */
+app.post("/api/games/solo/start", async (req: Request, res: Response) => {
+  try {
+    const user = await getUserByAccessToken(req.headers.authorization);
+    
+    if (!user) {
+      return res.status(401).json({ error: "Unauthorized" });
     }
 
-    // Fallback: fetch directly from Spotify API
     if (!user.access_token) {
       return res.status(400).json({ 
-        error: "No tracks available",
-        hint: "Import your liked tracks in Settings or reconnect to Spotify"
+        error: "No Spotify access token",
+        hint: "Please reconnect to Spotify"
       });
     }
 
-    const { data } = await axios.get("https://api.spotify.com/v1/me/tracks", {
-      headers: { Authorization: `Bearer ${user.access_token}` },
-      params: { limit: 50, offset: 0 }
+    const TRACKS_NEEDED = 20;
+
+    // Get list of already cached track IDs to exclude them
+    const { rows: cachedTracks } = await pool.query(
+      `SELECT DISTINCT spotify_track_id FROM tracks 
+       WHERE user_id = $1 AND spotify_track_id IS NOT NULL`,
+      [user.id]
+    );
+    const cachedIds = new Set(cachedTracks.map(t => t.spotify_track_id));
+
+    console.log(`📝 User ${user.id} has ${cachedIds.size} tracks in cache`);
+
+    // Fetch fresh tracks from Spotify API
+    console.log(`🎵 Fetching fresh tracks from Spotify...`);
+    
+    const allSpotifyTracks: SpotifyTrack[] = [];
+    const LIMIT = 50;
+    const MAX_PAGES = 4; // Up to 200 tracks
+
+    for (let page = 0; page < MAX_PAGES && allSpotifyTracks.length < TRACKS_NEEDED * 2; page++) {
+      const offset = page * LIMIT;
+      
+      try {
+        const { data } = await axios.get("https://api.spotify.com/v1/me/tracks", {
+          headers: { Authorization: `Bearer ${user.access_token}` },
+          params: { limit: LIMIT, offset }
+        });
+
+        if (!data.items || data.items.length === 0) break;
+
+        // Filter: with preview URL AND not already cached
+        const validTracks = data.items
+          .map(mapSpotifyItemToTrack)
+          .filter((t: SpotifyTrack) => t.preview_url && !cachedIds.has(t.spotify_track_id));
+
+        allSpotifyTracks.push(...validTracks);
+
+        // Stop if we have enough
+        if (allSpotifyTracks.length >= TRACKS_NEEDED) break;
+        
+        // Stop if last page was incomplete
+        if (data.items.length < LIMIT) break;
+      } catch (err) {
+        console.error(`⚠️ Error fetching page ${page}:`, err);
+        break;
+      }
+    }
+
+    // Deduplicate by track ID
+    const uniqueTracks = new Map<string, SpotifyTrack>();
+    allSpotifyTracks.forEach((track: SpotifyTrack) => {
+      if (!uniqueTracks.has(track.spotify_track_id)) {
+        uniqueTracks.set(track.spotify_track_id, track);
+      }
     });
 
-    // Filter and deduplicate tracks
-    const spotifyTracks = (data.items || [])
-      .map(mapSpotifyItemToTrack)
-      .filter((t: SpotifyTrack) => t.preview_url);
+    // Take only what we need
+    const selectedTracks = Array.from(uniqueTracks.values()).slice(0, TRACKS_NEEDED);
 
-    const uniqueTracks = new Map<string, SpotifyTrack>();
-    spotifyTracks.forEach((track: SpotifyTrack) => uniqueTracks.set(track.spotify_track_id, track));
-
-    const formattedTracks: FormattedTrack[] = Array.from(uniqueTracks.values())
-      .slice(0, TRACKS_NEEDED)
-      .map((track: SpotifyTrack, index: number) => ({
-        id: String(index + 1),
-        title: track.title,
-        artist: track.artist,
-        preview_url: track.preview_url!,
-        album_cover: track.album_cover
-      }));
-
-    if (formattedTracks.length < 10) {
+    if (selectedTracks.length < 10) {
       return res.status(404).json({ 
         error: "Insufficient tracks with preview URLs",
-        hint: "Like more songs on Spotify or import your library"
+        hint: "Add more liked songs on Spotify"
       });
     }
 
-    console.log(`✅ Game started for user ${user.id} with ${formattedTracks.length} Spotify tracks`);
+    // Cache these tracks in database for future exclusion
+    console.log(`💾 Caching ${selectedTracks.length} tracks in database...`);
+    for (const track of selectedTracks) {
+      try {
+        await pool.query(
+          `INSERT INTO tracks (user_id, spotify_track_id, title, artist, preview_url, album_cover, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6, NOW())
+           ON CONFLICT (user_id, spotify_track_id) DO NOTHING`,
+          [user.id, track.spotify_track_id, track.title, track.artist, track.preview_url, track.album_cover]
+        );
+      } catch (err) {
+        console.error(`⚠️ Error caching track:`, err);
+      }
+    }
+
+    const formattedTracks: FormattedTrack[] = selectedTracks.map((track: SpotifyTrack) => ({
+      id: track.spotify_track_id,
+      title: track.title,
+      artist: track.artist,
+      preview_url: track.preview_url!,
+      album_cover: track.album_cover
+    }));
+
+    console.log(`✅ Game started with ${formattedTracks.length} fresh tracks (${cachedIds.size} previously cached, ${allSpotifyTracks.length} found)`);
     res.json({ tracks: formattedTracks });
     
   } catch (err: any) {
@@ -528,35 +563,6 @@ app.post("/api/games/solo/start", async (req: Request, res: Response) => {
     });
   }
 });
-
-/**
- * Get user's game history
- */
-app.get("/api/games/history", async (req: Request, res: Response) => {
-  try {
-    const user = await getUserByAccessToken(req.headers.authorization);
-    
-    if (!user) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
-
-    // TODO: Implement game history tracking in database
-    // For now, return empty array
-    res.json({ games: [] });
-    
-  } catch (err: any) {
-    console.error("❌ Failed to fetch game history:", err.message);
-    res.status(500).json({ error: "Failed to fetch history" });
-  }
-});
-
-/**
- * Get detailed user statistics
- */
-app.get("/api/stats/detailed", async (req: Request, res: Response) => {
-  try {
-    const user = await getUserByAccessToken(req.headers.authorization);
-    
     if (!user) {
       return res.status(401).json({ error: "Unauthorized" });
     }
