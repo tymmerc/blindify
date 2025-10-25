@@ -55,8 +55,13 @@ app.use(
   })
 );
 
-// Slow down requests after 60 per minute
-app.use(slowDown({ windowMs: 60_000, delayAfter: 60, delayMs: 100 }));
+// Slow down requests after 60 per minute (FIXED)
+app.use(slowDown({ 
+  windowMs: 60_000, 
+  delayAfter: 60, 
+  delayMs: () => 100,
+  validate: { delayMs: false }
+}));
 
 // Session configuration for secure cookies
 app.use(
@@ -74,7 +79,10 @@ export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 pool
   .connect()
   .then(() => console.log("✅ PostgreSQL connected"))
-  .catch((err) => console.error("❌ Database connection failed:", err));
+  .catch((err) => {
+    console.error("❌ Database connection failed:", err);
+    console.error("DATABASE_URL:", process.env.DATABASE_URL ? "SET" : "MISSING");
+  });
 
 // Type definitions
 interface AuthenticatedUser {
@@ -175,6 +183,8 @@ app.get("/auth/callback", async (req, res) => {
   }
 
   try {
+    console.log("🔄 Exchanging authorization code for tokens...");
+    
     // Exchange authorization code for access and refresh tokens
     const tokenResponse = await axios.post(
       "https://accounts.spotify.com/api/token",
@@ -189,8 +199,10 @@ app.get("/auth/callback", async (req, res) => {
     );
     
     const { access_token, refresh_token } = tokenResponse.data;
+    console.log("✅ Tokens received from Spotify");
 
     // Fetch user profile from Spotify API
+    console.log("🔄 Fetching user profile...");
     const profileResponse = await axios.get("https://api.spotify.com/v1/me", {
       headers: { Authorization: `Bearer ${access_token}` }
     });
@@ -198,8 +210,10 @@ app.get("/auth/callback", async (req, res) => {
     const spotifyUser = profileResponse.data;
     const spotify_id = spotifyUser.id;
     const username = spotifyUser.display_name || spotifyUser.id;
+    console.log(`✅ Profile fetched: ${username} (${spotify_id})`);
 
     // Insert or update user in database
+    console.log("🔄 Saving user to database...");
     await pool.query(
       `INSERT INTO users (spotify_id, username, access_token, refresh_token, created_at, updated_at)
        VALUES ($1, $2, $3, $4, NOW(), NOW())
@@ -212,14 +226,17 @@ app.get("/auth/callback", async (req, res) => {
       [spotify_id, username, access_token, refresh_token]
     );
 
-    console.log(`✅ User authenticated: ${username} (${spotify_id})`);
+    console.log(`✅ User authenticated and saved: ${username} (${spotify_id})`);
 
     // Redirect to frontend with tokens in URL params
     const redirectUrl = `${process.env.FRONTEND_URL}/auth/callback?access_token=${access_token}&refresh_token=${refresh_token}`;
+    console.log(`➡️ Redirecting to: ${redirectUrl}`);
     res.redirect(redirectUrl);
     
   } catch (err: any) {
-    console.error("❌ Authentication callback failed:", err.response?.data || err.message);
+    console.error("❌ Authentication callback failed:");
+    console.error("Error:", err.response?.data || err.message);
+    console.error("Stack:", err.stack);
     res.status(500).send("Authentication failed. Please try again.");
   }
 });
@@ -496,10 +513,11 @@ io.on("connection", (socket) => {
 
 // ==================== SERVER INITIALIZATION ====================
 
-const PORT = process.env.PORT || 8080;
+const PORT = Number(process.env.PORT) || 8080;
 
 server.listen(PORT, () => {
   console.log(`🚀 Blindify API server running on port ${PORT}`);
   console.log(`📡 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔗 Allowed origins: ${allowedOrigins.join(", ")}`);
+  console.log(`✅ Server ready to accept connections`);
 });
