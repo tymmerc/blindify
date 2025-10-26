@@ -74,12 +74,16 @@ export default function GamePage() {
 
   useEffect(() => {
     if (state.showResult || !state.isPlaying) return
-    if (state.timeLeft <= 0) return handleAnswer(null)
+    if (state.timeLeft <= 0) {
+      handleAnswer(null)
+      return
+    }
     const t = setTimeout(() => {
       setState((p) => ({ ...p, timeLeft: p.timeLeft - 1 }))
       if (state.timeLeft <= 3) playSound("tick")
     }, 1000)
     return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.timeLeft, state.isPlaying, state.showResult])
 
   useEffect(() => {
@@ -91,6 +95,7 @@ export default function GamePage() {
     audioRef.current.play().catch(() => void 0)
     setState((p) => ({ ...p, isPlaying: true }))
     return () => audioRef.current?.pause()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.currentTrackIndex, state.tracks])
 
   useEffect(() => {
@@ -98,6 +103,7 @@ export default function GamePage() {
     const current = state.tracks[state.currentTrackIndex]
     const wrong = state.tracks.filter((t) => t.id !== current.id).sort(() => Math.random() - 0.5).slice(0, 3).map((t) => t.title)
     setOptions([...wrong, current.title].sort(() => Math.random() - 0.5))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.currentTrackIndex, state.tracks])
 
   const next = () => {
