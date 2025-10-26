@@ -120,7 +120,7 @@ export default function SettingsPage() {
                   <div className="flex items-center gap-3 text-red-400">
                     <span className="text-2xl">✗</span>
                     <div>
-                      <p className="font-semibold">Erreur d'importation</p>
+                      <p className="font-semibold">Erreur d&apos;importation</p>
                       <p className="text-sm text-gray-400">Vérifie ta connexion et réessaie</p>
                     </div>
                   </div>
@@ -139,7 +139,7 @@ export default function SettingsPage() {
             <ul className="space-y-2 text-gray-400 text-sm">
               <li className="flex items-start gap-2">
                 <span className="text-indigo-400 mt-0.5">•</span>
-                <span>L'import est optionnel - tu peux jouer sans importer</span>
+                <span>L&apos;import est optionnel - tu peux jouer sans importer</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-purple-400 mt-0.5">•</span>
