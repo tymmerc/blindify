@@ -129,25 +129,55 @@ export default function GamePage() {
       <LayoutGradient>
         <Navbar />
         <div className="flex flex-1 items-center justify-center px-4">
-          <div className="bg-white/80 backdrop-blur-sm rounded-2xl border-4 border-purple-300 shadow-2xl p-10 text-center max-w-xl w-full">
-            <h1 className="text-4xl font-bold mb-6 bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="glass-strong rounded-3xl p-10 text-center max-w-xl w-full"
+          >
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ delay: 0.2, type: "spring" }}
+              className="text-6xl mb-6"
+            >
+              🎮
+            </motion.div>
+            <h1 className="text-4xl font-bold mb-8 text-gradient">
               Choisis ta difficulté
             </h1>
             <div className="space-y-4">
-              <button onClick={() => start("easy")} className="w-full py-4 text-xl font-bold rounded-xl bg-green-500 hover:bg-green-600 text-white">
-                Facile — 15 s
-              </button>
-              <button onClick={() => start("normal")} className="w-full py-4 text-xl font-bold rounded-xl bg-purple-600 hover:bg-purple-700 text-white">
-                Normal — 10 s
-              </button>
-              <button onClick={() => start("hard")} className="w-full py-4 text-xl font-bold rounded-xl bg-red-500 hover:bg-red-600 text-white">
-                Difficile — 5 s
-              </button>
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => start("easy")}
+                className="w-full py-4 text-xl font-bold rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white transition-all duration-300 hover-lift"
+              >
+                <span className="mr-2">🟢</span> Facile — 15s
+              </motion.button>
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => start("normal")}
+                className="w-full py-4 text-xl font-bold rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white transition-all duration-300 hover-lift"
+              >
+                <span className="mr-2">🟣</span> Normal — 10s
+              </motion.button>
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => start("hard")}
+                className="w-full py-4 text-xl font-bold rounded-xl bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-600 hover:to-orange-600 text-white transition-all duration-300 hover-lift"
+              >
+                <span className="mr-2">🔴</span> Difficile — 5s
+              </motion.button>
             </div>
-            <button onClick={() => router.push("/menu")} className="w-full mt-6 border-2 border-purple-600 text-purple-600 hover:bg-purple-50 font-semibold py-3 rounded-xl">
-              Retour au menu
+            <button
+              onClick={() => router.push("/menu")}
+              className="w-full mt-6 glass hover:glass-strong text-gray-300 hover:text-white font-semibold py-3 rounded-xl transition-all duration-300"
+            >
+              ← Retour au menu
             </button>
-          </div>
+          </motion.div>
         </div>
       </LayoutGradient>
     )
@@ -157,7 +187,14 @@ export default function GamePage() {
       <LayoutGradient>
         <Navbar />
         <div className="flex flex-1 items-center justify-center">
-          <p className="text-xl text-gray-700">Chargement de la partie…</p>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="flex flex-col items-center gap-4"
+          >
+            <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+            <p className="text-xl text-gray-400">Chargement de la partie…</p>
+          </motion.div>
         </div>
       </LayoutGradient>
     )
@@ -167,94 +204,184 @@ export default function GamePage() {
       <LayoutGradient>
         <Navbar />
         <div className="flex flex-1 items-center justify-center px-4">
-          <div className="text-center bg-white/80 backdrop-blur-sm rounded-2xl border-4 border-purple-300 shadow-2xl p-10">
-            <h1 className="text-5xl font-bold mb-5 bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-              Partie terminée
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="text-center glass-strong rounded-3xl p-10 max-w-lg w-full"
+          >
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
+              className="text-7xl mb-6"
+            >
+              {state.score === state.tracks.length ? "🏆" : state.score >= state.tracks.length * 0.7 ? "🎉" : "🎮"}
+            </motion.div>
+            <h1 className="text-5xl font-bold mb-6 text-gradient">
+              {state.score === state.tracks.length ? "Parfait !" : state.score >= state.tracks.length * 0.7 ? "Bien joué !" : "Partie terminée"}
             </h1>
-            <p className="text-3xl font-bold text-gray-800 mb-6">
-              Score : {state.score} / {state.tracks.length}
-            </p>
-            <div className="flex gap-4 justify-center">
-              <button onClick={() => router.push("/game")} className="bg-purple-600 hover:bg-purple-700 text-white font-semibold px-8 py-3 rounded-xl">
-                Rejouer
-              </button>
-              <button onClick={() => router.push("/menu")} className="border-2 border-purple-600 text-purple-600 hover:bg-purple-50 font-semibold px-8 py-3 rounded-xl">
-                Menu
-              </button>
+            <div className="mb-8">
+              <div className="text-6xl font-bold text-white mb-2">
+                {state.score} / {state.tracks.length}
+              </div>
+              <div className="text-gray-400">
+                {Math.round((state.score / state.tracks.length) * 100)}% de réussite
+              </div>
             </div>
-          </div>
+            <div className="flex gap-4 justify-center">
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => router.push("/game")}
+                className="bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white font-semibold px-8 py-3 rounded-xl transition-all duration-300 hover-lift"
+              >
+                🔄 Rejouer
+              </motion.button>
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => router.push("/menu")}
+                className="glass hover:glass-strong text-gray-300 hover:text-white font-semibold px-8 py-3 rounded-xl transition-all duration-300"
+              >
+                🏠 Menu
+              </motion.button>
+            </div>
+          </motion.div>
         </div>
       </LayoutGradient>
     )
 
   const track = state.tracks[state.currentTrackIndex]
+  const progressPercent = (state.timeLeft / timeFor(state.difficulty)) * 100
 
   return (
     <LayoutGradient>
       <Navbar />
-      <main className="flex-1 flex flex-col items-center justify-center px-4 pt-24 pb-12 max-w-5xl mx-auto w-full">
-        <div className="flex justify-between items-center w-full mb-6">
-          <div className="text-2xl font-bold text-gray-800">
-            Question {state.currentTrackIndex + 1} / {state.tracks.length}
+      <main className="flex-1 flex flex-col items-center justify-center px-4 pt-32 pb-12 max-w-5xl mx-auto w-full">
+        {/* Header avec progression */}
+        <div className="flex justify-between items-center w-full mb-8">
+          <div className="glass px-6 py-3 rounded-xl">
+            <span className="text-gray-400 text-sm">Question</span>
+            <div className="text-2xl font-bold text-white">
+              {state.currentTrackIndex + 1} / {state.tracks.length}
+            </div>
           </div>
-          <div className="text-2xl font-bold text-pink-600">Score : {state.score}</div>
-        </div>
-
-        <div className="w-full mb-6">
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-lg font-semibold text-gray-800">Temps restant</span>
-            <span className="text-2xl font-bold text-purple-700">{state.timeLeft}s</span>
-          </div>
-          <div className="w-full h-3 bg-white rounded-full overflow-hidden border-2 border-purple-200">
-            <motion.div className="h-full bg-gradient-to-r from-purple-600 to-pink-600" initial={{ width: "100%" }} animate={{ width: `${(state.timeLeft / 10) * 100}%` }} transition={{ duration: 0.25 }} />
-          </div>
-        </div>
-
-        <div className="bg-white/80 backdrop-blur-sm rounded-2xl border-4 border-purple-200 shadow p-6 mb-8 w-full">
-          <div className="flex items-center gap-6">
-            <button onClick={toggle} className="w-20 h-20 rounded-full bg-purple-600 hover:bg-purple-700 text-white grid place-items-center text-3xl">
-              {state.isPlaying ? "❚❚" : "▶"}
-            </button>
-            <div>
-              <p className="text-2xl font-bold text-gray-800 mb-1">Quel est ce titre ?</p>
-              <p className="text-gray-600">Écoute et choisis la bonne réponse.</p>
+          <div className="glass px-6 py-3 rounded-xl">
+            <span className="text-gray-400 text-sm">Score</span>
+            <div className="text-2xl font-bold text-gradient">
+              {state.score}
             </div>
           </div>
         </div>
 
+        {/* Timer */}
+        <div className="w-full mb-8">
+          <div className="flex justify-between items-center mb-3">
+            <span className="text-lg font-semibold text-gray-300">Temps restant</span>
+            <span className={`text-3xl font-bold ${state.timeLeft <= 3 ? "text-red-400 animate-pulse" : "text-indigo-400"}`}>
+              {state.timeLeft}s
+            </span>
+          </div>
+          <div className="w-full h-3 glass rounded-full overflow-hidden">
+            <motion.div
+              className={`h-full ${
+                state.timeLeft <= 3
+                  ? "bg-gradient-to-r from-red-500 to-orange-500"
+                  : "bg-gradient-to-r from-indigo-500 to-purple-500"
+              }`}
+              initial={{ width: "100%" }}
+              animate={{ width: `${progressPercent}%` }}
+              transition={{ duration: 0.3 }}
+            />
+          </div>
+        </div>
+
+        {/* Lecteur audio */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="glass-strong rounded-2xl p-8 mb-10 w-full"
+        >
+          <div className="flex items-center gap-6">
+            <motion.button
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
+              onClick={toggle}
+              className="w-20 h-20 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white grid place-items-center text-3xl hover-lift"
+            >
+              {state.isPlaying ? "⏸" : "▶"}
+            </motion.button>
+            <div className="flex-1">
+              <p className="text-2xl font-bold text-white mb-2">Quel est ce titre ?</p>
+              <p className="text-gray-400">Écoute attentivement et choisis la bonne réponse</p>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Options de réponse */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full mb-6">
-          <AnimatePresence>
+          <AnimatePresence mode="wait">
             {options.map((opt, i) => {
               const selected = state.selectedAnswer === opt
               const correct = opt === track.title
               const showCorrect = state.showResult && correct
               const showWrong = state.showResult && selected && !correct
+              
               return (
                 <motion.button
                   key={opt}
-                  initial={{ opacity: 0, y: 16 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.06 }}
+                  initial={{ opacity: 0, x: i % 2 === 0 ? -20 : 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  transition={{ delay: i * 0.05, duration: 0.3 }}
                   disabled={state.showResult}
                   onClick={() => !state.showResult && handleAnswer(opt)}
-                  className={`w-full h-16 text-lg font-semibold rounded-xl transition-all border-2 ${
+                  whileHover={!state.showResult ? { scale: 1.02 } : {}}
+                  whileTap={!state.showResult ? { scale: 0.98 } : {}}
+                  className={`relative w-full min-h-[80px] text-lg font-semibold rounded-2xl transition-all duration-300 ${
                     showCorrect
-                      ? "bg-green-500 text-white border-green-600"
+                      ? "bg-gradient-to-r from-green-500 to-emerald-500 text-white"
                       : showWrong
-                      ? "bg-red-500 text-white border-red-600"
-                      : "bg-white hover:bg-purple-50 text-gray-800 border-purple-200 hover:border-purple-400"
-                  }`}
+                      ? "bg-gradient-to-r from-red-500 to-orange-500 text-white"
+                      : "glass hover:glass-strong text-gray-200 hover:text-white"
+                  } ${!state.showResult && "hover-lift"}`}
                 >
-                  {opt}
+                  <span className="relative z-10 px-6 py-4 block">{opt}</span>
+                  {showCorrect && (
+                    <motion.span
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-3xl"
+                    >
+                      ✓
+                    </motion.span>
+                  )}
+                  {showWrong && (
+                    <motion.span
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-3xl"
+                    >
+                      ✗
+                    </motion.span>
+                  )}
                 </motion.button>
               )
             })}
           </AnimatePresence>
         </div>
 
+        {/* Bouton suivant */}
         {state.showResult && (
-          <motion.button onClick={next} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold px-10 py-3 rounded-xl text-xl">
-            {state.currentTrackIndex + 1 < state.tracks.length ? "Question suivante →" : "Voir le résultat"}
+          <motion.button
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={next}
+            className="bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white font-semibold px-10 py-4 rounded-2xl text-xl transition-all duration-300 hover-lift"
+          >
+            {state.currentTrackIndex + 1 < state.tracks.length ? "Question suivante →" : "Voir le résultat 🏆"}
           </motion.button>
         )}
       </main>
