@@ -5,12 +5,11 @@ import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import slowDown from "express-slow-down";
 import session from "cookie-session";
-import { json, urlencoded } from "body-parser";
 import { Pool } from "pg";
 import { Server } from "socket.io";
 import http from "http";
 import axios from "axios";
-import querystring from "querystring";
+import * as querystring from "querystring";
 
 dotenv.config();
 
@@ -36,8 +35,8 @@ const io = new Server(server, {
 
 app.use(helmet());
 app.use(cors({ origin: allowedOrigins, credentials: true }));
-app.use(json());
-app.use(urlencoded({ extended: true }));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 app.use(rateLimit({
   windowMs: 60_000,
