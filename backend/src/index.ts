@@ -917,8 +917,15 @@ app.get("/api/games/history", async (req: Request, res: Response) => {
 
 // ==================== HEALTH ROUTES ====================
 
-app.get("/health", (_req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
+app.get("/health", async (_req, res) => {
+  try {
+    // Quick DB ping to ensure connection is alive
+    await pool.query('SELECT 1');
+    res.json({ status: "ok", timestamp: new Date().toISOString() });
+  } catch (err: any) {
+    console.error("❌ Health check failed:", err.message);
+    res.status(503).json({ status: "error", error: "Database not ready" });
+  }
 });
 
 app.get("/health/db", async (_req, res) => {
@@ -956,7 +963,7 @@ io.on("connection", (socket) => {
 
 const PORT = Number(process.env.PORT) || 8080;
 
-server.listen(PORT, () => {
+server.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Blindify API server running on port ${PORT}`);
   console.log(`📡 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔗 Allowed origins: ${allowedOrigins.join(", ")}`);
