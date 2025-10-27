@@ -21,7 +21,7 @@ export default function LeaderboardPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
-  const [currentUser, setCurrentUser] = useState<any>(null)
+  const [currentUser, setCurrentUser] = useState<{ id: number; username: string } | null>(null)
 
   useEffect(() => {
     const loadData = async () => {

@@ -1,6 +1,6 @@
 "use client"
 import { useEffect, useRef, useState } from "react"
-import { motion, AnimatePresence } from "framer-motion"
+import { motion } from "framer-motion"
 import { useRouter } from "next/navigation"
 import Navbar from "@/components/Navbar"
 import LayoutGradient from "@/components/LayoutGradient"
@@ -46,7 +46,7 @@ export default function GamePage() {
   const [selectingSource, setSelectingSource] = useState(true)
   const [selectingDifficulty, setSelectingDifficulty] = useState(false)
   const [selectedSource, setSelectedSource] = useState<Source>("liked")
-  const [playlists, setPlaylists] = useState<any[]>([])
+  const [playlists, setPlaylists] = useState<Array<{ name: string; id: string }>>([]);
   const [state, setState] = useState<GameState>({
     sessionId: null,
     tracks: [],
@@ -115,7 +115,7 @@ export default function GamePage() {
       }))
       setSelectingDifficulty(false)
       setLoading(false)
-    } catch (err) {
+    } catch (_err) {
       alert("Erreur lors du chargement de la partie")
       setSelectingSource(true)
       setLoading(false)
@@ -153,7 +153,7 @@ export default function GamePage() {
       }))
       
       audioRef.current?.pause()
-    } catch (err) {
+    } catch (_err) {
       alert("Erreur lors de l'envoi de la réponse")
     }
   }
@@ -181,7 +181,7 @@ export default function GamePage() {
       }))
       
       audioRef.current?.pause()
-    } catch (err) {
+    } catch (_err) {
       alert("Erreur")
     }
   }
@@ -191,7 +191,7 @@ export default function GamePage() {
     try {
       await api.likeTrack(current.id)
       playSound("correct")
-    } catch (err) {
+    } catch (_err) {
       console.error("Failed to like track")
     }
   }
@@ -294,7 +294,7 @@ export default function GamePage() {
             <h1 className="text-4xl font-bold mb-4 text-gradient">
               Choisis ta source
             </h1>
-            <p className="text-gray-400 mb-8">D'où veux-tu que viennent les questions ?</p>
+            <p className="text-gray-400 mb-8">D&apos;où veux-tu que viennent les questions ?</p>
             <div className="space-y-4">
               <motion.button
                 whileHover={{ scale: 1.02 }}
