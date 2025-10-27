@@ -22,53 +22,100 @@ export const api = {
     }
   },
 
-  async startSoloGame(difficulty: "easy" | "normal" | "hard" = "normal") {
+  async startSoloGame(params: { 
+    difficulty?: "easy" | "normal" | "hard", 
+    source?: string,
+    sourceId?: string | null,
+    mood?: string,
+    count?: number 
+  } = {}) {
     const r = await fetch(`${API_URL}/api/games/solo/start`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...authHeaders() },
       credentials: "include",
-      body: JSON.stringify({ difficulty }),
+      body: JSON.stringify(params),
     })
     if (!r.ok) throw new Error("Failed to start game")
     return r.json()
   },
 
-  async markTracksAsPlayed(trackIds: string[]) {
-    const r = await fetch(`${API_URL}/api/user/tracks/played`, {
+  async submitAnswer(data: {
+    sessionId: number,
+    trackId: string,
+    userAnswer: string,
+    correctAnswer: string,
+    responseTimeMs: number,
+    questionNumber: number,
+    hintUsed?: boolean,
+    skipped?: boolean
+  }) {
+    const r = await fetch(`${API_URL}/api/games/answer`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...authHeaders() },
       credentials: "include",
-      body: JSON.stringify({ trackIds }),
+      body: JSON.stringify(data),
     })
-    if (!r.ok) throw new Error("Failed to mark tracks as played")
+    if (!r.ok) throw new Error("Failed to submit answer")
     return r.json()
   },
 
-  async importAllTracks() {
-    const r = await fetch(`${API_URL}/api/user/tracks`, {
-      method: "POST",  // ← CORRECTION ICI : Ajout de method: "POST"
+  async completeGame(sessionId: number) {
+    const r = await fetch(`${API_URL}/api/games/complete`, {
+      method: "POST",
       headers: { "Content-Type": "application/json", ...authHeaders() },
       credentials: "include",
+      body: JSON.stringify({ sessionId }),
     })
-    if (!r.ok) throw new Error("Import failed")
+    if (!r.ok) throw new Error("Failed to complete game")
     return r.json()
   },
 
-  async getDetailedStats() {
-    const r = await fetch(`${API_URL}/api/stats/detailed`, {
-      headers: authHeaders(),
+  async likeTrack(trackId: string) {
+    const r = await fetch(`${API_URL}/api/tracks/like`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       credentials: "include",
+      body: JSON.stringify({ trackId }),
     })
-    if (!r.ok) throw new Error("Stats failed")
+    if (!r.ok) throw new Error("Failed to like track")
     return r.json()
   },
 
-  async getHistory() {
-    const r = await fetch(`${API_URL}/api/games/history`, {
+  async getPlaylists() {
+    const r = await fetch(`${API_URL}/api/sources/playlists`, {
       headers: authHeaders(),
       credentials: "include",
     })
-    if (!r.ok) throw new Error("History failed")
+    if (!r.ok) throw new Error("Failed to fetch playlists")
+    return r.json()
+  },
+
+  async getTopTracks(timeRange: "short_term" | "medium_term" | "long_term" = "medium_term") {
+    const r = await fetch(`${API_URL}/api/sources/top-tracks?time_range=${timeRange}`, {
+      headers: authHeaders(),
+      credentials: "include",
+    })
+    if (!r.ok) throw new Error("Failed to fetch top tracks")
+    return r.json()
+  },
+
+  async getRecentlyPlayed() {
+    const r = await fetch(`${API_URL}/api/sources/recently-played`, {
+      headers: authHeaders(),
+      credentials: "include",
+    })
+    if (!r.ok) throw new Error("Failed to fetch recently played")
+    return r.json()
+  },
+
+  async getAIRecommendations(mood: string = "balanced", count: number = 20) {
+    const r = await fetch(`${API_URL}/api/sources/ai-recommendations`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      credentials: "include",
+      body: JSON.stringify({ mood, count }),
+    })
+    if (!r.ok) throw new Error("Failed to get AI recommendations")
     return r.json()
   },
 
@@ -78,6 +125,24 @@ export const api = {
       credentials: "include",
     })
     if (!r.ok) return null
+    return r.json()
+  },
+
+  async getLeaderboard() {
+    const r = await fetch(`${API_URL}/api/stats/leaderboard`, {
+      headers: authHeaders(),
+      credentials: "include",
+    })
+    if (!r.ok) throw new Error("Failed to fetch leaderboard")
+    return r.json()
+  },
+
+  async getHistory() {
+    const r = await fetch(`${API_URL}/api/games/history`, {
+      headers: authHeaders(),
+      credentials: "include",
+    })
+    if (!r.ok) throw new Error("Failed to fetch history")
     return r.json()
   },
 

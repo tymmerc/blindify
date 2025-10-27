@@ -1,40 +1,37 @@
 {
-  "name": "backend",
-  "version": "1.0.0",
-  "main": "index.js",
+  "name": "blindify-backend",
+  "version": "2.0.0",
+  "description": "Blindify backend API with gamification and AI",
+  "main": "dist/index.js",
+  "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "nodemon --exec ts-node src/index.ts",
+    "dev": "tsx watch src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "init-db": "node init-db.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
   "dependencies": {
-    "axios": "^1.12.2",
-    "cookie-session": "^2.1.1",
+    "express": "^4.18.2",
     "cors": "^2.8.5",
-    "dotenv": "^17.2.3",
-    "express": "^5.1.0",
-    "express-rate-limit": "^8.1.0",
-    "express-slow-down": "^3.0.0",
-    "fuse.js": "^7.1.0",
-    "helmet": "^8.1.0",
-    "mongoose": "^8.18.2",
-    "pg": "^8.16.3",
-    "socket.io": "^4.8.1",
-    "spotify-web-api-node": "^5.0.2"
+    "dotenv": "^16.3.1",
+    "helmet": "^7.1.0",
+    "express-rate-limit": "^7.1.5",
+    "express-slow-down": "^2.0.1",
+    "cookie-session": "^2.0.0",
+    "body-parser": "^1.20.2",
+    "pg": "^8.11.3",
+    "socket.io": "^4.6.2",
+    "axios": "^1.6.2",
+    "querystring": "^0.2.1",
+    "fastest-levenshtein": "^1.0.16"
   },
   "devDependencies": {
-    "@types/cookie-session": "^2.0.49",
-    "@types/cors": "^2.8.19",
-    "@types/express": "^5.0.3",
-    "@types/node": "^24.7.0",
-    "@types/pg": "^8.15.5",
-    "nodemon": "^3.1.10",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.9.2"
+    "@types/express": "^4.17.21",
+    "@types/cors": "^2.8.17",
+    "@types/pg": "^8.10.9",
+    "@types/node": "^20.10.6",
+    "@types/cookie-session": "^2.0.48",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3"
   }
 }
