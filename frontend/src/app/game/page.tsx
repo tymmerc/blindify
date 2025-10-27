@@ -244,7 +244,7 @@ export default function GamePage() {
   const completeGame = async () => {
     try {
       await api.completeGame(state.sessionId!)
-    } catch (err) {
+    } catch (_err) {
       console.error("Failed to complete game")
     }
   }

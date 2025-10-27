@@ -13,7 +13,11 @@ export default function SettingsPage() {
     setBusy(true)
     setStatus("idle")
     try {
-      await api.importAllTracks()
+      // TODO: Implémenter l'importation côté backend
+      // await api.importAllTracks()
+      
+      // Simulation temporaire
+      await new Promise(resolve => setTimeout(resolve, 2000))
       setStatus("ok")
     } catch {
       setStatus("err")

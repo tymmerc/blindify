@@ -35,13 +35,28 @@ interface UserData {
   bestStreak: number
 }
 
+interface GameHistory {
+  id: number
+  mode: string
+  difficulty: string
+  source: string
+  total_questions: number
+  correct_answers: number
+  final_score: number
+  avg_response_time: number
+  streak_achieved: number
+  xp_earned: number
+  started_at: string
+  completed_at: string
+}
+
 export default function ProfilePage() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [user, setUser] = useState<UserData | null>(null)
   const [stats, setStats] = useState<Stats | null>(null)
   const [badges, setBadges] = useState<Badge[]>([])
-  const [history, setHistory] = useState<any[]>([])
+  const [history, setHistory] = useState<GameHistory[]>([])
 
   useEffect(() => {
     const loadProfile = async () => {
