@@ -1,33 +1,52 @@
 {
   "name": "blindify-backend",
-  "version": "2.0.0",
-  "description": "Blindify backend API with gamification and AI",
+  "version": "1.0.0",
+  "description": "Backend API pour Blindify - Blind test musical",
   "main": "dist/index.js",
-  "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "init-db": "node init-db.js",
+    "lint": "eslint src --ext .ts",
+    "test": "jest"
   },
+  "keywords": [
+    "blindify",
+    "spotify",
+    "blind-test",
+    "music",
+    "game"
+  ],
+  "author": "Blindify Team",
+  "license": "MIT",
   "dependencies": {
-    "express": "^4.21.2",
+    "express": "^4.18.2",
     "cors": "^2.8.5",
-    "dotenv": "^16.6.1",
-    "helmet": "^7.2.0",
-    "express-rate-limit": "^7.5.1",
-    "express-slow-down": "^2.1.0",
-    "cookie-session": "^2.0.0",
+    "dotenv": "^16.3.1",
     "pg": "^8.11.3",
-    "socket.io": "^4.6.2",
-    "axios": "^1.6.2"
+    "axios": "^1.6.0",
+    "cookie-session": "^2.0.0",
+    "helmet": "^7.1.0",
+    "express-rate-limit": "^7.1.5",
+    "express-slow-down": "^2.0.1",
+    "socket.io": "^4.6.1",
+    "querystring": "^0.2.1"
   },
   "devDependencies": {
-    "@types/express": "^4.17.24",
+    "@types/node": "^20.10.0",
+    "@types/express": "^4.17.21",
     "@types/cors": "^2.8.17",
     "@types/pg": "^8.10.9",
-    "@types/node": "^20.19.23",
     "@types/cookie-session": "^2.0.48",
-    "tsx": "^4.20.6",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "ts-node-dev": "^2.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.2",
+    "@typescript-eslint/parser": "^6.13.2",
+    "eslint": "^8.55.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
   }
 }
