@@ -7,7 +7,7 @@ export const authController = {
   /**
    * 🎵 Étape 1 : Redirection vers Spotify pour autorisation
    */
-  login: (_req: Request, res: Response) => {
+  login: (_req: Request, res: Response): void => {
     try {
       const api = makeSpotify();
       const scopes = [
@@ -30,12 +30,13 @@ export const authController = {
   /**
    * 🎧 Étape 2 : Callback Spotify → échange du code contre les tokens
    */
-  callback: async (req: Request, res: Response) => {
+  callback: async (req: Request, res: Response): Promise<void> => {
     try {
       const code = String(req.query.code || "");
       if (!code) {
         console.error("❌ No authorization code received from Spotify.");
-        return res.status(400).send("Code d'autorisation manquant.");
+        res.status(400).send("Code d'autorisation manquant.");
+        return;
       }
 
       const api = makeSpotify();
@@ -82,13 +83,14 @@ export const authController = {
   },
 
   /**
-   * ♻️ Étape 3 : Rafraîchir le token d’accès
+   * ♻️ Étape 3 : Rafraîchir le token d'accès
    */
-  refreshToken: async (req: Request, res: Response) => {
+  refreshToken: async (req: Request, res: Response): Promise<void> => {
     try {
       const refresh = String(req.query.refresh_token || "");
       if (!refresh) {
-        return res.status(400).json({ error: "Missing refresh_token" });
+        res.status(400).json({ error: "Missing refresh_token" });
+        return;
       }
 
       const api = makeSpotify(undefined, refresh);
@@ -104,7 +106,7 @@ export const authController = {
   },
 
   /**
-   * ✅ Vérifie l’authentification utilisateur (token actuel)
+   * ✅ Vérifie l'authentification utilisateur (token actuel)
    */
   me: async (req: Request, res: Response): Promise<void> => {
     const token = req.headers.authorization?.replace("Bearer ", "");

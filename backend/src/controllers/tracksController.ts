@@ -9,11 +9,12 @@ const spotifyApi = new SpotifyWebApi({
   clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
 });
 
-export const getRandomLikedTracks = async (req: Request, res: Response) => {
+export const getRandomLikedTracks = async (req: Request, res: Response): Promise<void> => {
   try {
     const access_token = req.headers.authorization?.split(" ")[1];
     if (!access_token) {
-      return res.status(401).json({ error: "Token Spotify manquant" });
+      res.status(401).json({ error: "Token Spotify manquant" });
+      return;
     }
 
     spotifyApi.setAccessToken(access_token);
@@ -34,8 +35,10 @@ export const getRandomLikedTracks = async (req: Request, res: Response) => {
       if (allTracks.length >= 200) break; // on limite pour la démo
     }
 
-    if (allTracks.length === 0)
-      return res.status(404).json({ error: "Aucun titre liké trouvé" });
+    if (allTracks.length === 0) {
+      res.status(404).json({ error: "Aucun titre liké trouvé" });
+      return;
+    }
 
     const selected = allTracks
       .sort(() => 0.5 - Math.random())
