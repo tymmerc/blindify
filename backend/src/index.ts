@@ -1,6 +1,6 @@
 /**
  * =============================================================================
- * BLINDIFY BACKEND - FULLY CORRECTED VERSION
+ * BLINDIFY BACKEND 
  * =============================================================================
  * All TypeScript errors resolved - Production ready
  */
@@ -107,8 +107,8 @@ app.set("trust proxy", 1);
 const server = http.createServer(app);
 
 const allowedOrigins = [
-  "https://blindify.vercel.app",
-  "https://blindify-zeta.vercel.app",
+  "https://blindify-chi.vercel.app",
+  "https://blindify-o5vqc47oi-tymeos-projects.vercel.app",
   process.env.FRONTEND_URL,
   "http://localhost:3000",
   "http://localhost:5173"
