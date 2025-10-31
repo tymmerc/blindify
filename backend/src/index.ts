@@ -428,7 +428,7 @@ app.post('/api/games/solo/start', async (req: Request, res: Response): Promise<v
       }
     }
 
-    const { difficulty = 'normal', source = 'top_tracks', sourceId, mood, count = 10 } = req.body;
+    const { difficulty = 'normal', source = 'top_tracks', sourceId, count = 10 } = req.body;
     
     const sessionResult = await pool.query<GameSession>(
       `INSERT INTO game_sessions (user_id, mode, difficulty, source, source_id, total_questions)
