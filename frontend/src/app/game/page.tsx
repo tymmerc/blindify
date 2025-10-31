@@ -2,8 +2,8 @@
 import { useEffect, useRef, useState } from "react"
 import { motion } from "framer-motion"
 import { useRouter } from "next/navigation"
-import Navbar from "@/components/Navbar"
-import LayoutGradient from "@/components/LayoutGradient"
+import Navbar from "@/components/ui/Navbar"
+import LayoutGradient from "@/components/ui/LayoutGradient"
 import { api } from "@/lib/api"
 import { useSound } from "@/lib/use-sound"
 

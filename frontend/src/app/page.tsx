@@ -1,20 +1,22 @@
 "use client"
-import { useEffect } from "react"
-import { useRouter } from "next/navigation"
 
-export default function HomePage() {
-  const router = useRouter()
+import Hero from "@/components/landing/Hero"
+import Features from "@/components/landing/Features"
+import HowItWorks from "@/components/landing/HowItWorks"
+import CTA from "@/components/landing/CTA"
+import Navbar from "@/components/ui/Navbar"
+import LayoutGradient from "@/components/ui/LayoutGradient"
 
-  useEffect(() => {
-    router.push("/menu")
-  }, [router])
-
+export default function Home() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-pink-50 via-purple-50 to-pink-100">
-      <div className="text-center">
-        <h1 className="text-6xl font-bold text-gradient-purple-pink mb-4">Blindify</h1>
-        <p className="text-xl text-muted-foreground">Chargement...</p>
-      </div>
-    </div>
+    <LayoutGradient>
+      <Navbar />
+      <main className="flex flex-col items-center justify-center text-center min-h-screen">
+        <Hero />
+        <Features />
+        <HowItWorks />
+        <CTA />
+      </main>
+    </LayoutGradient>
   )
 }

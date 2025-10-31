@@ -2,8 +2,8 @@
 import { useState } from "react"
 import { motion } from "framer-motion"
 import Link from "next/link"
-import Navbar from "@/components/Navbar"
-import LayoutGradient from "@/components/LayoutGradient"
+import Navbar from "@/components/ui/Navbar"
+import LayoutGradient from "@/components/ui/LayoutGradient"
 import { api } from "@/lib/api"
 
 export default function LobbyPage() {
