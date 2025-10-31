@@ -1,44 +1,37 @@
-'use client';
+"use client";
 
-import { useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import React, { Suspense, useEffect } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import LayoutGradient from "@/components/ui/LayoutGradient";
 import Navbar from "@/components/ui/Navbar";
 
-export default function Callback() {
-  const router = useRouter();
+function CallbackContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
 
   useEffect(() => {
-    const access = searchParams.get("access_token");
-    const expiresIn = searchParams.get("expires_in");
-    const refresh = searchParams.get("refresh_token");
-
-    if (access) {
-      // Sauvegarde du token dans le localStorage
-      localStorage.setItem("spotify_access_token", access);
-      localStorage.setItem(
-        "spotify_expires_at",
-        String(Date.now() + Number(expiresIn || 3600) * 1000)
-      );
-      if (refresh) localStorage.setItem("spotify_refresh_token", refresh);
-
-      console.log("✅ Spotify token enregistré :", access);
-
-      // Redirection propre après stockage
-      setTimeout(() => router.replace("/menu"), 500);
-    } else {
-      console.error("❌ Aucun token trouvé dans l'URL");
-      setTimeout(() => router.replace("/"), 1000);
+    const token = searchParams.get("token");
+    if (token) {
+      localStorage.setItem("spotify_token", token);
+      router.push("/app/menu");
     }
-  }, [router, searchParams]);
+  }, [searchParams, router]);
 
+  return (
+    <div className="flex flex-col items-center justify-center h-screen text-center">
+      <h1 className="text-3xl font-semibold mb-4">Connexion en cours...</h1>
+      <p className="text-gray-400">Redirection vers ton espace Blindify 🎵</p>
+    </div>
+  );
+}
+
+export default function CallbackPage() {
   return (
     <LayoutGradient>
       <Navbar />
-      <div className="flex flex-1 items-center justify-center">
-        <p className="text-lg text-gray-300">Connexion à Spotify...</p>
-      </div>
+      <Suspense fallback={<div>Chargement...</div>}>
+        <CallbackContent />
+      </Suspense>
     </LayoutGradient>
   );
 }

@@ -1,34 +1,22 @@
-import type React from "react"
-import type { Metadata } from "next"
-import { Outfit } from "next/font/google"
-import { Suspense } from "react"
-import "./globals.css"
-import { ThemeProvider } from "@/lib/theme-provider"
+"use client";
 
-const outfit = Outfit({
-  subsets: ["latin"],
-  variable: "--font-outfit",
-  display: "swap",
-})
+import React from "react";
+import LayoutGradient from "@/components/ui/LayoutGradient";
+import Navbar from "@/components/ui/Navbar";
 
-export const metadata: Metadata = {
-  title: "Blindify",
-  description: "Le Blind Test Spotify 2.0",
-  generator: "v0.app",
-}
-
-export default function RootLayout({
+export default function AppLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode
-}>) {
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="fr">
-      <body className={`${outfit.variable} font-sans antialiased`}>
-        <ThemeProvider>
-          <Suspense fallback={<div>Loading...</div>}>{children}</Suspense>
-        </ThemeProvider>
+      <body data-theme="dark" className="bg-gradient-to-b from-[#0d0b20] to-[#070616] text-white min-h-screen">
+        <LayoutGradient>
+          <Navbar />
+          <main className="pt-24 px-6">{children}</main>
+        </LayoutGradient>
       </body>
     </html>
-  )
+  );
 }
