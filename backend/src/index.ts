@@ -82,6 +82,10 @@ app.use(
     httpOnly: true,
   })
 );
+app.get("/health", (_req: Request, res: Response) => {
+  res.status(200).send("OK");
+});
+
 
 // --- DB Setup ----------------------------------------------------------------
 async function testConnection(): Promise<boolean> {
