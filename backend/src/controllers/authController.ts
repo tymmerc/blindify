@@ -15,11 +15,12 @@ export const authController = {
         "user-read-email",
         "user-library-read",
         "user-top-read",
+        "playlist-read-private",
+        "user-read-recently-played",
       ];
 
       const authorizeUrl = api.createAuthorizeURL(scopes, "state123");
       console.log("🔗 Redirecting user to Spotify:", authorizeUrl);
-
       res.redirect(authorizeUrl);
     } catch (err) {
       console.error("❌ Error during Spotify login redirect:", err);
@@ -41,7 +42,7 @@ export const authController = {
 
       const api = makeSpotify();
       const grant = await api.authorizationCodeGrant(code);
-      const { access_token, refresh_token } = grant.body;
+      const { access_token, refresh_token, expires_in } = grant.body;
 
       // 🔍 Récupération du profil utilisateur
       const { data: me } = await axios.get("https://api.spotify.com/v1/me", {
@@ -69,11 +70,12 @@ export const authController = {
 
       console.log("✅ Utilisateur enregistré / mis à jour dans la base.");
 
-      // ✅ Redirection vers le frontend (menu)
-      const redirectUrl = `${process.env.FRONTEND_URL}/menu`;
+      // ✅ Redirection vers le frontend AVEC TOKEN
+      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+      const redirectUrl = `${frontendUrl}/auth/callback?access_token=${access_token}&expires_in=${expires_in}`;
       console.log("➡️ Redirecting user to:", redirectUrl);
 
-      res.redirect(redirectUrl);
+      res.redirect(302, redirectUrl);
     } catch (err: any) {
       console.error("❌ Spotify callback error:", err.response?.data || err);
       res
