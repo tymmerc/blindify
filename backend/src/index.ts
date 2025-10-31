@@ -187,12 +187,10 @@ app.get("/auth/callback", async (req: Request, res: Response): Promise<void> => 
     const grant = await api.authorizationCodeGrant(code);
     const { access_token, refresh_token, expires_in } = grant.body;
 
-    // 🔹 Récupération du profil
     const { data: profile } = await axios.get("https://api.spotify.com/v1/me", {
       headers: { Authorization: `Bearer ${access_token}` },
     });
 
-    // 🔹 Sauvegarde ou mise à jour utilisateur
     await pool.query(
       `INSERT INTO users (spotify_id, username, email, access_token, refresh_token, created_at, updated_at)
        VALUES ($1,$2,$3,$4,$5,NOW(),NOW())
@@ -210,9 +208,9 @@ app.get("/auth/callback", async (req: Request, res: Response): Promise<void> => 
       ]
     );
 
-    // 🔹 Redirection front sécurisée
     const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
     const redirectUrl = `${frontendUrl}/auth/callback?access_token=${access_token}&expires_in=${expires_in}`;
+
     console.log("✅ Redirecting to:", redirectUrl);
     res.redirect(302, redirectUrl);
   } catch (err: any) {
@@ -220,6 +218,7 @@ app.get("/auth/callback", async (req: Request, res: Response): Promise<void> => 
     res.status(500).send("Auth failed");
   }
 });
+
 
 
 app.get("/api/auth/me", async (req: Request, res: Response): Promise<void> => {
