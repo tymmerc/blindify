@@ -58,11 +58,13 @@ const app = express();
 const server = http.createServer(app);
 
 const allowedOrigins = [
-  "https://blindify-chi.vercel.app",
+  "https://blindify-zeta.vercel.app", 
+  "https://blindify-production.up.railway.app", 
   process.env.FRONTEND_URL,
   "http://localhost:3000",
   "http://localhost:5173",
 ].filter(Boolean) as string[];
+
 
 const ioServer = initSocket(server, allowedOrigins);
 
@@ -204,6 +206,28 @@ app.get("/auth/callback", async (req: Request, res: Response) => {
     res.status(500).send("Auth failed");
   }
 });
+
+app.get("/api/auth/me", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const user = await getUserByAccessToken(req.headers.authorization);
+    if (!user) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    res.json({
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      spotify_id: user.spotify_id,
+    });
+  } catch (err) {
+    console.error("❌ /api/auth/me error:", err);
+    res.status(500).json({ error: "Failed to get user" });
+  }
+});
+
+
 
 app.post("/api/games/solo/start", async (req: Request, res: Response): Promise<void> => {
   try {
