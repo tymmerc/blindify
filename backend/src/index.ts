@@ -58,12 +58,13 @@ const app = express();
 const server = http.createServer(app);
 
 const allowedOrigins = [
-  "https://blindify-zeta.vercel.app", 
-  "https://blindify-production.up.railway.app", 
+  "https://blindify-chi.vercel.app", 
+  "https://blindify-production.up.railway.app",
   process.env.FRONTEND_URL,
   "http://localhost:3000",
   "http://localhost:5173",
 ].filter(Boolean) as string[];
+
 
 
 const ioServer = initSocket(server, allowedOrigins);
