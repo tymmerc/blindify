@@ -399,24 +399,121 @@ app.get('/auth/callback', async (req: Request, res: Response): Promise<void> => 
   }
 });
 
-app.post('/api/auth/refresh', async (req: Request, res: Response): Promise<void> => {
+app.post('/api/games/solo/start', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { refresh_token } = req.body;
-    if (!refresh_token) {
-      res.status(400).json({ error: 'Missing refresh_token' });
+    const user = await getUserByAccessToken(req.headers.authorization);
+    if (!user) {
+      res.status(401).json({ error: 'Unauthorized' });
       return;
     }
+
+    if (user.refresh_token) {
+      try {
+        const spotify = makeSpotify(user.access_token || undefined, user.refresh_token || undefined);
+        await spotify.getMe();
+      } catch (error: any) {
+        if (error.statusCode === 401) {
+          console.log('🔄 Token expired, refreshing...');
+          try {
+            const newTokens = await refreshSpotifyToken(user.refresh_token);
+            await pool.query('UPDATE users SET access_token = $1 WHERE id = $2', [newTokens.access_token, user.id]);
+            user.access_token = newTokens.access_token;
+            console.log('✅ Token refreshed successfully');
+          } catch (refreshError) {
+            console.error('❌ Failed to refresh token:', refreshError);
+            res.status(401).json({ error: 'Token refresh failed, please login again' });
+            return;
+          }
+        }
+      }
+    }
+
+    const { difficulty = 'normal', source = 'top_tracks', sourceId, mood, count = 10 } = req.body;
     
-    const result = await refreshSpotifyToken(refresh_token);
-    await pool.query(
-      'UPDATE users SET access_token = $1, updated_at = NOW() WHERE refresh_token = $2',
-      [result.access_token, refresh_token]
+    const sessionResult = await pool.query<GameSession>(
+      `INSERT INTO game_sessions (user_id, mode, difficulty, source, source_id, total_questions)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [user.id, 'solo', difficulty, source, sourceId || null, count]
     );
-    
-    res.json({ access_token: result.access_token, expires_in: result.expires_in });
-  } catch (err) {
-    console.error('❌ Refresh error:', err);
-    res.status(500).json({ error: 'Refresh failed' });
+    const session = sessionResult.rows[0];
+
+    let tracks: Track[] = [];
+    const spotify = makeSpotify(user.access_token || undefined, user.refresh_token || undefined);
+
+    try {
+      if (source === 'top_tracks') {
+        const data = await spotify.getMyTopTracks({ limit: count, time_range: 'medium_term' });
+        tracks = data.body.items.map((t: any) => ({
+          spotify_track_id: t.id,
+          title: t.name,
+          artist: t.artists.map((a: any) => a.name).join(', '),
+          album: t.album.name,
+          preview_url: t.preview_url,
+          album_cover: t.album.images[0]?.url || null,
+          duration_ms: t.duration_ms,
+          popularity: t.popularity
+        }));
+      } else if (source === 'liked_tracks') {
+        const data = await spotify.getMySavedTracks({ limit: count });
+        tracks = data.body.items.map((item: any) => ({
+          spotify_track_id: item.track.id,
+          title: item.track.name,
+          artist: item.track.artists.map((a: any) => a.name).join(', '),
+          album: item.track.album.name,
+          preview_url: item.track.preview_url,
+          album_cover: item.track.album.images[0]?.url || null,
+          duration_ms: item.track.duration_ms,
+          popularity: item.track.popularity
+        }));
+      } else if (source === 'playlist' && sourceId) {
+        const data = await spotify.getPlaylistTracks(sourceId, { limit: count });
+        tracks = data.body.items.map((item: any) => ({
+          spotify_track_id: item.track.id,
+          title: item.track.name,
+          artist: item.track.artists.map((a: any) => a.name).join(', '),
+          album: item.track.album.name,
+          preview_url: item.track.preview_url,
+          album_cover: item.track.album.images[0]?.url || null,
+          duration_ms: item.track.duration_ms,
+          popularity: item.track.popularity
+        }));
+      } else if (source === 'recently_played') {
+        const data = await spotify.getMyRecentlyPlayedTracks({ limit: count });
+        tracks = data.body.items.map((item: any) => ({
+          spotify_track_id: item.track.id,
+          title: item.track.name,
+          artist: item.track.artists.map((a: any) => a.name).join(', '),
+          album: item.track.album.name,
+          preview_url: item.track.preview_url,
+          album_cover: item.track.album.images[0]?.url || null,
+          duration_ms: item.track.duration_ms,
+          popularity: item.track.popularity
+        }));
+      }
+    } catch (error: any) {
+      console.error('❌ Error fetching tracks:', error);
+      res.status(500).json({ error: 'Failed to fetch tracks from Spotify' });
+      return;
+    }
+
+    if (tracks.length === 0) {
+      res.status(400).json({ error: 'No tracks available from the selected source' });
+      return;
+    }
+
+    for (const track of tracks) {
+      await pool.query(
+        `INSERT INTO tracks (spotify_track_id, title, artist, album, preview_url, album_cover, duration_ms, popularity, user_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         ON CONFLICT (spotify_track_id) DO NOTHING`,
+        [track.spotify_track_id, track.title, track.artist, track.album, track.preview_url, track.album_cover, track.duration_ms, track.popularity, user.id]
+      );
+    }
+
+    res.json({ sessionId: session.id, tracks });
+  } catch (error: any) {
+    console.error('❌ Error starting solo game:', error);
+    res.status(500).json({ error: 'Failed to start game' });
   }
 });
 
