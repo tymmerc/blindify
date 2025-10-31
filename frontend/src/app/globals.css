@@ -2,49 +2,36 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --brand-cyan: #22d3ee;
-  --brand-purple: #8b5cf6;
-  --brand-dark: #0a0a0f;
+/* ===== THEMES ===== */
+:root[data-theme='light'] {
+  --bg: #faf8fc;
+  --text: #1a1a1a;
+  --accent: #d946ef;
 }
 
-html,
+:root[data-theme='dark'] {
+  --bg: #0d0b20;
+  --text: #e2e8f0;
+  --accent: #a855f7;
+}
+
+/* Base */
 body {
-  @apply bg-gradient-main text-white min-h-screen antialiased;
+  @apply antialiased transition-colors duration-500;
+  background: var(--bg);
+  color: var(--text);
 }
 
-h1, h2, h3, h4 {
-  @apply font-bold tracking-tight text-white;
+/* Gradient section backgrounds */
+.section-gradient {
+  @apply bg-gradient-to-br from-purple-700/10 to-fuchsia-700/10 rounded-2xl p-6 shadow-lg backdrop-blur-md;
 }
 
-a {
-  @apply transition hover:opacity-80;
+/* Titles */
+h1, h2, h3 {
+  @apply font-bold tracking-tight;
 }
 
-button {
-  @apply transition active:scale-[0.97];
-}
-
-/* === Glass panels === */
-.glass {
-  @apply bg-white/5 border border-white/10 backdrop-blur-xl rounded-xl shadow-lg;
-}
-
-/* === Glow buttons === */
-.btn-glow {
-  @apply px-5 py-2 rounded-lg font-semibold bg-gradient-to-r from-brand-cyan to-brand-purple text-white shadow-glow hover:opacity-95;
-}
-
-/* === Page layout === */
-.page-container {
-  @apply max-w-6xl mx-auto px-6 py-10;
-}
-
-/* === Section header === */
-.section-header {
-  @apply mb-6;
-}
-
-.section-header h2 {
-  @apply text-2xl md:text-3xl font-extrabold bg-gradient-to-r from-brand-cyan to-brand-purple bg-clip-text text-transparent;
+.btn-primary {
+  @apply bg-gradient-to-r from-purple-500 to-pink-500 text-white px-6 py-3 rounded-xl shadow-lg hover:opacity-90 transition;
 }

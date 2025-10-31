@@ -1,22 +1,15 @@
-"use client"
+import Hero from "@/components/landing/Hero";
+import Features from "@/components/landing/Features";
+import HowItWorks from "@/components/landing/HowItWorks";
+import CTA from "@/components/landing/CTA";
 
-import Hero from "@/components/landing/Hero"
-import Features from "@/components/landing/Features"
-import HowItWorks from "@/components/landing/HowItWorks"
-import CTA from "@/components/landing/CTA"
-import Navbar from "@/components/ui/Navbar"
-import LayoutGradient from "@/components/ui/LayoutGradient"
-
-export default function Home() {
+export default function LandingPage() {
   return (
-    <LayoutGradient>
-      <Navbar />
-      <main className="flex flex-col items-center justify-center text-center min-h-screen">
-        <Hero />
-        <Features />
-        <HowItWorks />
-        <CTA />
-      </main>
-    </LayoutGradient>
-  )
+    <main data-theme="light" className="min-h-screen bg-gradient-to-b from-white to-purple-50 text-gray-800">
+      <Hero />
+      <Features />
+      <HowItWorks />
+      <CTA />
+    </main>
+  );
 }
