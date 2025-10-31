@@ -174,21 +174,32 @@ app.get("/auth/login", (_req: Request, res: Response) => {
   res.redirect(url);
 });
 
-app.get("/auth/callback", async (req: Request, res: Response) => {
+app.get("/auth/callback", async (req: Request, res: Response): Promise<void> => {
   try {
     const code = String(req.query.code || "");
+    if (!code) {
+      res.status(400).send("Missing Spotify code");
+      return;
+    }
+
     const api = makeSpotify();
     const grant = await api.authorizationCodeGrant(code);
     const { access_token, refresh_token, expires_in } = grant.body;
+
+    // 🔹 Récupération du profil
     const { data: profile } = await axios.get("https://api.spotify.com/v1/me", {
       headers: { Authorization: `Bearer ${access_token}` },
     });
+
+    // 🔹 Sauvegarde ou mise à jour utilisateur
     await pool.query(
       `INSERT INTO users (spotify_id, username, email, access_token, refresh_token, created_at, updated_at)
        VALUES ($1,$2,$3,$4,$5,NOW(),NOW())
        ON CONFLICT (spotify_id)
-       DO UPDATE SET username=EXCLUDED.username, access_token=EXCLUDED.access_token,
-                     refresh_token=EXCLUDED.refresh_token, updated_at=NOW()`,
+       DO UPDATE SET username=EXCLUDED.username,
+                     access_token=EXCLUDED.access_token,
+                     refresh_token=EXCLUDED.refresh_token,
+                     updated_at=NOW()`,
       [
         profile.id,
         profile.display_name || "Unknown",
@@ -197,15 +208,18 @@ app.get("/auth/callback", async (req: Request, res: Response) => {
         refresh_token,
       ]
     );
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
-    res.redirect(
-      `${frontendUrl}/auth/callback?access_token=${access_token}&expires_in=${expires_in}`
-    );
-  } catch (err) {
-    console.error("❌ Auth callback error:", err);
+
+    // 🔹 Redirection front sécurisée
+    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+    const redirectUrl = `${frontendUrl}/auth/callback?access_token=${access_token}&expires_in=${expires_in}`;
+    console.log("✅ Redirecting to:", redirectUrl);
+    res.redirect(302, redirectUrl);
+  } catch (err: any) {
+    console.error("❌ Auth callback error:", err.message || err);
     res.status(500).send("Auth failed");
   }
 });
+
 
 app.get("/api/auth/me", async (req: Request, res: Response): Promise<void> => {
   try {
