@@ -1,26 +1,32 @@
-"use client";
+import type React from "react"
+import type { Metadata } from "next"
+import { Geist, Geist_Mono } from "next/font/google"
+import "./globals.css"
 
-import React from "react";
-import "./globals.css"; 
-import LayoutGradient from "@/components/ui/LayoutGradient";
-import Navbar from "@/components/ui/Navbar";
+const geist = Geist({ subsets: ["latin"], variable: "--font-sans" })
+const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-mono" })
 
-export default function AppLayout({
+export const metadata: Metadata = {
+  title: "Blindify — le blindtest Spotify réinventé",
+  description:
+    "Joue avec tes musiques préférées, seul ou entre amis, et découvre qui a vraiment l'oreille musicale la plus affûtée.",
+  icons: {
+    icon: "/favicon.ico",
+  },
+}
+
+export default function RootLayout({
   children,
 }: {
-  children: React.ReactNode;
+  children: React.ReactNode
 }) {
   return (
-    <html lang="fr">
+    <html lang="fr" suppressHydrationWarning>
       <body
-        data-theme="dark"
-        className="bg-gradient-to-b from-[#0d0b20] to-[#070616] text-white min-h-screen"
+        className={`${geist.variable} ${geistMono.variable} font-sans antialiased bg-background text-foreground m-0 p-0`}
       >
-        <LayoutGradient>
-          <Navbar />
-          <main className="pt-24 px-6">{children}</main>
-        </LayoutGradient>
+        {children}
       </body>
     </html>
-  );
+  )
 }

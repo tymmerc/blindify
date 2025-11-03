@@ -65,7 +65,10 @@ export const api = {
       credentials: "include",
       body: JSON.stringify(params),
     })
-    if (!r.ok) throw new Error("Failed to start game")
+    if (!r.ok) {
+      const error = await r.json().catch(() => ({ error: "Failed to start game" }))
+      throw new Error(`${r.status}: ${error.error || "Failed to start game"}`)
+    }
     return r.json()
   },
 
@@ -106,29 +109,153 @@ export const api = {
     return r.json()
   },
 
-  // ==================== TRACKS ====================
+  // ==================== MULTIJOUEUR ====================
 
   /**
-   * Ajoute une track aux likes Spotify de l'utilisateur
+   * Crée une nouvelle room multijoueur
    */
-  async likeTrack(trackId: string) {
-    const r = await fetch(`${API_URL}/api/tracks/like`, {
+  async createRoom(params: {
+    mode: "public" | "private",
+    maxPlayers?: number,
+    difficulty?: "easy" | "normal" | "hard",
+    source?: string
+  }) {
+    const r = await fetch(`${API_URL}/api/rooms/create`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...authHeaders() },
       credentials: "include",
-      body: JSON.stringify({ trackId }),
+      body: JSON.stringify(params),
     })
-    if (!r.ok) throw new Error("Failed to like track")
+    if (!r.ok) throw new Error("Failed to create room")
     return r.json()
   },
 
-  // ==================== SOURCES DE MUSIQUE ====================
+  /**
+   * Rejoint une room existante
+   */
+  async joinRoom(roomId: string) {
+    const r = await fetch(`${API_URL}/api/rooms/${roomId}/join`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      credentials: "include",
+    })
+    if (!r.ok) throw new Error("Failed to join room")
+    return r.json()
+  },
+
+  /**
+   * Quitte une room
+   */
+  async leaveRoom(roomId: string) {
+    const r = await fetch(`${API_URL}/api/rooms/${roomId}/leave`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      credentials: "include",
+    })
+    if (!r.ok) throw new Error("Failed to leave room")
+    return r.json()
+  },
+
+  /**
+   * Démarre une partie multijoueur
+   */
+  async startMultiplayerGame(roomId: string) {
+    const r = await fetch(`${API_URL}/api/rooms/${roomId}/start`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      credentials: "include",
+    })
+    if (!r.ok) throw new Error("Failed to start multiplayer game")
+    return r.json()
+  },
+
+  // ==================== PROFIL UTILISATEUR ====================
+
+  /**
+   * Récupère les informations du profil utilisateur
+   */
+  async getProfile() {
+    const r = await fetch(`${API_URL}/api/users/profile`, {
+      headers: authHeaders(),
+      credentials: "include",
+    })
+    if (!r.ok) throw new Error("Failed to fetch profile")
+    return r.json()
+  },
+
+  /**
+   * Met à jour le profil utilisateur
+   */
+  async updateProfile(data: {
+    username?: string,
+    avatar?: string
+  }) {
+    const r = await fetch(`${API_URL}/api/users/profile`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      credentials: "include",
+      body: JSON.stringify(data),
+    })
+    if (!r.ok) throw new Error("Failed to update profile")
+    return r.json()
+  },
+
+  // ==================== STATS & HISTORIQUE ====================
+
+  /**
+   * Récupère les statistiques de l'utilisateur
+   */
+  async getStats() {
+    const r = await fetch(`${API_URL}/api/stats`, {
+      headers: authHeaders(),
+      credentials: "include",
+    })
+    if (!r.ok) throw new Error("Failed to fetch stats")
+    return r.json()
+  },
+
+  /**
+   * Récupère l'historique des parties
+   */
+  async getHistory(params?: { limit?: number, offset?: number }) {
+    const query = new URLSearchParams()
+    if (params?.limit) query.set("limit", params.limit.toString())
+    if (params?.offset) query.set("offset", params.offset.toString())
+    
+    const r = await fetch(`${API_URL}/api/games/history?${query}`, {
+      headers: authHeaders(),
+      credentials: "include",
+    })
+    if (!r.ok) throw new Error("Failed to fetch history")
+    return r.json()
+  },
+
+  /**
+   * Récupère le leaderboard global
+   */
+  async getLeaderboard(params?: { 
+    timeframe?: "daily" | "weekly" | "monthly" | "all-time",
+    limit?: number 
+  }) {
+    const query = new URLSearchParams()
+    if (params?.timeframe) query.set("timeframe", params.timeframe)
+    if (params?.limit) query.set("limit", params.limit.toString())
+    
+    const r = await fetch(`${API_URL}/api/leaderboard?${query}`, {
+      headers: authHeaders(),
+      credentials: "include",
+    })
+    if (!r.ok) throw new Error("Failed to fetch leaderboard")
+    return r.json()
+  },
+
+  // ==================== SPOTIFY ====================
 
   /**
    * Récupère les playlists de l'utilisateur
    */
   async getPlaylists() {
-    const r = await fetch(`${API_URL}/api/sources/playlists`, {
+    const r = await fetch(`${API_URL}/api/spotify/playlists`, {
       headers: authHeaders(),
       credentials: "include",
     })
@@ -137,157 +264,26 @@ export const api = {
   },
 
   /**
+   * Récupère les tracks d'une playlist
+   */
+  async getPlaylistTracks(playlistId: string) {
+    const r = await fetch(`${API_URL}/api/spotify/playlists/${playlistId}/tracks`, {
+      headers: authHeaders(),
+      credentials: "include",
+    })
+    if (!r.ok) throw new Error("Failed to fetch playlist tracks")
+    return r.json()
+  },
+
+  /**
    * Récupère les top tracks de l'utilisateur
-   * @param timeRange - Période de temps ('short_term', 'medium_term', 'long_term')
    */
   async getTopTracks(timeRange: "short_term" | "medium_term" | "long_term" = "medium_term") {
-    const r = await fetch(`${API_URL}/api/sources/top-tracks?time_range=${timeRange}`, {
+    const r = await fetch(`${API_URL}/api/spotify/top-tracks?time_range=${timeRange}`, {
       headers: authHeaders(),
       credentials: "include",
     })
     if (!r.ok) throw new Error("Failed to fetch top tracks")
     return r.json()
   },
-
-  /**
-   * Récupère les morceaux récemment joués
-   */
-  async getRecentlyPlayed() {
-    const r = await fetch(`${API_URL}/api/sources/recently-played`, {
-      headers: authHeaders(),
-      credentials: "include",
-    })
-    if (!r.ok) throw new Error("Failed to fetch recently played")
-    return r.json()
-  },
-
-  /**
-   * Obtient des recommandations IA basées sur l'humeur
-   * @param mood - Humeur pour la génération ('balanced', 'energetic', 'chill', etc.)
-   * @param count - Nombre de tracks à générer
-   */
-  async getAIRecommendations(mood: string = "balanced", count: number = 20) {
-    const r = await fetch(`${API_URL}/api/sources/ai-recommendations`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...authHeaders() },
-      credentials: "include",
-      body: JSON.stringify({ mood, count }),
-    })
-    if (!r.ok) throw new Error("Failed to get AI recommendations")
-    return r.json()
-  },
-
-  // ==================== PROFIL & STATS ====================
-
-  /**
-   * Récupère le profil complet de l'utilisateur
-   */
-  async getProfile() {
-    const r = await fetch(`${API_URL}/api/user/profile`, {
-      headers: authHeaders(),
-      credentials: "include",
-    })
-    if (!r.ok) return null
-    return r.json()
-  },
-
-  /**
-   * Récupère les statistiques détaillées de l'utilisateur
-   * Inclut: total games, score moyen, meilleur score, artistes favoris
-   */
-  async getDetailedStats() {
-    const r = await fetch(`${API_URL}/api/stats/detailed`, {
-      headers: authHeaders(),
-      credentials: "include",
-    })
-    if (!r.ok) throw new Error("Failed to fetch detailed stats")
-    return r.json()
-  },
-
-  /**
-   * Récupère le classement global des joueurs
-   */
-  async getLeaderboard() {
-    const r = await fetch(`${API_URL}/api/stats/leaderboard`, {
-      headers: authHeaders(),
-      credentials: "include",
-    })
-    if (!r.ok) throw new Error("Failed to fetch leaderboard")
-    return r.json()
-  },
-
-  /**
-   * Récupère l'historique des parties jouées
-   */
-  async getHistory() {
-    const r = await fetch(`${API_URL}/api/games/history`, {
-      headers: authHeaders(),
-      credentials: "include",
-    })
-    if (!r.ok) throw new Error("Failed to fetch history")
-    return r.json()
-  },
-
-  // ==================== MULTIJOUEUR ====================
-
-  /**
-   * Crée une nouvelle salle multijoueur
-   */
-  async createRoom(settings: { 
-    name: string; 
-    maxPlayers: number; 
-    questionCount: number 
-  }) {
-    const r = await fetch(`${API_URL}/api/rooms/create`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...authHeaders() },
-      credentials: "include",
-      body: JSON.stringify(settings),
-    })
-    if (!r.ok) throw new Error("Create room failed")
-    return r.json()
-  },
-
-  /**
-   * Rejoint une salle multijoueur existante
-   * @param code - Code de la salle à rejoindre
-   */
-  async joinRoom(code: string) {
-    const r = await fetch(`${API_URL}/api/rooms/join`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...authHeaders() },
-      credentials: "include",
-      body: JSON.stringify({ code }),
-    })
-    if (!r.ok) throw new Error("Join room failed")
-    return r.json()
-  },
-
-  /**
-   * Quitte une salle multijoueur
-   */
-  async leaveRoom(roomId: string) {
-    const r = await fetch(`${API_URL}/api/rooms/${roomId}/leave`, {
-      method: "POST",
-      headers: authHeaders(),
-      credentials: "include",
-    })
-    if (!r.ok) throw new Error("Leave room failed")
-    return r.json()
-  },
-
-  /**
-   * Démarre une partie multijoueur (réservé au host)
-   */
-  async startMultiplayerGame(roomId: string) {
-    const r = await fetch(`${API_URL}/api/rooms/${roomId}/start`, {
-      method: "POST",
-      headers: authHeaders(),
-      credentials: "include",
-    })
-    if (!r.ok) throw new Error("Start multiplayer failed")
-    return r.json()
-  },
 }
-
-export default api
