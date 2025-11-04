@@ -1,0 +1,111 @@
+import { API_BASE_URL } from "./config"
+import type { SoloGameResponse, UserSummary } from "./types"
+
+class ApiError extends Error {
+  constructor(readonly status: number, message: string) {
+    super(message)
+    this.name = "ApiError"
+  }
+}
+
+function buildUrl(path: string): string {
+  if (!path.startsWith("/")) {
+    return `${API_BASE_URL}/${path}`
+  }
+  return `${API_BASE_URL}${path}`
+}
+
+async function parseJson<T>(response: Response): Promise<T> {
+  const text = await response.text()
+  if (!text) {
+    return {} as T
+  }
+  try {
+    return JSON.parse(text) as T
+  } catch (err) {
+    throw new ApiError(response.status, "Invalid JSON response")
+  }
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(buildUrl(path), {
+    ...init,
+    credentials: "include",
+    headers: {
+      Accept: "application/json",
+      ...init?.headers,
+    },
+  })
+
+  if (!response.ok) {
+    const message = response.statusText || "API request failed"
+    throw new ApiError(response.status, message)
+  }
+
+  if (response.status === 204) {
+    return undefined as T
+  }
+
+  return parseJson<T>(response)
+}
+
+export const clientApi = {
+  getLoginUrl() {
+    return buildUrl("/auth/login")
+  },
+  async currentUser(): Promise<UserSummary | null> {
+    try {
+      return await request<UserSummary>("/api/auth/me", { cache: "no-store" })
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        return null
+      }
+      throw err
+    }
+  },
+  async startSoloGame(options: {
+    difficulty?: "easy" | "normal" | "hard"
+    source?: string
+    count?: number
+  } = {}): Promise<SoloGameResponse> {
+    return request<SoloGameResponse>("/api/games/solo/start", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        difficulty: options.difficulty ?? "normal",
+        source: options.source ?? "liked_tracks",
+        count: options.count ?? 10,
+      }),
+    })
+  },
+  async addLike(trackId: string): Promise<void> {
+    await request("/api/likes", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ track_id: trackId }),
+    })
+  },
+  async refreshSession(): Promise<{ expiresAt: number | null } | null> {
+    try {
+      return await request<{ expiresAt: number | null }>("/api/auth/refresh", {
+        method: "POST",
+      })
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        return null
+      }
+      throw err
+    }
+  },
+  async logout(): Promise<void> {
+    await request("/api/auth/logout", {
+      method: "POST",
+    })
+  },
+}
+
+export type ClientApi = typeof clientApi

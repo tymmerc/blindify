@@ -1,48 +1,39 @@
-"use client";
+import Link from "next/link"
+import { redirect } from "next/navigation"
+import { getServerApi } from "@/lib/apiServer"
 
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
+export const dynamic = "force-dynamic"
 
-export default function AuthLoginPage() {
-  const router = useRouter();
-  const [checking, setChecking] = useState(true);
-
-  useEffect(() => {
-    let active = true;
-
-    (async () => {
-      const me = await api.checkAuth();
-      if (!active) return;
-      if (me) {
-        router.replace("/menu")
-        return;
-      }
-      setChecking(false);
-    })();
-
-    return () => {
-      active = false;
-    };
-  }, [router]);
-
-  if (checking) {
-    return (
-      <div className="min-h-screen grid place-items-center">
-        Vérification…
-      </div>
-    );
+export default async function AuthLoginPage() {
+  const api = getServerApi()
+  const user = await api.currentUser()
+  if (user) {
+    redirect("/menu")
   }
 
-  const login = () => {
-    window.location.href = api.getLoginUrl();
-  };
+  const loginUrl = api.getLoginUrl()
 
   return (
-    <div className="min-h-screen grid place-items-center">
-      <button className="px-4 py-2 rounded border" onClick={login}>
-        Se connecter avec Spotify
-      </button>
-    </div>
-  );
+    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-8 px-6 py-16">
+      <div className="space-y-3 text-center">
+        <h1 className="text-3xl font-semibold">Connexion Spotify</h1>
+        <p className="text-sm text-muted-foreground">
+          Nous utilisons ton compte Spotify uniquement pour récupérer tes titres likés et lancer la partie.
+        </p>
+      </div>
+
+      <a
+        href={loginUrl}
+        className="rounded-md bg-primary px-6 py-3 text-center font-medium text-primary-foreground transition hover:bg-primary/90"
+      >
+        Continuer avec Spotify
+      </a>
+
+      <div className="text-center text-sm text-muted-foreground">
+        <p>
+          Besoin d'aide ? <Link href="/" className="underline">Retour à l'accueil</Link>
+        </p>
+      </div>
+    </main>
+  )
 }

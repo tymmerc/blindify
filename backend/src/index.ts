@@ -5,6 +5,7 @@
  */
 
 import express, { Request, Response, NextFunction } from "express";
+import crypto from "crypto";
 import cors from "cors";
 import dotenv from "dotenv";
 import helmet from "helmet";
@@ -18,6 +19,8 @@ import { makeSpotify } from "./config/spotify";
 import { initSocket } from "./socket";
 import roomsRoutes from "./routes/rooms";
 import likesRouter from "./routes/likes";
+import { getSessionContext, clearSession } from "./utils/session";
+import type { AuthenticatedUser } from "./types/user";
 
 dotenv.config();
 
@@ -30,17 +33,6 @@ const SPOTIFY_SCOPES = [
   "user-read-recently-played",
   "user-library-modify",
 ];
-
-interface AuthenticatedUser {
-  id: number;
-  spotify_id: string;
-  username: string | null;
-  email: string | null;
-  access_token: string | null;
-  refresh_token: string | null;
-  level: number;
-  xp: number;
-}
 
 interface GameSession {
   id: number;
@@ -103,13 +95,6 @@ async function ensureSchema() {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_blacklist_until ON track_blacklist(blacklisted_until);`);
 }
 
-async function getUserByAccessToken(authHeader?: string) {
-  if (!authHeader) return null;
-  const token = authHeader.replace(/^Bearer\s+/i, "");
-  const { rows } = await pool.query<AuthenticatedUser>(`SELECT * FROM users WHERE access_token=$1 LIMIT 1`, [token]);
-  return rows[0] || null;
-}
-
 async function blacklistTracks(userId: number, trackIds: string[], hours = 24) {
   const until = new Date(Date.now() + hours * 3600 * 1000);
   for (const spotifyId of trackIds) {
@@ -149,19 +134,32 @@ function pickRandom<T>(arr: T[], count: number): T[] {
 /**
  * AUTH
  */
-app.get("/auth/login", (_req, res) => {
+app.get("/auth/login", (req, res) => {
   const api = makeSpotify();
-  const state = Math.random().toString(36).substring(7);
+  const state = crypto.randomUUID();
+  if (!req.session) {
+    req.session = {};
+  }
+  req.session.oauthState = state;
   const url = api.createAuthorizeURL(SPOTIFY_SCOPES, state);
   res.redirect(url);
-  return;
 });
 
 app.get("/auth/callback", async (req, res) => {
   try {
     const code = String(req.query.code || "");
+    const state = String(req.query.state || "");
+    const storedState = req.session?.oauthState;
+
     if (!code) {
       res.status(400).send("Missing Spotify code");
+      return;
+    }
+
+    if (!storedState || !state || storedState !== state) {
+      clearSession(req);
+      const frontendUrl = (process.env.FRONTEND_URL || "http://localhost:3000").replace(/\/$/, "");
+      res.redirect(`${frontendUrl}/auth/login?error=state_mismatch`);
       return;
     }
 
@@ -173,23 +171,34 @@ app.get("/auth/callback", async (req, res) => {
       headers: { Authorization: `Bearer ${access_token}` },
     });
 
-    await pool.query(
+    const { rows } = await pool.query<AuthenticatedUser>(
       `INSERT INTO users (spotify_id, username, email, access_token, refresh_token, created_at, updated_at)
        VALUES ($1,$2,$3,$4,$5,NOW(),NOW())
        ON CONFLICT (spotify_id)
        DO UPDATE SET username=EXCLUDED.username, access_token=EXCLUDED.access_token,
-                     refresh_token=EXCLUDED.refresh_token, updated_at=NOW()`,
+                     refresh_token=COALESCE(EXCLUDED.refresh_token, users.refresh_token), updated_at=NOW()
+       RETURNING id, spotify_id, username, email, access_token, refresh_token, level, xp`,
       [profile.id, profile.display_name || "Unknown", profile.email || null, access_token, refresh_token]
     );
 
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
-    const redirectUrl = `${frontendUrl.replace(/\/$/, "")}/auth/callback?access_token=${encodeURIComponent(access_token)}&expires_in=${encodeURIComponent(String(expires_in))}`;
+    const user = rows[0];
+    const session = req.session || {};
+    const expiresAt = Date.now() + (expires_in ?? 3600) * 1000;
 
-    res.redirect(302, redirectUrl);
-    return;
-  } catch {
+    session.userId = user.id;
+    session.spotifyId = user.spotify_id;
+    session.accessToken = access_token;
+    session.refreshToken = user.refresh_token || refresh_token || null;
+    session.expiresAt = expiresAt;
+    session.oauthState = undefined;
+
+    req.session = session;
+
+    const frontendUrl = (process.env.FRONTEND_URL || "http://localhost:3000").replace(/\/$/, "");
+    res.redirect(`${frontendUrl}/auth/callback`);
+  } catch (err) {
+    console.error("spotify_callback_failed", err);
     res.status(500).send("Auth failed");
-    return;
   }
 });
 
@@ -197,27 +206,22 @@ app.get("/auth/callback", async (req, res) => {
  * AUTH + PROFILE
  */
 app.get("/api/auth/me", async (req, res) => {
-  const user = await getUserByAccessToken(req.headers.authorization);
-  if (!user) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
+  const context = await getSessionContext(req, res, { refresh: false });
+  if (!context) return;
 
+  const { user } = context;
   res.json({
     id: user.id,
     username: user.username,
     email: user.email,
     spotify_id: user.spotify_id,
   });
-  return;
 });
 
 app.get("/api/profile", async (req, res) => {
-  const user = await getUserByAccessToken(req.headers.authorization);
-  if (!user) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
+  const context = await getSessionContext(req, res, { refresh: false });
+  if (!context) return;
+  const { user } = context;
 
   const stats = await pool.query(
     `SELECT COUNT(*)::int AS games_played FROM game_sessions WHERE user_id=$1`,
@@ -233,18 +237,15 @@ app.get("/api/profile", async (req, res) => {
     },
     stats: stats.rows[0],
   });
-  return;
 });
 
 /**
  * HISTORY
  */
 app.get("/api/history", async (req, res) => {
-  const user = await getUserByAccessToken(req.headers.authorization);
-  if (!user) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
+  const context = await getSessionContext(req, res, { refresh: false });
+  if (!context) return;
+  const { user } = context;
 
   const r = await pool.query(
     `SELECT id, mode, difficulty, source, total_questions, created_at
@@ -256,7 +257,17 @@ app.get("/api/history", async (req, res) => {
   );
 
   res.json({ history: r.rows });
-  return;
+});
+
+app.post("/api/auth/logout", (req, res) => {
+  clearSession(req);
+  res.status(204).end();
+});
+
+app.post("/api/auth/refresh", async (req, res) => {
+  const context = await getSessionContext(req, res, { forceRefresh: true });
+  if (!context) return;
+  res.json({ expiresAt: req.session?.expiresAt ?? null });
 });
 
 /**
@@ -264,33 +275,36 @@ app.get("/api/history", async (req, res) => {
  */
 app.post("/api/games/solo/start", async (req, res) => {
   try {
-    const user = await getUserByAccessToken(req.headers.authorization);
-    if (!user) {
-      res.status(401).json({ error: "Unauthorized" });
-      return;
-    }
+    const context = await getSessionContext(req, res);
+    if (!context) return;
 
-    const { difficulty = "normal", source = "liked_tracks", count = 10 } = req.body;
-    const spotify = makeSpotify(user.access_token || undefined, user.refresh_token || undefined);
+    const { user, accessToken, refreshToken } = context;
+    const difficulty = typeof req.body?.difficulty === "string" ? req.body.difficulty : "normal";
+    const source = typeof req.body?.source === "string" ? req.body.source : "liked_tracks";
+    const count = Number.isFinite(Number(req.body?.count)) ? Math.max(1, Math.min(Number(req.body.count), 20)) : 10;
+
+    const spotify = makeSpotify(accessToken, refreshToken || undefined);
     const blacklisted = await getBlacklistedSpotifyIds(user.id);
 
     const data = await spotify.getMySavedTracks({ limit: Math.max(count * 3, 50) });
-    const available = data.body.items.map((i: any) => i.track).filter((t: any) => t.preview_url && !blacklisted.has(t.id));
+    const available = data.body.items
+      .map((item: any) => item.track)
+      .filter((track: any) => track && track.preview_url && !blacklisted.has(track.id));
 
     if (available.length === 0) {
       res.status(400).json({ error: "No tracks available" });
       return;
     }
 
-    const tracks = pickRandom(available, count).map((t: any) => ({
-      spotify_track_id: t.id,
-      title: t.name,
-      artist: t.artists.map((a: any) => a.name).join(", "),
-      album: t.album.name,
-      preview_url: t.preview_url,
-      album_cover: t.album.images[0]?.url || null,
-      duration_ms: t.duration_ms,
-      popularity: t.popularity,
+    const tracks = pickRandom(available, count).map((track: any) => ({
+      spotify_track_id: track.id,
+      title: track.name,
+      artist: track.artists.map((artist: any) => artist.name).join(", "),
+      album: track.album.name,
+      preview_url: track.preview_url,
+      album_cover: track.album.images?.[0]?.url || null,
+      duration_ms: track.duration_ms,
+      popularity: track.popularity,
     }));
 
     const sessionResult = await pool.query<GameSession>(
@@ -310,13 +324,12 @@ app.post("/api/games/solo/start", async (req, res) => {
       );
     }
 
-    await blacklistTracks(user.id, tracks.map(t => t.spotify_track_id), 24);
+    await blacklistTracks(user.id, tracks.map(track => track.spotify_track_id), 24);
 
     res.json({ sessionId: session.id, tracks });
-    return;
-  } catch {
+  } catch (err) {
+    console.error("solo_game_failed", err);
     res.status(500).json({ error: "Failed to start game" });
-    return;
   }
 });
 
