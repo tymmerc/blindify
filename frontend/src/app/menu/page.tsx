@@ -20,7 +20,7 @@ export default function MenuPage() {
               </span>
             </div>
             <Link
-              href="/app/profile"
+              href="/profile"
               className="flex items-center gap-2 px-4 py-2 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition"
             >
               <User className="w-4 h-4" />
@@ -56,7 +56,7 @@ export default function MenuPage() {
               transition={{ delay: 0.1 }}
               className="group"
             >
-              <Link href="/app/solo">
+              <Link href="/solo">
                 <div className="relative p-8 rounded-3xl bg-white dark:bg-gray-900 border-2 border-gray-200 dark:border-gray-800 hover:border-purple-600 hover:shadow-2xl hover:shadow-purple-500/20 transition-all group-hover:scale-[1.02]">
                   {/* Icon */}
                   <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-600 to-pink-500 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
@@ -105,7 +105,7 @@ export default function MenuPage() {
               transition={{ delay: 0.2 }}
               className="group"
             >
-              <Link href="/app/lobby">
+              <Link href="/lobby">
                 <div className="relative p-8 rounded-3xl bg-white dark:bg-gray-900 border-2 border-gray-200 dark:border-gray-800 hover:border-green-600 hover:shadow-2xl hover:shadow-green-500/20 transition-all group-hover:scale-[1.02]">
                   {/* Icon */}
                   <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-green-600 to-pink-500 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
@@ -150,7 +150,7 @@ export default function MenuPage() {
 
           {/* Quick Access */}
           <div className="grid md:grid-cols-4 gap-4">
-            <Link href="/app/profile">
+            <Link href="/profile">
               <div className="p-6 rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 hover:border-purple-600 hover:shadow-lg transition-all">
                 <User className="w-8 h-8 text-purple-600 mb-3" />
                 <h3 className="font-bold text-gray-900 dark:text-white mb-1">Profil</h3>
@@ -158,7 +158,7 @@ export default function MenuPage() {
               </div>
             </Link>
 
-            <Link href="/app/leaderboard">
+            <Link href="/leaderboard">
               <div className="p-6 rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 hover:border-green-600 hover:shadow-lg transition-all">
                 <Trophy className="w-8 h-8 text-green-600 mb-3" />
                 <h3 className="font-bold text-gray-900 dark:text-white mb-1">Classement</h3>
@@ -166,7 +166,7 @@ export default function MenuPage() {
               </div>
             </Link>
 
-            <Link href="/app/history">
+            <Link href="/history">
               <div className="p-6 rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 hover:border-pink-600 hover:shadow-lg transition-all">
                 <History className="w-8 h-8 text-pink-600 mb-3" />
                 <h3 className="font-bold text-gray-900 dark:text-white mb-1">Historique</h3>
@@ -174,7 +174,7 @@ export default function MenuPage() {
               </div>
             </Link>
 
-            <Link href="/app/stats">
+            <Link href="/stats">
               <div className="p-6 rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 hover:border-purple-600 hover:shadow-lg transition-all">
                 <BarChart3 className="w-8 h-8 text-purple-600 mb-3" />
                 <h3 className="font-bold text-gray-900 dark:text-white mb-1">Statistiques</h3>
@@ -186,7 +186,7 @@ export default function MenuPage() {
           {/* Settings Link */}
           <div className="text-center">
             <Link
-              href="/app/settings"
+              href="/settings"
               className="inline-flex items-center gap-2 px-6 py-3 rounded-full border border-gray-200 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700 transition"
             >
               <Settings className="w-4 h-4" />

@@ -18,7 +18,7 @@ export default function LobbyPage() {
     try {
       const data = await api.createRoom()
       if (data?.roomCode) {
-        router.push(`/app/room/${data.roomCode}`)
+        router.push(`/room/${data.roomCode}`)
       } else {
         throw new Error("Code de salle manquant")
       }
@@ -39,7 +39,7 @@ export default function LobbyPage() {
     setError(null)
     try {
       await api.joinRoom(roomCode.toUpperCase())
-      router.push(`/app/room/${roomCode.toUpperCase()}`)
+      router.push(`/room/${roomCode.toUpperCase()}`)
     } catch (err: any) {
       setError(err.message || "Erreur lors de la connexion à la salle")
     } finally {

@@ -15,7 +15,7 @@ export default function AuthLoginPage() {
       const me = await api.checkAuth();
       if (!active) return;
       if (me) {
-        router.replace("/app/menu");
+        router.replace("/menu")
         return;
       }
       setChecking(false);

@@ -27,7 +27,7 @@ export default function HomePage() {
               Tarifs
             </Link>
             <Link
-              href="/app/menu"
+              href="/menu"
               className="px-5 py-2 rounded-full bg-gradient-to-r from-purple-600 to-green-500 text-white font-semibold hover:shadow-lg hover:scale-105 transition-all"
             >
               Jouer maintenant
@@ -77,7 +77,7 @@ export default function HomePage() {
               {/* CTA Buttons */}
               <div className="flex flex-col sm:flex-row gap-4">
                 <Link
-                  href="/app/menu"
+                  href="/menu"
                   className="group px-8 py-4 rounded-full bg-gradient-to-r from-purple-600 to-green-500 text-white font-bold text-lg flex items-center justify-center gap-2 hover:shadow-2xl hover:shadow-purple-500/50 hover:scale-105 transition-all"
                 >
                   <Play className="w-5 h-5" />
@@ -444,7 +444,7 @@ export default function HomePage() {
             Rejoins 50 000+ joueurs qui s'affrontent déjà sur Blindify
           </p>
           <Link
-            href="/app/menu"
+            href="/menu"
             className="inline-flex items-center gap-3 px-10 py-5 rounded-full bg-gradient-to-r from-purple-600 to-green-500 text-white font-bold text-xl hover:shadow-2xl hover:shadow-purple-500/50 hover:scale-105 transition-all"
           >
             <Play className="w-6 h-6" />

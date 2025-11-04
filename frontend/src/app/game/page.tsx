@@ -23,7 +23,7 @@ export default function GamePage() {
     (async () => {
       const m = await api.checkAuth();
       if (!m) {
-        router.replace("/app/auth/login");
+        router.replace("/auth/login");
         return;
       }
       setMe(m);

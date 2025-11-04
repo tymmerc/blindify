@@ -11,7 +11,7 @@ export default function SoloPage() {
   const [source, setSource] = useState<"liked" | "playlist" | "top-tracks">("liked")
 
   const startGame = () => {
-    router.push(`/app/game?difficulty=${difficulty}&source=${source}`)
+    router.push(`/game?difficulty=${difficulty}&source=${source}`)
   }
 
   return (
