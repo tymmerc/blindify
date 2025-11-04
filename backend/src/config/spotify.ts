@@ -4,9 +4,9 @@ dotenv.config();
 
 export const makeSpotify = (access_token?: string, refresh_token?: string) => {
   const api = new SpotifyWebApi({
-    clientId: process.env.SPOTIFY_CLIENT_ID,
-    clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
-    redirectUri: process.env.SPOTIFY_REDIRECT_URI,
+    clientId: process.env.SPOTIFY_CLIENT_ID!,
+    clientSecret: process.env.SPOTIFY_CLIENT_SECRET!,
+    redirectUri: process.env.SPOTIFY_REDIRECT_URI || "https://blindify-production.up.railway.app/auth/callback",
   });
 
   if (access_token) api.setAccessToken(access_token);

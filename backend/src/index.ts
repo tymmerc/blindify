@@ -2,10 +2,6 @@
  * =============================================================================
  * BLINDIFY BACKEND — COMPLETE STABLE VERSION
  * =============================================================================
- * - auto-migration (source_id)
- * - solo mode non-répétitif (blacklist)
- * - socket.io ready
- * - rooms routes intégrées
  */
 
 import express, { Request, Response, NextFunction } from "express";
@@ -19,8 +15,9 @@ import http from "http";
 import axios from "axios";
 import { pool } from "./config/db";
 import { makeSpotify } from "./config/spotify";
-import { initSocket} from "./socket";
+import { initSocket } from "./socket";
 import roomsRoutes from "./routes/rooms";
+import likesRouter from "./routes/likes";
 
 dotenv.config();
 
@@ -58,14 +55,12 @@ const app = express();
 const server = http.createServer(app);
 
 const allowedOrigins = [
-  "https://blindify-chi.vercel.app", 
+  "https://blindify-chi.vercel.app",
   "https://blindify-production.up.railway.app",
   process.env.FRONTEND_URL,
   "http://localhost:3000",
   "http://localhost:5173",
 ].filter(Boolean) as string[];
-
-
 
 const ioServer = initSocket(server, allowedOrigins);
 
@@ -73,24 +68,22 @@ app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false 
 app.use(cors({ origin: allowedOrigins, credentials: true }));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
-app.use(rateLimit({ windowMs: 60_000, max: 120 }));
-app.use(slowDown({ windowMs: 60_000, delayAfter: 60, delayMs: () => 100 }));
+app.use(rateLimit({ windowMs: 60000, max: 120 }));
+app.use(slowDown({ windowMs: 60000, delayAfter: 60, delayMs: () => 100 }));
+
 app.use(
   cookieSession({
     name: "blindify_session",
     secret: process.env.SESSION_SECRET || "CHANGE_ME",
-    maxAge: 24 * 60 * 60 * 1000,
+    maxAge: 86400000,
     sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
     secure: process.env.NODE_ENV === "production",
     httpOnly: true,
   })
 );
-app.get("/health", (_req: Request, res: Response) => {
-  res.status(200).send("OK");
-});
 
+app.get("/health", (_req, res) => res.status(200).send("OK"));
 
-// --- DB Setup ----------------------------------------------------------------
 async function testConnection(): Promise<boolean> {
   try {
     const client = await pool.connect();
@@ -105,38 +98,23 @@ async function testConnection(): Promise<boolean> {
 }
 
 async function ensureSchema() {
-  await pool.query(`
-    ALTER TABLE game_sessions
-    ADD COLUMN IF NOT EXISTS source_id VARCHAR(255);
-  `);
-  await pool.query(`
-    CREATE INDEX IF NOT EXISTS idx_blacklist_user_track ON track_blacklist(user_id, track_id);
-  `);
-  await pool.query(`
-    CREATE INDEX IF NOT EXISTS idx_blacklist_until ON track_blacklist(blacklisted_until);
-  `);
-  console.log("✅ Schema verified / updated");
+  await pool.query(`ALTER TABLE game_sessions ADD COLUMN IF NOT EXISTS source_id VARCHAR(255);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_blacklist_user_track ON track_blacklist(user_id, track_id);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_blacklist_until ON track_blacklist(blacklisted_until);`);
 }
 
-// --- Helpers -----------------------------------------------------------------
 async function getUserByAccessToken(authHeader?: string) {
   if (!authHeader) return null;
   const token = authHeader.replace(/^Bearer\s+/i, "");
-  const { rows } = await pool.query<AuthenticatedUser>(
-    `SELECT * FROM users WHERE access_token=$1 LIMIT 1`,
-    [token]
-  );
+  const { rows } = await pool.query<AuthenticatedUser>(`SELECT * FROM users WHERE access_token=$1 LIMIT 1`, [token]);
   return rows[0] || null;
 }
 
 async function blacklistTracks(userId: number, trackIds: string[], hours = 24) {
   const until = new Date(Date.now() + hours * 3600 * 1000);
   for (const spotifyId of trackIds) {
-    const { rows } = await pool.query<{ id: number }>(
-      "SELECT id FROM tracks WHERE spotify_track_id=$1",
-      [spotifyId]
-    );
-    if (rows[0])
+    const { rows } = await pool.query<{ id: number }>(`SELECT id FROM tracks WHERE spotify_track_id=$1`, [spotifyId]);
+    if (rows[0]) {
       await pool.query(
         `INSERT INTO track_blacklist (user_id, track_id, blacklisted_until)
          VALUES ($1,$2,$3)
@@ -144,6 +122,7 @@ async function blacklistTracks(userId: number, trackIds: string[], hours = 24) {
          DO UPDATE SET blacklisted_until=EXCLUDED.blacklisted_until`,
         [userId, rows[0].id, until]
       );
+    }
   }
 }
 
@@ -155,7 +134,7 @@ async function getBlacklistedSpotifyIds(userId: number): Promise<Set<string>> {
      WHERE b.user_id=$1 AND b.blacklisted_until>NOW()`,
     [userId]
   );
-  return new Set(rows.map((r) => r.spotify_track_id));
+  return new Set(rows.map(r => r.spotify_track_id));
 }
 
 function pickRandom<T>(arr: T[], count: number): T[] {
@@ -167,15 +146,18 @@ function pickRandom<T>(arr: T[], count: number): T[] {
   return copy.slice(0, count);
 }
 
-// --- Routes ------------------------------------------------------------------
-app.get("/auth/login", (_req: Request, res: Response) => {
+/**
+ * AUTH
+ */
+app.get("/auth/login", (_req, res) => {
   const api = makeSpotify();
   const state = Math.random().toString(36).substring(7);
   const url = api.createAuthorizeURL(SPOTIFY_SCOPES, state);
   res.redirect(url);
+  return;
 });
 
-app.get("/auth/callback", async (req: Request, res: Response): Promise<void> => {
+app.get("/auth/callback", async (req, res) => {
   try {
     const code = String(req.query.code || "");
     if (!code) {
@@ -195,55 +177,92 @@ app.get("/auth/callback", async (req: Request, res: Response): Promise<void> => 
       `INSERT INTO users (spotify_id, username, email, access_token, refresh_token, created_at, updated_at)
        VALUES ($1,$2,$3,$4,$5,NOW(),NOW())
        ON CONFLICT (spotify_id)
-       DO UPDATE SET username=EXCLUDED.username,
-                     access_token=EXCLUDED.access_token,
-                     refresh_token=EXCLUDED.refresh_token,
-                     updated_at=NOW()`,
-      [
-        profile.id,
-        profile.display_name || "Unknown",
-        profile.email || null,
-        access_token,
-        refresh_token,
-      ]
+       DO UPDATE SET username=EXCLUDED.username, access_token=EXCLUDED.access_token,
+                     refresh_token=EXCLUDED.refresh_token, updated_at=NOW()`,
+      [profile.id, profile.display_name || "Unknown", profile.email || null, access_token, refresh_token]
     );
 
     const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
-    const redirectUrl = `${frontendUrl}/auth/callback?access_token=${access_token}&expires_in=${expires_in}`;
+    const redirectUrl = `${frontendUrl.replace(/\/$/, "")}/auth/callback?access_token=${encodeURIComponent(access_token)}&expires_in=${encodeURIComponent(String(expires_in))}`;
 
-    console.log("✅ Redirecting to:", redirectUrl);
     res.redirect(302, redirectUrl);
-  } catch (err: any) {
-    console.error("❌ Auth callback error:", err.message || err);
+    return;
+  } catch {
     res.status(500).send("Auth failed");
+    return;
   }
 });
 
+/**
+ * AUTH + PROFILE
+ */
+app.get("/api/auth/me", async (req, res) => {
+  const user = await getUserByAccessToken(req.headers.authorization);
+  if (!user) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
 
+  res.json({
+    id: user.id,
+    username: user.username,
+    email: user.email,
+    spotify_id: user.spotify_id,
+  });
+  return;
+});
 
-app.get("/api/auth/me", async (req: Request, res: Response): Promise<void> => {
-  try {
-    const user = await getUserByAccessToken(req.headers.authorization);
-    if (!user) {
-      res.status(401).json({ error: "Unauthorized" });
-      return;
-    }
+app.get("/api/profile", async (req, res) => {
+  const user = await getUserByAccessToken(req.headers.authorization);
+  if (!user) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
 
-    res.json({
+  const stats = await pool.query(
+    `SELECT COUNT(*)::int AS games_played FROM game_sessions WHERE user_id=$1`,
+    [user.id]
+  );
+
+  res.json({
+    user: {
       id: user.id,
       username: user.username,
       email: user.email,
       spotify_id: user.spotify_id,
-    });
-  } catch (err) {
-    console.error("❌ /api/auth/me error:", err);
-    res.status(500).json({ error: "Failed to get user" });
-  }
+    },
+    stats: stats.rows[0],
+  });
+  return;
 });
 
+/**
+ * HISTORY
+ */
+app.get("/api/history", async (req, res) => {
+  const user = await getUserByAccessToken(req.headers.authorization);
+  if (!user) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
 
+  const r = await pool.query(
+    `SELECT id, mode, difficulty, source, total_questions, created_at
+     FROM game_sessions
+     WHERE user_id=$1
+     ORDER BY created_at DESC
+     LIMIT 50`,
+    [user.id]
+  );
 
-app.post("/api/games/solo/start", async (req: Request, res: Response): Promise<void> => {
+  res.json({ history: r.rows });
+  return;
+});
+
+/**
+ * SOLO
+ */
+app.post("/api/games/solo/start", async (req, res) => {
   try {
     const user = await getUserByAccessToken(req.headers.authorization);
     if (!user) {
@@ -256,9 +275,7 @@ app.post("/api/games/solo/start", async (req: Request, res: Response): Promise<v
     const blacklisted = await getBlacklistedSpotifyIds(user.id);
 
     const data = await spotify.getMySavedTracks({ limit: Math.max(count * 3, 50) });
-    const available = data.body.items
-      .map((i: any) => i.track)
-      .filter((t: any) => t.preview_url && !blacklisted.has(t.id));
+    const available = data.body.items.map((i: any) => i.track).filter((t: any) => t.preview_url && !blacklisted.has(t.id));
 
     if (available.length === 0) {
       res.status(400).json({ error: "No tracks available" });
@@ -289,53 +306,49 @@ app.post("/api/games/solo/start", async (req: Request, res: Response): Promise<v
                               duration_ms, popularity, user_id)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
          ON CONFLICT (spotify_track_id) DO NOTHING`,
-        [
-          track.spotify_track_id,
-          track.title,
-          track.artist,
-          track.album,
-          track.preview_url,
-          track.album_cover,
-          track.duration_ms,
-          track.popularity,
-          user.id,
-        ]
+        [track.spotify_track_id, track.title, track.artist, track.album, track.preview_url, track.album_cover, track.duration_ms, track.popularity, user.id]
       );
     }
 
-    await blacklistTracks(user.id, tracks.map((t) => t.spotify_track_id), 24);
+    await blacklistTracks(user.id, tracks.map(t => t.spotify_track_id), 24);
 
     res.json({ sessionId: session.id, tracks });
     return;
-  } catch (error) {
-    console.error("❌ Error starting solo game:", error);
+  } catch {
     res.status(500).json({ error: "Failed to start game" });
     return;
   }
 });
 
-
-// --- Routes multi ------------------------------------------------------------
+/**
+ * LIKES + ROOMS
+ */
+app.use("/api/likes", likesRouter);
 app.use("/api/rooms", roomsRoutes);
 
-// --- Sockets -----------------------------------------------------------------
-ioServer.on("connection", (socket) => {
-  console.log(`🔌 Socket connected: ${socket.id}`);
-  socket.on("join-room", (roomCode: string) => {
+/**
+ * SOCKETS
+ */
+ioServer.on("connection", socket => {
+  socket.on("join-room", roomCode => {
     socket.join(roomCode);
     ioServer.to(roomCode).emit("player-joined", { socketId: socket.id });
   });
-  socket.on("disconnect", () => console.log(`❌ Disconnected: ${socket.id}`));
 });
 
-// --- Errors ------------------------------------------------------------------
-app.use((_req: Request, res: Response) => res.status(404).json({ error: "Not Found" }));
+/**
+ * ERRORS
+ */
+app.use((_req, res) => res.status(404).json({ error: "Not Found" }));
+
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   console.error("❌ Internal error:", err);
   res.status(500).json({ error: "Internal error" });
 });
 
-// --- Start -------------------------------------------------------------------
+/**
+ * BOOT
+ */
 const PORT = Number(process.env.PORT) || 8080;
 (async () => {
   const db = await testConnection();
