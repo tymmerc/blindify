@@ -32,20 +32,28 @@ export const api = {
     }
   },
 
-  async startSoloGame(params: { difficulty?: "easy" | "normal" | "hard"; count?: number } = {}) {
+  async startSoloGame(params: {
+    difficulty?: "easy" | "normal" | "hard";
+    source?: "liked_tracks" | "playlist" | "top-tracks";
+    sourceId?: string | null;
+    count?: number;
+  } = {}) {
     const r = await fetch(`${API_URL}/api/games/solo/start`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...authHeaders() },
       credentials: "include",
       body: JSON.stringify({
         difficulty: params.difficulty || "normal",
-        source: "liked_tracks",          // aligné backend
+        source: params.source || "liked_tracks",
+        sourceId: params.sourceId || null,
         count: params.count || 10,
       }),
     });
+
     if (!r.ok) throw new Error("Failed to start game");
     return r.json();
   },
+
 
   async createRoom() {
     const r = await fetch(`${API_URL}/api/rooms/create`, {

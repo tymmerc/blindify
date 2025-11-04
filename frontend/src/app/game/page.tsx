@@ -23,8 +23,18 @@ export default function GamePage() {
   const [revealed, setRevealed] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  const difficulty = params.get("difficulty") || "normal";
-  const source = params.get("source") || "liked_tracks";
+  // Normalize difficulty
+  const rawDifficulty = params.get("difficulty");
+  const difficulty: "easy" | "normal" | "hard" =
+    rawDifficulty === "easy" || rawDifficulty === "hard"
+      ? rawDifficulty
+      : "normal";
+
+  // Normalize source (backend expects liked_tracks)
+  const rawSource = params.get("source");
+  const source = rawSource === "playlist" || rawSource === "top-tracks"
+    ? rawSource
+    : "liked_tracks";
 
   useEffect(() => {
     const token = localStorage.getItem("spotify_access_token");
@@ -32,6 +42,7 @@ export default function GamePage() {
       router.replace("/auth/login");
       return;
     }
+
     (async () => {
       const m = await api.checkAuth();
       if (!m) {
@@ -41,12 +52,14 @@ export default function GamePage() {
       setMe(m);
 
       const game = await api.startSoloGame({
-        difficulty: difficulty as any,
+        difficulty,
+        source,
         count: 10
       });
+
       setTracks(game.tracks);
     })();
-  }, [router, difficulty]);
+  }, [router, difficulty, source]);
 
   useEffect(() => {
     if (!tracks.length) return;
@@ -59,6 +72,7 @@ export default function GamePage() {
       audioRef.current.pause();
       audioRef.current.src = current.preview_url;
     }
+
     audioRef.current.play().catch(() => {});
   }, [idx, tracks]);
 
