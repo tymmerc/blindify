@@ -32,10 +32,6 @@ export default function AuthLoginPage() {
     }
   }, [router])
 
-  const login = () => {
-    window.location.href = api.getLoginUrl()
-  }
-
   if (checking) {
     return (
       <div className="min-h-screen grid place-items-center bg-gradient-to-br from-purple-900 via-indigo-900 to-gray-900 text-white">
@@ -98,13 +94,13 @@ export default function AuthLoginPage() {
               </p>
             </div>
 
-            <button
-              type="button"
-              onClick={login}
-              className="w-full rounded-2xl bg-white px-6 py-4 text-base font-semibold text-purple-900 transition hover:bg-purple-100"
+            <a
+              href={api.getLoginUrl()}
+              className="block w-full rounded-2xl bg-white px-6 py-4 text-center text-base font-semibold text-purple-900 transition hover:bg-purple-100"
+              rel="noreferrer"
             >
               Continuer avec Spotify
-            </button>
+            </a>
 
             <p className="mt-6 text-center text-xs text-purple-100/70">
               Besoin d'aide ? <span className="underline cursor-pointer" onClick={() => router.push("/")}>Retour à l'accueil</span>
