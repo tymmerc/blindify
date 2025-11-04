@@ -1,9 +1,8 @@
 "use client";
-
-import { useSearchParams, useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 
-export default function CallbackClient() {
+export default function Page() {
   const params = useSearchParams();
   const router = useRouter();
 
@@ -11,7 +10,8 @@ export default function CallbackClient() {
     const token = params.get("access_token");
     if (token) {
       localStorage.setItem("spotify_access_token", token);
-      router.push("/app");
+      router.replace("/menu");
+      return;
     }
   }, [params, router]);
 
