@@ -1,6 +1,6 @@
-import { Button } from "@/components/ui/ActionButton"
-import { Card } from "@/components/ui/SectionCard"
-import { Check } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import SectionCard from "@/components/ui/SectionCard"
+import { Check, Sparkles } from "lucide-react"
 
 const plans = [
   {
@@ -56,64 +56,53 @@ const plans = [
 
 export function Pricing() {
   return (
-    <section id="pricing" className="py-24 lg:py-32 bg-secondary/30">
+    <section id="pricing" className="py-24 lg:py-32 bg-gradient-to-b from-green-50/50 via-pink-50/30 to-purple-50/50 dark:from-gray-950 dark:via-pink-950/30 dark:to-gray-950">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center space-y-4 mb-16">
-          <h2 className="text-4xl lg:text-5xl font-bold text-balance">
+          <h2 className="text-4xl lg:text-5xl font-bold text-balance bg-gradient-to-r from-purple-600 via-pink-500 to-green-500 bg-clip-text text-transparent">
             Choisissez votre formule
           </h2>
-          <p className="text-xl text-muted-foreground max-w-2xl mx-auto text-pretty">
+          <p className="text-xl text-gray-600 dark:text-gray-400 max-w-2xl mx-auto text-pretty">
             Des tarifs transparents adaptés à tous les besoins, sans engagement
           </p>
         </div>
 
         <div className="grid md:grid-cols-3 gap-8">
           {plans.map((plan, index) => (
-            <Card
+            <SectionCard
               key={index}
-              className={`p-8 flex flex-col ${
+              className={`p-8 flex flex-col relative ${
                 plan.highlighted
-                  ? "bg-accent text-accent-foreground border-accent shadow-2xl scale-105"
-                  : "bg-card border-border"
+                  ? "border-2 border-pink-500 shadow-2xl scale-105 bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20"
+                  : ""
               }`}
             >
               {plan.highlighted && (
-                <div className="text-center mb-4">
-                  <span className="inline-block px-4 py-1 bg-accent-foreground/10 rounded-full text-sm font-medium">
+                <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
+                  <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 via-pink-500 to-green-500 rounded-full text-white text-sm font-bold shadow-lg">
+                    <Sparkles className="w-4 h-4" />
                     Le plus populaire
-                  </span>
+                  </div>
                 </div>
               )}
 
-              <div className="text-center mb-8">
-                <h3
-                  className={`text-2xl font-bold mb-2 ${
-                    plan.highlighted ? "text-accent-foreground" : "text-foreground"
-                  }`}
-                >
+              <div className="text-center mb-8 mt-4">
+                <h3 className="text-2xl font-bold mb-2 text-gray-900 dark:text-white">
                   {plan.name}
                 </h3>
                 <div className="mb-2">
-                  <span
-                    className={`text-5xl font-bold ${
-                      plan.highlighted ? "text-accent-foreground" : "text-foreground"
-                    }`}
-                  >
+                  <span className={`text-5xl font-bold ${
+                    plan.highlighted 
+                      ? "bg-gradient-to-r from-purple-600 via-pink-500 to-green-500 bg-clip-text text-transparent"
+                      : "text-gray-900 dark:text-white"
+                  }`}>
                     {plan.price}
                   </span>
-                  <span
-                    className={`text-lg ml-2 ${
-                      plan.highlighted ? "text-accent-foreground/80" : "text-muted-foreground"
-                    }`}
-                  >
+                  <span className="text-lg ml-2 text-gray-600 dark:text-gray-400">
                     {plan.period}
                   </span>
                 </div>
-                <p
-                  className={
-                    plan.highlighted ? "text-accent-foreground/80" : "text-muted-foreground"
-                  }
-                >
+                <p className="text-gray-600 dark:text-gray-400">
                   {plan.description}
                 </p>
               </div>
@@ -121,12 +110,8 @@ export function Pricing() {
               <ul className="space-y-4 mb-8 flex-grow">
                 {plan.features.map((feature, featureIndex) => (
                   <li key={featureIndex} className="flex items-start gap-3">
-                    <Check
-                      className={`w-5 h-5 mt-0.5 flex-shrink-0 ${
-                        plan.highlighted ? "text-accent-foreground" : "text-accent"
-                      }`}
-                    />
-                    <span className={plan.highlighted ? "text-accent-foreground" : "text-foreground"}>
+                    <Check className="w-5 h-5 mt-0.5 flex-shrink-0 text-green-500" />
+                    <span className="text-gray-900 dark:text-white">
                       {feature}
                     </span>
                   </li>
@@ -135,15 +120,12 @@ export function Pricing() {
 
               <Button
                 size="lg"
-                className={
-                  plan.highlighted
-                    ? "bg-accent-foreground text-accent hover:bg-accent-foreground/90 w-full"
-                    : "bg-accent text-accent-foreground hover:bg-accent/90 w-full"
-                }
+                variant={plan.highlighted ? "default" : "outline"}
+                className="w-full"
               >
                 {plan.cta}
               </Button>
-            </Card>
+            </SectionCard>
           ))}
         </div>
       </div>

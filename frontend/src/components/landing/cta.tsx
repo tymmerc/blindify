@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/ActionButton"
+import { Button } from "@/components/ui/button"
 import { Play, ArrowRight } from "lucide-react"
 
 export function CTA() {

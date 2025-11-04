@@ -114,58 +114,32 @@ export const api = {
   /**
    * Crée une nouvelle room multijoueur
    */
-  async createRoom(params: {
-    mode: "public" | "private",
-    maxPlayers?: number,
-    difficulty?: "easy" | "normal" | "hard",
-    source?: string
-  }) {
+  async createRoom() {
     const r = await fetch(`${API_URL}/api/rooms/create`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...authHeaders() },
       credentials: "include",
-      body: JSON.stringify(params),
     })
-    if (!r.ok) throw new Error("Failed to create room")
+    if (!r.ok) {
+      const error = await r.json().catch(() => ({ error: "Failed to create room" }))
+      throw new Error(`${r.status}: ${error.error || "Failed to create room"}`)
+    }
     return r.json()
   },
 
   /**
    * Rejoint une room existante
    */
-  async joinRoom(roomId: string) {
-    const r = await fetch(`${API_URL}/api/rooms/${roomId}/join`, {
+  async joinRoom(roomCode: string) {
+    const r = await fetch(`${API_URL}/api/rooms/${roomCode}/join`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...authHeaders() },
       credentials: "include",
     })
-    if (!r.ok) throw new Error("Failed to join room")
-    return r.json()
-  },
-
-  /**
-   * Quitte une room
-   */
-  async leaveRoom(roomId: string) {
-    const r = await fetch(`${API_URL}/api/rooms/${roomId}/leave`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...authHeaders() },
-      credentials: "include",
-    })
-    if (!r.ok) throw new Error("Failed to leave room")
-    return r.json()
-  },
-
-  /**
-   * Démarre une partie multijoueur
-   */
-  async startMultiplayerGame(roomId: string) {
-    const r = await fetch(`${API_URL}/api/rooms/${roomId}/start`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...authHeaders() },
-      credentials: "include",
-    })
-    if (!r.ok) throw new Error("Failed to start multiplayer game")
+    if (!r.ok) {
+      const error = await r.json().catch(() => ({ error: "Failed to join room" }))
+      throw new Error(`${r.status}: ${error.error || "Failed to join room"}`)
+    }
     return r.json()
   },
 

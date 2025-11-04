@@ -1,5 +1,5 @@
 import { Music, Users, Trophy, Sparkles, Zap, Globe } from "lucide-react"
-import { Card } from "@/components/ui/SectionCard"
+import SectionCard from "@/components/ui/SectionCard"
 
 const features = [
   {
@@ -42,29 +42,29 @@ const features = [
 
 export function Features() {
   return (
-    <section id="features" className="py-24 lg:py-32 bg-secondary/30">
+    <section id="features" className="py-24 lg:py-32 bg-gradient-to-b from-purple-50/50 via-pink-50/30 to-green-50/50 dark:from-gray-950 dark:via-purple-950/30 dark:to-gray-950">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center space-y-4 mb-16">
-          <h2 className="text-4xl lg:text-5xl font-bold text-balance">
-            Pourquoi <span className="text-primary">Blindify</span> ?
+          <h2 className="text-4xl lg:text-5xl font-bold text-balance bg-gradient-to-r from-purple-600 via-pink-500 to-green-500 bg-clip-text text-transparent">
+            Pourquoi Blindify ?
           </h2>
-          <p className="text-xl text-muted-foreground max-w-2xl mx-auto text-pretty">
+          <p className="text-xl text-gray-600 dark:text-gray-400 max-w-2xl mx-auto text-pretty">
             Une plateforme complète et intuitive conçue pour offrir la meilleure expérience de blindtest possible.
           </p>
         </div>
 
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
           {features.map((feature, index) => (
-            <Card
+            <SectionCard
               key={index}
-              className="p-8 bg-card hover:bg-accent/5 transition-all duration-300 hover:shadow-lg hover:-translate-y-1 border-border"
+              className="p-8 hover:shadow-xl hover:-translate-y-1 transition-all duration-300"
             >
-              <div className="w-14 h-14 bg-accent/10 rounded-xl flex items-center justify-center mb-6">
-                <feature.icon className="w-7 h-7 text-accent" />
+              <div className="w-14 h-14 bg-gradient-to-br from-purple-100 to-pink-100 dark:from-purple-900/30 dark:to-pink-900/30 rounded-xl flex items-center justify-center mb-6">
+                <feature.icon className="w-7 h-7 text-purple-600" />
               </div>
-              <h3 className="text-xl font-bold mb-3">{feature.title}</h3>
-              <p className="text-muted-foreground leading-relaxed">{feature.description}</p>
-            </Card>
+              <h3 className="text-xl font-bold mb-3 text-gray-900 dark:text-white">{feature.title}</h3>
+              <p className="text-gray-600 dark:text-gray-400 leading-relaxed">{feature.description}</p>
+            </SectionCard>
           ))}
         </div>
       </div>

@@ -1,7 +1,7 @@
 import type { Config } from "tailwindcss"
 
 const config: Config = {
-  darkMode: ["class"],
+  darkMode: "class",
   content: [
     "./pages/**/*.{ts,tsx}",
     "./components/**/*.{ts,tsx}",
@@ -18,19 +18,27 @@ const config: Config = {
     },
     extend: {
       colors: {
+        // Variables CSS pour compatibilité avec système oklch
         border: "oklch(var(--border))",
         input: "oklch(var(--input))",
         ring: "oklch(var(--ring))",
         background: "oklch(var(--background))",
         foreground: "oklch(var(--foreground))",
+        
+        // DA Rose/Violet/Vert - Couleurs directes
         primary: {
-          DEFAULT: "oklch(var(--primary))",
-          foreground: "oklch(var(--primary-foreground))",
+          DEFAULT: "#9333ea", // purple-600
+          foreground: "#ffffff",
         },
         secondary: {
-          DEFAULT: "oklch(var(--secondary))",
-          foreground: "oklch(var(--secondary-foreground))",
+          DEFAULT: "#ec4899", // pink-500
+          foreground: "#ffffff",
         },
+        accent: {
+          DEFAULT: "#22c55e", // green-500
+          foreground: "#ffffff",
+        },
+        
         destructive: {
           DEFAULT: "oklch(var(--destructive))",
           foreground: "oklch(var(--destructive-foreground))",
@@ -38,10 +46,6 @@ const config: Config = {
         muted: {
           DEFAULT: "oklch(var(--muted))",
           foreground: "oklch(var(--muted-foreground))",
-        },
-        accent: {
-          DEFAULT: "oklch(var(--accent))",
-          foreground: "oklch(var(--accent-foreground))",
         },
         popover: {
           DEFAULT: "oklch(var(--popover))",

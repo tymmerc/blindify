@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { motion } from "framer-motion";
-import PageHeader from "@/components/ui/pageheader";
+import PageHeader from "@/components/ui/PageHeader";
 
 export function HowItWorks() {
   return (

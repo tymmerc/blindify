@@ -1,229 +1,194 @@
 "use client"
+
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
-import Link from "next/link"
-import Navbar from "@/components/ui/navbar"
-import LayoutGradient from "@/components/ui/layout-gradient"
+import { Users, Plus, LogIn, Loader2 } from "lucide-react"
 import { api } from "@/lib/api"
 
 export default function LobbyPage() {
+  const router = useRouter()
   const [roomCode, setRoomCode] = useState("")
-  const [creating, setCreating] = useState(false)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const create = async () => {
-    setCreating(true)
+  const handleCreateRoom = async () => {
+    setLoading(true)
     setError(null)
     try {
-      const data = await api.createRoom({ name: "Salle de jeu", maxPlayers: 6, questionCount: 10 })
-      if (data?.code) window.location.href = `/room/${data.code}`
-      else throw new Error("Code de salle manquant")
-    } catch {
-      setError("Impossible de créer une salle.")
+      const data = await api.createRoom()
+      if (data?.roomCode) {
+        router.push(`/app/room/${data.roomCode}`)
+      } else {
+        throw new Error("Code de salle manquant")
+      }
+    } catch (err: any) {
+      setError(err.message || "Erreur lors de la création de la salle")
     } finally {
-      setCreating(false)
+      setLoading(false)
     }
   }
 
-  const join = async () => {
-    setError(null)
-    if (roomCode.trim().length !== 6) {
-      setError("Code invalide")
+  const handleJoinRoom = async () => {
+    if (!roomCode.trim()) {
+      setError("Entre un code de salle")
       return
     }
+
+    setLoading(true)
+    setError(null)
     try {
-      const data = await api.joinRoom(roomCode.trim())
-      if (data?.roomId) window.location.href = `/room/${data.roomId}`
-      else throw new Error("Salle introuvable")
-    } catch {
-      setError("Salle introuvable ou non disponible.")
+      await api.joinRoom(roomCode.toUpperCase())
+      router.push(`/app/room/${roomCode.toUpperCase()}`)
+    } catch (err: any) {
+      setError(err.message || "Erreur lors de la connexion à la salle")
+    } finally {
+      setLoading(false)
     }
   }
 
   return (
-    <LayoutGradient>
-      <Navbar />
-      <div className="flex-1 flex flex-col items-center justify-center px-4 pt-32 pb-16">
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-green-50 dark:from-gray-950 dark:via-purple-950 dark:to-gray-950">
+      <div className="max-w-4xl mx-auto px-6 py-12">
+        {/* Header */}
         <motion.div
-          initial={{ opacity: 0, y: 30 }}
+          initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-          className="w-full max-w-2xl"
+          className="text-center mb-12"
         >
-          <Link
-            href="/menu"
-            className="inline-flex items-center gap-2 text-gray-400 hover:text-white mb-8 font-medium transition-colors duration-300 group"
-          >
-            <motion.span
-              animate={{ x: [-3, 0, -3] }}
-              transition={{ duration: 1.5, repeat: Infinity }}
-            >
-              ←
-            </motion.span>
-            Retour au menu
-          </Link>
-
-          <div className="text-center mb-10">
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ delay: 0.2, type: "spring" }}
-              className="text-6xl mb-4"
-            >
-              👥
-            </motion.div>
-            <h1 className="text-5xl font-bold text-gradient mb-3">
-              Multijoueur
-            </h1>
-            <p className="text-xl text-gray-400">
-              Crée une salle ou rejoins une partie existante
-            </p>
+          <div className="w-20 h-20 mx-auto mb-6 rounded-3xl bg-gradient-to-br from-purple-600 via-pink-500 to-green-500 flex items-center justify-center">
+            <Users className="w-10 h-10 text-white" />
           </div>
+          <h1 className="text-5xl font-black bg-gradient-to-r from-purple-600 via-pink-500 to-green-500 bg-clip-text text-transparent mb-4">
+            Multijoueur
+          </h1>
+          <p className="text-xl text-gray-600 dark:text-gray-400">
+            Crée ou rejoins une salle pour jouer avec tes amis
+          </p>
+        </motion.div>
 
+        {/* Error Message */}
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="mb-6 p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-900 dark:text-red-100"
+          >
+            {error}
+          </motion.div>
+        )}
+
+        <div className="grid md:grid-cols-2 gap-6">
           {/* Créer une salle */}
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="glass-strong rounded-3xl p-8 mb-6"
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.1 }}
+            className="p-8 rounded-2xl bg-white dark:bg-gray-900 border-2 border-gray-200 dark:border-gray-800"
           >
-            <div className="flex items-center gap-4 mb-6">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 flex items-center justify-center text-3xl">
-                ✨
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 rounded-xl bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+                <Plus className="w-6 h-6 text-purple-600" />
               </div>
               <div>
-                <h3 className="text-2xl font-semibold text-white">Créer une salle</h3>
-                <p className="text-gray-400">Invite tes amis à te rejoindre</p>
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                  Créer une salle
+                </h2>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Invite jusqu'à 20 amis
+                </p>
               </div>
             </div>
-            <motion.button
-              whileHover={{ scale: creating ? 1 : 1.02 }}
-              whileTap={{ scale: creating ? 1 : 0.98 }}
-              onClick={create}
-              disabled={creating}
-              className={`w-full py-4 rounded-2xl text-lg font-semibold text-white transition-all duration-300 ${
-                creating
-                  ? "bg-gray-700 cursor-not-allowed opacity-50"
-                  : "bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 hover-lift"
-              }`}
+
+            <button
+              onClick={handleCreateRoom}
+              disabled={loading}
+              className="w-full px-6 py-4 rounded-full bg-gradient-to-r from-purple-600 via-pink-500 to-green-500 text-white font-bold text-lg hover:shadow-xl hover:scale-[1.02] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
-              {creating ? (
-                <span className="flex items-center justify-center gap-3">
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Création en cours…
-                </span>
+              {loading ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Création...
+                </>
               ) : (
-                <span className="flex items-center justify-center gap-2">
-                  <span>🚀</span>
-                  Créer une nouvelle salle
-                </span>
+                <>
+                  <Plus className="w-5 h-5" />
+                  Créer une salle
+                </>
               )}
-            </motion.button>
+            </button>
           </motion.div>
 
           {/* Rejoindre une salle */}
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-            className="glass-strong rounded-3xl p-8"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.2 }}
+            className="p-8 rounded-2xl bg-white dark:bg-gray-900 border-2 border-gray-200 dark:border-gray-800"
           >
-            <div className="flex items-center gap-4 mb-6">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-teal-500/20 to-cyan-500/20 flex items-center justify-center text-3xl">
-                🔗
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 rounded-xl bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                <LogIn className="w-6 h-6 text-green-600" />
               </div>
               <div>
-                <h3 className="text-2xl font-semibold text-white">Rejoindre une salle</h3>
-                <p className="text-gray-400">Entre le code à 6 caractères</p>
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                  Rejoindre une salle
+                </h2>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Entre le code de la salle
+                </p>
               </div>
             </div>
 
             <div className="space-y-4">
-              <div className="relative">
-                <input
-                  value={roomCode}
-                  onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
-                  placeholder="AB12CD"
-                  className="w-full glass hover:glass-strong rounded-2xl px-6 py-4 text-2xl text-white text-center tracking-[0.5em] font-bold placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all duration-300"
-                  maxLength={6}
-                />
-                {roomCode && (
-                  <motion.button
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    onClick={() => setRoomCode("")}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full glass hover:glass-strong flex items-center justify-center text-gray-400 hover:text-white transition-colors"
-                  >
-                    ✕
-                  </motion.button>
-                )}
-              </div>
+              <input
+                type="text"
+                value={roomCode}
+                onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
+                placeholder="CODE123"
+                maxLength={6}
+                className="w-full px-6 py-4 rounded-xl border-2 border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white font-bold text-xl text-center uppercase tracking-widest focus:border-green-600 focus:outline-none transition-colors"
+              />
 
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={join}
-                disabled={roomCode.length !== 6}
-                className={`w-full py-4 rounded-2xl text-lg font-semibold text-white transition-all duration-300 ${
-                  roomCode.length === 6
-                    ? "bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600 hover-lift"
-                    : "bg-gray-700 cursor-not-allowed opacity-50"
-                }`}
+              <button
+                onClick={handleJoinRoom}
+                disabled={loading || !roomCode.trim()}
+                className="w-full px-6 py-4 rounded-full bg-green-600 text-white font-bold text-lg hover:bg-green-700 hover:shadow-xl hover:scale-[1.02] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                <span className="flex items-center justify-center gap-2">
-                  <span>🎮</span>
-                  Rejoindre la partie
-                </span>
-              </motion.button>
-
-              {error && (
-                <motion.div
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="glass rounded-xl p-4 border border-red-500/30"
-                >
-                  <div className="flex items-center gap-3 text-red-400">
-                    <span className="text-xl">⚠️</span>
-                    <p className="font-medium">{error}</p>
-                  </div>
-                </motion.div>
-              )}
+                {loading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Connexion...
+                  </>
+                ) : (
+                  <>
+                    <LogIn className="w-5 h-5" />
+                    Rejoindre
+                  </>
+                )}
+              </button>
             </div>
           </motion.div>
+        </div>
 
-          {/* Info */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.6 }}
-            className="mt-6 glass rounded-2xl p-6"
-          >
-            <h4 className="text-sm font-semibold text-gray-400 mb-3 uppercase tracking-wider">
-              Comment ça marche ?
-            </h4>
-            <div className="space-y-2 text-gray-400 text-sm">
-              <div className="flex items-start gap-3">
-                <span className="w-6 h-6 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400 font-bold text-xs flex-shrink-0">
-                  1
-                </span>
-                <p>Le créateur reçoit un code unique à partager</p>
-              </div>
-              <div className="flex items-start gap-3">
-                <span className="w-6 h-6 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400 font-bold text-xs flex-shrink-0">
-                  2
-                </span>
-                <p>Les joueurs entrent le code pour rejoindre</p>
-              </div>
-              <div className="flex items-start gap-3">
-                <span className="w-6 h-6 rounded-full bg-teal-500/20 flex items-center justify-center text-teal-400 font-bold text-xs flex-shrink-0">
-                  3
-                </span>
-                <p>Tout le monde joue en même temps !</p>
-              </div>
-            </div>
-          </motion.div>
+        {/* Info */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="mt-8 p-6 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800"
+        >
+          <h3 className="font-bold text-blue-900 dark:text-blue-100 mb-2">
+            💡 Comment ça marche ?
+          </h3>
+          <ul className="space-y-2 text-sm text-blue-800 dark:text-blue-200">
+            <li>• Le créateur de la salle partage le code avec ses amis</li>
+            <li>• Tous les joueurs doivent être connectés avec Spotify</li>
+            <li>• La partie démarre quand tous sont prêts</li>
+            <li>• Le premier à trouver le titre gagne !</li>
+          </ul>
         </motion.div>
       </div>
-    </LayoutGradient>
+    </div>
   )
 }

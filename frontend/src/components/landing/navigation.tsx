@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/ActionButton"
+import { Button } from "@/components/ui/button"
 import { Music } from "lucide-react"
 import Link from "next/link"
 
