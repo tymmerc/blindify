@@ -6,9 +6,10 @@ const API_URL =
   "https://blindify-production.up.railway.app";
 
 function authHeaders(): Record<string, string> {
-  const token = typeof window !== "undefined"
-    ? localStorage.getItem("spotify_access_token")
-    : null;
+  const token =
+    typeof window !== "undefined"
+      ? localStorage.getItem("spotify_access_token")
+      : null;
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
@@ -18,26 +19,29 @@ export const api = {
   },
 
   async checkAuth() {
-    const r = await fetch(`${API_URL}/api/auth/me`, {
-      headers: authHeaders(),
-      credentials: "include",
-    });
-    if (!r.ok) return null;
-    return r.json();
+    try {
+      const r = await fetch(`${API_URL}/api/auth/me`, {
+        headers: authHeaders(),
+        credentials: "include",
+        cache: "no-store",
+      });
+      if (!r.ok) return null;
+      return r.json();
+    } catch {
+      return null; // évite le crash "Failed to fetch"
+    }
   },
 
-  async startSoloGame(params: {
-    difficulty?: "easy" | "normal" | "hard";
-    source?: string;
-    sourceId?: string | null;
-    mood?: string;
-    count?: number;
-  } = {}) {
+  async startSoloGame(params: { difficulty?: "easy" | "normal" | "hard"; count?: number } = {}) {
     const r = await fetch(`${API_URL}/api/games/solo/start`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...authHeaders() },
       credentials: "include",
-      body: JSON.stringify(params),
+      body: JSON.stringify({
+        difficulty: params.difficulty || "normal",
+        source: "liked_tracks",          // aligné backend
+        count: params.count || 10,
+      }),
     });
     if (!r.ok) throw new Error("Failed to start game");
     return r.json();
@@ -68,6 +72,7 @@ export const api = {
     const r = await fetch(`${API_URL}/api/profile`, {
       headers: authHeaders(),
       credentials: "include",
+      cache: "no-store",
     });
     if (!r.ok) throw new Error("Failed to load profile");
     return r.json();
@@ -88,19 +93,19 @@ export const api = {
     const r = await fetch(`${API_URL}/api/likes/${userId}`, {
       headers: authHeaders(),
       credentials: "include",
+      cache: "no-store",
     });
     if (!r.ok) throw new Error("Failed to get likes");
     return r.json();
   },
+
   async getHistory() {
     const r = await fetch(`${API_URL}/api/history`, {
       headers: authHeaders(),
       credentials: "include",
+      cache: "no-store",
     });
     if (!r.ok) throw new Error("Failed to load history");
     return r.json();
-  }
-
-  
+  },
 };
-
