@@ -1,5 +1,5 @@
-import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
+import { Button } from "@/components/ui/ActionButton"
+import { Card } from "@/components/ui/SectionCard"
 import { Check } from "lucide-react"
 
 const plans = [

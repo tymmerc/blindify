@@ -1,5 +1,5 @@
 import { Music, Users, Trophy, Sparkles, Zap, Globe } from "lucide-react"
-import { Card } from "@/components/ui/card"
+import { Card } from "@/components/ui/SectionCard"
 
 const features = [
   {
