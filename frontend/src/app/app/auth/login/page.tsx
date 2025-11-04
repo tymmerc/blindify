@@ -9,19 +9,29 @@ export default function AuthLoginPage() {
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    const run = async () => {
+    let active = true;
+
+    (async () => {
       const me = await api.checkAuth();
+      if (!active) return;
       if (me) {
         router.replace("/app/menu");
         return;
       }
       setChecking(false);
+    })();
+
+    return () => {
+      active = false;
     };
-    run();
   }, [router]);
 
   if (checking) {
-    return <div className="min-h-screen grid place-items-center">Vérification…</div>;
+    return (
+      <div className="min-h-screen grid place-items-center">
+        Vérification…
+      </div>
+    );
   }
 
   const login = () => {
