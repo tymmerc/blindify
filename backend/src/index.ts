@@ -170,6 +170,12 @@ async function ensureSchema() {
   await pool.query(`ALTER TABLE game_sessions ADD COLUMN IF NOT EXISTS source_id VARCHAR(255);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_blacklist_user_track ON track_blacklist(user_id, track_id);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_blacklist_until ON track_blacklist(blacklisted_until);`);
+  await pool.query(`
+    DELETE FROM tracks a
+    USING tracks b
+    WHERE a.id > b.id AND a.spotify_track_id = b.spotify_track_id;
+  `);
+  await pool.query(`ALTER TABLE tracks ADD CONSTRAINT IF NOT EXISTS tracks_spotify_unique UNIQUE (spotify_track_id);`);
 }
 
 async function blacklistTracks(userId: number, trackIds: string[], hours = 24) {
