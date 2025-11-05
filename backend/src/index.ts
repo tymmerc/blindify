@@ -187,6 +187,20 @@ async function ensureSchema() {
       END IF;
     END $$;
   `);
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'track_blacklist_user_track_unique'
+      ) THEN
+        ALTER TABLE track_blacklist
+          ADD CONSTRAINT track_blacklist_user_track_unique
+          UNIQUE (user_id, track_id);
+      END IF;
+    END $$;
+  `);
 }
 
 async function blacklistTracks(userId: number, trackIds: string[], hours = 24) {
