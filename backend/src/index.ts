@@ -42,6 +42,74 @@ const FALLBACK_PLAYLISTS = [
 
 const FALLBACK_GENRES = ["pop", "rock", "edm", "hip-hop", "indie"];
 
+const STATIC_FALLBACK_TRACKS: SpotifyTrack[] = [
+  {
+    id: "0VjIjW4GlUZAMYd2vXMi3b",
+    name: "Blinding Lights",
+    artists: [{ name: "The Weeknd" }],
+    album: {
+      name: "After Hours",
+      images: [{ url: "https://i.scdn.co/image/ab67616d0000b273a4de26a2a0cf0f962d9a389d" }],
+    },
+    preview_url:
+      "https://p.scdn.co/mp3-preview/4f3d8f8cda146cccea62e7e0349395fac5761b1c?cid=1",
+    duration_ms: 200040,
+    popularity: 95,
+  },
+  {
+    id: "2Fxmhks0bxGSBdJ92vM42m",
+    name: "bad guy",
+    artists: [{ name: "Billie Eilish" }],
+    album: {
+      name: "WHEN WE ALL FALL ASLEEP, WHERE DO WE GO?",
+      images: [{ url: "https://i.scdn.co/image/ab67616d0000b273fd77a7080f8335a7b94439c6" }],
+    },
+    preview_url:
+      "https://p.scdn.co/mp3-preview/0cbb6a421be2858e577f93c7cdd11abbd88abee5?cid=1",
+    duration_ms: 194087,
+    popularity: 91,
+  },
+  {
+    id: "7qiZfU4dY1lWllzX7mPBI3",
+    name: "Shape of You",
+    artists: [{ name: "Ed Sheeran" }],
+    album: {
+      name: "÷ (Deluxe)",
+      images: [{ url: "https://i.scdn.co/image/ab67616d0000b2732f5d6d203c49b1115c3a1e75" }],
+    },
+    preview_url:
+      "https://p.scdn.co/mp3-preview/6a2c7f85d0e5aed0881c9f1c3d4b63a5e0b1ed4b?cid=1",
+    duration_ms: 233712,
+    popularity: 95,
+  },
+  {
+    id: "35mvY5S1H3J2QZyna3TFe0",
+    name: "Levitating",
+    artists: [{ name: "Dua Lipa" }],
+    album: {
+      name: "Future Nostalgia",
+      images: [{ url: "https://i.scdn.co/image/ab67616d0000b2737206019b2ff6f7f02e97142c" }],
+    },
+    preview_url:
+      "https://p.scdn.co/mp3-preview/1bb547652004e3d037fad0a9d6236551cc4036d1?cid=1",
+    duration_ms: 203064,
+    popularity: 89,
+  },
+  {
+    id: "24JygzOLM0EmRQeGtFcIcG",
+    name: "Hey Ya!",
+    artists: [{ name: "Outkast" }],
+    album: {
+      name: "Speakerboxxx/The Love Below",
+      images: [{ url: "https://i.scdn.co/image/ab67616d0000b273d1a3cd95528ca9f63753ce7a" }],
+    },
+    preview_url:
+      "https://p.scdn.co/mp3-preview/64b4e2f2f9ce2f48abeb8491bfc2c0b2c6b81998?cid=1",
+    duration_ms: 238266,
+    popularity: 82,
+  },
+];
+
 interface GameSession {
   id: number;
   user_id: number;
@@ -307,6 +375,11 @@ async function gatherTracks(
   const recommendedTracks = await tryFetch("recommendations", () => fetchRecommendations(spotify, desired, blacklist));
   if (recommendedTracks.length) {
     return { sourceUsed: "recommendations", tracks: recommendedTracks };
+  }
+
+  const staticTracks = STATIC_FALLBACK_TRACKS.filter(track => !blacklist.has(track.id));
+  if (staticTracks.length) {
+    return { sourceUsed: "static", tracks: staticTracks };
   }
 
   return { sourceUsed: source, tracks: [] };
