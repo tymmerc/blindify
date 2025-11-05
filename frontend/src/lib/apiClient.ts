@@ -51,6 +51,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       const errorPayload = await response.json()
       if (errorPayload && typeof errorPayload.error === "string") {
         message = errorPayload.error
+        if (typeof errorPayload.details === "string" && errorPayload.details) {
+          message = `${message}: ${errorPayload.details}`
+        }
       }
     } catch {
       // ignore json parsing issue, keep default message

@@ -233,6 +233,15 @@ async function gatherTracks(
   desired: number,
   blacklist: Set<string>
 ): Promise<{ sourceUsed: string; tracks: SpotifyTrack[] }> {
+  async function tryFetch(label: string, fetcher: () => Promise<SpotifyTrack[]>): Promise<SpotifyTrack[]> {
+    try {
+      return await fetcher();
+    } catch (err) {
+      console.error(`fetch_${label}_failed`, err);
+      return [];
+    }
+  }
+
   const attempts: string[] = [];
   switch (source) {
     case "top_tracks":
@@ -253,11 +262,11 @@ async function gatherTracks(
   for (const attempt of attempts) {
     let fetched: SpotifyTrack[] = [];
     if (attempt === "liked_tracks") {
-      fetched = await fetchSavedTracks(spotify, desired, blacklist);
+      fetched = await tryFetch("saved_tracks", () => fetchSavedTracks(spotify, desired, blacklist));
     } else if (attempt === "top_tracks") {
-      fetched = await fetchTopTracks(spotify, desired, blacklist);
+      fetched = await tryFetch("top_tracks", () => fetchTopTracks(spotify, desired, blacklist));
     } else {
-      fetched = await fetchRecentTracks(spotify, desired, blacklist);
+      fetched = await tryFetch("recent_tracks", () => fetchRecentTracks(spotify, desired, blacklist));
     }
 
     if (fetched.length) {
@@ -265,7 +274,7 @@ async function gatherTracks(
     }
   }
 
-  const fallbackTracks = await fetchFromPlaylists(spotify, desired, blacklist);
+  const fallbackTracks = await tryFetch("curated", () => fetchFromPlaylists(spotify, desired, blacklist));
   if (fallbackTracks.length) {
     return { sourceUsed: "curated", tracks: fallbackTracks };
   }
@@ -475,7 +484,8 @@ app.post("/api/games/solo/start", async (req, res) => {
     res.json({ sessionId: session.id, tracks, sourceUsed });
   } catch (err) {
     console.error("solo_game_failed", err);
-    res.status(500).json({ error: "Failed to start game" });
+    const message = err instanceof Error ? err.message : "Failed to start game";
+    res.status(500).json({ error: "Failed to start game", details: message });
   }
 });
 
