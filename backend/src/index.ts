@@ -42,16 +42,6 @@ const FALLBACK_PLAYLISTS = [
 
 const FALLBACK_GENRES = ["pop", "rock", "edm", "hip-hop", "indie"];
 
-const FALLBACK_SEARCH_QUERIES = [
-  'track:"Blinding Lights" artist:"The Weeknd"',
-  'track:"bad guy" artist:"Billie Eilish"',
-  'track:"Shape of You" artist:"Ed Sheeran"',
-  'track:"Levitating" artist:"Dua Lipa"',
-  'track:"Hey Ya" artist:"Outkast"',
-  'track:"Rolling in the Deep" artist:"Adele"',
-  'track:"Uptown Funk" artist:"Mark Ronson"',
-];
-
 interface GameSession {
   id: number;
   user_id: number;
@@ -293,25 +283,6 @@ async function fetchRecommendations(
   return collected;
 }
 
-async function fetchSearchFallback(
-  spotify: ReturnType<typeof makeSpotify>,
-  desired: number,
-  blacklist: Set<string>
-): Promise<SpotifyTrack[]> {
-  const collected: SpotifyTrack[] = [];
-  for (const query of FALLBACK_SEARCH_QUERIES) {
-    if (collected.length >= desired * 3) break;
-    const data = await spotify.searchTracks(query, { limit: 1, market: "from_token" });
-    for (const track of data.body.tracks?.items ?? []) {
-      if (!track.preview_url || blacklist.has(track.id)) continue;
-      if (!collected.find(t => t.id === track.id)) {
-        collected.push(track as SpotifyTrack);
-      }
-    }
-  }
-  return collected;
-}
-
 async function gatherTracks(
   spotify: ReturnType<typeof makeSpotify>,
   source: string,
@@ -367,11 +338,6 @@ async function gatherTracks(
   const recommendedTracks = await tryFetch("recommendations", () => fetchRecommendations(spotify, desired, blacklist));
   if (recommendedTracks.length) {
     return { sourceUsed: "recommendations", tracks: recommendedTracks };
-  }
-
-  const searchTracks = await tryFetch("search_fallback", () => fetchSearchFallback(spotify, desired, blacklist));
-  if (searchTracks.length) {
-    return { sourceUsed: "search", tracks: searchTracks };
   }
 
   return { sourceUsed: source, tracks: [] };
