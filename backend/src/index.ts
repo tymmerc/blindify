@@ -34,6 +34,12 @@ const SPOTIFY_SCOPES = [
   "user-library-modify",
 ];
 
+const FALLBACK_PLAYLISTS = [
+  "37i9dQZF1DXcBWIGoYBM5M", // Today's Top Hits
+  "37i9dQZF1DX0XUsuxWHRQd", // All Out 00s
+  "37i9dQZF1DX4VzleG8lP50", // Pop Sauce
+];
+
 interface GameSession {
   id: number;
   user_id: number;
@@ -200,6 +206,27 @@ async function fetchRecentTracks(
   return collected;
 }
 
+async function fetchFromPlaylists(
+  spotify: ReturnType<typeof makeSpotify>,
+  desired: number,
+  blacklist: Set<string>
+): Promise<SpotifyTrack[]> {
+  const collected: SpotifyTrack[] = [];
+  for (const playlistId of FALLBACK_PLAYLISTS) {
+    if (collected.length >= desired * 3) break;
+    const data = await spotify.getPlaylistTracks(playlistId, { limit: 100 });
+    for (const item of data.body.items ?? []) {
+      const track = item?.track as SpotifyTrack | undefined;
+      if (!track || !track.preview_url || blacklist.has(track.id)) continue;
+      if (!collected.find(t => t.id === track.id)) {
+        collected.push(track);
+      }
+      if (collected.length >= desired * 3) break;
+    }
+  }
+  return collected;
+}
+
 async function gatherTracks(
   spotify: ReturnType<typeof makeSpotify>,
   source: string,
@@ -236,6 +263,11 @@ async function gatherTracks(
     if (fetched.length) {
       return { sourceUsed: attempt, tracks: fetched };
     }
+  }
+
+  const fallbackTracks = await fetchFromPlaylists(spotify, desired, blacklist);
+  if (fallbackTracks.length) {
+    return { sourceUsed: "curated", tracks: fallbackTracks };
   }
 
   return { sourceUsed: source, tracks: [] };
