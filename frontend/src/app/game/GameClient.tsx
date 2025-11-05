@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { api } from "@/lib/api"
 import type { SoloGameResponse, SoloTrack, UserSummary } from "@/lib/types"
+import type { ApiError } from "@/lib/apiClient"
 import { SoloGameClient } from "@/components/game/SoloGameClient"
 
 function normalizeDifficulty(value: string | null): "easy" | "normal" | "hard" {
@@ -55,9 +56,13 @@ export default function GameClient() {
         if (!active) return
         setTracks(game.tracks)
       } catch (err) {
+        const rawMessage = err && typeof err === "object" && "message" in err ? String((err as ApiError).message) : null
+        const message = rawMessage === "No tracks available"
+          ? "Spotify ne renvoie aucun extrait jouable pour cette configuration. Ajoute des titres likés avec preview et réessaie."
+          : rawMessage
         console.error("game_bootstrap_failed", err)
         if (!active) return
-        setError("Impossible de démarrer la partie. Réessaie plus tard.")
+        setError(message || "Impossible de démarrer la partie. Réessaie plus tard.")
       } finally {
         if (active) setLoading(false)
       }

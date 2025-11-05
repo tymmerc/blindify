@@ -135,7 +135,7 @@ export default function HomePage() {
                         <Music className="w-6 h-6 text-purple-600" />
                       </div>
                       <div>
-                        <p className="font-semibold text-gray-900 dark:text_WHITE">Devine le titre !</p>
+                        <p className="font-semibold text-gray-900 dark:text-white">Devine le titre !</p>
                         <p className="text-sm text-gray-500">15 secondes restantes</p>
                       </div>
                     </div>
@@ -165,7 +165,7 @@ export default function HomePage() {
                         <p className="text-2xl font-bold text-purple-600">850</p>
                       </div>
                       <div>
-                        <p className="text-sm text.GRAY-500">Temps</p>
+                        <p className="text-sm text-gray-500">Temps</p>
                         <p className="text-2xl font-bold text-gray-900 dark:text-white">2:34</p>
                       </div>
                       <div>
@@ -229,7 +229,7 @@ export default function HomePage() {
                 <Users className="w-8 h-8 text-pink-600" />
               </div>
               <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-3">
-                Prêt pour tes soirées
+                Ready for party
               </h3>
               <p className="text-sm text-gray-600 dark:text-gray-400">
                 Crée des rooms en un clic, invite tes amis et lance des blindtests synchronisés, en direct ou à distance.
@@ -242,15 +242,82 @@ export default function HomePage() {
               viewport={{ once: true }}
               className="group p-8 rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 hover:border-green-600 hover:shadow-xl transition-all"
             >
-              <div className="w-14 h-14 rounded-xl bg-green-100 dark:bg-green-900/20 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+              <div className="w-14 h-14 rounded-xl bg-green-100 dark:bg-green-900/20 flex items center justify-center mb-6 group-hover:scale-110 transition-transform">
                 <Trophy className="w-8 h-8 text-green-600" />
               </div>
-              <h3 className="text-xl font-semibold text-gray-900 dark-text-white mb-3">
+              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-3">
                 Classements & stats
               </h3>
               <p className="text-sm text-gray-600 dark:text-gray-400">
                 Historique des parties, statistiques détaillées, progression et badges à collectionner.
               </p>
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
+      {/* Pricing Section */}
+      <section id="pricing" className="py-20 px-6 bg-white dark:bg-gray-950">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center mb-16 space-y-4">
+            <h2 className="text-4xl md:text-5xl font-bold text-gray-900 dark:text-white">
+              Gratuit, et ça le restera.
+            </h2>
+            <p className="text-xl text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
+              Blindify est open source et restera gratuit pour les joueurs. Soutiens le projet si tu veux accélérer la roadmap.
+            </p>
+          </div>
+
+          <div className="grid lg:grid-cols-3 gap-8">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              className="p-8 rounded-3xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm hover:shadow-xl transition-all"
+            >
+              <p className="text-sm font-medium text-purple-600">Solo</p>
+              <h3 className="mt-4 text-3xl font-bold text-gray-900 dark:text-white">0€</h3>
+              <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">Accès complet au mode solo avec tes titres likés.</p>
+              <ul className="mt-6 space-y-3 text-sm text-gray-600 dark:text-gray-400">
+                <li>✅ Blindtest instantané</li>
+                <li>✅ Blacklist auto des morceaux joués</li>
+                <li>✅ Like depuis la partie</li>
+              </ul>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.1 }}
+              className="relative p-8 rounded-3xl border-2 border-purple-500 bg-gradient-to-br from-purple-600 via-pink-500 to-green-500 text-white shadow-xl"
+            >
+              <span className="absolute -top-3 left-8 rounded-full bg-white/20 px-3 py-1 text-xs font-semibold uppercase tracking-widest">Bientôt</span>
+              <p className="text-sm font-medium">Multijoueur</p>
+              <h3 className="mt-4 text-3xl font-bold">3,99€ / session</h3>
+              <p className="mt-2 text-sm text-white/80">Héberge une room, invite tes amis et garde la main sur la playlist.</p>
+              <ul className="mt-6 space-y-3 text-sm text-white/90">
+                <li>✅ Invitations instantanées</li>
+                <li>✅ Classement temps réel</li>
+                <li>✅ Playlist collaborative</li>
+              </ul>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.2 }}
+              className="p-8 rounded-3xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm hover:shadow-xl transition-all"
+            >
+              <p className="text-sm font-medium text-green-600">Clubs & bars</p>
+              <h3 className="mt-4 text-3xl font-bold text-gray-900 dark:text-white">Sur devis</h3>
+              <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">Blindtest conçu pour les soirées avec scoreboard sur écran.</p>
+              <ul className="mt-6 space-y-3 text-sm text-gray-600 dark:text-gray-400">
+                <li>✅ Marque personnalisée</li>
+                <li>✅ Mode host avec tablette</li>
+                <li>✅ Statistiques avancées</li>
+              </ul>
             </motion.div>
           </div>
         </div>

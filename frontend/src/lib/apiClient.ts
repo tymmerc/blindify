@@ -1,7 +1,7 @@
 import { API_BASE_URL } from "./config"
 import type { SoloGameResponse, UserSummary } from "./types"
 
-class ApiError extends Error {
+export class ApiError extends Error {
   constructor(readonly status: number, message: string) {
     super(message)
     this.name = "ApiError"
@@ -38,7 +38,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   })
 
   if (!response.ok) {
-    const message = response.statusText || "API request failed"
+    let message = response.statusText || "API request failed"
+    try {
+      const errorPayload = await response.json()
+      if (errorPayload && typeof errorPayload.error === "string") {
+        message = errorPayload.error
+      }
+    } catch {
+      // ignore json parsing issue, keep default message
+    }
     throw new ApiError(response.status, message)
   }
 
