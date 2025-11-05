@@ -42,67 +42,14 @@ const FALLBACK_PLAYLISTS = [
 
 const FALLBACK_GENRES = ["pop", "rock", "edm", "hip-hop", "indie"];
 
-const STATIC_FALLBACK_TRACKS: SpotifyTrack[] = [
-  {
-    id: "0VjIjW4GlUZAMYd2vXMi3b",
-    name: "Blinding Lights",
-    artists: [{ name: "The Weeknd" }],
-    album: {
-      name: "After Hours",
-      images: [],
-    },
-    preview_url: "https://samplelib.com/lib/preview/mp3/sample-15s.mp3",
-    duration_ms: 200040,
-    popularity: 95,
-  },
-  {
-    id: "2Fxmhks0bxGSBdJ92vM42m",
-    name: "bad guy",
-    artists: [{ name: "Billie Eilish" }],
-    album: {
-      name: "WHEN WE ALL FALL ASLEEP, WHERE DO WE GO?",
-      images: [],
-    },
-    preview_url: "https://samplelib.com/lib/preview/mp3/sample-12s.mp3",
-    duration_ms: 194087,
-    popularity: 91,
-  },
-  {
-    id: "7qiZfU4dY1lWllzX7mPBI3",
-    name: "Shape of You",
-    artists: [{ name: "Ed Sheeran" }],
-    album: {
-      name: "÷ (Deluxe)",
-      images: [],
-    },
-    preview_url: "https://samplelib.com/lib/preview/mp3/sample-9s.mp3",
-    duration_ms: 233712,
-    popularity: 95,
-  },
-  {
-    id: "35mvY5S1H3J2QZyna3TFe0",
-    name: "Levitating",
-    artists: [{ name: "Dua Lipa" }],
-    album: {
-      name: "Future Nostalgia",
-      images: [],
-    },
-    preview_url: "https://samplelib.com/lib/preview/mp3/sample-6s.mp3",
-    duration_ms: 203064,
-    popularity: 89,
-  },
-  {
-    id: "24JygzOLM0EmRQeGtFcIcG",
-    name: "Hey Ya!",
-    artists: [{ name: "Outkast" }],
-    album: {
-      name: "Speakerboxxx/The Love Below",
-      images: [],
-    },
-    preview_url: "https://samplelib.com/lib/preview/mp3/sample-3s.mp3",
-    duration_ms: 238266,
-    popularity: 82,
-  },
+const FALLBACK_SEARCH_QUERIES = [
+  'track:"Blinding Lights" artist:"The Weeknd"',
+  'track:"bad guy" artist:"Billie Eilish"',
+  'track:"Shape of You" artist:"Ed Sheeran"',
+  'track:"Levitating" artist:"Dua Lipa"',
+  'track:"Hey Ya" artist:"Outkast"',
+  'track:"Rolling in the Deep" artist:"Adele"',
+  'track:"Uptown Funk" artist:"Mark Ronson"',
 ];
 
 interface GameSession {
@@ -346,6 +293,25 @@ async function fetchRecommendations(
   return collected;
 }
 
+async function fetchSearchFallback(
+  spotify: ReturnType<typeof makeSpotify>,
+  desired: number,
+  blacklist: Set<string>
+): Promise<SpotifyTrack[]> {
+  const collected: SpotifyTrack[] = [];
+  for (const query of FALLBACK_SEARCH_QUERIES) {
+    if (collected.length >= desired * 3) break;
+    const data = await spotify.searchTracks(query, { limit: 1, market: "from_token" });
+    for (const track of data.body.tracks?.items ?? []) {
+      if (!track.preview_url || blacklist.has(track.id)) continue;
+      if (!collected.find(t => t.id === track.id)) {
+        collected.push(track as SpotifyTrack);
+      }
+    }
+  }
+  return collected;
+}
+
 async function gatherTracks(
   spotify: ReturnType<typeof makeSpotify>,
   source: string,
@@ -403,9 +369,9 @@ async function gatherTracks(
     return { sourceUsed: "recommendations", tracks: recommendedTracks };
   }
 
-  const staticTracks = STATIC_FALLBACK_TRACKS.filter(track => !blacklist.has(track.id));
-  if (staticTracks.length) {
-    return { sourceUsed: "static", tracks: staticTracks };
+  const searchTracks = await tryFetch("search_fallback", () => fetchSearchFallback(spotify, desired, blacklist));
+  if (searchTracks.length) {
+    return { sourceUsed: "search", tracks: searchTracks };
   }
 
   return { sourceUsed: source, tracks: [] };
