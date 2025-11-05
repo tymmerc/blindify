@@ -175,7 +175,18 @@ async function ensureSchema() {
     USING tracks b
     WHERE a.id > b.id AND a.spotify_track_id = b.spotify_track_id;
   `);
-  await pool.query(`ALTER TABLE tracks ADD CONSTRAINT IF NOT EXISTS tracks_spotify_unique UNIQUE (spotify_track_id);`);
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'tracks_spotify_unique'
+      ) THEN
+        ALTER TABLE tracks ADD CONSTRAINT tracks_spotify_unique UNIQUE (spotify_track_id);
+      END IF;
+    END $$;
+  `);
 }
 
 async function blacklistTracks(userId: number, trackIds: string[], hours = 24) {
