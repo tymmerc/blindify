@@ -59,6 +59,38 @@ export async function getSessionContext(
   const session = ensureSessionObject(req)
 
   if (!session.userId) {
+    const authHeader = req.headers.authorization
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const bearerToken = authHeader.slice(7).trim()
+      if (!bearerToken) {
+        if (res) res.status(401).json({ error: "Unauthorized" })
+        return null
+      }
+
+      const { rows } = await pool.query<AuthenticatedUser>(
+        `SELECT * FROM users WHERE access_token=$1 LIMIT 1`,
+        [bearerToken]
+      )
+      const bearerUser = rows[0]
+      if (!bearerUser) {
+        if (res) res.status(401).json({ error: "Unauthorized" })
+        return null
+      }
+
+      session.userId = bearerUser.id
+      session.spotifyId = bearerUser.spotify_id
+      session.accessToken = bearerToken
+      session.refreshToken = bearerUser.refresh_token
+      session.expiresAt = Date.now() + 3_600_000
+      req.session = session
+
+      return {
+        user: bearerUser,
+        accessToken: bearerToken,
+        refreshToken: bearerUser.refresh_token,
+      }
+    }
+
     if (res) res.status(401).json({ error: "Unauthorized" })
     return null
   }

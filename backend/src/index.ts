@@ -337,7 +337,14 @@ app.get("/auth/callback", async (req, res) => {
     req.session = session;
 
     const frontendUrl = (process.env.FRONTEND_URL || "http://localhost:3000").replace(/\/$/, "");
-    res.redirect(`${frontendUrl}/auth/callback`);
+    const redirect = new URL(`${frontendUrl}/auth/callback`);
+    redirect.searchParams.set("access_token", access_token);
+    if (refresh_token) {
+      redirect.searchParams.set("refresh_token", refresh_token);
+    }
+    redirect.searchParams.set("expires_in", String(expires_in ?? 3600));
+
+    res.redirect(redirect.toString());
   } catch (err) {
     console.error("spotify_callback_failed", err);
     res.status(500).send("Auth failed");
