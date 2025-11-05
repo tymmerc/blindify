@@ -132,6 +132,115 @@ function pickRandom<T>(arr: T[], count: number): T[] {
   return copy.slice(0, count);
 }
 
+type SpotifyTrack = {
+  id: string;
+  name: string;
+  artists: { name: string }[];
+  album: { name: string; images: { url: string }[] };
+  preview_url: string | null;
+  duration_ms: number;
+  popularity: number;
+};
+
+async function fetchSavedTracks(
+  spotify: ReturnType<typeof makeSpotify>,
+  desired: number,
+  blacklist: Set<string>
+): Promise<SpotifyTrack[]> {
+  const collected: SpotifyTrack[] = [];
+  const pageSize = 50;
+  for (let offset = 0; offset < 250 && collected.length < desired * 3; offset += pageSize) {
+    const data = await spotify.getMySavedTracks({ limit: pageSize, offset });
+    for (const item of data.body.items ?? []) {
+      const track: SpotifyTrack | undefined = item?.track;
+      if (!track || !track.preview_url || blacklist.has(track.id)) continue;
+      if (!collected.find(t => t.id === track.id)) {
+        collected.push(track);
+      }
+    }
+    if (!data.body.items || data.body.items.length < pageSize) break;
+  }
+  return collected;
+}
+
+async function fetchTopTracks(
+  spotify: ReturnType<typeof makeSpotify>,
+  desired: number,
+  blacklist: Set<string>
+): Promise<SpotifyTrack[]> {
+  const collected: SpotifyTrack[] = [];
+  for (const range of ["short_term", "medium_term", "long_term"] as const) {
+    if (collected.length >= desired * 3) break;
+    const data = await spotify.getMyTopTracks({ limit: 50, time_range: range });
+    for (const track of data.body.items ?? []) {
+      if (!track.preview_url || blacklist.has(track.id)) continue;
+      if (!collected.find(t => t.id === track.id)) {
+        collected.push(track as SpotifyTrack);
+      }
+    }
+  }
+  return collected;
+}
+
+async function fetchRecentTracks(
+  spotify: ReturnType<typeof makeSpotify>,
+  desired: number,
+  blacklist: Set<string>
+): Promise<SpotifyTrack[]> {
+  const collected: SpotifyTrack[] = [];
+  const data = await spotify.getMyRecentlyPlayedTracks({ limit: 50 });
+  for (const item of data.body.items ?? []) {
+    const track: SpotifyTrack | undefined = item?.track as SpotifyTrack | undefined;
+    if (!track || !track.preview_url || blacklist.has(track.id)) continue;
+    if (!collected.find(t => t.id === track.id)) {
+      collected.push(track);
+    }
+    if (collected.length >= desired * 3) break;
+  }
+  return collected;
+}
+
+async function gatherTracks(
+  spotify: ReturnType<typeof makeSpotify>,
+  source: string,
+  desired: number,
+  blacklist: Set<string>
+): Promise<{ sourceUsed: string; tracks: SpotifyTrack[] }> {
+  const attempts: string[] = [];
+  switch (source) {
+    case "top_tracks":
+      attempts.push("top_tracks", "liked_tracks", "recent_tracks");
+      break;
+    case "recent_tracks":
+    case "recently_played":
+      attempts.push("recent_tracks", "liked_tracks", "top_tracks");
+      break;
+    case "playlist":
+      attempts.push("liked_tracks", "top_tracks", "recent_tracks");
+      break;
+    default:
+      attempts.push("liked_tracks", "top_tracks", "recent_tracks");
+      break;
+  }
+
+  for (const attempt of attempts) {
+    let fetched: SpotifyTrack[] = [];
+    if (attempt === "liked_tracks") {
+      fetched = await fetchSavedTracks(spotify, desired, blacklist);
+    } else if (attempt === "top_tracks") {
+      fetched = await fetchTopTracks(spotify, desired, blacklist);
+    } else {
+      fetched = await fetchRecentTracks(spotify, desired, blacklist);
+    }
+
+    if (fetched.length) {
+      return { sourceUsed: attempt, tracks: fetched };
+    }
+  }
+
+  return { sourceUsed: source, tracks: [] };
+}
+
 /**
  * AUTH
  */
@@ -287,20 +396,17 @@ app.post("/api/games/solo/start", async (req, res) => {
     const spotify = makeSpotify(accessToken, refreshToken || undefined);
     const blacklisted = await getBlacklistedSpotifyIds(user.id);
 
-    const data = await spotify.getMySavedTracks({ limit: Math.max(count * 3, 50) });
-    const available = data.body.items
-      .map((item: any) => item.track)
-      .filter((track: any) => track && track.preview_url && !blacklisted.has(track.id));
+    const { sourceUsed, tracks: available } = await gatherTracks(spotify, source, count, blacklisted);
 
     if (available.length === 0) {
       res.status(400).json({ error: "No tracks available" });
       return;
     }
 
-    const tracks = pickRandom(available, count).map((track: any) => ({
+    const tracks = pickRandom(available, count).map(track => ({
       spotify_track_id: track.id,
       title: track.name,
-      artist: track.artists.map((artist: any) => artist.name).join(", "),
+      artist: track.artists.map(artist => artist.name).join(", "),
       album: track.album.name,
       preview_url: track.preview_url,
       album_cover: track.album.images?.[0]?.url || null,
@@ -327,7 +433,7 @@ app.post("/api/games/solo/start", async (req, res) => {
 
     await blacklistTracks(user.id, tracks.map(track => track.spotify_track_id), 24);
 
-    res.json({ sessionId: session.id, tracks });
+    res.json({ sessionId: session.id, tracks, sourceUsed });
   } catch (err) {
     console.error("solo_game_failed", err);
     res.status(500).json({ error: "Failed to start game" });

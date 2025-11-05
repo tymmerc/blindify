@@ -16,4 +16,5 @@ export type SoloTrack = {
 export type SoloGameResponse = {
   sessionId: number
   tracks: SoloTrack[]
+  sourceUsed?: string
 }

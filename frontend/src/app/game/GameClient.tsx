@@ -22,15 +22,15 @@ function normalizeSource(value: string | null): string {
 export default function GameClient() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const [user, setUser] = useState<UserSummary | null>(null)
-  const [tracks, setTracks] = useState<SoloTrack[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
   const difficultyParam = searchParams.get("difficulty")
   const sourceParam = searchParams.get("source")
   const difficulty = normalizeDifficulty(difficultyParam)
   const source = normalizeSource(sourceParam)
+  const [user, setUser] = useState<UserSummary | null>(null)
+  const [tracks, setTracks] = useState<SoloTrack[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [sourceUsed, setSourceUsed] = useState<string>(source)
 
   useEffect(() => {
     let active = true
@@ -55,6 +55,7 @@ export default function GameClient() {
         })
         if (!active) return
         setTracks(game.tracks)
+        setSourceUsed(game.sourceUsed || source)
       } catch (err) {
         const rawMessage = err && typeof err === "object" && "message" in err ? String((err as ApiError).message) : null
         const message = rawMessage === "No tracks available"
@@ -135,8 +136,13 @@ export default function GameClient() {
             Blindtest en cours
           </h1>
           <p className="text-sm text-gray-600 dark:text-gray-400">
-            Difficulté <span className="font-semibold">{difficulty}</span> · Source <span className="font-semibold">{source.replace(/_/g, " ")}</span>
+            Difficulté <span className="font-semibold">{difficulty}</span> · Source <span className="font-semibold">{(sourceUsed || source).replace(/_/g, " ")}</span>
           </p>
+          {sourceUsed !== source ? (
+            <p className="text-xs text-purple-700 dark:text-purple-300">
+              Nous avons automatiquement basculé sur {sourceUsed?.replace(/_/g, " ")} faute d'extraits disponibles pour la source initiale.
+            </p>
+          ) : null}
         </header>
 
         <SoloGameClient user={user} tracks={tracks} />
