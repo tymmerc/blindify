@@ -49,10 +49,9 @@ const STATIC_FALLBACK_TRACKS: SpotifyTrack[] = [
     artists: [{ name: "The Weeknd" }],
     album: {
       name: "After Hours",
-      images: [{ url: "https://i.scdn.co/image/ab67616d0000b273a4de26a2a0cf0f962d9a389d" }],
+      images: [],
     },
-    preview_url:
-      "https://p.scdn.co/mp3-preview/4f3d8f8cda146cccea62e7e0349395fac5761b1c?cid=1",
+    preview_url: "https://samplelib.com/lib/preview/mp3/sample-15s.mp3",
     duration_ms: 200040,
     popularity: 95,
   },
@@ -62,10 +61,9 @@ const STATIC_FALLBACK_TRACKS: SpotifyTrack[] = [
     artists: [{ name: "Billie Eilish" }],
     album: {
       name: "WHEN WE ALL FALL ASLEEP, WHERE DO WE GO?",
-      images: [{ url: "https://i.scdn.co/image/ab67616d0000b273fd77a7080f8335a7b94439c6" }],
+      images: [],
     },
-    preview_url:
-      "https://p.scdn.co/mp3-preview/0cbb6a421be2858e577f93c7cdd11abbd88abee5?cid=1",
+    preview_url: "https://samplelib.com/lib/preview/mp3/sample-12s.mp3",
     duration_ms: 194087,
     popularity: 91,
   },
@@ -75,10 +73,9 @@ const STATIC_FALLBACK_TRACKS: SpotifyTrack[] = [
     artists: [{ name: "Ed Sheeran" }],
     album: {
       name: "÷ (Deluxe)",
-      images: [{ url: "https://i.scdn.co/image/ab67616d0000b2732f5d6d203c49b1115c3a1e75" }],
+      images: [],
     },
-    preview_url:
-      "https://p.scdn.co/mp3-preview/6a2c7f85d0e5aed0881c9f1c3d4b63a5e0b1ed4b?cid=1",
+    preview_url: "https://samplelib.com/lib/preview/mp3/sample-9s.mp3",
     duration_ms: 233712,
     popularity: 95,
   },
@@ -88,10 +85,9 @@ const STATIC_FALLBACK_TRACKS: SpotifyTrack[] = [
     artists: [{ name: "Dua Lipa" }],
     album: {
       name: "Future Nostalgia",
-      images: [{ url: "https://i.scdn.co/image/ab67616d0000b2737206019b2ff6f7f02e97142c" }],
+      images: [],
     },
-    preview_url:
-      "https://p.scdn.co/mp3-preview/1bb547652004e3d037fad0a9d6236551cc4036d1?cid=1",
+    preview_url: "https://samplelib.com/lib/preview/mp3/sample-6s.mp3",
     duration_ms: 203064,
     popularity: 89,
   },
@@ -101,10 +97,9 @@ const STATIC_FALLBACK_TRACKS: SpotifyTrack[] = [
     artists: [{ name: "Outkast" }],
     album: {
       name: "Speakerboxxx/The Love Below",
-      images: [{ url: "https://i.scdn.co/image/ab67616d0000b273d1a3cd95528ca9f63753ce7a" }],
+      images: [],
     },
-    preview_url:
-      "https://p.scdn.co/mp3-preview/64b4e2f2f9ce2f48abeb8491bfc2c0b2c6b81998?cid=1",
+    preview_url: "https://samplelib.com/lib/preview/mp3/sample-3s.mp3",
     duration_ms: 238266,
     popularity: 82,
   },
