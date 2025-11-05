@@ -40,6 +40,8 @@ const FALLBACK_PLAYLISTS = [
   "37i9dQZF1DX4VzleG8lP50", // Pop Sauce
 ];
 
+const FALLBACK_GENRES = ["pop", "rock", "edm", "hip-hop", "indie"];
+
 interface GameSession {
   id: number;
   user_id: number;
@@ -214,12 +216,35 @@ async function fetchFromPlaylists(
   const collected: SpotifyTrack[] = [];
   for (const playlistId of FALLBACK_PLAYLISTS) {
     if (collected.length >= desired * 3) break;
-    const data = await spotify.getPlaylistTracks(playlistId, { limit: 100 });
+    const data = await spotify.getPlaylistTracks(playlistId, { limit: 100, market: "from_token" });
     for (const item of data.body.items ?? []) {
       const track = item?.track as SpotifyTrack | undefined;
       if (!track || !track.preview_url || blacklist.has(track.id)) continue;
       if (!collected.find(t => t.id === track.id)) {
         collected.push(track);
+      }
+      if (collected.length >= desired * 3) break;
+    }
+  }
+  return collected;
+}
+
+async function fetchRecommendations(
+  spotify: ReturnType<typeof makeSpotify>,
+  desired: number,
+  blacklist: Set<string>
+): Promise<SpotifyTrack[]> {
+  const collected: SpotifyTrack[] = [];
+  for (const genre of FALLBACK_GENRES) {
+    if (collected.length >= desired * 3) break;
+    const data = await spotify.getRecommendations({
+      seed_genres: [genre],
+      limit: 50,
+    });
+    for (const track of data.body.tracks ?? []) {
+      if (!track.preview_url || blacklist.has(track.id)) continue;
+      if (!collected.find(t => t.id === track.id)) {
+        collected.push(track as SpotifyTrack);
       }
       if (collected.length >= desired * 3) break;
     }
@@ -274,9 +299,14 @@ async function gatherTracks(
     }
   }
 
-  const fallbackTracks = await tryFetch("curated", () => fetchFromPlaylists(spotify, desired, blacklist));
-  if (fallbackTracks.length) {
-    return { sourceUsed: "curated", tracks: fallbackTracks };
+  const curatedTracks = await tryFetch("curated", () => fetchFromPlaylists(spotify, desired, blacklist));
+  if (curatedTracks.length) {
+    return { sourceUsed: "curated", tracks: curatedTracks };
+  }
+
+  const recommendedTracks = await tryFetch("recommendations", () => fetchRecommendations(spotify, desired, blacklist));
+  if (recommendedTracks.length) {
+    return { sourceUsed: "recommendations", tracks: recommendedTracks };
   }
 
   return { sourceUsed: source, tracks: [] };
