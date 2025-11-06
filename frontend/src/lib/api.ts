@@ -1,8 +1,11 @@
 import { clientApi } from "./apiClient"
 import type {
   MusicProvider,
+  MultiplayerParticipant,
+  MultiplayerRoom,
   ProviderConnectionSummary,
   SoloGameResponse,
+  SoloTrack,
   UserSummary,
 } from "./types"
 
@@ -45,6 +48,34 @@ export const api = {
   },
   async getSpotifyToken(): Promise<{ accessToken: string; expiresAt: string | null; provider: MusicProvider }> {
     return clientApi.spotifyToken() as Promise<{ accessToken: string; expiresAt: string | null; provider: MusicProvider }>
+  },
+  async createRoom(options?: {
+    name?: string
+    difficulty?: "easy" | "normal" | "hard"
+    maxPlayers?: number
+    questionCount?: number
+  }): Promise<{ room: MultiplayerRoom }> {
+    return clientApi.createRoom(options)
+  },
+  async joinRoom(code: string): Promise<{ room: MultiplayerRoom }> {
+    return clientApi.joinRoom(code)
+  },
+  async roomDetails(code: string): Promise<{ room: MultiplayerRoom; participants: MultiplayerParticipant[] }> {
+    return clientApi.roomDetails(code)
+  },
+  async startMultiplayerGame(code: string, payload?: { provider?: string }): Promise<{
+    session: {
+      id: number
+      mode: string
+      difficulty: string
+      provider: string
+      totalRounds: number
+      startedAt: string
+      roomCode: string
+    }
+    tracks: SoloTrack[]
+  }> {
+    return clientApi.startMultiplayerGame(code, payload)
   },
   async logout(): Promise<void> {
     await clientApi.logout()

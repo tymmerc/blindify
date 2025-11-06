@@ -1,7 +1,10 @@
 import { API_BASE_URL } from "./config"
 import type {
+  MultiplayerParticipant,
+  MultiplayerRoom,
   ProviderConnectionSummary,
   SoloGameResponse,
+  SoloTrack,
   UserSummary,
 } from "./types"
 
@@ -141,6 +144,58 @@ export const clientApi = {
     return request<{ accessToken: string; expiresAt: string | null; provider: string }>(
       "/api/auth/providers/spotify/token"
     )
+  },
+  async createRoom(options: {
+    name?: string
+    difficulty?: "easy" | "normal" | "hard"
+    maxPlayers?: number
+    questionCount?: number
+  } = {}): Promise<{ room: MultiplayerRoom }> {
+    return request<{ room: MultiplayerRoom }>("/api/rooms/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(options),
+    })
+  },
+  async joinRoom(code: string): Promise<{ room: MultiplayerRoom }> {
+    return request<{ room: MultiplayerRoom }>(`/api/rooms/${code}/join`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    })
+  },
+  async roomDetails(code: string): Promise<{ room: MultiplayerRoom; participants: MultiplayerParticipant[] }> {
+    return request<{ room: MultiplayerRoom; participants: MultiplayerParticipant[] }>(`/api/rooms/${code}`, {
+      method: "GET",
+    })
+  },
+  async startMultiplayerGame(code: string, payload: { provider?: string } = {}): Promise<{
+    session: {
+      id: number
+      mode: string
+      difficulty: string
+      provider: string
+      totalRounds: number
+      startedAt: string
+      roomCode: string
+    }
+    tracks: SoloTrack[]
+  }> {
+    return request<{
+      session: {
+        id: number
+        mode: string
+        difficulty: string
+        provider: string
+        totalRounds: number
+        startedAt: string
+        roomCode: string
+      }
+      tracks: SoloTrack[]
+    }>(`/api/rooms/${code}/start`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })
   },
   async logout(): Promise<void> {
     await request("/api/auth/logout", {

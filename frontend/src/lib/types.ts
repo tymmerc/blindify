@@ -48,3 +48,19 @@ export type UserStats = {
   totalXp: number
   lastPlayedAt: string | null
 }
+
+export type MultiplayerRoom = {
+  id: number
+  room_code: string
+  host_user_id: number
+  status: string
+  max_players: number
+  question_count: number
+  difficulty: string
+  session_id?: number | null
+}
+
+export type MultiplayerParticipant = {
+  user_id: number
+  username: string | null
+}
