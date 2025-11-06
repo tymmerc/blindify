@@ -17,6 +17,7 @@ declare global {
   type SpotifyPlayer = {
     connect: () => Promise<boolean>;
     disconnect: () => Promise<void> | void;
+    activateElement?: () => Promise<void>;
     addListener: (event: string, cb: (...args: any[]) => void) => SpotifyPlayer;
     removeListener: (event: string) => SpotifyPlayer;
   };

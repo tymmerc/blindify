@@ -6,16 +6,7 @@ import { api } from "@/lib/api"
 import type { SoloTrack, UserSummary } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import { ApiError } from "@/lib/apiClient"
-import {
-  ArrowRight,
-  Check,
-  Flame,
-  Heart,
-  PauseCircle,
-  Sparkles,
-  Timer,
-  Volume2,
-} from "lucide-react"
+import { ArrowRight, Check, Flame, Heart, Sparkles, Timer, Volume2 } from "lucide-react"
 
 type Phase = "countdown" | "listening" | "reveal"
 type Verdict = "correct" | "close" | "wrong"
@@ -42,7 +33,7 @@ export interface RoundStats {
   bestStreak: number
 }
 
-const LISTENING_DURATION = 25
+const LISTENING_DURATION = 45
 const COUNTDOWN_DURATION = 3
 
 export function SoloGameClient({
@@ -72,7 +63,8 @@ export function SoloGameClient({
 
   const statsRef = useRef(stats)
   const countdownRef = useRef<NodeJS.Timeout | null>(null)
-  const timerRef = useRef<NodeJS.Timeout | null>(null)
+  const listeningRafRef = useRef<number | null>(null)
+  const listeningDeadlineRef = useRef<number>(0)
 
   const current = tracks[index]
   const total = tracks.length
@@ -96,9 +88,9 @@ export function SoloGameClient({
       clearInterval(countdownRef.current)
       countdownRef.current = null
     }
-    if (timerRef.current) {
-      clearInterval(timerRef.current)
-      timerRef.current = null
+    if (listeningRafRef.current !== null) {
+      cancelAnimationFrame(listeningRafRef.current)
+      listeningRafRef.current = null
     }
   }, [])
 
@@ -217,28 +209,31 @@ export function SoloGameClient({
           }
         }
       }
+      listeningDeadlineRef.current = Date.now() + LISTENING_DURATION * 1000
 
-      timerRef.current = setInterval(() => {
-        setTimer(prev => {
-          if (prev <= 1) {
-            clearInterval(timerRef.current!)
-            timerRef.current = null
-            const autoVerdict = verdict ?? evaluateGuess(guess, current)
-            finalizeRound(autoVerdict, "timeout", current, guess)
-            return 0
-          }
-          return prev - 1
-        })
-      }, 1000)
+      const tick = () => {
+        if (cancelled) return
+        const remainingMs = listeningDeadlineRef.current - Date.now()
+        const nextSeconds = Math.max(0, Math.ceil(remainingMs / 1000))
+        setTimer(prev => (prev === nextSeconds ? prev : nextSeconds))
+        if (remainingMs <= 0) {
+          const autoVerdict = verdict ?? evaluateGuess(guess, current)
+          finalizeRound(autoVerdict, "timeout", current, guess)
+        } else {
+          listeningRafRef.current = requestAnimationFrame(tick)
+        }
+      }
+
+      listeningRafRef.current = requestAnimationFrame(tick)
     }
 
     startPlayback()
 
     return () => {
       cancelled = true
-      if (timerRef.current) {
-        clearInterval(timerRef.current)
-        timerRef.current = null
+      if (listeningRafRef.current !== null) {
+        cancelAnimationFrame(listeningRafRef.current)
+        listeningRafRef.current = null
       }
     }
   }, [
@@ -251,7 +246,7 @@ export function SoloGameClient({
     guess,
     verdict,
     gameFinished,
-  ])
+  ]);
 
   const albumName = useMemo(() => {
     if (!current?.metadata) return null
@@ -539,6 +534,7 @@ function useSpotifyPlayback(enabled: boolean): SpotifyPlaybackControls {
   const [playbackError, setPlaybackError] = useState<string | null>(null)
   const playerRef = useRef<SpotifyPlayer | null>(null)
   const deviceIdRef = useRef<string | null>(null)
+  const activatedRef = useRef(false)
 
   const getLatestToken = useCallback(async () => {
     try {
@@ -658,6 +654,15 @@ function useSpotifyPlayback(enabled: boolean): SpotifyPlaybackControls {
       const headers = {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
+      }
+
+      if (!activatedRef.current && playerRef.current?.activateElement) {
+        try {
+          await playerRef.current.activateElement()
+          activatedRef.current = true
+        } catch (err) {
+          console.warn("spotify_activate_element_failed", err)
+        }
       }
 
       await fetch(`https://api.spotify.com/v1/me/player/pause?device_id=${deviceIdRef.current}`, {
