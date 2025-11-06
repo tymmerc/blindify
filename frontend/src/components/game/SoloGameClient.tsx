@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Image from "next/image"
 import { api } from "@/lib/api"
+import { ApiError } from "@/lib/apiClient"
 import type { SoloTrack, UserSummary } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import { ArrowRight, Heart, ShieldCheck } from "lucide-react"
@@ -247,7 +248,14 @@ function useSpotifyPlayback(enabled: boolean): SpotifyPlaybackControls {
       return accessToken
     } catch (err) {
       console.error("spotify_token_fetch_failed", err)
-      setPlaybackError("Unable to refresh Spotify token. Try reconnecting your account.")
+      if (err instanceof ApiError) {
+        const message =
+          err.message ||
+          "Spotify authorisation failed. Please reconnect your Spotify account in settings."
+        setPlaybackError(message)
+      } else {
+        setPlaybackError("Unable to refresh Spotify token. Try reconnecting your account.")
+      }
       throw err
     }
   }, [])

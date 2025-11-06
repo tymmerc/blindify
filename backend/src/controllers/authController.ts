@@ -13,10 +13,14 @@ import {
 import { fail, ok } from "../utils/response";
 import { ensureSpotifyConnection } from "../services/providers/spotifySync";
 
-const SPOTIFY_SCOPES = [
+const SPOTIFY_PLAYBACK_SCOPES = [
   "streaming",
   "user-read-playback-state",
   "user-modify-playback-state",
+] as const;
+
+const SPOTIFY_SCOPES = [
+  ...SPOTIFY_PLAYBACK_SCOPES,
   "user-read-private",
   "user-read-email",
   "user-library-read",
@@ -211,7 +215,7 @@ function spotifyAuthorizeUrl(req: Request): string {
   const spotify = makeSpotify();
   const state = crypto.randomUUID();
   storeOAuthState(req, "spotify", state);
-  return spotify.createAuthorizeURL(SPOTIFY_SCOPES, state);
+  return spotify.createAuthorizeURL(SPOTIFY_SCOPES, state, true);
 }
 
 function deezerAuthorizeUrl(req: Request): string {
@@ -382,6 +386,19 @@ export const authController = {
 
       if (!connection.access_token) {
         fail(res, "spotify_token_missing", "Token Spotify introuvable", 400);
+        return;
+      }
+
+      const scopes = new Set((connection.scope ?? []).map(scope => scope.toLowerCase()));
+      const missing = SPOTIFY_PLAYBACK_SCOPES.filter(scope => !scopes.has(scope));
+      if (missing.length > 0) {
+        fail(
+          res,
+          "spotify_scope_insufficient",
+          "Spotify permissions changed. Please reconnect your Spotify account to enable playback.",
+          400,
+          { missingScopes: missing }
+        );
         return;
       }
 
