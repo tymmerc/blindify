@@ -1,54 +1,104 @@
-import type { Request, Response } from "express"
-import { pool } from "../config/db"
-import { makeSpotify } from "../config/spotify"
-import type { AuthenticatedUser } from "../types/user"
+import crypto from "crypto";
+import type { Request, Response } from "express";
+import { pool } from "../config/db";
+import type {
+  AuthenticatedUser,
+  MusicProvider,
+  UserConnection,
+  UserSessionToken,
+} from "../types/user";
+import { fail } from "./response";
 
 interface SessionOptions {
-  refresh?: boolean
-  forceRefresh?: boolean
+  provider?: MusicProvider;
+  requireConnection?: boolean;
+  autoExtend?: boolean;
+  ttlMs?: number;
 }
 
 export interface SessionContext {
-  user: AuthenticatedUser
-  accessToken: string
-  refreshToken: string | null
+  user: AuthenticatedUser;
+  connection: UserConnection | null;
+  sessionToken: string | null;
 }
 
-type SessionData = NonNullable<Request["session"]>
+type SessionData = NonNullable<Request["session"]>;
 
-async function refreshSpotifyToken(
-  user: AuthenticatedUser,
-  session: SessionData
-): Promise<{ accessToken: string; refreshToken: string | null; expiresAt: number }> {
-  const refreshToken = session.refreshToken || user.refresh_token
-  if (!refreshToken) {
-    throw new Error("Missing refresh token")
-  }
-
-  const spotify = makeSpotify(undefined, refreshToken)
-  const refreshed = await spotify.refreshAccessToken()
-  const newAccess = refreshed.body.access_token
-  const newRefresh = refreshed.body.refresh_token || refreshToken
-  const expiresIn = refreshed.body.expires_in ?? 3600
-  const expiresAt = Date.now() + expiresIn * 1000
-
-  session.accessToken = newAccess
-  session.refreshToken = newRefresh
-  session.expiresAt = expiresAt
-
-  await pool.query(
-    `UPDATE users SET access_token=$1, refresh_token=$2, updated_at=NOW() WHERE id=$3`,
-    [newAccess, newRefresh, user.id]
-  )
-
-  return { accessToken: newAccess, refreshToken: newRefresh, expiresAt }
-}
+const DEFAULT_SESSION_TTL = 1000 * 60 * 60 * 24; // 24h
 
 function ensureSessionObject(req: Request): SessionData {
   if (!req.session) {
-    req.session = {}
+    req.session = {};
   }
-  return req.session as SessionData
+  return req.session as SessionData;
+}
+
+async function queryUserById(id: number): Promise<AuthenticatedUser | null> {
+  const { rows } = await pool.query<AuthenticatedUser>(
+    `SELECT id, provider, provider_id, username, email, avatar, created_at
+     FROM users
+     WHERE id=$1
+     LIMIT 1`,
+    [id]
+  );
+  return rows[0] ?? null;
+}
+
+async function querySessionByToken(token: string): Promise<UserSessionToken | null> {
+  const { rows } = await pool.query<UserSessionToken>(
+    `SELECT token, user_id, created_at, expires_at
+     FROM user_sessions
+     WHERE token=$1
+     LIMIT 1`,
+    [token]
+  );
+  return rows[0] ?? null;
+}
+
+async function queryConnection(userId: number, provider?: MusicProvider): Promise<UserConnection | null> {
+  if (!provider) {
+    const { rows } = await pool.query<UserConnection>(
+      `SELECT id, user_id, provider, access_token, refresh_token, expires_at, scope, created_at, updated_at
+       FROM user_connections
+       WHERE user_id=$1
+       ORDER BY updated_at DESC
+       LIMIT 1`,
+      [userId]
+    );
+    return rows[0] ?? null;
+  }
+
+  const { rows } = await pool.query<UserConnection>(
+    `SELECT id, user_id, provider, access_token, refresh_token, expires_at, scope, created_at, updated_at
+     FROM user_connections
+     WHERE user_id=$1 AND provider=$2
+     LIMIT 1`,
+    [userId, provider]
+  );
+  return rows[0] ?? null;
+}
+
+export async function createSessionToken(userId: number, ttlMs = DEFAULT_SESSION_TTL): Promise<UserSessionToken> {
+  const token = crypto.randomUUID();
+  const expiresAt = new Date(Date.now() + ttlMs);
+
+  const { rows } = await pool.query<UserSessionToken>(
+    `INSERT INTO user_sessions (token, user_id, expires_at)
+     VALUES ($1, $2, $3)
+     RETURNING token, user_id, created_at, expires_at`,
+    [token, userId, expiresAt]
+  );
+
+  return rows[0];
+}
+
+export async function extendSessionToken(token: string, ttlMs = DEFAULT_SESSION_TTL): Promise<void> {
+  const expiresAt = new Date(Date.now() + ttlMs);
+  await pool.query(`UPDATE user_sessions SET expires_at=$2 WHERE token=$1`, [token, expiresAt]);
+}
+
+export async function revokeSessionToken(token: string): Promise<void> {
+  await pool.query(`DELETE FROM user_sessions WHERE token=$1`, [token]);
 }
 
 export async function getSessionContext(
@@ -56,101 +106,71 @@ export async function getSessionContext(
   res?: Response,
   options: SessionOptions = {}
 ): Promise<SessionContext | null> {
-  const session = ensureSessionObject(req)
+  const session = ensureSessionObject(req);
+  const ttlMs = options.ttlMs ?? DEFAULT_SESSION_TTL;
 
-  if (!session.userId) {
-    const authHeader = req.headers.authorization
+  let sessionToken: string | null = null;
+  let userId = typeof session.userId === "number" ? session.userId : null;
+
+  if (!userId) {
+    const authHeader = req.headers.authorization?.trim();
     if (authHeader && authHeader.startsWith("Bearer ")) {
-      const bearerToken = authHeader.slice(7).trim()
-      if (!bearerToken) {
-        if (res) res.status(401).json({ error: "Unauthorized" })
-        return null
-      }
-
-      const { rows } = await pool.query<AuthenticatedUser>(
-        `SELECT * FROM users WHERE access_token=$1 LIMIT 1`,
-        [bearerToken]
-      )
-      const bearerUser = rows[0]
-      if (!bearerUser) {
-        if (res) res.status(401).json({ error: "Unauthorized" })
-        return null
-      }
-
-      session.userId = bearerUser.id
-      session.spotifyId = bearerUser.spotify_id
-      session.accessToken = bearerToken
-      session.refreshToken = bearerUser.refresh_token
-      session.expiresAt = Date.now() + 3_600_000
-      req.session = session
-
-      return {
-        user: bearerUser,
-        accessToken: bearerToken,
-        refreshToken: bearerUser.refresh_token,
+      const candidate = authHeader.slice(7);
+      if (candidate) {
+        const sessionRow = await querySessionByToken(candidate);
+        if (!sessionRow) {
+          if (res) fail(res, "unauthorized", "Session expirée ou invalide", 401);
+          return null;
+        }
+        if (sessionRow.expires_at && new Date(sessionRow.expires_at) <= new Date()) {
+          await revokeSessionToken(candidate);
+          if (res) fail(res, "unauthorized", "Session expirée", 401);
+          return null;
+        }
+        userId = sessionRow.user_id;
+        sessionToken = sessionRow.token;
+        session.userId = userId;
+        session.sessionToken = sessionRow.token;
       }
     }
-
-    if (res) res.status(401).json({ error: "Unauthorized" })
-    return null
+  } else if (typeof session.sessionToken === "string") {
+    sessionToken = session.sessionToken;
   }
 
-  const { rows } = await pool.query<AuthenticatedUser>(`SELECT * FROM users WHERE id=$1 LIMIT 1`, [session.userId])
-  const user = rows[0]
+  if (!userId) {
+    if (res) fail(res, "unauthorized", "Authentification requise", 401);
+    return null;
+  }
 
+  const user = await queryUserById(userId);
   if (!user) {
-    req.session = null
-    if (res) res.status(401).json({ error: "Unauthorized" })
-    return null
+    req.session = null;
+    if (res) fail(res, "unauthorized", "Utilisateur introuvable", 401);
+    return null;
   }
 
-  session.userId = user.id
-  session.spotifyId = user.spotify_id
+  session.userId = user.id;
 
-  let accessToken = session.accessToken || user.access_token || undefined
-  let refreshToken = session.refreshToken || user.refresh_token || null
+  const desiredProvider: MusicProvider | undefined =
+    options.provider ?? (user.provider as MusicProvider | undefined);
 
-  const shouldForceRefresh = options.forceRefresh === true
-  const expiresAt = session.expiresAt ?? 0
-  const needsRefresh = shouldForceRefresh || (!!refreshToken && (!accessToken || expiresAt <= Date.now() + 60_000))
-
-  if (needsRefresh) {
-    try {
-      const refreshed = await refreshSpotifyToken(user, session)
-      accessToken = refreshed.accessToken
-      refreshToken = refreshed.refreshToken
-    } catch (err) {
-      console.error("token_refresh_failed", err)
-      req.session = null
-      if (res) res.status(401).json({ error: "Unauthorized" })
-      return null
-    }
+  const connection = await queryConnection(user.id, desiredProvider);
+  if (options.requireConnection && !connection) {
+    if (res) fail(res, "provider_required", "Aucune connexion active pour ce fournisseur", 403);
+    return null;
   }
 
-  if (!accessToken) {
-    if (res) res.status(401).json({ error: "Unauthorized" })
-    return null
+  if (sessionToken && options.autoExtend !== false) {
+    await extendSessionToken(sessionToken, ttlMs);
   }
 
-  req.session = session
-
-  if (options.refresh !== false && refreshToken && session.expiresAt && session.expiresAt <= Date.now() + 60_000) {
-    try {
-      const refreshed = await refreshSpotifyToken(user, session)
-      accessToken = refreshed.accessToken
-      refreshToken = refreshed.refreshToken
-      req.session = session
-    } catch (err) {
-      console.error("token_refresh_failed", err)
-      req.session = null
-      if (res) res.status(401).json({ error: "Unauthorized" })
-      return null
-    }
-  }
-
-  return { user, accessToken, refreshToken }
+  return {
+    user,
+    connection,
+    sessionToken,
+  };
 }
 
 export function clearSession(req: Request): void {
-  req.session = null
+  req.session = null;
 }

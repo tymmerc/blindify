@@ -1,20 +1,50 @@
+export type MusicProvider = "spotify" | "deezer" | "apple" | "local" | "guest"
+
 export type UserSummary = {
   id: number
+  provider: MusicProvider
+  provider_id: string
   username: string | null
-  spotify_id: string
   email: string | null
+  avatar: string | null
+}
+
+export type ProviderConnectionSummary = {
+  id: number
+  provider: MusicProvider
+  expires_at: string | null
+  scope: string[] | null
 }
 
 export type SoloTrack = {
-  spotify_track_id: string
+  round: number
+  audioSourceId: string
+  type: MusicProvider
+  track_id: string
   title: string
   artist: string
-  preview_url: string | null
   album_cover: string | null
+  audio_url: string | null
+  metadata: Record<string, unknown>
 }
 
 export type SoloGameResponse = {
-  sessionId: number
+  session: {
+    id: number
+    mode: string
+    difficulty: string
+    provider: MusicProvider
+    totalRounds: number
+    startedAt: string
+  }
   tracks: SoloTrack[]
-  sourceUsed?: string
+}
+
+export type UserStats = {
+  totalGames: number
+  accuracyRate: number
+  averageReactionTime: number
+  bestStreak: number
+  totalXp: number
+  lastPlayedAt: string | null
 }

@@ -1,76 +1,171 @@
-import { Request, Response } from "express";
+import type { Request, Response } from "express";
+import type { MusicProvider } from "../types/user";
 import { pool } from "../config/db";
+import { getSessionContext } from "../utils/session";
+import { ok, fail } from "../utils/response";
+import type { AudioSourceRow } from "../types/audio";
+import { syncSpotifyLibrary } from "../services/providers/spotifySync";
+
+async function fetchAudioSources(
+  userId: number,
+  provider: MusicProvider,
+  count: number
+): Promise<AudioSourceRow[]> {
+  const { rows } = await pool.query<AudioSourceRow>(
+    `SELECT id, provider, external_id, title, artist, album_cover, audio_url, duration_ms, metadata
+     FROM audio_sources
+     WHERE provider=$1 AND (user_id=$2 OR user_id IS NULL)
+     ORDER BY RANDOM()
+     LIMIT $3`,
+    [provider, userId, count]
+  );
+  return rows;
+}
 
 export const gamesController = {
   async startSoloGame(req: Request, res: Response): Promise<void> {
-    const token = req.headers.authorization?.replace("Bearer ", "");
-    if (!token) {
-      res.status(401).json({ error: "No token" });
+    const preferredProvider = (req.body?.provider as MusicProvider | undefined) ?? undefined;
+    const difficulty = typeof req.body?.difficulty === "string" ? req.body.difficulty : "normal";
+    const count = Number.isFinite(Number(req.body?.count)) ? Math.min(Math.max(Number(req.body.count), 5), 25) : 10;
+
+    const context = await getSessionContext(req, res, {
+      provider: preferredProvider,
+      requireConnection: preferredProvider !== "guest",
+    });
+    if (!context) return;
+
+    const provider: MusicProvider =
+      preferredProvider ?? context.connection?.provider ?? context.user.provider ?? "guest";
+
+    if (provider !== "guest" && !context.connection) {
+      fail(res, "provider_connection_missing", "Aucune connexion active pour ce mode", 400);
       return;
     }
 
-    const userRes = await pool.query(`SELECT id FROM users WHERE access_token=$1`, [token]);
-    if (!userRes.rows.length) {
-      res.status(404).json({ error: "User not found" });
+    let sources = await fetchAudioSources(context.user.id, provider, count);
+
+    if (sources.length < count && provider === "spotify" && context.connection) {
+      const { connection } = await syncSpotifyLibrary(
+        context.user.id,
+        context.connection,
+        count
+      );
+      if (connection) {
+        context.connection = connection;
+      }
+      sources = await fetchAudioSources(context.user.id, provider, count);
+    }
+
+    if (sources.length < count) {
+      fail(res, "insufficient_tracks", "Pas assez de titres pour lancer la partie", 400, {
+        needed: count,
+        available: sources.length,
+      });
       return;
     }
-    const userId = userRes.rows[0].id;
 
-    const tracks = await pool.query(
-      `SELECT * FROM tracks WHERE user_id=$1 AND preview_url IS NOT NULL ORDER BY RANDOM() LIMIT 10`,
-      [userId]
+    const { rows: sessions } = await pool.query(
+      `INSERT INTO game_sessions (host_user_id, mode, difficulty, source_provider, total_rounds, state)
+       VALUES ($1,'solo',$2,$3,$4,'in_progress')
+       RETURNING id, mode, difficulty, source_provider, total_rounds, started_at`,
+      [context.user.id, difficulty, provider, count]
+    );
+    const session = sessions[0];
+
+    await pool.query(
+      `INSERT INTO game_participants (session_id, user_id, score, accuracy, avg_response_ms, best_streak)
+       VALUES ($1,$2,0,null,null,null)
+       ON CONFLICT (session_id, user_id) DO NOTHING`,
+      [session.id, context.user.id]
     );
 
-    const game = await pool.query(
-      `INSERT INTO games (host_id, mode) VALUES ($1,'solo') RETURNING id`,
-      [userId]
-    );
-    const gameId = game.rows[0].id;
+    const normalizedTracks = sources.map((source, index) => {
+      return {
+        round: index + 1,
+        audioSourceId: source.id,
+        type: source.provider,
+        track_id: source.external_id ?? source.id,
+        title: source.title,
+        artist: source.artist,
+        album_cover: source.album_cover,
+        audio_url: source.audio_url,
+        metadata: source.metadata ?? {},
+      };
+    });
 
-    for (let i = 0; i < tracks.rows.length; i++) {
+    for (const track of normalizedTracks) {
       await pool.query(
-        `INSERT INTO game_tracks (game_id, track_id, "order") VALUES ($1,$2,$3)`,
-        [gameId, tracks.rows[i].id, i + 1]
+        `INSERT INTO game_rounds (session_id, round_index, audio_source_id, correct_title, correct_artist)
+         VALUES ($1,$2,$3,$4,$5)
+         ON CONFLICT (session_id, round_index) DO NOTHING`,
+        [session.id, track.round, track.audioSourceId, track.title, track.artist]
       );
     }
 
-    res.json({ game_id: gameId, tracks: tracks.rows });
+    ok(res, {
+      session: {
+        id: session.id,
+        mode: session.mode,
+        difficulty: session.difficulty,
+        provider: session.source_provider,
+        totalRounds: session.total_rounds,
+        startedAt: session.started_at,
+      },
+      tracks: normalizedTracks,
+    });
   },
 
   async history(req: Request, res: Response): Promise<void> {
-    const token = req.headers.authorization?.replace("Bearer ", "");
-    const user = await pool.query(`SELECT id FROM users WHERE access_token=$1`, [token]);
-    if (!user.rows.length) {
-      res.status(404).json({ error: "User not found" });
-      return;
-    }
-    const userId = user.rows[0].id;
+    const context = await getSessionContext(req, res);
+    if (!context) return;
 
-    const history = await pool.query(
-      `SELECT * FROM game_summary WHERE host_name=(SELECT username FROM users WHERE id=$1) ORDER BY created_at DESC`,
-      [userId]
+    const { rows } = await pool.query(
+      `SELECT id, mode, difficulty, source_provider, total_rounds, started_at, ended_at, state
+       FROM game_sessions
+       WHERE host_user_id=$1
+       ORDER BY started_at DESC
+       LIMIT 50`,
+      [context.user.id]
     );
-    res.json(history.rows);
+
+    ok(res, { sessions: rows });
   },
 
   async detailedStats(req: Request, res: Response): Promise<void> {
-    const token = req.headers.authorization?.replace("Bearer ", "");
-    const user = await pool.query(`SELECT id FROM users WHERE access_token=$1`, [token]);
-    if (!user.rows.length) {
-      res.status(404).json({ error: "User not found" });
-      return;
-    }
-    const userId = user.rows[0].id;
+    const context = await getSessionContext(req, res);
+    if (!context) return;
 
-    const stats = await pool.query(
-      `SELECT 
-        COUNT(*) AS total_games,
-        COALESCE(MAX(score),0) AS best_score,
-        COALESCE(AVG(score),0) AS avg_score
-       FROM game_players WHERE user_id=$1`,
-      [userId]
+    const { rows } = await pool.query(
+      `SELECT
+         total_games,
+         total_correct,
+         total_guesses,
+         total_reaction_ms,
+         best_streak,
+         total_xp,
+         last_played_at
+       FROM user_stats
+       WHERE user_id=$1
+       LIMIT 1`,
+      [context.user.id]
     );
 
-    res.json(stats.rows[0]);
+    const stats = rows[0];
+    ok(res, {
+      stats: {
+        totalGames: stats?.total_games ?? 0,
+        accuracyRate:
+          stats && stats.total_guesses > 0
+            ? Number(((stats.total_correct / stats.total_guesses) * 100).toFixed(2))
+            : 0,
+        averageReactionTime:
+          stats && stats.total_guesses > 0
+            ? Math.round(stats.total_reaction_ms / stats.total_guesses)
+            : 0,
+        bestStreak: stats?.best_streak ?? 0,
+        totalXp: stats?.total_xp ?? 0,
+        lastPlayedAt: stats?.last_played_at ?? null,
+      },
+    });
   },
 };

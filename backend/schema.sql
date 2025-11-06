@@ -1,138 +1,171 @@
 -- ====================================
 -- BLINDIFY DATABASE SCHEMA
--- Système de blind test musical
+-- Universal music blind test platform
 -- ====================================
 
--- Table des utilisateurs
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+-- Users & Authentication -----------------------------------------------
 CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
-    spotify_id VARCHAR(255) UNIQUE NOT NULL,
-    username VARCHAR(100),
+    provider TEXT NOT NULL,
+    provider_id TEXT NOT NULL,
+    username VARCHAR(120),
     email VARCHAR(255),
+    avatar TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(provider, provider_id)
+);
+
+CREATE TABLE IF NOT EXISTS user_connections (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    provider TEXT NOT NULL,
     access_token TEXT,
     refresh_token TEXT,
-    level INTEGER DEFAULT 1,
-    xp INTEGER DEFAULT 0,
-    total_score INTEGER DEFAULT 0,
-    games_played INTEGER DEFAULT 0,
-    current_streak INTEGER DEFAULT 0,
-    best_streak INTEGER DEFAULT 0,
+    expires_at TIMESTAMP,
+    scope TEXT[],
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, provider)
+);
+
+CREATE TABLE IF NOT EXISTS user_sessions (
+    token TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP
+);
+
+-- Audio Sources ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS audio_sources (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    provider TEXT NOT NULL,
+    external_id TEXT,
+    title TEXT NOT NULL,
+    artist TEXT NOT NULL,
+    album_cover TEXT,
+    duration_ms INTEGER,
+    audio_url TEXT,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(provider, external_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_audio_sources_user ON audio_sources(user_id);
+CREATE INDEX IF NOT EXISTS idx_audio_sources_provider ON audio_sources(provider);
+
+-- Game Sessions ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS game_sessions (
+    id SERIAL PRIMARY KEY,
+    host_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    mode TEXT NOT NULL,
+    difficulty TEXT DEFAULT 'normal',
+    source_provider TEXT,
+    source_reference TEXT,
+    room_code TEXT,
+    total_rounds INTEGER DEFAULT 10,
+    current_round INTEGER DEFAULT 0,
+    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    ended_at TIMESTAMP,
+    state TEXT DEFAULT 'waiting'
+);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_host ON game_sessions(host_user_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_room_code ON game_sessions(room_code);
+
+CREATE TABLE IF NOT EXISTS game_participants (
+    id SERIAL PRIMARY KEY,
+    session_id INTEGER NOT NULL REFERENCES game_sessions(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    score INTEGER DEFAULT 0,
+    accuracy NUMERIC(5,2),
+    avg_response_ms INTEGER,
+    best_streak INTEGER,
+    joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(session_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS game_rounds (
+    id SERIAL PRIMARY KEY,
+    session_id INTEGER NOT NULL REFERENCES game_sessions(id) ON DELETE CASCADE,
+    round_index INTEGER NOT NULL,
+    audio_source_id UUID REFERENCES audio_sources(id) ON DELETE SET NULL,
+    correct_title TEXT NOT NULL,
+    correct_artist TEXT NOT NULL,
+    reveal_at TIMESTAMP,
+    completed_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(session_id, round_index)
+);
+
+CREATE TABLE IF NOT EXISTS round_responses (
+    id SERIAL PRIMARY KEY,
+    round_id INTEGER NOT NULL REFERENCES game_rounds(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    guess_title TEXT,
+    guess_artist TEXT,
+    is_correct BOOLEAN DEFAULT FALSE,
+    response_time_ms INTEGER,
+    score_delta INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(round_id, user_id)
+);
+
+-- Progression & Analytics -----------------------------------------------
+CREATE TABLE IF NOT EXISTS user_stats (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    total_games INTEGER DEFAULT 0,
+    total_correct INTEGER DEFAULT 0,
+    total_guesses INTEGER DEFAULT 0,
+    total_reaction_ms BIGINT DEFAULT 0,
+    best_streak INTEGER DEFAULT 0,
+    total_xp INTEGER DEFAULT 0,
+    longest_game INTEGER DEFAULT 0,
+    last_played_at TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Index pour améliorer les performances des requêtes fréquentes
-CREATE INDEX IF NOT EXISTS idx_users_spotify_id ON users(spotify_id);
-CREATE INDEX IF NOT EXISTS idx_users_access_token ON users(access_token);
-
--- Table des pistes audio (tracks)
-CREATE TABLE IF NOT EXISTS tracks (
-    id SERIAL PRIMARY KEY,
-    spotify_track_id VARCHAR(255) UNIQUE NOT NULL,
-    title VARCHAR(500) NOT NULL,
-    artist VARCHAR(500) NOT NULL,
-    album VARCHAR(500),
-    preview_url TEXT,
-    album_cover TEXT,
-    duration_ms INTEGER,
-    popularity INTEGER,
-    energy DECIMAL(3,2),
-    valence DECIMAL(3,2),
-    danceability DECIMAL(3,2),
-    tempo DECIMAL(6,2),
-    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX IF NOT EXISTS idx_tracks_spotify_id ON tracks(spotify_track_id);
-CREATE INDEX IF NOT EXISTS idx_tracks_user_id ON tracks(user_id);
-
--- Table de blacklist des tracks (éviter les répétitions)
-CREATE TABLE IF NOT EXISTS track_blacklist (
-    id SERIAL PRIMARY KEY,
-    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-    track_id INTEGER REFERENCES tracks(id) ON DELETE CASCADE,
-    blacklisted_until TIMESTAMP NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(user_id, track_id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_blacklist_user_track ON track_blacklist(user_id, track_id);
-CREATE INDEX IF NOT EXISTS idx_blacklist_until ON track_blacklist(blacklisted_until);
-
--- Table des sessions de jeu
-CREATE TABLE IF NOT EXISTS game_sessions (
-    id SERIAL PRIMARY KEY,
-    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-    mode VARCHAR(20) NOT NULL, -- 'solo' ou 'multiplayer'
-    difficulty VARCHAR(20) DEFAULT 'normal', -- 'easy', 'normal', 'hard'
-    source VARCHAR(100), -- 'liked_tracks', 'playlist', 'top_tracks', 'ai_recommendations'
-    source_id VARCHAR(255), -- ID de la playlist ou autre source
-    total_questions INTEGER DEFAULT 10,
-    correct_answers INTEGER DEFAULT 0,
-    final_score INTEGER DEFAULT 0,
-    avg_response_time DECIMAL(10,2),
-    streak_achieved INTEGER DEFAULT 0,
-    xp_earned INTEGER DEFAULT 0,
-    completed BOOLEAN DEFAULT FALSE,
-    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    completed_at TIMESTAMP,
-    room_id VARCHAR(50) -- Pour le mode multijoueur
-);
-
-CREATE INDEX IF NOT EXISTS idx_sessions_user ON game_sessions(user_id);
-CREATE INDEX IF NOT EXISTS idx_sessions_completed ON game_sessions(completed);
-CREATE INDEX IF NOT EXISTS idx_sessions_mode ON game_sessions(mode);
-
--- Table des rounds de jeu (chaque question)
-CREATE TABLE IF NOT EXISTS game_rounds (
+CREATE TABLE IF NOT EXISTS leaderboard_snapshots (
     id SERIAL PRIMARY KEY,
     session_id INTEGER REFERENCES game_sessions(id) ON DELETE CASCADE,
-    track_id INTEGER REFERENCES tracks(id) ON DELETE SET NULL,
-    spotify_track_id VARCHAR(255) NOT NULL,
-    question_number INTEGER NOT NULL,
-    user_answer TEXT,
-    correct_answer TEXT NOT NULL,
-    is_correct BOOLEAN DEFAULT FALSE,
-    response_time_ms INTEGER,
-    points_earned INTEGER DEFAULT 0,
-    hint_used BOOLEAN DEFAULT FALSE,
-    skipped BOOLEAN DEFAULT FALSE,
-    similarity_score DECIMAL(5,2),
-    validation_method VARCHAR(20), -- 'exact', 'fuzzy', 'contains'
+    payload JSONB NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_rounds_session ON game_rounds(session_id);
-CREATE INDEX IF NOT EXISTS idx_rounds_track ON game_rounds(track_id);
-
--- Table des découvertes (nouvelles musiques découvertes)
-CREATE TABLE IF NOT EXISTS discoveries (
+CREATE TABLE IF NOT EXISTS likes (
     id SERIAL PRIMARY KEY,
     user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-    track_id INTEGER REFERENCES tracks(id) ON DELETE CASCADE,
-    session_id INTEGER REFERENCES game_sessions(id) ON DELETE SET NULL,
-    liked BOOLEAN DEFAULT FALSE,
-    added_to_spotify BOOLEAN DEFAULT FALSE,
-    discovered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(user_id, track_id)
+    audio_source_id UUID REFERENCES audio_sources(id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, audio_source_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_discoveries_user ON discoveries(user_id);
+CREATE TABLE IF NOT EXISTS uploads (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    filename TEXT NOT NULL,
+    mime_type TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    duration_ms INTEGER,
+    audio_source_id UUID REFERENCES audio_sources(id) ON DELETE SET NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
--- Table des badges
+-- Badges & Achievements -------------------------------------------------
 CREATE TABLE IF NOT EXISTS badges (
     id SERIAL PRIMARY KEY,
-    name VARCHAR(100) UNIQUE NOT NULL,
+    slug TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
     description TEXT,
-    icon VARCHAR(100),
-    tier VARCHAR(20), -- 'bronze', 'silver', 'gold', 'platinum'
-    requirement_type VARCHAR(50), -- 'games_played', 'streak', 'level', 'discoveries', etc.
+    icon TEXT,
+    tier TEXT,
+    requirement_type TEXT,
     requirement_value INTEGER,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Table des badges d'utilisateurs
 CREATE TABLE IF NOT EXISTS user_badges (
     id SERIAL PRIMARY KEY,
     user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -141,121 +174,50 @@ CREATE TABLE IF NOT EXISTS user_badges (
     UNIQUE(user_id, badge_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_user_badges_user ON user_badges(user_id);
-
--- Table des salles multijoueur
+-- Multiplayer Rooms (staging lobby) -------------------------------------
 CREATE TABLE IF NOT EXISTS multiplayer_rooms (
     id SERIAL PRIMARY KEY,
     room_code VARCHAR(6) UNIQUE NOT NULL,
     host_user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-    name VARCHAR(100),
+    session_id INTEGER REFERENCES game_sessions(id) ON DELETE SET NULL,
+    name VARCHAR(120),
+    status TEXT DEFAULT 'waiting',
     max_players INTEGER DEFAULT 8,
     question_count INTEGER DEFAULT 10,
-    difficulty VARCHAR(20) DEFAULT 'normal',
-    status VARCHAR(20) DEFAULT 'waiting', -- 'waiting', 'in_progress', 'completed'
-    current_question INTEGER DEFAULT 0,
+    difficulty TEXT DEFAULT 'normal',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     started_at TIMESTAMP,
     completed_at TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_rooms_code ON multiplayer_rooms(room_code);
-CREATE INDEX IF NOT EXISTS idx_rooms_status ON multiplayer_rooms(status);
-
--- Table des participants aux salles multijoueur
 CREATE TABLE IF NOT EXISTS room_participants (
     id SERIAL PRIMARY KEY,
     room_id INTEGER REFERENCES multiplayer_rooms(id) ON DELETE CASCADE,
     user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-    score INTEGER DEFAULT 0,
-    is_ready BOOLEAN DEFAULT FALSE,
     joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    is_ready BOOLEAN DEFAULT FALSE,
     UNIQUE(room_id, user_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_participants_room ON room_participants(room_id);
+-- Seed default badges ---------------------------------------------------
+INSERT INTO badges (slug, name, description, icon, tier, requirement_type, requirement_value)
+VALUES
+    ('first-play', 'Première Note', 'Joue ta première partie', '🎵', 'bronze', 'games_played', 1),
+    ('ten-games', 'Amateur', 'Joue 10 parties', '🎹', 'silver', 'games_played', 10),
+    ('fifty-games', 'Mélomane', 'Joue 50 parties', '🎸', 'gold', 'games_played', 50),
+    ('hundred-games', 'Légende', 'Joue 100 parties', '🎺', 'platinum', 'games_played', 100),
+    ('streak-3', 'Première Série', 'Atteins une série de 3', '🔥', 'bronze', 'streak', 3),
+    ('streak-5', 'En Feu', 'Atteins une série de 5', '🔥🔥', 'silver', 'streak', 5),
+    ('streak-10', 'Inarrêtable', 'Atteins une série de 10', '🔥🔥🔥', 'gold', 'streak', 10),
+    ('xp-500', 'Niveau 5', 'Accumule 500 XP', '⭐', 'bronze', 'xp', 500),
+    ('xp-1500', 'Niveau 10', 'Accumule 1500 XP', '⭐⭐', 'silver', 'xp', 1500),
+    ('xp-5000', 'Niveau 25', 'Accumule 5000 XP', '⭐⭐⭐', 'gold', 'xp', 5000),
+    ('discover-20', 'Explorateur', 'Découvre 20 nouvelles musiques', '🧭', 'silver', 'discoveries', 20),
+    ('hard-10', 'Expert Difficile', 'Gagne 10 parties difficiles', '💎', 'gold', 'hard_games', 10)
+ON CONFLICT (slug) DO NOTHING;
 
--- Vue des statistiques utilisateur agrégées
-CREATE OR REPLACE VIEW user_statistics AS
-SELECT 
-    u.id as user_id,
-    u.username,
-    u.level,
-    u.xp,
-    u.total_score,
-    u.games_played,
-    u.current_streak,
-    u.best_streak,
-    COALESCE(AVG(gs.final_score), 0) as average_score,
-    COALESCE(MAX(gs.final_score), 0) as best_score,
-    COALESCE(AVG(gs.correct_answers::DECIMAL / NULLIF(gs.total_questions, 0) * 100), 0) as average_accuracy,
-    COUNT(DISTINCT d.track_id) as discoveries_count,
-    COUNT(DISTINCT ub.badge_id) as badges_count,
-    COALESCE(AVG(gs.avg_response_time), 0) as avg_response_time
-FROM users u
-LEFT JOIN game_sessions gs ON u.id = gs.user_id AND gs.completed = TRUE
-LEFT JOIN discoveries d ON u.id = d.user_id
-LEFT JOIN user_badges ub ON u.id = ub.user_id
-GROUP BY u.id, u.username, u.level, u.xp, u.total_score, u.games_played, u.current_streak, u.best_streak;
-
--- Vue du classement global
-CREATE OR REPLACE VIEW leaderboard_global AS
-SELECT 
-    u.id,
-    u.username,
-    u.level,
-    u.total_score,
-    u.games_played,
-    u.best_streak,
-    COUNT(DISTINCT ub.badge_id) as badges_count,
-    ROW_NUMBER() OVER (ORDER BY u.total_score DESC, u.level DESC) as rank
-FROM users u
-LEFT JOIN user_badges ub ON u.id = ub.user_id
-GROUP BY u.id, u.username, u.level, u.total_score, u.games_played, u.best_streak
-ORDER BY u.total_score DESC
-LIMIT 100;
-
--- Insertion des badges par défaut
-INSERT INTO badges (name, description, icon, tier, requirement_type, requirement_value) VALUES
-    ('Première Note', 'Joue ta première partie', '🎵', 'bronze', 'games_played', 1),
-    ('Amateur', 'Joue 10 parties', '🎹', 'silver', 'games_played', 10),
-    ('Mélomane', 'Joue 50 parties', '🎸', 'gold', 'games_played', 50),
-    ('Légende', 'Joue 100 parties', '🎺', 'platinum', 'games_played', 100),
-    ('Première Série', 'Obtiens une série de 3', '🔥', 'bronze', 'streak', 3),
-    ('En Feu', 'Obtiens une série de 5', '🔥🔥', 'silver', 'streak', 5),
-    ('Inarrêtable', 'Obtiens une série de 10', '🔥🔥🔥', 'gold', 'streak', 10),
-    ('Niveau 5', 'Atteins le niveau 5', '⭐', 'bronze', 'level', 5),
-    ('Niveau 10', 'Atteins le niveau 10', '⭐⭐', 'silver', 'level', 10),
-    ('Niveau 25', 'Atteins le niveau 25', '⭐⭐⭐', 'gold', 'level', 25),
-    ('Explorateur', 'Découvre 20 nouvelles musiques', '🧭', 'silver', 'discoveries', 20),
-    ('Expert Difficile', 'Gagne 10 parties en mode difficile', '💎', 'gold', 'hard_games', 10)
-ON CONFLICT (name) DO NOTHING;
-
--- Fonction pour nettoyer les anciennes blacklists
-CREATE OR REPLACE FUNCTION clean_expired_blacklist() RETURNS void AS $$
+-- Final notice ----------------------------------------------------------
+DO $$
 BEGIN
-    DELETE FROM track_blacklist WHERE blacklisted_until < NOW();
-END;
-$$ LANGUAGE plpgsql;
-
--- Fonction pour mettre à jour updated_at automatiquement
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = CURRENT_TIMESTAMP;
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
--- Trigger pour updated_at sur users
-DROP TRIGGER IF EXISTS update_users_updated_at ON users;
-CREATE TRIGGER update_users_updated_at
-    BEFORE UPDATE ON users
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
-
--- Affichage de confirmation
-DO $$ 
-BEGIN
-    RAISE NOTICE '✅ Blindify database schema created successfully';
+    RAISE NOTICE '✅ Blindify universal schema ready';
 END $$;

@@ -1,17 +1,17 @@
 import { redirect } from "next/navigation"
 import { getServerApi } from "./apiServer"
-import type { UserSummary } from "./types"
+import type { CurrentUserPayload } from "./api"
 
-export async function requireUser(): Promise<UserSummary> {
+export async function requireUser(): Promise<CurrentUserPayload> {
   const api = getServerApi()
-  const user = await api.currentUser()
-  if (!user) {
+  const data = await api.currentUser()
+  if (!data) {
     redirect("/auth/login")
   }
-  return user
+  return data
 }
 
-export async function maybeUser(): Promise<UserSummary | null> {
+export async function maybeUser(): Promise<CurrentUserPayload | null> {
   const api = getServerApi()
   return api.currentUser()
 }

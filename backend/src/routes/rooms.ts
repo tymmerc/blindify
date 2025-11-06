@@ -4,6 +4,12 @@ import { roomsController } from "../controllers/roomsController";
 const router = express.Router();
 
 router.post("/create", roomsController.createRoom);
+router.post("/join", (req, res) => {
+  if (typeof req.body?.code === "string") {
+    (req.params as { code?: string }).code = req.body.code;
+  }
+  return roomsController.joinRoom(req, res);
+});
 router.post("/:code/join", roomsController.joinRoom);
 
 export default router;

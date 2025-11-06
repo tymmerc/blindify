@@ -18,48 +18,43 @@ const config: Config = {
     },
     extend: {
       colors: {
-        // Variables CSS pour compatibilité avec système oklch
-        border: "oklch(var(--border))",
-        input: "oklch(var(--input))",
-        ring: "oklch(var(--ring))",
-        background: "oklch(var(--background))",
-        foreground: "oklch(var(--foreground))",
-        
-        // DA Rose/Violet/Vert - Couleurs directes
+        background: "#050510",
+        foreground: "#e2e8f0",
+        border: "rgba(148, 163, 184, 0.15)",
+        ring: "rgba(168, 85, 247, 0.6)",
         primary: {
-          DEFAULT: "#9333ea", // purple-600
-          foreground: "#ffffff",
+          DEFAULT: "#a855f7",
+          foreground: "#050510",
         },
         secondary: {
-          DEFAULT: "#ec4899", // pink-500
-          foreground: "#ffffff",
+          DEFAULT: "#6366f1",
+          foreground: "#f8fafc",
         },
         accent: {
-          DEFAULT: "#22c55e", // green-500
-          foreground: "#ffffff",
+          DEFAULT: "#22c55e",
+          foreground: "#03130a",
         },
-        
         destructive: {
-          DEFAULT: "oklch(var(--destructive))",
-          foreground: "oklch(var(--destructive-foreground))",
+          DEFAULT: "#f87171",
+          foreground: "#0b0b14",
         },
         muted: {
-          DEFAULT: "oklch(var(--muted))",
-          foreground: "oklch(var(--muted-foreground))",
+          DEFAULT: "#1a1d35",
+          foreground: "#94a3b8",
         },
         popover: {
-          DEFAULT: "oklch(var(--popover))",
-          foreground: "oklch(var(--popover-foreground))",
+          DEFAULT: "rgba(8, 10, 22, 0.92)",
+          foreground: "#f8fafc",
         },
         card: {
-          DEFAULT: "oklch(var(--card))",
-          foreground: "oklch(var(--card-foreground))",
+          DEFAULT: "rgba(20, 24, 42, 0.75)",
+          foreground: "#e2e8f0",
         },
       },
       borderRadius: {
-        lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
+        lg: "1.5rem",
+        md: "1rem",
+        sm: "0.75rem",
       },
       keyframes: {
         "accordion-down": {

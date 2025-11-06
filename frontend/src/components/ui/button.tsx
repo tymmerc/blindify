@@ -21,24 +21,26 @@ export function Button({
 }: ButtonProps) {
   const Comp = asChild ? Slot : "button"
 
-  const variants = {
-    default: "bg-gradient-to-r from-purple-600 via-pink-500 to-green-500 text-white hover:shadow-lg hover:scale-[1.02]",
-    outline: "border-2 border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800",
-    ghost: "hover:bg-gray-100 dark:hover:bg-gray-800",
-    link: "underline-offset-4 hover:underline"
+  const variants: Record<NonNullable<ButtonProps["variant"]>, string> = {
+    default:
+      "btn-primary px-8 py-3 text-sm tracking-[0.3em] uppercase border border-white/20 before:!opacity-60 hover:before:!opacity-80",
+    outline:
+      "rounded-full border border-white/15 bg-white/5 text-slate-200 hover:border-white/35 hover:text-white",
+    ghost: "rounded-full text-slate-200 hover:bg-white/10",
+    link: "rounded-none border-none bg-transparent text-neon underline-offset-8 hover:underline",
   }
 
-  const sizes = {
+  const sizes: Record<NonNullable<ButtonProps["size"]>, string> = {
     default: "px-6 py-3 text-base",
     sm: "px-4 py-2 text-sm",
-    lg: "px-8 py-4 text-lg",
-    icon: "w-10 h-10"
+    lg: "px-9 py-4 text-lg",
+    icon: "h-11 w-11",
   }
 
   return (
     <Comp
       className={cn(
-        "inline-flex items-center justify-center font-semibold rounded-full transition-all focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed",
+        "relative inline-flex items-center justify-center gap-2 font-semibold rounded-full transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#a855f7] focus-visible:ring-offset-2 focus-visible:ring-offset-black disabled:cursor-not-allowed disabled:opacity-50",
         variants[variant],
         sizes[size],
         className

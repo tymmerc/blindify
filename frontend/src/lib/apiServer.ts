@@ -2,7 +2,11 @@ import "server-only"
 
 import { cookies } from "next/headers"
 import { API_BASE_URL } from "./config"
-import type { SoloGameResponse, UserSummary } from "./types"
+import type {
+  ProviderConnectionSummary,
+  SoloGameResponse,
+  UserSummary,
+} from "./types"
 
 export class ApiError extends Error {
   constructor(readonly status: number, message: string) {
@@ -16,6 +20,12 @@ function buildUrl(path: string): string {
     return `${API_BASE_URL}/${path}`
   }
   return `${API_BASE_URL}${path}`
+}
+
+type ApiEnvelope<T> = {
+  success: boolean
+  data: T | null
+  error: { code: string; message: string; details?: unknown } | null
 }
 
 async function parseJson<T>(response: Response): Promise<T> {
@@ -45,12 +55,20 @@ export function getServerApi() {
     })
 
     if (!response.ok) {
-      const message = response.statusText || "API request failed"
+      let message = response.statusText || "API request failed"
+      try {
+        const errorPayload = (await response.json()) as ApiEnvelope<unknown>
+        if (errorPayload?.error?.message) {
+          message = errorPayload.error.message
+        }
+      } catch {
+        // ignore parse error, keep default message
+      }
       throw new ApiError(response.status, message)
     }
 
     if (response.status === 204) {
-      return undefined as T
+      return { success: true, data: null, error: null } as T
     }
 
     return parseJson<T>(response)
@@ -60,9 +78,15 @@ export function getServerApi() {
     getLoginUrl() {
       return buildUrl("/auth/login")
     },
-    async currentUser(): Promise<UserSummary | null> {
+    async currentUser(): Promise<{ user: UserSummary; providerConnection: ProviderConnectionSummary | null } | null> {
       try {
-        return await request<UserSummary>("/api/auth/me")
+        const payload = await request<ApiEnvelope<{ user: UserSummary; providerConnection: ProviderConnectionSummary | null }>>(
+          "/api/auth/me"
+        )
+        if (!payload.success) {
+          throw new ApiError(500, payload.error?.message ?? "Failed to load user")
+        }
+        return payload.data
       } catch (err) {
         if (err instanceof ApiError && err.status === 401) {
           return null
@@ -70,29 +94,35 @@ export function getServerApi() {
         throw err
       }
     },
-    async requireUser(): Promise<UserSummary> {
-      const user = await this.currentUser()
-      if (!user) {
+    async requireUser(): Promise<{ user: UserSummary; providerConnection: ProviderConnectionSummary | null }> {
+      const data = await this.currentUser()
+      if (!data) {
         throw new ApiError(401, "Unauthorized")
       }
-      return user
+      return data
     },
     async startSoloGame(options: {
       difficulty?: "easy" | "normal" | "hard"
       source?: string
       count?: number
+      provider?: string
     } = {}): Promise<SoloGameResponse> {
-      return request<SoloGameResponse>("/api/games/solo/start", {
+      const payload = await request<ApiEnvelope<SoloGameResponse>>("/api/games/solo", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
           difficulty: options.difficulty ?? "normal",
-          source: options.source ?? "liked_tracks",
+          source: options.source ?? "library",
           count: options.count ?? 10,
+          provider: options.provider,
         }),
       })
+      if (!payload.success || !payload.data) {
+        throw new ApiError(500, payload.error?.message ?? "Unable to start solo game")
+      }
+      return payload.data
     },
   }
 }

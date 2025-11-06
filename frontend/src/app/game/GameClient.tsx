@@ -3,34 +3,32 @@
 import { useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { api } from "@/lib/api"
-import type { SoloGameResponse, SoloTrack, UserSummary } from "@/lib/types"
-import type { ApiError } from "@/lib/apiClient"
+import type { CurrentUserPayload } from "@/lib/api"
+import type { SoloGameResponse, SoloTrack } from "@/lib/types"
 import { SoloGameClient } from "@/components/game/SoloGameClient"
+import { Button } from "@/components/ui/button"
+import { AlertTriangle } from "lucide-react"
 
 function normalizeDifficulty(value: string | null): "easy" | "normal" | "hard" {
-  if (value === "easy" || value === "hard") {
-    return value
-  }
-  return "normal"
+  return value === "easy" || value === "hard" ? value : "normal"
 }
 
-function normalizeSource(value: string | null): string {
-  if (!value) return "liked_tracks"
-  return value
+function normalizeSource(value: string | null): "library" | "top" | "recent" {
+  if (value === "top" || value === "recent") return value
+  return "library"
 }
 
 export default function GameClient() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const difficultyParam = searchParams.get("difficulty")
-  const sourceParam = searchParams.get("source")
-  const difficulty = normalizeDifficulty(difficultyParam)
-  const source = normalizeSource(sourceParam)
-  const [user, setUser] = useState<UserSummary | null>(null)
+  const [userPayload, setUserPayload] = useState<CurrentUserPayload | null>(null)
+  const [sessionInfo, setSessionInfo] = useState<SoloGameResponse["session"] | null>(null)
   const [tracks, setTracks] = useState<SoloTrack[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [sourceUsed, setSourceUsed] = useState<string>(source)
+
+  const difficulty = normalizeDifficulty(searchParams.get("difficulty"))
+  const source = normalizeSource(searchParams.get("source"))
 
   useEffect(() => {
     let active = true
@@ -46,24 +44,25 @@ export default function GameClient() {
           router.replace("/auth/login")
           return
         }
-        setUser(me)
+        setUserPayload(me)
 
         const game: SoloGameResponse = await api.startSoloGame({
           difficulty,
           source,
           count: 10,
         })
+
         if (!active) return
+        setSessionInfo(game.session)
         setTracks(game.tracks)
-        setSourceUsed(game.sourceUsed || source)
       } catch (err) {
-        const rawMessage = err && typeof err === "object" && "message" in err ? String((err as ApiError).message) : null
-        const message = rawMessage === "No tracks available"
-          ? "Spotify ne renvoie aucun extrait jouable pour cette configuration. Ajoute des titres likés avec preview et réessaie."
-          : rawMessage
-        console.error("game_bootstrap_failed", err)
+        console.error("solo_game_start_failed", err)
         if (!active) return
-        setError(message || "Impossible de démarrer la partie. Réessaie plus tard.")
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to start a new game. Try syncing more tracks or switching providers."
+        )
       } finally {
         if (active) setLoading(false)
       }
@@ -76,14 +75,13 @@ export default function GameClient() {
     }
   }, [router, difficulty, source])
 
-  const hasContent = useMemo(() => tracks.length > 0 && !!user, [tracks, user])
+  const hasTracks = useMemo(() => tracks.length > 0, [tracks])
 
   if (loading) {
     return (
-      <div className="min-h-screen grid place-items-center">
-        <div className="space-y-2 text-center">
-          <p className="text-lg font-semibold">Préparation de ta partie…</p>
-          <p className="text-sm text-muted-foreground">Nous récupérons tes titres Spotify.</p>
+      <div className="grid min-h-screen place-items-center">
+        <div className="rounded-full border border-white/10 bg-white/5 px-6 py-3 text-sm uppercase tracking-[0.5em] text-slate-300">
+          Initialising game
         </div>
       </div>
     )
@@ -91,61 +89,63 @@ export default function GameClient() {
 
   if (error) {
     return (
-      <div className="min-h-screen grid place-items-center px-6 text-center">
-        <div className="max-w-sm space-y-4">
-          <p className="text-lg font-semibold">Oups !</p>
-          <p className="text-sm text-muted-foreground">{error}</p>
-          <button
-            type="button"
-            onClick={() => router.replace("/menu")}
-            className="w-full rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-muted"
-          >
-            Retour au menu
-          </button>
+      <div className="grid min-h-screen place-items-center px-6">
+        <div className="surface flex max-w-md flex-col items-center gap-4 rounded-3xl border border-white/10 p-8 text-center">
+          <AlertTriangle className="h-10 w-10 text-neon" />
+          <p className="text-sm text-slate-300">{error}</p>
+          <Button variant="outline" onClick={() => router.replace("/menu")} className="gap-2">
+            Return to menu
+          </Button>
         </div>
       </div>
     )
   }
 
-  if (!hasContent || !user) {
+  if (!userPayload || !sessionInfo || !hasTracks) {
     return (
-      <div className="min-h-screen grid place-items-center px-6 text-center">
-        <div className="max-w-sm space-y-3">
-          <p className="text-lg font-semibold">Aucun morceau disponible</p>
-          <p className="text-sm text-muted-foreground">
-            Nous n'avons pas trouvé d'extraits jouables dans ta bibliothèque Spotify pour cette configuration.
-          </p>
-          <button
-            type="button"
-            onClick={() => router.replace("/menu")}
-            className="w-full rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-muted"
-          >
-            Retour au menu
-          </button>
+      <div className="grid min-h-screen place-items-center px-6">
+        <div className="surface flex max-w-md flex-col items-center gap-3 rounded-3xl border border-white/10 p-8 text-center text-sm text-slate-300">
+          <p>No playable tracks were found for this configuration.</p>
+          <Button variant="outline" onClick={() => router.replace("/menu")}>
+            Back to menu
+          </Button>
         </div>
       </div>
     )
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-green-50 dark:from-gray-950 dark:via-purple-950 dark:to-gray-950">
-      <div className="mx-auto flex min-h-screen max-w-4xl flex-col gap-10 px-6 py-16">
-        <header className="space-y-2 text-center">
-          <p className="text-sm uppercase tracking-[0.3em] text-purple-600">Mode solo</p>
-          <h1 className="text-4xl font-bold text-gray-900 dark:text-white">
-            Blindtest en cours
-          </h1>
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            Difficulté <span className="font-semibold">{difficulty}</span> · Source <span className="font-semibold">{(sourceUsed || source).replace(/_/g, " ")}</span>
+    <main className="relative min-h-screen overflow-hidden">
+      <div className="absolute inset-0 opacity-40">
+        <div
+          className="absolute inset-0"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle at 20% 15%, rgba(168,85,247,0.16), transparent 55%), radial-gradient(circle at 80% 10%, rgba(34,197,94,0.2), transparent 55%), radial-gradient(circle at 50% 80%, rgba(59,130,246,0.18), transparent 60%)",
+          }}
+        />
+      </div>
+
+      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-10 px-6 py-10">
+        <header className="surface flex flex-col gap-4 rounded-3xl border border-white/10 p-8">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <p className="text-xs uppercase tracking-[0.5em] text-slate-400">Solo session</p>
+              <h1 className="text-3xl font-semibold text-white sm:text-4xl">
+                Round up your guesses
+              </h1>
+            </div>
+            <div className="rounded-full border border-white/10 bg-white/5 px-5 py-2 text-xs uppercase tracking-[0.5em] text-slate-300">
+              {sessionInfo.provider.toUpperCase()} · {sessionInfo.totalRounds} rounds
+            </div>
+          </div>
+          <p className="text-xs text-slate-400">
+            Difficulty <span className="text-neon">{difficulty}</span> · Source{" "}
+            <span className="text-neon">{source}</span>
           </p>
-          {sourceUsed !== source ? (
-            <p className="text-xs text-purple-700 dark:text-purple-300">
-              Nous avons automatiquement basculé sur {sourceUsed?.replace(/_/g, " ")} faute d'extraits disponibles pour la source initiale.
-            </p>
-          ) : null}
         </header>
 
-        <SoloGameClient user={user} tracks={tracks} />
+        <SoloGameClient user={userPayload.user} tracks={tracks} />
       </div>
     </main>
   )

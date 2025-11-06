@@ -2,15 +2,7 @@
 
 import { useEffect } from "react"
 import { useRouter } from "next/navigation"
-
-function setCookie(name: string, value: string, maxAgeSeconds: number) {
-  const maxAge = Math.max(60, Math.floor(maxAgeSeconds))
-  document.cookie = `${name}=${encodeURIComponent(value)}; Path=/; Max-Age=${maxAge}; Secure; SameSite=Lax`
-}
-
-function clearCookie(name: string) {
-  document.cookie = `${name}=; Path=/; Max-Age=0; Secure; SameSite=Lax`
-}
+import { api } from "@/lib/api"
 
 export const dynamic = "force-dynamic"
 
@@ -19,23 +11,19 @@ export default function AuthCallbackPage() {
 
   useEffect(() => {
     const url = new URL(window.location.href)
-    const accessToken = url.searchParams.get("access_token")
-    const refreshToken = url.searchParams.get("refresh_token")
+    const sessionToken = url.searchParams.get("session_token")
     const expiresInParam = url.searchParams.get("expires_in")
 
-    if (!accessToken) {
+    if (!sessionToken) {
       router.replace("/auth/login?error=session_invalid")
       return
     }
 
-    const expiresIn = Number(expiresInParam ?? "3600")
+    const expiresIn = Number.isNaN(Number(expiresInParam))
+      ? 60 * 60 * 24
+      : Math.max(300, Number(expiresInParam))
 
-    setCookie("blindify_access_token", accessToken, expiresIn > 120 ? expiresIn - 60 : expiresIn)
-    if (refreshToken) {
-      setCookie("blindify_refresh_token", refreshToken, 60 * 60 * 24 * 30)
-    } else {
-      clearCookie("blindify_refresh_token")
-    }
+    api.setSessionCookie(sessionToken, expiresIn)
 
     router.replace("/menu")
   }, [router])

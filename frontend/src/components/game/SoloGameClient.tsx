@@ -1,10 +1,11 @@
 "use client"
 
+import { useMemo, useState } from "react"
 import Image from "next/image"
-import { useEffect, useMemo, useRef, useState } from "react"
-import { useRouter } from "next/navigation"
-import { clientApi } from "@/lib/apiClient"
+import { api } from "@/lib/api"
 import type { SoloTrack, UserSummary } from "@/lib/types"
+import { Button } from "@/components/ui/button"
+import { ArrowRight, Heart, ShieldCheck } from "lucide-react"
 
 interface SoloGameClientProps {
   user: UserSummary
@@ -12,167 +13,171 @@ interface SoloGameClientProps {
 }
 
 export function SoloGameClient({ user, tracks }: SoloGameClientProps) {
-  const router = useRouter()
   const [index, setIndex] = useState(0)
   const [revealed, setRevealed] = useState(false)
   const [liking, setLiking] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const [hintVisible, setHintVisible] = useState(false)
 
-  const current = useMemo(() => tracks[index], [tracks, index])
+  const current = tracks[index]
   const total = tracks.length
-  const positionLabel = `${index + 1} / ${total}`
+  const positionLabel = `${String(index + 1).padStart(2, "0")} / ${String(total).padStart(2, "0")}`
 
-  useEffect(() => {
-    if (!current) return
-
-    if (!current.preview_url) {
-      audioRef.current?.pause()
-      audioRef.current = null
-      return
-    }
-
-    const audio = new Audio(current.preview_url)
-    audioRef.current?.pause()
-    audioRef.current = audio
-    audio.play().catch(() => undefined)
-
-    return () => {
-      audio.pause()
-    }
+  const albumName = useMemo(() => {
+    if (!current?.metadata) return null
+    const album = (current.metadata.album as string | undefined) ?? null
+    return album
   }, [current])
 
-  useEffect(() => {
-    return () => {
-      audioRef.current?.pause()
-      audioRef.current = null
-    }
-  }, [])
+  const releaseYear = useMemo(() => {
+    if (!current?.metadata) return null
+    const release = current.metadata.release_date as string | undefined
+    if (!release) return null
+    return release.slice(0, 4)
+  }, [current])
 
-  const handleReveal = () => {
-    setRevealed(true)
-    setError(null)
-  }
-
-  const handleNext = () => {
-    audioRef.current?.pause()
-    audioRef.current = null
-
-    if (index + 1 >= total) {
-      router.replace("/menu")
-      router.refresh()
-      return
-    }
-
-    setIndex(prev => prev + 1)
-    setRevealed(false)
-    setError(null)
-  }
-
-  const handleLike = async () => {
-    if (!current) return
-
+  async function handleLike() {
+    if (!current || liking) return
     try {
       setLiking(true)
-      await clientApi.addLike(current.spotify_track_id)
+      await api.addLike(user.id, current.audioSourceId)
       setError(null)
     } catch (err) {
       console.error("like_failed", err)
-      setError("Impossible d'ajouter ce titre pour le moment.")
+      setError("Unable to save this track right now.")
     } finally {
       setLiking(false)
     }
   }
 
+  function handleReveal() {
+    setRevealed(true)
+  }
+
+  function handleNext() {
+    if (index + 1 >= total) {
+      window.location.href = "/menu"
+      return
+    }
+    setIndex(prev => prev + 1)
+    setRevealed(false)
+    setHintVisible(false)
+    setError(null)
+  }
+
   if (!current) {
     return (
-      <div className="mx-auto flex min-h-[60vh] max-w-xl flex-col items-center justify-center gap-4 text-center">
-        <p className="text-lg font-medium">Aucun titre disponible.</p>
-        <button
-          type="button"
-          onClick={() => router.replace("/menu")}
-          className="rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-muted"
-        >
-          Retour au menu
-        </button>
+      <div className="surface flex min-h-[40vh] flex-col items-center justify-center gap-4 rounded-3xl border border-white/10 p-10 text-center">
+        <ShieldCheck className="h-10 w-10 text-neon" />
+        <p className="text-sm text-slate-300">No tracks available — try syncing another provider.</p>
+        <Button variant="outline" onClick={() => (window.location.href = "/menu")}>
+          Return to menu
+        </Button>
       </div>
     )
   }
 
   return (
-    <div className="mx-auto flex max-w-xl flex-col gap-6">
-      <header className="flex flex-col gap-1 text-sm text-muted-foreground">
-        <span>Connecté en tant que {user.username || user.spotify_id}</span>
-        <span>Progrès : {positionLabel}</span>
+    <div className="surface relative flex flex-col gap-6 rounded-3xl border border-white/10 p-8">
+      <header className="flex flex-col gap-2">
+        <p className="text-xs uppercase tracking-[0.5em] text-slate-400">Round {positionLabel}</p>
+        <h2 className="text-2xl font-semibold text-white">Guess the track</h2>
+        <p className="text-xs text-slate-400">
+          Logged in as <span className="text-neon">{user.username || user.provider_id}</span>
+        </p>
       </header>
 
-      <div className="overflow-hidden rounded-xl border border-border bg-card">
-        {current.album_cover ? (
-          <div className="relative h-72 w-full">
+      <div className="grid gap-8 md:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)]">
+        <div className="relative flex min-h-[240px] items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-black/40">
+          {current.album_cover ? (
             <Image
               src={current.album_cover}
               alt={`${current.title} cover`}
               fill
-              sizes="512px"
-              className={`object-cover transition duration-300 ${revealed ? "opacity-100" : "opacity-40"}`}
+              sizes="320px"
+              className={`object-cover transition duration-500 ${revealed ? "opacity-100" : "opacity-60 blur-sm"}`}
             />
-          </div>
-        ) : (
-          <div className="flex h-72 items-center justify-center bg-muted text-muted-foreground">
-            Aucun visuel disponible
-          </div>
-        )}
-
-        <div className="space-y-3 p-6">
-          {revealed ? (
-            <div className="space-y-1">
-              <p className="text-lg font-semibold">{current.title}</p>
-              <p className="text-sm text-muted-foreground">{current.artist}</p>
+          ) : (
+            <div className="flex flex-col items-center gap-2 text-slate-500">
+              <ShieldCheck className="h-10 w-10" />
+              <span className="text-xs uppercase tracking-[0.4em]">No artwork</span>
             </div>
-          ) : (
-            <p className="text-base text-muted-foreground">
-              Écoute l'extrait et devine le titre…
-            </p>
           )}
-
-          {current.preview_url ? (
-            <p className="text-xs text-muted-foreground">Extrait de 30 secondes fourni par Spotify.</p>
-          ) : (
-            <p className="text-xs text-muted-foreground">Pas d'extrait audio pour ce morceau.</p>
-          )}
+          <div className="absolute bottom-4 left-4 rounded-full border border-white/10 bg-black/60 px-4 py-1 text-xs uppercase tracking-[0.4em] text-slate-300">
+            {current.type.toUpperCase()}
+          </div>
         </div>
-      </div>
 
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        <div className="flex flex-col gap-5">
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+            {!revealed ? (
+              <div className="space-y-3">
+                <p className="text-sm text-slate-300">
+                  Listen on your device and enter your guess. When you&apos;re ready, reveal the answer below.
+                </p>
+                <div className="rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-xs text-slate-300">
+                  <p>Hints</p>
+                  <ul className="mt-2 space-y-1 text-[11px] text-slate-400">
+                    <li>• {current.artist.split(",")[0] ? `Artist initial: ${current.artist.split(",")[0]?.charAt(0)}…` : "Artist hidden"}</li>
+                    {hintVisible ? (
+                      <>
+                        {albumName ? <li>• Album: {albumName}</li> : null}
+                        {releaseYear ? <li>• Release: {releaseYear}</li> : null}
+                      </>
+                    ) : (
+                      <li>
+                        <button
+                          type="button"
+                          onClick={() => setHintVisible(true)}
+                          className="rounded-full border border-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.4em] text-slate-200 hover:border-white/25"
+                        >
+                          Reveal more hints
+                        </button>
+                      </li>
+                    )}
+                  </ul>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-xs uppercase tracking-[0.5em] text-neon">Reveal</p>
+                <h3 className="text-2xl font-semibold text-white">{current.title}</h3>
+                <p className="text-sm text-slate-300">{current.artist}</p>
+                {albumName ? <p className="text-xs text-slate-500">Album · {albumName}</p> : null}
+              </div>
+            )}
+          </div>
 
-      <div className="flex flex-col gap-3 sm:flex-row">
-        {!revealed ? (
-          <button
-            type="button"
-            onClick={handleReveal}
-            className="flex-1 rounded-md bg-primary px-4 py-2 font-medium text-primary-foreground transition hover:bg-primary/90"
-          >
-            Révéler le morceau
-          </button>
-        ) : (
-          <>
-            <button
-              type="button"
-              onClick={handleLike}
-              disabled={liking}
-              className="flex-1 rounded-md border border-border px-4 py-2 font-medium transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              {liking ? "Ajout…" : "Like"}
-            </button>
-            <button
-              type="button"
-              onClick={handleNext}
-              className="flex-1 rounded-md bg-primary px-4 py-2 font-medium text-primary-foreground transition hover:bg-primary/90"
-            >
-              Suivant
-            </button>
-          </>
-        )}
+          {error ? <p className="text-xs text-red-400">{error}</p> : null}
+
+          <div className="flex flex-col gap-3 sm:flex-row">
+            {!revealed ? (
+              <Button
+                onClick={handleReveal}
+                className="flex-1 justify-center gap-2"
+              >
+                Reveal answer
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            ) : (
+              <>
+                <Button
+                  onClick={handleLike}
+                  disabled={liking}
+                  variant="outline"
+                  className="flex-1 justify-center gap-2 text-slate-200 hover:text-white disabled:cursor-not-allowed"
+                >
+                  <Heart className="h-4 w-4" />
+                  {liking ? "Saving..." : "Save to favourites"}
+                </Button>
+                <Button onClick={handleNext} className="flex-1 justify-center gap-2">
+                  Next round
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   )
