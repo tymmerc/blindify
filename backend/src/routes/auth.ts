@@ -21,5 +21,6 @@ router.post("/guest", authController.guest);
 
 router.get("/me", authController.me);
 router.post("/logout", authController.logout);
+router.get("/providers/spotify/token", authController.spotifyToken);
 
 export default router;

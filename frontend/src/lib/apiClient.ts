@@ -137,6 +137,11 @@ export const clientApi = {
       body: JSON.stringify({ audio_source_id: audioSourceId }),
     })
   },
+  async spotifyToken(): Promise<{ accessToken: string; expiresAt: string | null; provider: string }> {
+    return request<{ accessToken: string; expiresAt: string | null; provider: string }>(
+      "/api/auth/providers/spotify/token"
+    )
+  },
   async logout(): Promise<void> {
     await request("/api/auth/logout", {
       method: "POST",

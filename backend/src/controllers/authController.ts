@@ -11,6 +11,7 @@ import {
   revokeSessionToken,
 } from "../utils/session";
 import { fail, ok } from "../utils/response";
+import { ensureSpotifyConnection } from "../services/providers/spotifySync";
 
 const SPOTIFY_SCOPES = [
   "user-read-private",
@@ -362,6 +363,33 @@ export const authController = {
     } catch (error) {
       console.error("logout_failed", error);
       fail(res, "logout_failed", "Impossible de se déconnecter", 500);
+    }
+  },
+
+  async spotifyToken(req: Request, res: Response): Promise<void> {
+    try {
+      const context = await getSessionContext(req, res, {
+        provider: "spotify",
+        requireConnection: true,
+        autoExtend: true,
+      });
+      if (!context || !context.connection) return;
+
+      const connection = await ensureSpotifyConnection(context.connection);
+
+      if (!connection.access_token) {
+        fail(res, "spotify_token_missing", "Token Spotify introuvable", 400);
+        return;
+      }
+
+      ok(res, {
+        accessToken: connection.access_token,
+        expiresAt: connection.expires_at,
+        provider: connection.provider,
+      });
+    } catch (error) {
+      console.error("spotify_token_failed", error);
+      fail(res, "spotify_token_failed", "Impossible de récupérer le token Spotify", 500);
     }
   },
 };

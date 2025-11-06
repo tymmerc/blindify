@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Image from "next/image"
 import { api } from "@/lib/api"
 import type { SoloTrack, UserSummary } from "@/lib/types"
@@ -18,8 +18,16 @@ export function SoloGameClient({ user, tracks }: SoloGameClientProps) {
   const [liking, setLiking] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hintVisible, setHintVisible] = useState(false)
-
   const current = tracks[index]
+  const isSpotifyTrack = current?.type === "spotify"
+
+  const {
+    play: playSpotify,
+    pause: pauseSpotify,
+    ready: spotifyReady,
+    error: spotifyError,
+  } = useSpotifyPlayback(isSpotifyTrack)
+
   const total = tracks.length
   const positionLabel = `${String(index + 1).padStart(2, "0")} / ${String(total).padStart(2, "0")}`
 
@@ -35,6 +43,21 @@ export function SoloGameClient({ user, tracks }: SoloGameClientProps) {
     if (!release) return null
     return release.slice(0, 4)
   }, [current])
+
+  useEffect(() => {
+    if (!current) return
+    if (current.type === "spotify" && current.track_id) {
+      playSpotify(current.track_id).catch(err => {
+        console.error("spotify_play_failed", err)
+      })
+    } else {
+      pauseSpotify().catch(() => undefined)
+    }
+    return () => {
+      pauseSpotify().catch(() => undefined)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current?.audioSourceId])
 
   async function handleLike() {
     if (!current || liking) return
@@ -54,7 +77,10 @@ export function SoloGameClient({ user, tracks }: SoloGameClientProps) {
     setRevealed(true)
   }
 
-  function handleNext() {
+  async function handleNext() {
+    if (current?.type === "spotify") {
+      await pauseSpotify()
+    }
     if (index + 1 >= total) {
       window.location.href = "/menu"
       return
@@ -115,6 +141,20 @@ export function SoloGameClient({ user, tracks }: SoloGameClientProps) {
                 <p className="text-sm text-slate-300">
                   Listen on your device and enter your guess. When you&apos;re ready, reveal the answer below.
                 </p>
+                {isSpotifyTrack ? (
+                  <div className="rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-xs text-slate-300">
+                    {spotifyError ? (
+                      <p className="text-red-400">{spotifyError}</p>
+                    ) : spotifyReady ? (
+                      <p>Spotify player ready. Ensure “Blindify Web Player” is selected as your active device.</p>
+                    ) : (
+                      <p>
+                        Connecting to Spotify… Make sure you have a premium account and allow the browser to control
+                        playback.
+                      </p>
+                    )}
+                  </div>
+                ) : null}
                 <div className="rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-xs text-slate-300">
                   <p>Hints</p>
                   <ul className="mt-2 space-y-1 text-[11px] text-slate-400">
@@ -181,4 +221,183 @@ export function SoloGameClient({ user, tracks }: SoloGameClientProps) {
       </div>
     </div>
   )
+}
+
+type SpotifyPlaybackControls = {
+  ready: boolean
+  error: string | null
+  play: (trackId: string) => Promise<void>
+  pause: () => Promise<void>
+}
+
+function useSpotifyPlayback(enabled: boolean): SpotifyPlaybackControls {
+  const [ready, setReady] = useState(false)
+  const [playbackError, setPlaybackError] = useState<string | null>(null)
+  const playerRef = useRef<SpotifyPlayer | null>(null)
+  const deviceIdRef = useRef<string | null>(null)
+
+  const getLatestToken = useCallback(async () => {
+    try {
+      const { accessToken } = await api.getSpotifyToken()
+      if (!accessToken) {
+        setPlaybackError("Spotify token unavailable. Reconnect your account.")
+        throw new Error("spotify_token_missing")
+      }
+      setPlaybackError(null)
+      return accessToken
+    } catch (err) {
+      console.error("spotify_token_fetch_failed", err)
+      setPlaybackError("Unable to refresh Spotify token. Try reconnecting your account.")
+      throw err
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!enabled || typeof window === "undefined") return
+
+    if (!document.getElementById("spotify-web-playback")) {
+      const script = document.createElement("script")
+      script.id = "spotify-web-playback"
+      script.src = "https://sdk.scdn.co/spotify-player.js"
+      script.async = true
+      document.body.appendChild(script)
+    }
+
+    const initializePlayer = () => {
+      if (playerRef.current || !window.Spotify) return
+
+      const player = new window.Spotify.Player({
+        name: "Blindify Web Player",
+        getOAuthToken: async cb => {
+          try {
+            const token = await getLatestToken()
+            cb(token)
+          } catch {
+            cb("")
+          }
+        },
+        volume: 0.6,
+      })
+
+      player.addListener("ready", ({ device_id }) => {
+        deviceIdRef.current = device_id
+        setReady(true)
+        setPlaybackError(null)
+      })
+
+      player.addListener("not_ready", () => {
+        deviceIdRef.current = null
+        setReady(false)
+      })
+
+      player.addListener("initialization_error", ({ message }) => {
+        console.error("spotify_initialization_error", message)
+        setPlaybackError(message)
+      })
+      player.addListener("authentication_error", ({ message }) => {
+        console.error("spotify_authentication_error", message)
+        setPlaybackError("Spotify authentication failed. Please reconnect your account.")
+      })
+      player.addListener("account_error", ({ message }) => {
+        console.error("spotify_account_error", message)
+        setPlaybackError("Spotify account not eligible. Premium is required.")
+      })
+      player.addListener("playback_error", ({ message }) => {
+        console.error("spotify_playback_error", message)
+        setPlaybackError("Playback failed on Spotify. Check your active device.")
+      })
+
+      playerRef.current = player
+      player.connect().catch(err => {
+        console.error("spotify_connect_failed", err)
+        setPlaybackError("Spotify player connection failed.")
+      })
+    }
+
+    if (window.Spotify) {
+      initializePlayer()
+    } else {
+      window.onSpotifyWebPlaybackSDKReady = initializePlayer
+    }
+
+    return () => {
+      window.onSpotifyWebPlaybackSDKReady = undefined
+      if (playerRef.current) {
+        try {
+          playerRef.current.disconnect()
+        } catch (err) {
+          console.error("spotify_disconnect_failed", err)
+        }
+        playerRef.current = null
+      }
+      deviceIdRef.current = null
+      setReady(false)
+    }
+  }, [enabled, getLatestToken])
+
+  const play = useCallback(
+    async (trackId: string) => {
+      if (!enabled || !trackId) return
+      if (!deviceIdRef.current) {
+        setPlaybackError("Spotify player not ready. Open Spotify and select the Blindify Web Player.")
+        throw new Error("spotify_device_unavailable")
+      }
+
+      const token = await getLatestToken()
+      const headers = {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      }
+
+      await fetch("https://api.spotify.com/v1/me/player", {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ device_ids: [deviceIdRef.current], play: false }),
+      }).catch(err => {
+        console.error("spotify_transfer_failed", err)
+      })
+
+      const response = await fetch(
+        `https://api.spotify.com/v1/me/player/play?device_id=${deviceIdRef.current}`,
+        {
+          method: "PUT",
+          headers,
+          body: JSON.stringify({ uris: [`spotify:track:${trackId}`], position_ms: 0 }),
+        }
+      )
+
+      if (!response.ok && response.status !== 204) {
+        const fallback =
+          response.status === 404
+            ? "Activate the Blindify Web Player in Spotify (devices list) and keep Spotify open."
+            : response.status === 403
+              ? "Spotify refused playback. Premium account is required."
+              : "Spotify playback failed. Try again."
+        setPlaybackError(fallback)
+        throw new Error(fallback)
+      }
+      setPlaybackError(null)
+    },
+    [enabled, getLatestToken]
+  )
+
+  const pause = useCallback(async () => {
+    if (!enabled || !deviceIdRef.current) return
+    try {
+      const token = await getLatestToken()
+      await fetch(`https://api.spotify.com/v1/me/player/pause?device_id=${deviceIdRef.current}`, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}` },
+      })
+    } catch (err) {
+      console.error("spotify_pause_failed", err)
+    }
+  }, [enabled, getLatestToken])
+
+  return {
+    ready,
+    error: playbackError,
+    play,
+    pause,
+  }
 }

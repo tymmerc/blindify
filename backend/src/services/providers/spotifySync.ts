@@ -50,6 +50,13 @@ async function refreshSpotifyConnection(connection: UserConnection): Promise<Use
   return rows[0];
 }
 
+export async function ensureSpotifyConnection(connection: UserConnection): Promise<UserConnection> {
+  if (!connection.access_token || isExpired(connection)) {
+    return refreshSpotifyConnection(connection);
+  }
+  return connection;
+}
+
 export async function syncSpotifyLibrary(
   userId: number,
   connection: UserConnection,

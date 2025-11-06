@@ -1,5 +1,6 @@
 import { clientApi } from "./apiClient"
 import type {
+  MusicProvider,
   ProviderConnectionSummary,
   SoloGameResponse,
   UserSummary,
@@ -41,6 +42,9 @@ export const api = {
   },
   async addLike(_userId: number | null | undefined, audioSourceId: string): Promise<void> {
     return clientApi.addLike(audioSourceId)
+  },
+  async getSpotifyToken(): Promise<{ accessToken: string; expiresAt: string | null; provider: MusicProvider }> {
+    return clientApi.spotifyToken() as Promise<{ accessToken: string; expiresAt: string | null; provider: MusicProvider }>
   },
   async logout(): Promise<void> {
     await clientApi.logout()
