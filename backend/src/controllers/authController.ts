@@ -14,6 +14,9 @@ import { fail, ok } from "../utils/response";
 import { ensureSpotifyConnection } from "../services/providers/spotifySync";
 
 const SPOTIFY_SCOPES = [
+  "streaming",
+  "user-read-playback-state",
+  "user-modify-playback-state",
   "user-read-private",
   "user-read-email",
   "user-library-read",
