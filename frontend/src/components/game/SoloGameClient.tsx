@@ -357,11 +357,16 @@ function useSpotifyPlayback(enabled: boolean): SpotifyPlaybackControls {
         "Content-Type": "application/json",
       }
 
+      await fetch(`https://api.spotify.com/v1/me/player/pause?device_id=${deviceIdRef.current}`, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}` },
+      }).catch(() => undefined)
+
       await fetch("https://api.spotify.com/v1/me/player", {
         method: "PUT",
         headers,
         body: JSON.stringify({ device_ids: [deviceIdRef.current], play: false }),
-      }).catch(err => {
+     }).catch(err => {
         console.error("spotify_transfer_failed", err)
       })
 
