@@ -11,21 +11,18 @@ const providerButtons = [
   {
     id: "spotify",
     label: "Continue with Spotify",
-    href: "/auth/spotify/login",
     description: "Access liked tracks, playlists, and top artists instantly.",
     icon: <Music3 className="h-5 w-5" />,
   },
   {
     id: "deezer",
     label: "Connect Deezer",
-    href: "/auth/deezer/login",
     description: "Bring Flow favourites and curated selections.",
     icon: <Radio className="h-5 w-5" />,
   },
   {
     id: "apple",
     label: "Link Apple Music",
-    href: "/auth/apple/login",
     description: "Use your personal catalogue via MusicKit.",
     icon: <Apple className="h-5 w-5" />,
   },
@@ -138,7 +135,7 @@ export default function AuthLoginPage() {
               {providerButtons.map(provider => (
                 <a
                   key={provider.id}
-                  href={provider.href}
+                  href={api.getProviderLoginUrl(provider.id)}
                   className="flex items-center gap-4 rounded-2xl border border-white/10 bg-white/5 px-5 py-4 transition hover:border-white/25"
                 >
                   <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-black/40">

@@ -89,6 +89,13 @@ export const clientApi = {
   getLoginUrl() {
     return buildUrl("/auth/login")
   },
+  getProviderLoginUrl(provider: string) {
+    const sanitized = provider.trim().toLowerCase()
+    if (!sanitized) {
+      return buildUrl("/auth/login")
+    }
+    return buildUrl(`/auth/${sanitized}/login`)
+  },
   async currentUser(): Promise<{ user: UserSummary; providerConnection: ProviderConnectionSummary | null } | null> {
     try {
       return await request<{ user: UserSummary; providerConnection: ProviderConnectionSummary | null }>(

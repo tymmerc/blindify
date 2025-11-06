@@ -25,6 +25,9 @@ export const api = {
   getLoginUrl(): string {
     return clientApi.getLoginUrl()
   },
+  getProviderLoginUrl(provider: string): string {
+    return clientApi.getProviderLoginUrl(provider)
+  },
   async checkAuth(): Promise<CurrentUserPayload | null> {
     return clientApi.currentUser()
   },
