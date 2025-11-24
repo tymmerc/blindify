@@ -62,6 +62,8 @@ export function SoloGameClient({
   })
 
   const statsRef = useRef(stats)
+  const guessRef = useRef(guess)
+  const verdictRef = useRef<Verdict | null>(verdict)
   const countdownRef = useRef<NodeJS.Timeout | null>(null)
   const listeningRafRef = useRef<number | null>(null)
   const listeningDeadlineRef = useRef<number>(0)
@@ -82,6 +84,14 @@ export function SoloGameClient({
   useEffect(() => {
     statsRef.current = stats
   }, [stats])
+
+  useEffect(() => {
+    guessRef.current = guess
+  }, [guess])
+
+  useEffect(() => {
+    verdictRef.current = verdict
+  }, [verdict])
 
   const cleanupTimers = useCallback(() => {
     if (countdownRef.current) {
@@ -115,6 +125,7 @@ export function SoloGameClient({
       statsRef.current = updatedStats
       setStats(updatedStats)
       setVerdict(nextVerdict)
+      verdictRef.current = nextVerdict
       setPhase("reveal")
 
       const feedbackMessage =
@@ -204,7 +215,8 @@ export function SoloGameClient({
                 : "Spotify playback failed. Ensure Spotify is open and the device is set to Blindify Web Player."
             setFeedback(message)
             setError(message)
-            finalizeRound("wrong", "timeout", current, guess)
+            const latestGuess = guessRef.current
+            finalizeRound("wrong", "timeout", current, latestGuess)
             return
           }
         }
@@ -217,8 +229,10 @@ export function SoloGameClient({
         const nextSeconds = Math.max(0, Math.ceil(remainingMs / 1000))
         setTimer(prev => (prev === nextSeconds ? prev : nextSeconds))
         if (remainingMs <= 0) {
-          const autoVerdict = verdict ?? evaluateGuess(guess, current)
-          finalizeRound(autoVerdict, "timeout", current, guess)
+          const latestGuess = guessRef.current
+          const computedVerdict =
+            verdictRef.current ?? evaluateGuess(latestGuess, current)
+          finalizeRound(computedVerdict, "timeout", current, latestGuess)
         } else {
           listeningRafRef.current = requestAnimationFrame(tick)
         }
@@ -243,10 +257,8 @@ export function SoloGameClient({
     playSpotify,
     cleanupTimers,
     finalizeRound,
-    guess,
-    verdict,
     gameFinished,
-  ]);
+  ])
 
   const albumName = useMemo(() => {
     if (!current?.metadata) return null
