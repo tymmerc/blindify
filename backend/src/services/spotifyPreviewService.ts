@@ -17,8 +17,8 @@ export interface SpotifyTrackMetadata {
 }
 
 interface SpotifyTrackApiResponse {
-  id?: string;
-  name?: string;
+  id?: string | null;
+  name?: string | null;
   preview_url?: string | null;
   artists?: { name?: string | null }[];
 }
@@ -30,9 +30,8 @@ interface SpotifySearchResponse {
 }
 
 interface SpotifyAccessTokenResponse {
-  access_token: string;
-  token_type: string;
-  expires_in: number;
+  access_token?: string;
+  expires_in?: number;
 }
 
 type TokenCache = {
@@ -67,18 +66,19 @@ export class SpotifyPreviewService {
     }
 
     const credentials = Buffer.from(`${this.clientId}:${this.clientSecret}`).toString("base64");
+    const body = new URLSearchParams({ grant_type: "client_credentials" });
 
     try {
-      const { data } = await axios.post<SpotifyAccessTokenResponse>(
-        TOKEN_URL,
-        new URLSearchParams({ grant_type: "client_credentials" }).toString(),
-        {
-          headers: {
-            Authorization: `Basic ${credentials}`,
-            "Content-Type": "application/x-www-form-urlencoded",
-          },
-        }
-      );
+      const { data } = await axios.post<SpotifyAccessTokenResponse>(TOKEN_URL, body.toString(), {
+        headers: {
+          Authorization: `Basic ${credentials}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+      });
+
+      if (!data?.access_token) {
+        throw new SpotifyPreviewError("Spotify returned an empty access token response");
+      }
 
       const expiresAt = Date.now() + (data.expires_in ?? 3600) * 1000;
       this.tokenCache = { token: data.access_token, expiresAt };
@@ -90,36 +90,33 @@ export class SpotifyPreviewService {
   }
 
   public async getTrackMetadata(trackId: string): Promise<SpotifyTrackMetadata> {
-    if (!trackId) {
+    const sanitizedId = trackId?.trim();
+    if (!sanitizedId) {
       throw new SpotifyPreviewError("trackId is required to fetch track metadata");
     }
 
     const token = await this.getAccessToken();
 
     try {
-      const { data } = await axios.get<SpotifyTrackApiResponse>(`${TRACK_URL}/${encodeURIComponent(trackId)}`, {
+      const { data } = await axios.get<SpotifyTrackApiResponse>(`${TRACK_URL}/${encodeURIComponent(sanitizedId)}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      const name = data.name?.trim();
-      const id = data.id?.trim();
+      const id = this.clean(data.id);
+      const name = this.clean(data.name);
       const artists = (data.artists ?? [])
-        .map(artist => artist?.name?.trim())
+        .map(artist => this.clean(artist?.name))
         .filter((artistName): artistName is string => Boolean(artistName))
         .map(artistName => ({ name: artistName }));
+      const preview_url = data.preview_url ?? null;
 
       if (!id || !name) {
         throw new SpotifyPreviewError("Incomplete track metadata received from Spotify");
       }
 
-      return {
-        id,
-        name,
-        preview_url: data.preview_url ?? null,
-        artists,
-      };
+      return { id, name, preview_url, artists };
     } catch (error) {
-      throw this.toSpotifyError(`Failed to fetch track metadata for ${trackId}`, error);
+      throw this.toSpotifyError(`Failed to fetch track metadata for ${sanitizedId}`, error);
     }
   }
 
@@ -130,39 +127,28 @@ export class SpotifyPreviewService {
       return track.preview_url;
     }
 
-    const artistNames = track.artists.map(artist => artist.name).filter(Boolean);
-    const querySegments: string[] = [];
-
-    if (track.name) {
-      querySegments.push(`track:${track.name}`);
-    }
-
-    if (artistNames.length) {
-      querySegments.push(`artist:${artistNames.join(" ")}`);
-    }
-
-    const query = querySegments.join(" ");
-
-    if (!query) {
-      return null;
-    }
+    const primaryArtist = track.artists[0]?.name;
+    const query = [`track:${track.name}`, primaryArtist ? `artist:${primaryArtist}` : ""]
+      .filter(Boolean)
+      .join(" ");
 
     try {
       return await this.searchFallback(query);
     } catch (error) {
-      throw this.toSpotifyError(`Failed to resolve preview URL via fallback for ${trackId}`, error);
+      throw this.toSpotifyError(`Failed to resolve preview URL via fallback for ${track.id}`, error);
     }
   }
 
   private async searchFallback(query: string): Promise<string | null> {
-    if (!query.trim()) {
+    const safeQuery = query.trim();
+    if (!safeQuery) {
       throw new SpotifyPreviewError("Fallback search query cannot be empty");
     }
 
     const token = await this.getAccessToken();
     const params = new URLSearchParams({
       type: "track",
-      q: query,
+      q: safeQuery,
       limit: "10",
     });
 
@@ -176,8 +162,13 @@ export class SpotifyPreviewService {
 
       return match?.preview_url ?? null;
     } catch (error) {
-      throw this.toSpotifyError(`Spotify search fallback failed for query "${query}"`, error);
+      throw this.toSpotifyError(`Spotify search fallback failed for query "${safeQuery}"`, error);
     }
+  }
+
+  private clean(value?: string | null): string | undefined {
+    const trimmed = value?.trim();
+    return trimmed?.length ? trimmed : undefined;
   }
 
   private toSpotifyError(message: string, error: unknown): SpotifyPreviewError {
@@ -187,12 +178,12 @@ export class SpotifyPreviewService {
 
     if (axios.isAxiosError(error)) {
       const statusCode = error.response?.status;
-      const detail =
+      const apiMessage =
         (typeof error.response?.data === "object" && error.response?.data !== null
           ? (error.response.data as { error?: { message?: string } }).error?.message
           : undefined) ?? error.message;
 
-      return new SpotifyPreviewError(`${message}: ${detail}`, statusCode, error);
+      return new SpotifyPreviewError(`${message}: ${apiMessage}`, statusCode, error);
     }
 
     if (error instanceof Error) {
