@@ -35,7 +35,7 @@ async function parseJson<T>(response: Response): Promise<T> {
   }
   try {
     return JSON.parse(text) as T
-  } catch (err) {
+  } catch {
     throw new ApiError(response.status, "Invalid JSON response")
   }
 }
@@ -213,6 +213,18 @@ export const clientApi = {
       },
       body: JSON.stringify({ nickname }),
     })
+  },
+  async detailedStats(): Promise<{
+    stats: {
+      totalGames: number
+      accuracyRate: number
+      averageReactionTime: number
+      bestStreak: number
+      totalXp: number
+      lastPlayedAt: string | null
+    }
+  }> {
+    return request("/api/stats/detailed")
   },
 }
 

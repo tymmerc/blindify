@@ -1,11 +1,15 @@
-const apiBaseEnv =
+const rawBase =
   process.env.NEXT_PUBLIC_API_URL ||
   process.env.API_URL ||
   (process.env.NODE_ENV === "production"
-    ? "https://blindify-production.up.railway.app"
-    : "http://localhost:8080")
+    ? "https://tymmerc.eu/blindify"
+    : "http://localhost:3000")
 
-export const API_BASE_URL = apiBaseEnv.replace(/\/$/, "")
+// Remove trailing slashes and strip a trailing "/api" to avoid "/api/api" when paths already include /api
+const normalized = rawBase.replace(/\/+$/, "")
+export const API_BASE_URL = normalized.endsWith("/api")
+  ? normalized.slice(0, -4)
+  : normalized
 
 export function apiUrl(path: string): string {
   if (!path.startsWith("/")) {

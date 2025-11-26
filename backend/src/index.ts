@@ -24,8 +24,17 @@ app.set("trust proxy", 1);
 
 const server = http.createServer(app);
 
+const frontendBase = (process.env.FRONTEND_URL || "http://localhost:3000").replace(/\/$/, "");
+const isProd = process.env.NODE_ENV === "production";
+const isFrontendHttps = frontendBase.startsWith("https://");
+const secureCookies = process.env.COOKIE_SECURE
+  ? process.env.COOKIE_SECURE === "true"
+  : isProd && isFrontendHttps;
+const sameSite = secureCookies ? "none" : "lax";
+const cookieDomain = process.env.COOKIE_DOMAIN || (isProd ? "tymmerc.eu" : undefined);
+
 const allowedOrigins = [
-  process.env.FRONTEND_URL,
+  frontendBase,
   "https://blindify-chi.vercel.app",
   "https://blindify-production.up.railway.app",
   "http://localhost:3000",
@@ -73,13 +82,17 @@ app.use(
     name: "blindify_session",
     secret: process.env.SESSION_SECRET || "CHANGE_ME",
     maxAge: 1000 * 60 * 60 * 24,
-    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-    secure: process.env.NODE_ENV === "production",
+    sameSite,
+    secure: secureCookies,
+    domain: cookieDomain,
     httpOnly: true,
   })
 );
 
 app.get("/health", (_req, res) => {
+  ok(res, { status: "ok" });
+});
+app.get("/api/health", (_req, res) => {
   ok(res, { status: "ok" });
 });
 

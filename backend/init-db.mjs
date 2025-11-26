@@ -3,6 +3,7 @@
  * Exécute le schéma SQL pour créer toutes les tables
  */
 
+import dotenv from "dotenv";
 import pg from "pg";
 import fs from "fs";
 import path from "path";
@@ -11,6 +12,10 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+dotenv.config({
+  path: path.join(__dirname, "../.env"),
+});
+
 // Lecture du fichier SQL
 const sqlPath = path.join(__dirname, "schema.sql");
 const sql = fs.readFileSync(sqlPath, "utf8");
@@ -18,7 +23,7 @@ const sql = fs.readFileSync(sqlPath, "utf8");
 // Connexion à la base de données
 const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
+  ssl: false,
 });
 
 /**

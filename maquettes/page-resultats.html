@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BlindBeats - Résultats</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #0a0a0a;
+            color: #ffffff;
+            line-height: 1.6;
+            min-height: 100vh;
+            padding: 24px;
+        }
+
+        .results-container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .results-header {
+            text-align: center;
+            padding: 48px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            margin-bottom: 48px;
+        }
+
+        .trophy-icon {
+            font-size: 80px;
+            margin-bottom: 24px;
+            animation: bounce 1s ease;
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-20px); }
+        }
+
+        .results-title {
+            font-size: 48px;
+            font-weight: 700;
+            letter-spacing: -1px;
+            margin-bottom: 16px;
+            background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .results-subtitle {
+            font-size: 18px;
+            color: #808080;
+        }
+
+        .score-summary {
+            background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);
+            border-radius: 20px;
+            padding: 48px;
+            margin-bottom: 48px;
+            text-align: center;
+            box-shadow: 0 24px 64px rgba(168, 85, 247, 0.3);
+        }
+
+        .score-main {
+            font-size: 72px;
+            font-weight: 900;
+            letter-spacing: -2px;
+            margin-bottom: 8px;
+        }
+
+        .score-label {
+            font-size: 16px;
+            opacity: 0.9;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 32px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+            margin-bottom: 48px;
+        }
+
+        .stat-box {
+            background: #0f0f0f;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 12px;
+            padding: 32px 24px;
+            text-align: center;
+            transition: all 0.2s ease;
+        }
+
+        .stat-box:hover {
+            border-color: rgba(168, 85, 247, 0.3);
+            transform: translateY(-4px);
+        }
+
+        .stat-value {
+            font-size: 36px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .stat-label {
+            font-size: 14px;
+            color: #808080;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .section-title {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 24px;
+            letter-spacing: -0.3px;
+        }
+
+        .answers-list {
+            background: #0f0f0f;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 48px;
+        }
+
+        .answer-item {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            padding: 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            transition: background 0.2s ease;
+        }
+
+        .answer-item:last-child {
+            border-bottom: none;
+        }
+
+        .answer-item:hover {
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .answer-number {
+            width: 40px;
+            height: 40px;
+            background: rgba(255, 255, 255, 0.06);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+
+        .answer-item.correct .answer-number {
+            background: rgba(76, 175, 80, 0.2);
+            color: #4caf50;
+        }
+
+        .answer-item.incorrect .answer-number {
+            background: rgba(244, 67, 54, 0.2);
+            color: #f44336;
+        }
+
+        .answer-info {
+            flex: 1;
+        }
+
+        .answer-track {
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .answer-artist {
+            font-size: 13px;
+            color: #808080;
+        }
+
+        .answer-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .answer-status.correct {
+            color: #4caf50;
+        }
+
+        .answer-status.incorrect {
+            color: #f44336;
+        }
+
+        .user-answer {
+            font-size: 12px;
+            color: #606060;
+            margin-top: 4px;
+        }
+
+        .actions {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+        }
+
+        .btn {
+            padding: 16px 40px;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: none;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);
+            color: #ffffff;
+            box-shadow: 0 8px 24px rgba(168, 85, 247, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: scale(1.03);
+            box-shadow: 0 12px 32px rgba(168, 85, 247, 0.4);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.06);
+            color: #ffffff;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        @media (max-width: 768px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .results-title {
+                font-size: 36px;
+            }
+
+            .score-main {
+                font-size: 56px;
+            }
+
+            .actions {
+                flex-direction: column;
+            }
+
+            .btn {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="results-container">
+        <div class="results-header">
+            <div class="trophy-icon">🏆</div>
+            <h1 class="results-title">Partie terminée !</h1>
+            <p class="results-subtitle">Voici vos résultats</p>
+        </div>
+
+        <div class="score-summary">
+            <div class="score-main">16/20</div>
+            <div class="score-label">Score final</div>
+            
+            <div class="stats-grid" style="color: #ffffff;">
+                <div style="background: rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 20px;">
+                    <div style="font-size: 32px; font-weight: 700; margin-bottom: 4px;">80%</div>
+                    <div style="font-size: 13px; opacity: 0.9;">Précision</div>
+                </div>
+                <div style="background: rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 20px;">
+                    <div style="font-size: 32px; font-weight: 700; margin-bottom: 4px;">6.8s</div>
+                    <div style="font-size: 13px; opacity: 0.9;">Temps moyen</div>
+                </div>
+                <div style="background: rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 20px;">
+                    <div style="font-size: 32px; font-weight: 700; margin-bottom: 4px;">+240</div>
+                    <div style="font-size: 13px; opacity: 0.9;">Points gagnés</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-box">
+                <div class="stat-value">16</div>
+                <div class="stat-label">Bonnes réponses</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value">4</div>
+                <div class="stat-label">Mauvaises réponses</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value">8</div>
+                <div class="stat-label">Série max</div>
+            </div>
+        </div>
+
+        <h2 class="section-title">Détails des réponses</h2>
+        
+        <div class="answers-list">
+            <div class="answer-item correct">
+                <div class="answer-number">1</div>
+                <div class="answer-info">
+                    <div class="answer-track">Blinding Lights</div>
+                    <div class="answer-artist">The Weeknd</div>
+                </div>
+                <div class="answer-status correct">✓ Correct</div>
+            </div>
+
+            <div class="answer-item correct">
+                <div class="answer-number">2</div>
+                <div class="answer-info">
+                    <div class="answer-track">Levitating</div>
+                    <div class="answer-artist">Dua Lipa</div>
+                </div>
+                <div class="answer-status correct">✓ Correct</div>
+            </div>
+
+            <div class="answer-item incorrect">
+                <div class="answer-number">3</div>
+                <div class="answer-info">
+                    <div class="answer-track">Save Your Tears</div>
+                    <div class="answer-artist">The Weeknd</div>
+                    <div class="user-answer">Votre réponse : Starboy</div>
+                </div>
+                <div class="answer-status incorrect">✗ Incorrect</div>
+            </div>
+
+            <div class="answer-item correct">
+                <div class="answer-number">4</div>
+                <div class="answer-info">
+                    <div class="answer-track">Heat Waves</div>
+                    <div class="answer-artist">Glass Animals</div>
+                </div>
+                <div class="answer-status correct">✓ Correct</div>
+            </div>
+
+            <div class="answer-item correct">
+                <div class="answer-number">5</div>
+                <div class="answer-info">
+                    <div class="answer-track">Peaches</div>
+                    <div class="answer-artist">Justin Bieber ft. Daniel Caesar</div>
+                </div>
+                <div class="answer-status correct">✓ Correct</div>
+            </div>
+
+            <div class="answer-item correct">
+                <div class="answer-number">6</div>
+                <div class="answer-info">
+                    <div class="answer-track">Good 4 U</div>
+                    <div class="answer-artist">Olivia Rodrigo</div>
+                </div>
+                <div class="answer-status correct">✓ Correct</div>
+            </div>
+
+            <div class="answer-item correct">
+                <div class="answer-number">7</div>
+                <div class="answer-info">
+                    <div class="answer-track">Stay</div>
+                    <div class="answer-artist">The Kid LAROI & Justin Bieber</div>
+                </div>
+                <div class="answer-status correct">✓ Correct</div>
+            </div>
+
+            <div class="answer-item incorrect">
+                <div class="answer-number">8</div>
+                <div class="answer-info">
+                    <div class="answer-track">drivers license</div>
+                    <div class="answer-artist">Olivia Rodrigo</div>
+                    <div class="user-answer">Pas de réponse</div>
+                </div>
+                <div class="answer-status incorrect">✗ Incorrect</div>
+            </div>
+
+            <div class="answer-item correct">
+                <div class="answer-number">9</div>
+                <div class="answer-info">
+                    <div class="answer-track">As It Was</div>
+                    <div class="answer-artist">Harry Styles</div>
+                </div>
+                <div class="answer-status correct">✓ Correct</div>
+            </div>
+
+            <div class="answer-item correct">
+                <div class="answer-number">10</div>
+                <div class="answer-info">
+                    <div class="answer-track">Anti-Hero</div>
+                    <div class="answer-artist">Taylor Swift</div>
+                </div>
+                <div class="answer-status correct">✓ Correct</div>
+            </div>
+
+            <div class="answer-item correct">
+                <div class="answer-number">11</div>
+                <div class="answer-info">
+                    <div class="answer-track">Flowers</div>
+                    <div class="answer-artist">Miley Cyrus</div>
+                </div>
+                <div class="answer-status correct">✓ Correct</div>
+            </div>
+
+            <div class="answer-item incorrect">
+                <div class="answer-number">12</div>
+                <div class="answer-info">
+                    <div class="answer-track">Kill Bill</div>
+                    <div class="answer-artist">SZA</div>
+                    <div class="user-answer">Votre réponse : Good Days</div>
+                </div>
+                <div class="answer-status incorrect">✗ Incorrect</div>
+            </div>
+
+            <div class="answer-item correct">
+                <div class="answer-number">13</div>
+                <div class="answer-info">
+                    <div class="answer-track">Cruel Summer</div>
+                    <div class="answer-artist">Taylor Swift</div>
+                </div>
+                <div class="answer-status correct">✓ Correct</div>
+            </div>
+
+            <div class="answer-item correct">
+                <div class="answer-number">14</div>
+                <div class="answer-info">
+                    <div class="answer-track">vampire</div>
+                    <div class="answer-artist">Olivia Rodrigo</div>
+                </div>
+                <div class="answer-status correct">✓ Correct</div>
+            </div>
+
+            <div class="answer-item correct">
+                <div class="answer-number">15</div>
+                <div class="answer-info">
+                    <div class="answer-track">Paint The Town Red</div>
+                    <div class="answer-artist">Doja Cat</div>
+                </div>
+                <div class="answer-status correct">✓ Correct</div>
+            </div>
+
+            <div class="answer-item correct">
+                <div class="answer-number">16</div>
+                <div class="answer-info">
+                    <div class="answer-track">greedy</div>
+                    <div class="answer-artist">Tate McRae</div>
+                </div>
+                <div class="answer-status correct">✓ Correct</div>
+            </div>
+
+            <div class="answer-item incorrect">
+                <div class="answer-number">17</div>
+                <div class="answer-info">
+                    <div class="answer-track">Snooze</div>
+                    <div class="answer-artist">SZA</div>
+                    <div class="user-answer">Votre réponse : Shirt</div>
+                </div>
+                <div class="answer-status incorrect">✗ Incorrect</div>
+            </div>
+
+            <div class="answer-item correct">
+                <div class="answer-number">18</div>
+                <div class="answer-info">
+                    <div class="answer-track">Seven</div>
+                    <div class="answer-artist">Jung Kook ft. Latto</div>
+                </div>
+                <div class="answer-status correct">✓ Correct</div>
+            </div>
+
+            <div class="answer-item correct">
+                <div class="answer-number">19</div>
+                <div class="answer-info">
+                    <div class="answer-track">Calm Down</div>
+                    <div class="answer-artist">Rema & Selena Gomez</div>
+                </div>
+                <div class="answer-status correct">✓ Correct</div>
+            </div>
+
+            <div class="answer-item correct">
+                <div class="answer-number">20</div>
+                <div class="answer-info">
+                    <div class="answer-track">Die For You</div>
+                    <div class="answer-artist">The Weeknd</div>
+                </div>
+                <div class="answer-status correct">✓ Correct</div>
+            </div>
+        </div>
+
+        <div class="actions">
+            <button class="btn btn-primary" onclick="alert('Nouvelle partie...')">Rejouer</button>
+            <button class="btn btn-secondary" onclick="alert('Retour à l\'accueil')">Retour à l'accueil</button>
+        </div>
+    </div>
+</body>
+</html>

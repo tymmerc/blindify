@@ -17,12 +17,18 @@ export type CurrentUserPayload = {
 function setSessionCookie(token: string, maxAgeSeconds = 60 * 60 * 24) {
   if (typeof document === "undefined") return
   const maxAge = Math.max(60, Math.floor(maxAgeSeconds))
-  document.cookie = `blindify_session_token=${encodeURIComponent(token)}; Path=/; Max-Age=${maxAge}; Secure; SameSite=Lax`
+  const isHttps = typeof window !== "undefined" && window.location.protocol === "https:"
+  const sameSite = isHttps ? "None" : "Lax"
+  const secureFlag = isHttps ? "; Secure" : ""
+  document.cookie = `blindify_session_token=${encodeURIComponent(token)}; Path=/; Max-Age=${maxAge}; SameSite=${sameSite}${secureFlag}`
 }
 
 function clearSessionCookie() {
   if (typeof document === "undefined") return
-  document.cookie = "blindify_session_token=; Path=/; Max-Age=0; Secure; SameSite=Lax"
+  const isHttps = typeof window !== "undefined" && window.location.protocol === "https:"
+  const sameSite = isHttps ? "None" : "Lax"
+  const secureFlag = isHttps ? "; Secure" : ""
+  document.cookie = `blindify_session_token=; Path=/; Max-Age=0; SameSite=${sameSite}${secureFlag}`
 }
 
 export const api = {
@@ -84,6 +90,9 @@ export const api = {
   async startGuestSession(nickname?: string): Promise<void> {
     const { sessionToken } = await clientApi.createGuestSession(nickname)
     setSessionCookie(sessionToken, 60 * 60 * 4)
+  },
+  async detailedStats() {
+    return clientApi.detailedStats()
   },
   setSessionCookie,
   clearSessionCookie,

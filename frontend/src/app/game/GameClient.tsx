@@ -13,8 +13,8 @@ function normalizeDifficulty(value: string | null): "easy" | "normal" | "hard" {
   return value === "easy" || value === "hard" ? value : "normal"
 }
 
-function normalizeSource(value: string | null): "library" | "top" | "recent" {
-  if (value === "top" || value === "recent") return value
+function normalizeSource(value: string | null): "library" | "top" | "recent" | "liked" {
+  if (value === "top" || value === "recent" || value === "liked") return value
   return "library"
 }
 
@@ -29,6 +29,12 @@ export default function GameClient() {
 
   const difficulty = normalizeDifficulty(searchParams.get("difficulty"))
   const source = normalizeSource(searchParams.get("source"))
+  const roundsCount = (() => {
+    const raw = searchParams.get("count")
+    const parsed = raw ? Number(raw) : NaN
+    if (Number.isFinite(parsed) && parsed >= 5 && parsed <= 25) return parsed
+    return 10
+  })()
 
   useEffect(() => {
     let active = true
@@ -49,7 +55,7 @@ export default function GameClient() {
         const game: SoloGameResponse = await api.startSoloGame({
           difficulty,
           source,
-          count: 10,
+          count: roundsCount,
         })
 
         if (!active) return
@@ -145,7 +151,13 @@ export default function GameClient() {
           </p>
         </header>
 
-        <SoloGameClient user={userPayload.user} tracks={tracks} />
+        <SoloGameClient
+          user={userPayload.user}
+          tracks={tracks}
+          mode="solo"
+          difficulty={difficulty}
+          source={source}
+        />
       </div>
     </main>
   )

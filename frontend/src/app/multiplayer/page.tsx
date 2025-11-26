@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import Link from "next/link"
 import type { Socket } from "socket.io-client"
 import { getSocket, disconnectSocket } from "@/lib/socket"
 import { api } from "@/lib/api"
@@ -101,6 +100,7 @@ export default function MultiplayerPage() {
     bootstrap()
 
     return () => {
+      active = false
       if (room && userPayload) {
         const socket = socketRef.current
         socket?.emit("room:leave", { roomCode: room.room_code, userId: userPayload.user.id })

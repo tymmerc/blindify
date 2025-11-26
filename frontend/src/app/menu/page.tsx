@@ -1,65 +1,47 @@
 "use client"
 
+import Image from "next/image"
 import { useEffect, useMemo, useState } from "react"
-import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { motion } from "framer-motion"
-import {
-  ArrowRight,
-  Disc3,
-  Headphones,
-  Layers,
-  Play,
-  Radio,
-  Settings,
-  Trophy,
-  UploadCloud,
-  User,
-} from "lucide-react"
-
+import { useRouter } from "next/navigation"
 import { api, type CurrentUserPayload } from "@/lib/api"
 import type { UserSummary } from "@/lib/types"
-import { Button } from "@/components/ui/button"
 
-const modeCards = [
-  {
-    href: "/solo",
-    title: "Solo Mode",
-    description: "Generate adaptive rounds from your connected libraries and uploaded snippets.",
-    icon: Play,
-    accent: "from-purple-500/70 to-purple-700/30",
-    cta: "Launch solo session",
-  },
-  {
-    href: "/multiplayer",
-    title: "Multiplayer Rooms",
-    description: "Create a code, sync audio over WebSockets, and battle friends with live streaks.",
-    icon: Radio,
-    accent: "from-emerald-500/70 to-teal-600/30",
-    cta: "Host a room",
-    disabled: false,
-  },
-  {
-    href: "/upload",
-    title: "Local Uploads",
-    description: "Drop short MP3 clips to craft surprise rounds and custom blind tests.",
-    icon: UploadCloud,
-    accent: "from-sky-500/70 to-indigo-600/30",
-    cta: "Add local tracks",
-  },
+type Playlist = {
+  id: string
+  title: string
+  count: number
+  emoji?: string
+  cover?: string | null
+  owner?: string | null
+}
+
+const fallbackPlaylists: Playlist[] = [
+  { title: "Top 2024", count: 142, emoji: "🎸", id: "top-2024" },
+  { title: "Workout Mix", count: 87, emoji: "💪", id: "workout-mix" },
+  { title: "Chill Vibes", count: 234, emoji: "🌙", id: "chill-vibes" },
+  { title: "Road Trip", count: 156, emoji: "🚗", id: "road-trip" },
 ]
 
-const quickLinks = [
-  { href: "/profile", label: "Profile & badges", icon: User },
-  { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
-  { href: "/history", label: "Match history", icon: Layers },
-  { href: "/stats", label: "Analytics", icon: Headphones },
+const activity = [
+  { title: "Top 2024", time: "Aujourd'hui à 14:32", score: "18/20" },
+  { title: "Workout Mix", time: "Hier à 19:15", score: "15/20" },
+  { title: "Chill Vibes", time: "Il y a 2 jours", score: "20/20" },
 ]
 
 export default function MenuPage() {
   const router = useRouter()
   const [userPayload, setUserPayload] = useState<CurrentUserPayload | null>(null)
   const [loading, setLoading] = useState(true)
+  const [playlists, setPlaylists] = useState<Playlist[]>([])
+  const [loadingPlaylists, setLoadingPlaylists] = useState(false)
+  const [playlistError, setPlaylistError] = useState<string | null>(null)
+  const [stats, setStats] = useState([
+    { label: "Parties", value: "—" },
+    { label: "Précision", value: "—" },
+    { label: "Points", value: "—" },
+    { label: "Niveau", value: "—" },
+  ])
 
   useEffect(() => {
     let active = true
@@ -79,178 +61,286 @@ export default function MenuPage() {
     }
 
     load()
-
     return () => {
       active = false
     }
   }, [router])
 
-  const user: UserSummary | null = userPayload?.user ?? null
-  const providerLabel = useMemo(() => {
-    if (!user) return ""
-    switch (user.provider) {
-      case "spotify":
-        return "Spotify"
-      case "deezer":
-        return "Deezer"
-      case "apple":
-        return "Apple Music"
-      case "local":
-        return "Local uploads"
-      case "guest":
-      default:
-        return "Guest mode"
+  useEffect(() => {
+    if (!userPayload?.user) return
+    if (userPayload.user.provider !== "spotify") {
+      setPlaylists(fallbackPlaylists)
+      return
     }
+
+    let cancelled = false
+    async function loadPlaylists() {
+      setLoadingPlaylists(true)
+      setPlaylistError(null)
+      try {
+        const token = await api.getSpotifyToken()
+        const response = await fetch("https://api.spotify.com/v1/me/playlists?limit=12", {
+          headers: { Authorization: `Bearer ${token.accessToken}` },
+        })
+        if (!response.ok) {
+          throw new Error(`Spotify API error ${response.status}`)
+        }
+        const payload = (await response.json()) as {
+          items: Array<{
+            id: string
+            name: string
+            tracks: { total: number }
+            images?: Array<{ url: string }>
+            owner?: { display_name?: string }
+          }>
+        }
+        if (cancelled) return
+        const mapped: Playlist[] =
+          payload.items?.map(item => ({
+            id: item.id,
+            title: item.name,
+            count: item.tracks?.total ?? 0,
+            cover: item.images?.[0]?.url ?? null,
+            owner: item.owner?.display_name ?? null,
+          })) ?? []
+        setPlaylists(mapped.length > 0 ? mapped : fallbackPlaylists)
+      } catch (err) {
+        console.error("spotify_playlists_failed", err)
+        if (!cancelled) {
+          setPlaylistError("Impossible de récupérer vos playlists Spotify.")
+          setPlaylists(fallbackPlaylists)
+        }
+      } finally {
+        if (!cancelled) setLoadingPlaylists(false)
+      }
+    }
+
+    loadPlaylists()
+    return () => {
+      cancelled = true
+    }
+  }, [userPayload])
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadStats() {
+      try {
+        const res = await api.detailedStats()
+        if (cancelled) return
+        const level = Math.max(1, Math.floor((res.stats.totalXp ?? 0) / 100) + 1)
+        setStats([
+          { label: "Parties", value: String(res.stats.totalGames ?? 0) },
+          { label: "Précision", value: `${Math.round(res.stats.accuracyRate ?? 0)}%` },
+          { label: "Points", value: String(res.stats.totalXp ?? 0) },
+          { label: "Niveau", value: String(level) },
+        ])
+      } catch (err) {
+        console.error("load_stats_failed", err)
+      }
+    }
+    loadStats()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const user: UserSummary | null = userPayload?.user ?? null
+  const isSpotifyUser = user?.provider === "spotify"
+  const initials = useMemo(() => {
+    if (!user?.username) return "?"
+    return user.username
+      .split(" ")
+      .map(part => part[0])
+      .slice(0, 2)
+      .join("")
+      .toUpperCase()
   }, [user])
 
   if (loading) {
     return (
-      <div className="grid min-h-screen place-items-center">
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.6, repeat: Infinity, repeatType: "mirror" }}
-          className="rounded-full border border-white/15 bg-white/5 px-6 py-3 text-sm uppercase tracking-[0.5em] text-slate-300"
-        >
-          Loading menu
-        </motion.div>
+      <div className="grid min-h-screen place-items-center text-sm uppercase tracking-[0.3em] text-[var(--ma-muted)]">
+        Chargement
       </div>
     )
   }
 
-  if (!user) {
-    return null
-  }
-
   return (
-    <div className="relative min-h-screen overflow-hidden">
-      <div className="absolute inset-0">
-        <motion.div
-          className="pointer-events-none absolute inset-0 opacity-40"
-          animate={{ backgroundPosition: ["0% 0%", "160% 160%"] }}
-          transition={{ duration: 18, repeat: Infinity, ease: "linear" }}
-          style={{
-            backgroundImage:
-              "radial-gradient(circle at 15% 20%, rgba(168,85,247,0.22), transparent 52%), radial-gradient(circle at 80% 30%, rgba(34,197,94,0.2), transparent 55%), radial-gradient(circle at 50% 100%, rgba(59,130,246,0.2), transparent 60%)",
-          }}
-        />
-      </div>
-
-      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-10 px-6 py-10">
-        <header className="flex flex-col gap-6 rounded-3xl border border-white/10 bg-black/60 p-8 backdrop-blur-2xl md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-5">
-            <div className="surface flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10">
-              <Disc3 className="h-7 w-7 text-neon" />
+    <div className="min-h-screen bg-[var(--ma-bg)] text-white pb-28">
+      <div className="ma-container">
+        <div className="relative overflow-hidden rounded-3xl border border-[var(--ma-border)] bg-[#0b0b0f] px-6 py-8 shadow-[0_25px_70px_rgba(0,0,0,0.4)]">
+          <div className="absolute -left-20 -top-20 h-56 w-56 rounded-full bg-[rgba(168,85,247,0.15)] blur-3xl" />
+          <div className="absolute -right-10 top-0 h-48 w-48 rounded-full bg-[rgba(34,197,94,0.12)] blur-3xl" />
+          <div className="relative grid gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
+            <div className="flex items-center gap-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--ma-gradient)] text-lg font-semibold shadow-[0_10px_30px_rgba(168,85,247,0.35)]">
+                {initials}
+              </div>
+              <div className="greeting">
+                <p className="text-xs uppercase tracking-[0.3em] text-[var(--ma-muted)]">Bienvenue</p>
+                <h1 className="text-2xl font-semibold tracking-[-0.02em]">Bonjour, {user?.username ?? "Joueur"}</h1>
+                <p className="text-sm text-[var(--ma-muted)]">Prêt pour une nouvelle session ?</p>
+              </div>
             </div>
+            <div className="flex flex-wrap items-center justify-start gap-3 lg:justify-end">
+              <Link
+                href="/modes"
+                className="rounded-xl border border-[var(--ma-border-strong)] px-4 py-2 text-sm font-semibold text-white/90 transition hover:bg-white/5"
+              >
+                Choisir un mode
+              </Link>
+            </div>
+          </div>
+
+          <div className="ma-stat-grid mt-8">
+            {stats.map(item => (
+              <div key={item.label} className="ma-stat-card shadow-[0_10px_30px_rgba(0,0,0,0.35)] text-center">
+                <div className="ma-stat-label">{item.label}</div>
+                <div className="ma-stat-value">{item.value}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="my-10 overflow-hidden rounded-3xl bg-[var(--ma-gradient)] px-6 py-10 shadow-[0_30px_80px_rgba(168,85,247,0.3)] lg:px-10">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+            <div className="space-y-2">
+              <p className="text-xs uppercase tracking-[0.3em] text-white/80">Mode express</p>
+              <h2 className="text-3xl font-bold leading-tight">Partie rapide</h2>
+              <p className="text-white/85">20 morceaux aléatoires de votre bibliothèque</p>
+            </div>
+            <Link
+              href="/solo?source=liked&count=10"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-white/95 px-6 py-3 text-sm font-semibold text-[#a855f7] shadow-[0_12px_32px_rgba(0,0,0,0.25)] transition hover:scale-[1.02]"
+            >
+              Jouer maintenant
+            </Link>
+          </div>
+        </div>
+
+        <section className="ma-section">
+          <div className="mb-6 flex items-center justify-between gap-3">
             <div>
-              <p className="text-xs uppercase tracking-[0.5em] text-slate-400">Welcome back</p>
-              <h1 className="text-3xl font-bold text-white">
-                {user.username || user.provider_id}
-              </h1>
-              <p className="text-sm text-slate-400">
-                Connected via <span className="text-neon">{providerLabel}</span> — ready for new rounds?
+              <h2 className="text-xl font-semibold">Vos playlists</h2>
+              <p className="text-sm text-[var(--ma-muted)]">
+                {isSpotifyUser
+                  ? playlistError ?? "Synchronisées depuis votre bibliothèque Spotify"
+                  : "Connectez Spotify pour charger vos playlists"}
               </p>
             </div>
+            <Link href="/playlists" className="text-sm font-semibold text-white underline-offset-4 hover:underline">
+              Voir tout
+            </Link>
           </div>
-            <div className="flex flex-wrap items-center gap-4">
-              <Link
-                href="/settings"
-                className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-5 py-3 text-sm font-medium text-slate-200 transition hover:border-white/30 hover:text-white"
-              >
-                <Settings className="h-4 w-4" />
-                Settings
-              </Link>
-              <Button
-                onClick={async () => {
-                  await api.logout()
-                  router.replace("/auth/login")
-                }}
-                className="gap-2"
-              >
-                Logout
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            </div>
-        </header>
-
-        <section className="grid gap-9 lg:grid-cols-3">
-          {modeCards.map((card, index) => (
-            <motion.div
-              key={card.title}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1 }}
-              className={`relative overflow-hidden rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl transition duration-300 hover:-translate-y-1 hover:border-white/25 hover:shadow-[0_25px_60px_rgba(12,12,34,0.45)] ${card.disabled ? "opacity-70" : ""}`}
-            >
-              <div className={`absolute inset-0 bg-gradient-to-br ${card.accent} opacity-25`} />
-              <div className="relative flex h-full flex-col gap-6 p-8">
-                <div className="flex items-center gap-4">
-                  <div className="surface flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10">
-                    <card.icon className="h-6 w-6 text-neon" />
-                  </div>
-                  <h2 className="text-xl font-semibold text-white">{card.title}</h2>
-                </div>
-                <p className="text-sm text-slate-300 flex-1">{card.description}</p>
-                <Button
-                  asChild
-                  variant={card.disabled ? "outline" : "default"}
-                  className={card.disabled ? "cursor-not-allowed opacity-60" : ""}
-                  disabled={card.disabled}
-                >
-                  <Link href={card.href}>
-                    {card.cta}
-                    <ArrowRight className="h-4 w-4" />
-                  </Link>
-                </Button>
+          {!isSpotifyUser ? (
+            <div className="ma-card flex flex-col items-start gap-3 border-[rgba(168,85,247,0.25)] bg-[rgba(168,85,247,0.08)] md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-base font-semibold">Connectez votre compte Spotify</p>
+                <p className="text-sm text-[var(--ma-muted)]">
+                  Récupérez vos playlists et lancez des parties personnalisées.
+                </p>
               </div>
-            </motion.div>
-          ))}
+              <Link
+                href="/auth/login"
+                className="ma-btn-primary px-4 py-3 text-sm font-semibold shadow-[0_12px_32px_rgba(168,85,247,0.3)]"
+              >
+                Se connecter à Spotify
+              </Link>
+            </div>
+          ) : null}
+          <PlaylistGrid playlists={playlists} loading={loadingPlaylists} />
         </section>
 
-        <section className="surface rounded-3xl border border-white/10 p-8">
-          <div className="mb-6 flex items-center justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-[0.5em] text-slate-400">Quick navigation</p>
-              <h3 className="text-xl font-semibold text-white">Dive deeper</h3>
-            </div>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {quickLinks.map(link => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className="group flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-sm font-medium text-slate-200 transition hover:border-white/25 hover:text-white"
+        <section className="mb-16">
+          <h2 className="text-xl font-semibold mb-6">Activité récente</h2>
+          <div className="ma-card px-0">
+            {activity.map((item, index) => (
+              <div
+                key={item.title}
+                className={`activity-item flex items-center justify-between px-6 py-5 ${
+                  index < activity.length - 1 ? "border-b border-[var(--ma-border)]" : ""
+                }`}
               >
-                <link.icon className="h-5 w-5 text-neon transition group-hover:scale-110" />
-                <span>{link.label}</span>
-                <ArrowRight className="ml-auto h-4 w-4 text-slate-400 transition group-hover:text-neon" />
-              </Link>
+                <div className="activity-info">
+                  <h4 className="text-base font-semibold">{item.title}</h4>
+                  <p className="text-sm text-[var(--ma-muted)]">{item.time}</p>
+                </div>
+                <div className="activity-score text-2xl font-bold bg-clip-text text-transparent" style={{ backgroundImage: "var(--ma-gradient)" }}>
+                  {item.score}
+                </div>
+              </div>
             ))}
           </div>
         </section>
-
-        <section className="mb-12 rounded-3xl border border-white/10 bg-black/50 p-8 backdrop-blur-2xl">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-            <div className="max-w-xl space-y-3">
-              <p className="text-xs uppercase tracking-[0.5em] text-slate-400">Tip</p>
-              <h3 className="text-2xl font-semibold text-white">Sync more providers for richer rounds</h3>
-              <p className="text-sm text-slate-300">
-                Plug additional accounts to unlock cross-platform rounds instantly. Blindify only pulls metadata —
-                playback stays on your devices for zero-latency precision.
-              </p>
-            </div>
-            <div className="flex items-center gap-4">
-              <Link
-                href="/settings/providers"
-                className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-5 py-3 text-sm font-medium text-slate-200 transition hover:border-white/30 hover:text-white"
-              >
-                Manage providers
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </div>
-          </div>
-        </section>
       </div>
+
+      <nav className="ma-nav-bottom">
+        <div className="ma-nav-inner">
+          <Link href="/menu" className="ma-nav-item active">
+            <span className="text-lg">○</span>
+            <span className="text-[11px] font-semibold uppercase tracking-[0.4px]">Accueil</span>
+          </Link>
+          <Link href="/modes" className="ma-nav-item">
+            <span className="text-lg">▶</span>
+            <span className="text-[11px] font-semibold uppercase tracking-[0.4px]">Jouer</span>
+          </Link>
+          <Link href="/stats" className="ma-nav-item">
+            <span className="text-lg">◆</span>
+            <span className="text-[11px] font-semibold uppercase tracking-[0.4px]">Stats</span>
+          </Link>
+          <Link href="/profile" className="ma-nav-item">
+            <span className="text-lg">◉</span>
+            <span className="text-[11px] font-semibold uppercase tracking-[0.4px]">Profil</span>
+          </Link>
+        </div>
+      </nav>
+    </div>
+  )
+}
+
+function PlaylistGrid({ playlists, loading }: { playlists: Playlist[]; loading: boolean }) {
+  if (loading) {
+    return (
+      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <div
+            key={index}
+            className="ma-card h-full animate-pulse border-[rgba(255,255,255,0.08)] bg-[#0f0f0f]"
+          >
+            <div className="mb-4 aspect-square w-full rounded-lg bg-white/5" />
+            <div className="h-4 w-1/2 rounded bg-white/10" />
+            <div className="mt-2 h-3 w-1/3 rounded bg-white/5" />
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  if (!playlists.length) {
+    return <p className="text-sm text-[var(--ma-muted)]">Aucune playlist disponible.</p>
+  }
+
+  return (
+    <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      {playlists.map(item => (
+        <div
+          key={item.id}
+          className="ma-card relative overflow-hidden cursor-pointer border-[rgba(255,255,255,0.08)] bg-[#0f0f0f] transition duration-200 hover:-translate-y-1 hover:border-[rgba(168,85,247,0.3)] hover:shadow-[0_12px_32px_rgba(168,85,247,0.15)]"
+        >
+          <div className="relative mb-4 aspect-square w-full overflow-hidden rounded-lg bg-[var(--ma-gradient)]">
+            {item.cover ? (
+              <Image src={item.cover} alt={item.title} fill className="object-cover" sizes="260px" />
+            ) : (
+              <div className="grid h-full w-full place-items-center text-4xl">{item.emoji ?? "🎵"}</div>
+            )}
+            <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-[rgba(0,0,0,0.25)]" />
+          </div>
+          <div className="playlist-info space-y-1">
+            <h3 className="text-base font-semibold leading-tight">{item.title}</h3>
+            <p className="text-sm text-[var(--ma-muted)]">{item.count} morceaux</p>
+            {item.owner ? <p className="text-xs text-[var(--ma-muted)]">Par {item.owner}</p> : null}
+          </div>
+        </div>
+      ))}
     </div>
   )
 }

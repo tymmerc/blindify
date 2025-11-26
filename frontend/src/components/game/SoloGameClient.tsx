@@ -5,17 +5,19 @@ import Image from "next/image"
 import { api } from "@/lib/api"
 import type { SoloTrack, UserSummary } from "@/lib/types"
 import { Button } from "@/components/ui/button"
-import { ApiError } from "@/lib/apiClient"
-import { ArrowRight, Check, Flame, Heart, Sparkles, Timer, Volume2 } from "lucide-react"
+import { ArrowRight, Check, Flame, Heart, Play, Sparkles, Timer, Volume2 } from "lucide-react"
 
 type Phase = "countdown" | "listening" | "reveal"
 type Verdict = "correct" | "close" | "wrong"
 type FinalizeReason = "timeout" | "reveal" | "guess"
+type RoundState = "pending" | "current" | Verdict
 
 export interface SoloGameClientProps {
   user: UserSummary
   tracks: SoloTrack[]
   mode?: "solo" | "multiplayer"
+  difficulty?: "easy" | "normal" | "hard"
+  source?: string
   onRoundComplete?: (payload: {
     track: SoloTrack
     verdict: Verdict
@@ -36,13 +38,57 @@ export interface RoundStats {
 const LISTENING_DURATION = 45
 const COUNTDOWN_DURATION = 3
 
+function ListeningSurface({ active }: { active: boolean }) {
+  return (
+    <div className="absolute inset-0">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_30%,rgba(168,85,247,0.18),transparent_55%),radial-gradient(circle_at_20%_80%,rgba(34,197,94,0.12),transparent_55%)]" />
+      {active ? (
+        <div className="absolute inset-0 animate-pulse bg-[radial-gradient(circle_at_50%_50%,rgba(168,85,247,0.12),transparent_55%)]" />
+      ) : null}
+    </div>
+  )
+}
+
+function AudioBars() {
+  return (
+    <div className="flex items-end gap-1">
+      {[6, 10, 14, 10, 6].map((h, idx) => (
+        <span
+          key={idx}
+          className="w-1.5 rounded-sm bg-[var(--ma-gradient)]"
+          style={{
+            height: `${h * 4}px`,
+            animation: `barPulse 1.2s ease-in-out ${idx * 0.1}s infinite`,
+          }}
+        />
+      ))}
+      <style jsx>{`
+        @keyframes barPulse {
+          0%,
+          100% {
+            transform: scaleY(0.6);
+            opacity: 0.6;
+          }
+          50% {
+            transform: scaleY(1);
+            opacity: 1;
+          }
+        }
+      `}</style>
+    </div>
+  )
+}
+
 export function SoloGameClient({
   user,
   tracks,
   mode = "solo",
+  difficulty = "normal",
+  source = "library",
   onRoundComplete,
   onGameComplete,
 }: SoloGameClientProps) {
+  const [trackList, setTrackList] = useState<SoloTrack[]>(tracks)
   const [index, setIndex] = useState(0)
   const [phase, setPhase] = useState<Phase>("countdown")
   const [countdown, setCountdown] = useState(COUNTDOWN_DURATION)
@@ -53,6 +99,9 @@ export function SoloGameClient({
   const [liking, setLiking] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [gameFinished, setGameFinished] = useState(false)
+  const [roundStates, setRoundStates] = useState<RoundState[]>(() =>
+    tracks.map((_, i) => (i === 0 ? "current" : "pending"))
+  )
 
   const [stats, setStats] = useState<RoundStats>({
     rounds: 0,
@@ -60,6 +109,7 @@ export function SoloGameClient({
     streak: 0,
     bestStreak: 0,
   })
+  const [manualPlayRequired, setManualPlayRequired] = useState(false)
 
   const statsRef = useRef(stats)
   const guessRef = useRef(guess)
@@ -67,19 +117,29 @@ export function SoloGameClient({
   const countdownRef = useRef<NodeJS.Timeout | null>(null)
   const listeningRafRef = useRef<number | null>(null)
   const listeningDeadlineRef = useRef<number>(0)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const previewUrlRef = useRef<string | null>(null)
 
-  const current = tracks[index]
-  const total = tracks.length
+  useEffect(() => {
+    setTrackList(tracks)
+    setRoundStates(tracks.map((_, i) => (i === 0 ? "current" : "pending")))
+    setIndex(0)
+  }, [tracks])
+
+  const current = trackList[index]
+  const total = trackList.length
   const hasMoreRounds = index < total - 1
   const accuracy = stats.rounds > 0 ? Math.round((stats.correct / stats.rounds) * 100) : 0
-  const isSpotifyTrack = current?.type === "spotify"
-
-  const {
-    play: playSpotify,
-    pause: pauseSpotify,
-    ready: spotifyReady,
-    error: spotifyError,
-  } = useSpotifyPlayback(isSpotifyTrack)
+  const history = useMemo(
+    () =>
+      trackList.map((track, i) => ({
+        round: i + 1,
+        title: track.title,
+        artist: track.artist,
+        state: roundStates[i] ?? "pending",
+      })),
+    [trackList, roundStates]
+  )
 
   useEffect(() => {
     statsRef.current = stats
@@ -102,6 +162,15 @@ export function SoloGameClient({
       cancelAnimationFrame(listeningRafRef.current)
       listeningRafRef.current = null
     }
+    if (audioRef.current) {
+      try {
+        audioRef.current.pause()
+        audioRef.current.src = ""
+      } catch {
+        // ignore cleanup errors
+      }
+      audioRef.current = null
+    }
   }, [])
 
   const finalizeRound = useCallback(
@@ -110,7 +179,6 @@ export function SoloGameClient({
       if (phase === "reveal") return
 
       cleanupTimers()
-      pauseSpotify().catch(() => undefined)
 
       const prevStats = statsRef.current
       const correct = nextVerdict === "correct"
@@ -147,20 +215,27 @@ export function SoloGameClient({
         round: index + 1,
         stats: updatedStats,
       })
+      setRoundStates(prev => {
+        const copy = [...prev]
+        copy[index] = nextVerdict
+        if (index + 1 < copy.length) {
+          copy[index + 1] = "current"
+        }
+        return copy
+      })
 
       if (index >= total - 1) {
         setGameFinished(true)
         onGameComplete?.(updatedStats)
       }
     },
-    [cleanupTimers, pauseSpotify, phase, index, total, onRoundComplete, onGameComplete]
+    [cleanupTimers, phase, index, total, onRoundComplete, onGameComplete]
   )
 
   useEffect(() => {
     if (!current || gameFinished) return
 
     cleanupTimers()
-    pauseSpotify().catch(() => undefined)
 
     setPhase("countdown")
     setCountdown(COUNTDOWN_DURATION)
@@ -169,6 +244,8 @@ export function SoloGameClient({
     setVerdict(null)
     setFeedback(null)
     setError(null)
+    setManualPlayRequired(false)
+    previewUrlRef.current = null
 
     let remaining = COUNTDOWN_DURATION
     countdownRef.current = setInterval(() => {
@@ -184,9 +261,25 @@ export function SoloGameClient({
 
     return () => {
       cleanupTimers()
-      pauseSpotify().catch(() => undefined)
     }
-  }, [current?.audioSourceId, cleanupTimers, pauseSpotify, gameFinished])
+  }, [current, cleanupTimers, gameFinished])
+
+  useEffect(() => {
+    setRoundStates(prev =>
+      trackList.map((_, i) => {
+        if (prev[i]) return prev[i]
+        return i === 0 ? "current" : "pending"
+      })
+    )
+  }, [trackList])
+
+  useEffect(() => {
+    setRoundStates(prev => {
+      const copy = [...prev]
+      if (copy[index] === "pending") copy[index] = "current"
+      return copy
+    })
+  }, [index])
 
   useEffect(() => {
     if (!current || gameFinished) return
@@ -197,30 +290,57 @@ export function SoloGameClient({
 
     let cancelled = false
 
-    const startPlayback = async () => {
-      if (current.type === "spotify") {
-        if (!spotifyReady) {
-          setFeedback("Waiting for Spotify player… Select the Blindify Web Player in Spotify.")
-          return
-        }
-        try {
-          await playSpotify(current.track_id)
-          if (!cancelled) setFeedback(null)
-        } catch (err) {
-          console.error("spotify_play_failed", err)
-          if (!cancelled) {
-            const message =
-              err instanceof Error && err.message
-                ? err.message
-                : "Spotify playback failed. Ensure Spotify is open and the device is set to Blindify Web Player."
-            setFeedback(message)
-            setError(message)
-            const latestGuess = guessRef.current
-            finalizeRound("wrong", "timeout", current, latestGuess)
-            return
+    const ensurePreview = async () => {
+      if (current.audio_url) {
+        previewUrlRef.current = current.audio_url
+        return current.audio_url
+      }
+      if (current.type !== "spotify") return null
+      try {
+        const token = await api.getSpotifyToken()
+        const queries = [
+          `track:${current.title} artist:${current.artist}`,
+          current.title,
+        ]
+        for (const q of queries) {
+          const resp = await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(q)}&type=track&limit=1`, {
+            headers: { Authorization: `Bearer ${token.accessToken}` },
+          })
+          if (!resp.ok) continue
+          const data = await resp.json()
+          const preview = data?.tracks?.items?.[0]?.preview_url as string | undefined
+          if (preview) {
+            setTrackList(prev =>
+              prev.map(t => (t.audioSourceId === current.audioSourceId ? { ...t, audio_url: preview } : t))
+            )
+            previewUrlRef.current = preview
+            return preview
           }
         }
+        return null
+      } catch (err) {
+        console.error("preview_fallback_failed", err)
+        return null
       }
+    }
+
+    const startAudio = async (previewUrl: string, track: SoloTrack) => {
+      if (audioRef.current) {
+        try {
+          audioRef.current.pause()
+        } catch {
+          // ignore pause errors
+        }
+      }
+
+      const audio = new Audio(previewUrl)
+      audioRef.current = audio
+      audio.loop = false
+      await audio.play()
+      if (cancelled) return
+      setManualPlayRequired(false)
+      setFeedback(null)
+
       listeningDeadlineRef.current = Date.now() + LISTENING_DURATION * 1000
 
       const tick = () => {
@@ -231,14 +351,44 @@ export function SoloGameClient({
         if (remainingMs <= 0) {
           const latestGuess = guessRef.current
           const computedVerdict =
-            verdictRef.current ?? evaluateGuess(latestGuess, current)
-          finalizeRound(computedVerdict, "timeout", current, latestGuess)
+            verdictRef.current ?? evaluateGuess(latestGuess, track)
+          finalizeRound(computedVerdict, "timeout", track, latestGuess)
         } else {
           listeningRafRef.current = requestAnimationFrame(tick)
         }
       }
 
       listeningRafRef.current = requestAnimationFrame(tick)
+    }
+
+    const startPlayback = async () => {
+      const previewUrl = await ensurePreview()
+      if (!previewUrl) {
+        setFeedback("Aucun extrait audio disponible pour ce titre.")
+        const latestGuess = guessRef.current
+        finalizeRound("wrong", "timeout", current, latestGuess)
+        if (hasMoreRounds) {
+          setTimeout(() => {
+            setIndex(prev => Math.min(prev + 1, total - 1))
+          }, 800)
+        }
+        return
+      }
+
+      previewUrlRef.current = previewUrl
+
+      try {
+        await startAudio(previewUrl, current)
+      } catch (err) {
+        if (cancelled) return
+        if ((err as DOMException)?.name === "NotAllowedError") {
+          setManualPlayRequired(true)
+          setFeedback("Clique sur ▶ pour lancer l'extrait audio.")
+          return
+        }
+        console.error("html_audio_play_failed", err)
+        setFeedback("Impossible de lire l'extrait.")
+      }
     }
 
     startPlayback()
@@ -253,12 +403,55 @@ export function SoloGameClient({
   }, [
     phase,
     current,
-    spotifyReady,
-    playSpotify,
     cleanupTimers,
     finalizeRound,
     gameFinished,
+    hasMoreRounds,
+    total,
+    setIndex,
   ])
+
+  const handleManualPlay = useCallback(async () => {
+    if (!current) return
+    const previewUrl = previewUrlRef.current
+    if (!previewUrl) {
+      setFeedback("Aucun extrait audio disponible pour ce titre.")
+      return
+    }
+    try {
+      const audio = new Audio(previewUrl)
+      if (audioRef.current) {
+        try {
+          audioRef.current.pause()
+        } catch {
+          // ignore pause errors
+        }
+      }
+      audioRef.current = audio
+      audio.loop = false
+      await audio.play()
+      setManualPlayRequired(false)
+
+      listeningDeadlineRef.current = Date.now() + LISTENING_DURATION * 1000
+      const tick = () => {
+        const remainingMs = listeningDeadlineRef.current - Date.now()
+        const nextSeconds = Math.max(0, Math.ceil(remainingMs / 1000))
+        setTimer(prev => (prev === nextSeconds ? prev : nextSeconds))
+        if (remainingMs <= 0) {
+          const latestGuess = guessRef.current
+          const computedVerdict =
+            verdictRef.current ?? evaluateGuess(latestGuess, current)
+          finalizeRound(computedVerdict, "timeout", current, latestGuess)
+        } else {
+          listeningRafRef.current = requestAnimationFrame(tick)
+        }
+      }
+      listeningRafRef.current = requestAnimationFrame(tick)
+    } catch (err) {
+      console.error("manual_play_failed", err)
+      setFeedback("Impossible de lancer l'extrait.")
+    }
+  }, [current, finalizeRound])
 
   const albumName = useMemo(() => {
     if (!current?.metadata) return null
@@ -307,6 +500,16 @@ export function SoloGameClient({
     setIndex(prev => Math.min(prev + 1, total - 1))
   }, [hasMoreRounds, total])
 
+  const handleSkipQuestion = useCallback(() => {
+    if (!current || phase === "reveal") return
+    const submittedGuess = guessRef.current ?? guess
+    const finalVerdict = verdictRef.current ?? "wrong"
+    finalizeRound(finalVerdict, "reveal", current, submittedGuess)
+    if (hasMoreRounds) {
+      setTimeout(() => setIndex(prev => Math.min(prev + 1, total - 1)), 150)
+    }
+  }, [current, phase, finalizeRound, hasMoreRounds, total, guess])
+
   const handleLike = useCallback(async () => {
     if (!current || liking) return
     try {
@@ -354,152 +557,138 @@ export function SoloGameClient({
     )
   }
 
-  const positionLabel = `${String(index + 1).padStart(2, "0")} / ${String(total).padStart(2, "0")}`
+  const positionLabel = `${index + 1} / ${total}`
+  const percent = Math.round(((index) / Math.max(1, total)) * 100)
 
   return (
-    <div className="flex flex-col gap-8">
-      <section className="grid gap-4 rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur">
-        <div className="flex flex-wrap items-center justify-between gap-4 text-xs uppercase tracking-[0.4em] text-slate-400">
-          <span>{mode === "solo" ? "Solo blind test" : "Multiplayer blind test"}</span>
-          <span>Round {positionLabel}</span>
-          <span>
-            Accuracy {accuracy}% • Streak {stats.streak} (best {stats.bestStreak})
-          </span>
-        </div>
-        <div className="rounded-2xl border border-white/10 bg-black/40 px-5 py-4 text-sm text-slate-300">
-          {feedback ? feedback : "Listen carefully, type your guess, and reveal when ready."}
-        </div>
-      </section>
-
-      <div className="grid gap-8 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
-        <div className="relative min-h-[280px] overflow-hidden rounded-3xl border border-white/10 bg-black/60 p-6">
-          <ListeningSurface active={phase === "listening"} />
-          {current.album_cover ? (
-            <Image
-              src={current.album_cover}
-              alt={`${current.title} cover`}
-              fill
-              className={`object-cover transition duration-500 ${
-                phase === "reveal" ? "opacity-100" : "opacity-60 blur"
-              }`}
-            />
-          ) : (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-slate-500">
-              <Volume2 className="h-10 w-10" />
-              <span className="text-xs uppercase tracking-[0.4em]">No artwork</span>
-            </div>
-          )}
-
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            {phase === "countdown" ? (
-              <div className="flex h-24 w-24 items-center justify-center rounded-full border border-white/20 bg-black/60 text-4xl font-semibold text-white shadow-[0_0_35px_rgba(168,85,247,0.4)]">
-                {countdown}
-              </div>
-            ) : phase === "listening" ? (
-              <div className="flex flex-col items-center gap-3 text-white">
-                <div className="flex items-center gap-2 rounded-full border border-white/20 bg-black/50 px-4 py-2 text-xs uppercase tracking-[0.4em]">
-                  <Timer className="h-4 w-4 text-neon" />
-                  {timer}s
-                </div>
-                <AudioBars />
-              </div>
-            ) : (
-              <div className="flex flex-col items-center gap-2 rounded-2xl border border-white/15 bg-black/70 px-6 py-4 text-center text-sm text-slate-200">
-                <p className="text-xs uppercase tracking-[0.5em] text-neon">Reveal</p>
-                <p className="text-lg font-semibold text-white">{current.title}</p>
-                <p className="text-sm text-slate-300">{current.artist}</p>
-                {albumName ? <p className="text-xs text-slate-500">Album · {albumName}</p> : null}
-                {releaseYear ? <p className="text-xs text-slate-500">Released · {releaseYear}</p> : null}
-              </div>
-            )}
+    <div className="min-h-screen bg-black text-white grid lg:grid-cols-[1fr_320px]">
+      <div className="px-6 pb-10 pt-6">
+        <div className="flex items-center justify-between mb-6">
+          <button
+            className="rounded-md border border-[#1b1b1b] bg-transparent px-4 py-2 text-sm text-white hover:bg-[#151515]"
+            onClick={() => (window.location.href = "/menu")}
+          >
+            ← Quitter
+          </button>
+          <div className="rounded-lg border border-[#4c2c56] bg-[#2a1c2f] px-4 py-2 text-sm font-semibold text-[#f7e8ff] shadow">
+            Score: {stats.correct}/{total}
           </div>
         </div>
 
-        <div className="flex flex-col gap-6 rounded-3xl border border-white/10 bg-black/60 p-6">
-          <form onSubmit={handleGuessSubmit} className="space-y-4">
-            <label className="flex flex-col gap-2 text-left">
-              <span className="text-xs uppercase tracking-[0.5em] text-slate-400">Your guess</span>
+        <div className="rounded-xl border border-[#1b1b1b] bg-[#0f0f0f] p-6 shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
+          <div className="mb-6 flex flex-col gap-2">
+            <div className="flex items-center justify-between text-sm text-[#8a8a8a]">
+              <span>Question {index + 1} sur {total}</span>
+              <span>{percent}%</span>
+            </div>
+            <div className="h-1.5 w-full rounded-full bg-[#161616]">
+              <div className="h-full rounded-full bg-gradient-to-r from-[#b155f0] to-[#f24f90]" style={{ width: `${percent}%` }} />
+            </div>
+          </div>
+
+          <div className="mx-auto mb-6 grid h-[200px] w-[200px] place-items-center rounded-xl bg-gradient-to-br from-[#b155f0] to-[#f24f90] shadow-[0_25px_60px_rgba(204,90,196,0.35)]">
+            <span className="text-5xl opacity-90">🎵</span>
+          </div>
+
+          <div className="text-center text-5xl font-bold mb-2">
+            {phase === "countdown" ? countdown.toString().padStart(2, "0") : timer.toString().padStart(2, "0")}
+          </div>
+          <div className="mb-6 text-center text-sm text-[#8a8a8a]">secondes restantes</div>
+
+          <form className="flex flex-col gap-3" onSubmit={handleGuessSubmit}>
+            <input
+              value={guess}
+              onChange={event => setGuess(event.target.value)}
+              disabled={phase === "reveal"}
+              placeholder="Titre du morceau"
+              className="w-full rounded-md border border-[#1f1f1f] bg-[#0f0f0f] px-3 py-3 text-sm text-white outline-none focus:border-[#343434]"
+            />
+            <div className="flex gap-3">
               <input
                 value={guess}
                 onChange={event => setGuess(event.target.value)}
                 disabled={phase === "reveal"}
-                placeholder="Artist – Track title"
-                className="w-full rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-sm text-white outline-none transition focus:border-neon focus:ring-2 focus:ring-neon/40 disabled:cursor-not-allowed"
-                autoFocus
+                placeholder="Artiste"
+                className="w-full rounded-md border border-[#1f1f1f] bg-[#0f0f0f] px-3 py-3 text-sm text-white outline-none focus:border-[#343434]"
               />
-            </label>
-            <div className="flex flex-wrap items-center gap-3">
-              <Button type="submit" disabled={phase === "reveal"} className="gap-2">
-                <Check className="h-4 w-4" />
-                Submit guess
-              </Button>
-              <Button type="button" variant="outline" onClick={handleReveal} disabled={phase === "reveal"}>
-                Reveal now
-              </Button>
-              {phase === "reveal" ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleLike}
-                  disabled={liking}
-                  className="gap-2"
-                >
-                  <Heart className="h-4 w-4" />
-                  {liking ? "Saving…" : "Add to favourites"}
-                </Button>
-              ) : null}
+              <button
+                type="submit"
+                disabled={phase === "reveal"}
+                className="min-w-[110px] rounded-lg bg-gradient-to-r from-[#b155f0] to-[#f24f90] px-4 py-3 text-sm font-semibold text-white shadow-[0_10px_28px_rgba(178,82,217,0.35)] disabled:opacity-60"
+              >
+                Valider
+              </button>
             </div>
           </form>
 
-          {spotifyError ? (
-            <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs text-red-200">
-              {spotifyError}
-            </div>
-          ) : null}
-          {error ? (
-            <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs text-red-200">
-              {error}
-            </div>
-          ) : null}
-
-          {phase === "reveal" ? (
-            <div className="rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-xs text-slate-300">
-              <p>
-                Verdict:{" "}
-                <span
-                  className={
-                    verdict === "correct"
-                      ? "text-emerald-300"
-                      : verdict === "close"
-                        ? "text-amber-300"
-                        : "text-red-300"
-                  }
-                >
-                  {verdict}
-                </span>
-              </p>
-              <p className="mt-1">Your guess: {guess || "—"}</p>
-            </div>
-          ) : (
-            <div className="rounded-2xl border border-white/5 bg-white/5 px-5 py-4 text-xs text-slate-300">
-              Tip: include either the artist or the full track name for a perfect score.
-            </div>
-          )}
-
-          <div className="mt-auto flex items-center justify-between">
-            <div className="flex items-center gap-2 text-xs uppercase tracking-[0.4em] text-slate-400">
-              <Flame className="h-4 w-4 text-neon" />
-              Streak {stats.streak}
-            </div>
-            {phase === "reveal" && (
-              <Button onClick={handleNext} className="gap-2">
-                {hasMoreRounds ? "Next track" : "See results"}
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            )}
+          <div className="mt-5 flex justify-center gap-3">
+            <button className="circle-btn" onClick={() => setPhase("listening")}>⟳</button>
+            <button className="circle-btn play" onClick={handleManualPlay}>{manualPlayRequired ? "▶" : "▶"}</button>
+            <style jsx>{`
+              .circle-btn {
+                width: 48px;
+                height: 48px;
+                border-radius: 50%;
+                border: 1px solid #1f1f1f;
+                background: #121212;
+                color: #f1f1f1;
+                display: grid;
+                place-items: center;
+                cursor: pointer;
+                transition: transform .2s ease, box-shadow .2s ease;
+              }
+              .circle-btn.play {
+                width: 64px;
+                height: 64px;
+                background: linear-gradient(135deg, #b155f0 0%, #f24f90 100%);
+                border: none;
+                box-shadow: 0 10px 30px rgba(200,90,200,0.35);
+                font-size: 20px;
+              }
+              .circle-btn:hover { transform: translateY(-1px); }
+            `}</style>
+            <button className="circle-btn" onClick={() => alert("Volume")}>🔊</button>
+          </div>
+          <div className="mt-3 text-center text-sm text-[#8a8a8a]">
+            <button onClick={handleSkipQuestion}>Passer cette question →</button>
           </div>
         </div>
       </div>
+
+      <aside className="hidden h-full border-l border-[#1b1b1b] bg-black px-4 py-5 lg:block">
+        <div className="mb-3 text-xs uppercase tracking-[0.08em] text-[#9b9b9b]">Historique</div>
+        <div className="flex flex-col gap-2">
+          {history.map(item => (
+            <div
+              key={item.round}
+              className={`rounded-lg border px-3 py-3 ${
+                item.state === "correct"
+                  ? "border-[#246b38] bg-[rgba(46,204,112,0.1)]"
+                  : item.state === "wrong"
+                    ? "border-[#813131] bg-[rgba(195,66,66,0.14)]"
+                    : item.state === "current"
+                      ? "border-[#2f2f2f] bg-[#161616]"
+                      : "border-[#1f1f1f] bg-[#0f0f0f]"
+              }`}
+            >
+              <div className="mb-1 flex items-center justify-between text-[12px] text-[#9b9b9b]">
+                <span>Manche {item.round}</span>
+                {item.state === "correct" ? (
+                  <span className="rounded-full border border-[#2e8d55] bg-[rgba(46,204,112,0.14)] px-2 py-[2px] text-[11px] text-[#67e08f]">✔ Correct</span>
+                ) : item.state === "wrong" ? (
+                  <span className="rounded-full border border-[#7f3030] bg-[rgba(195,66,66,0.12)] px-2 py-[2px] text-[11px] text-[#f19595]">✕ Incorrect</span>
+                ) : item.state === "current" ? (
+                  <span className="rounded-full border border-[#2a2a2a] bg-[#1d1d1d] px-2 py-[2px] text-[11px] text-[#c9c9c9]">En cours…</span>
+                ) : (
+                  <span className="rounded-full border border-[#2a2a2a] bg-[#1d1d1d] px-2 py-[2px] text-[11px] text-[#c9c9c9]">À venir</span>
+                )}
+              </div>
+              <div className="text-sm font-semibold text-white">{item.title}</div>
+              <div className="text-xs text-[#b5b5b5]">{item.artist}</div>
+            </div>
+          ))}
+        </div>
+      </aside>
     </div>
   )
 }
@@ -532,247 +721,4 @@ function evaluateGuess(guess: string, track: SoloTrack): Verdict {
     return "close"
   }
   return "wrong"
-}
-
-type SpotifyPlaybackControls = {
-  ready: boolean
-  error: string | null
-  play: (trackId: string) => Promise<void>
-  pause: () => Promise<void>
-}
-
-function useSpotifyPlayback(enabled: boolean): SpotifyPlaybackControls {
-  const [ready, setReady] = useState(false)
-  const [playbackError, setPlaybackError] = useState<string | null>(null)
-  const playerRef = useRef<SpotifyPlayer | null>(null)
-  const deviceIdRef = useRef<string | null>(null)
-  const activatedRef = useRef(false)
-
-  const getLatestToken = useCallback(async () => {
-    try {
-      const { accessToken } = await api.getSpotifyToken()
-      if (!accessToken) {
-        setPlaybackError("Spotify token unavailable. Reconnect your account.")
-        throw new Error("spotify_token_missing")
-      }
-      setPlaybackError(null)
-      return accessToken
-    } catch (err) {
-      console.error("spotify_token_fetch_failed", err)
-      if (err instanceof ApiError) {
-        const message =
-          err.message ||
-          "Spotify authorisation failed. Please reconnect your Spotify account in settings."
-        setPlaybackError(message)
-      } else {
-        setPlaybackError("Unable to refresh Spotify token. Try reconnecting your account.")
-      }
-      throw err
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!enabled || typeof window === "undefined") return
-
-    if (!document.getElementById("spotify-web-playback")) {
-      const script = document.createElement("script")
-      script.id = "spotify-web-playback"
-      script.src = "https://sdk.scdn.co/spotify-player.js"
-      script.async = true
-      document.body.appendChild(script)
-    }
-
-    const initializePlayer = () => {
-      if (playerRef.current || !window.Spotify) return
-
-      const player = new window.Spotify.Player({
-        name: "Blindify Web Player",
-        getOAuthToken: async cb => {
-          try {
-            const token = await getLatestToken()
-            cb(token)
-          } catch {
-            cb("")
-          }
-        },
-        volume: 0.6,
-      })
-
-      player.addListener("ready", ({ device_id }) => {
-        deviceIdRef.current = device_id
-        setReady(true)
-        setPlaybackError(null)
-      })
-
-      player.addListener("not_ready", () => {
-        deviceIdRef.current = null
-        setReady(false)
-      })
-
-      player.addListener("initialization_error", ({ message }) => {
-        console.error("spotify_initialization_error", message)
-        setPlaybackError(message)
-      })
-      player.addListener("authentication_error", ({ message }) => {
-        console.error("spotify_authentication_error", message)
-        setPlaybackError("Spotify authentication failed. Please reconnect your Spotify account.")
-      })
-      player.addListener("account_error", ({ message }) => {
-        console.error("spotify_account_error", message)
-        setPlaybackError("Spotify account not eligible. Premium is required.")
-      })
-      player.addListener("playback_error", ({ message }) => {
-        console.error("spotify_playback_error", message)
-        setPlaybackError("Playback failed on Spotify. Check your active device.")
-      })
-
-      playerRef.current = player
-      player.connect().catch(err => {
-        console.error("spotify_connect_failed", err)
-        setPlaybackError("Spotify player connection failed.")
-      })
-    }
-
-    if (window.Spotify) {
-      initializePlayer()
-    } else {
-      window.onSpotifyWebPlaybackSDKReady = initializePlayer
-    }
-
-    return () => {
-      window.onSpotifyWebPlaybackSDKReady = undefined
-      if (playerRef.current) {
-        try {
-          playerRef.current.disconnect()
-        } catch (err) {
-          console.error("spotify_disconnect_failed", err)
-        }
-        playerRef.current = null
-      }
-      deviceIdRef.current = null
-      setReady(false)
-    }
-  }, [enabled, getLatestToken])
-
-  const play = useCallback(
-    async (trackId: string) => {
-      if (!enabled || !trackId) return
-      if (!deviceIdRef.current) {
-        setPlaybackError("Spotify player not ready. Open Spotify and select the Blindify Web Player.")
-        throw new Error("spotify_device_unavailable")
-      }
-
-      const token = await getLatestToken()
-      const headers = {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      }
-
-      if (!activatedRef.current && playerRef.current?.activateElement) {
-        try {
-          await playerRef.current.activateElement()
-          activatedRef.current = true
-        } catch (err) {
-          console.warn("spotify_activate_element_failed", err)
-        }
-      }
-
-      await fetch(`https://api.spotify.com/v1/me/player/pause?device_id=${deviceIdRef.current}`, {
-        method: "PUT",
-        headers: { Authorization: `Bearer ${token}` },
-      }).catch(() => undefined)
-
-      await fetch("https://api.spotify.com/v1/me/player", {
-        method: "PUT",
-        headers,
-        body: JSON.stringify({ device_ids: [deviceIdRef.current], play: false }),
-      }).catch(err => {
-        console.error("spotify_transfer_failed", err)
-      })
-
-      await new Promise(resolve => setTimeout(resolve, 150))
-
-      const response = await fetch(
-        `https://api.spotify.com/v1/me/player/play?device_id=${deviceIdRef.current}`,
-        {
-          method: "PUT",
-          headers,
-          body: JSON.stringify({ uris: [`spotify:track:${trackId}`], position_ms: 0 }),
-        }
-      )
-
-      if (!response.ok && response.status !== 204) {
-        const fallback =
-          response.status === 404
-            ? "Activate the Blindify Web Player in Spotify (devices list) and keep Spotify open."
-            : response.status === 403
-              ? "Spotify refused playback. A Premium account is required."
-              : "Spotify playback failed. Try again."
-        setPlaybackError(fallback)
-        throw new Error(fallback)
-      }
-      setPlaybackError(null)
-    },
-    [enabled, getLatestToken]
-  )
-
-  const pause = useCallback(async () => {
-    if (!enabled || !deviceIdRef.current) return
-    try {
-      const token = await getLatestToken()
-      await fetch(`https://api.spotify.com/v1/me/player/pause?device_id=${deviceIdRef.current}`, {
-        method: "PUT",
-        headers: { Authorization: `Bearer ${token}` },
-      })
-    } catch (err) {
-      console.error("spotify_pause_failed", err)
-    }
-  }, [enabled, getLatestToken])
-
-  return {
-    ready,
-    error: playbackError,
-    play,
-    pause,
-  }
-}
-
-function ListeningSurface({ active }: { active: boolean }) {
-  return (
-    <div
-      className={`absolute inset-0 bg-gradient-to-br from-purple-600/25 via-black to-emerald-500/25 transition ${
-        active ? "animate-pulse" : ""
-      }`}
-    />
-  )
-}
-
-function AudioBars() {
-  return (
-    <div className="flex items-end gap-1">
-      {Array.from({ length: 12 }).map((_, index) => (
-        <span
-          // eslint-disable-next-line react/no-array-index-key
-          key={index}
-          className="h-3 w-1.5 rounded-full bg-gradient-to-t from-emerald-400 via-purple-400 to-fuchsia-500"
-          style={{
-            animation: `equalize 1.4s ease-in-out ${index * 0.08}s infinite`,
-          }}
-        />
-      ))}
-      <style jsx>{`
-        @keyframes equalize {
-          0%,
-          100% {
-            transform: scaleY(0.3);
-            opacity: 0.6;
-          }
-          50% {
-            transform: scaleY(1);
-            opacity: 1;
-          }
-        }
-      `}</style>
-    </div>
-  )
 }

@@ -25,7 +25,7 @@ export function Hero() {
             réinventé.
           </h1>
           <p className="text-lg text-muted-foreground max-w-xl mx-auto lg:mx-0">
-            Joue avec tes playlists Spotify, seul ou entre amis, et découvre qui a vraiment l'oreille musicale la plus affûtée.
+            Joue avec tes playlists Spotify, seul ou entre amis, et découvre qui a vraiment l&apos;oreille musicale la plus affûtée.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
             <Link

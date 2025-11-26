@@ -1,8 +1,10 @@
-/** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: "export",
+  basePath: "/blindify",
+  trailingSlash: true,
   images: {
-    domains: ['i.scdn.co', 'mosaic.scdn.co'],
+    unoptimized: true,
   },
-}
+};
 
-export default nextConfig
+export default nextConfig;

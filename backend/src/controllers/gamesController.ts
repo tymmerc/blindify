@@ -5,12 +5,28 @@ import { getSessionContext } from "../utils/session";
 import { ok, fail } from "../utils/response";
 import type { AudioSourceRow } from "../types/audio";
 import { syncSpotifyLibrary } from "../services/providers/spotifySync";
+import axios from "axios";
+import previewFinder from "spotify-preview-finder";
 
 async function fetchAudioSources(
   userId: number,
   provider: MusicProvider,
-  count: number
+  count: number,
+  opts: { likedOnly?: boolean } = {}
 ): Promise<AudioSourceRow[]> {
+  if (opts.likedOnly) {
+    const { rows } = await pool.query<AudioSourceRow>(
+      `SELECT s.id, s.provider, s.external_id, s.title, s.artist, s.album_cover, s.audio_url, s.duration_ms, s.metadata
+       FROM audio_sources s
+       INNER JOIN likes l ON l.audio_source_id = s.id
+       WHERE l.user_id = $1 AND s.provider = $2
+       ORDER BY RANDOM()
+       LIMIT $3`,
+      [userId, provider, count]
+    );
+    return rows;
+  }
+
   const { rows } = await pool.query<AudioSourceRow>(
     `SELECT id, provider, external_id, title, artist, album_cover, audio_url, duration_ms, metadata
      FROM audio_sources
@@ -22,11 +38,114 @@ async function fetchAudioSources(
   return rows;
 }
 
+async function hydratePreviewUrl(
+  source: AudioSourceRow,
+  opts: { accessToken?: string; allowScrape?: boolean } = {}
+): Promise<string | null> {
+  if (source.provider !== "spotify") return source.audio_url ?? null;
+  const title = source.title?.trim();
+  const artist = source.artist?.trim();
+  if (!title) return null;
+
+  try {
+    const searchUrl = "https://api.spotify.com/v1/search";
+    const queries = [
+      [`track:${title}`, artist ? `artist:${artist}` : ""].filter(Boolean).join(" "),
+      title,
+    ];
+
+    let preview: string | null = null;
+    // First: official search if we have a token
+    if (opts.accessToken) {
+      for (const q of queries) {
+        if (preview) break;
+        if (!q) continue;
+        const { data } = await axios.get(searchUrl, {
+          params: { q, type: "track", limit: 1, market: "from_token" },
+          headers: { Authorization: `Bearer ${opts.accessToken}` },
+        });
+        preview = data?.tracks?.items?.[0]?.preview_url ?? null;
+      }
+    }
+
+    // Second: fallback using spotify-preview-finder (scrapes preview URLs)
+    if (!preview && opts.allowScrape) {
+      try {
+        const finderResult = await previewFinder(title, artist ?? undefined, 1);
+        if (finderResult?.success && finderResult.results?.length) {
+          const candidate = finderResult.results[0];
+          const scraped = candidate.previewUrls?.[0] ?? null;
+          preview = scraped ?? null;
+        }
+      } catch (finderErr) {
+        console.error("preview_scrape_failed", { id: source.id, err: finderErr });
+      }
+    }
+
+    if (preview) {
+      await pool.query("UPDATE audio_sources SET audio_url=$1 WHERE id=$2", [preview, source.id]);
+      return preview;
+    }
+    return null;
+  } catch (err) {
+    console.error("preview_lookup_failed", { id: source.id, err });
+    return null;
+  }
+}
+
+async function collectPlayableSources(
+  userId: number,
+  provider: MusicProvider,
+  desiredCount: number,
+  opts: { likedOnly?: boolean; accessToken?: string; allowScrape?: boolean }
+): Promise<AudioSourceRow[]> {
+  // Fetch a larger candidate pool to filter out tracks without preview
+  const candidateLimit = Math.min(desiredCount * 5, 200);
+  let candidates = await fetchAudioSources(userId, provider, candidateLimit, { likedOnly: opts.likedOnly });
+
+  if (provider === "spotify" && opts.accessToken) {
+    await Promise.all(
+      candidates.map(async source => {
+        if (!source.audio_url) {
+          const preview = await hydratePreviewUrl(source, {
+            accessToken: opts.accessToken!,
+            allowScrape: opts.allowScrape !== false,
+          });
+          if (preview) {
+            source.audio_url = preview;
+            console.log("preview_found", { sourceId: source.id, title: source.title });
+          } else {
+            console.log("no_preview_found", { sourceId: source.id, title: source.title });
+          }
+        }
+      })
+    );
+  } else if (provider === "spotify" && opts.allowScrape !== false) {
+    // Even without a token, try scrape fallback
+    await Promise.all(
+      candidates.map(async source => {
+        if (!source.audio_url) {
+          const preview = await hydratePreviewUrl(source, { allowScrape: true });
+          if (preview) {
+            source.audio_url = preview;
+            console.log("preview_found_scrape_only", { sourceId: source.id, title: source.title });
+          } else {
+            console.log("no_preview_found_scrape_only", { sourceId: source.id, title: source.title });
+          }
+        }
+      })
+    );
+  }
+
+  return candidates.filter(source => Boolean(source.audio_url)).slice(0, desiredCount);
+}
+
 export const gamesController = {
   async startSoloGame(req: Request, res: Response): Promise<void> {
     const preferredProvider = (req.body?.provider as MusicProvider | undefined) ?? undefined;
     const difficulty = typeof req.body?.difficulty === "string" ? req.body.difficulty : "normal";
     const count = Number.isFinite(Number(req.body?.count)) ? Math.min(Math.max(Number(req.body.count), 5), 25) : 10;
+    const likedOnly = req.body?.source === "liked";
 
     const context = await getSessionContext(req, res, {
       provider: preferredProvider,
@@ -42,8 +161,13 @@ export const gamesController = {
       return;
     }
 
-    let sources = await fetchAudioSources(context.user.id, provider, count);
+    // Pull a larger candidate set so we can filter out tracks without preview_url
+    let sources = await collectPlayableSources(context.user.id, provider, count, {
+      likedOnly,
+      accessToken: context.connection?.access_token ?? undefined,
+    });
 
+    // Try to resync library if we are short on tracks
     if (sources.length < count && provider === "spotify" && context.connection) {
       const { connection } = await syncSpotifyLibrary(
         context.user.id,
@@ -53,13 +177,28 @@ export const gamesController = {
       if (connection) {
         context.connection = connection;
       }
-      sources = await fetchAudioSources(context.user.id, provider, count);
+      sources = await collectPlayableSources(context.user.id, provider, count, {
+        likedOnly,
+        accessToken: connection?.access_token ?? undefined,
+      });
     }
 
-    if (sources.length < count) {
-      fail(res, "insufficient_tracks", "Pas assez de titres pour lancer la partie", 400, {
+    // If liked-only is too small, backfill with full library to avoid hard failure
+    if (likedOnly && sources.length < count) {
+      const remaining = count - sources.length;
+      const fallback = await collectPlayableSources(context.user.id, provider, remaining, {
+        likedOnly: false,
+        accessToken: context.connection?.access_token ?? undefined,
+      });
+      sources = [...sources, ...fallback];
+    }
+
+    const totalRounds = sources.length;
+
+    if (totalRounds < 5) {
+      fail(res, "insufficient_tracks", "Pas assez de titres avec extrait audio pour lancer la partie", 400, {
         needed: count,
-        available: sources.length,
+        available: totalRounds,
       });
       return;
     }
@@ -68,7 +207,7 @@ export const gamesController = {
       `INSERT INTO game_sessions (host_user_id, mode, difficulty, source_provider, total_rounds, state)
        VALUES ($1,'solo',$2,$3,$4,'in_progress')
        RETURNING id, mode, difficulty, source_provider, total_rounds, started_at`,
-      [context.user.id, difficulty, provider, count]
+      [context.user.id, difficulty, provider, totalRounds]
     );
     const session = sessions[0];
 

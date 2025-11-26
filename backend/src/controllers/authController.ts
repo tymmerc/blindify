@@ -103,9 +103,24 @@ async function performSpotifyCallback(req: Request, res: Response): Promise<void
   const grant = await spotify.authorizationCodeGrant(code);
   const { access_token, refresh_token, expires_in } = grant.body;
 
-  const { data: profile } = await axios.get("https://api.spotify.com/v1/me", {
-    headers: { Authorization: `Bearer ${access_token}` },
-  });
+  let profile: { id: string; display_name?: string; email?: string; images?: { url?: string }[] };
+  try {
+    const { data } = await axios.get("https://api.spotify.com/v1/me", {
+      headers: { Authorization: `Bearer ${access_token}` },
+    });
+    profile = data;
+  } catch (err) {
+    const status = (err as { response?: { status?: number } })?.response?.status;
+    if (status === 403) {
+      fail(
+        res,
+        "spotify_profile_forbidden",
+        "Spotify refuse l'accès à ce compte. Assure-toi que l'utilisateur est ajouté comme testeur dans la console Spotify ou que l'app est publiée."
+      );
+      return;
+    }
+    throw err;
+  }
 
   const user = await upsertUser("spotify", profile.id, {
     username: profile.display_name ?? profile.id,
@@ -267,6 +282,15 @@ export const authController = {
       const providerParam = (req.params.provider as MusicProvider | undefined) ?? "spotify";
       const stateParam = typeof req.query.state === "string" ? req.query.state : undefined;
 
+      console.log("oauth_callback_debug", {
+        providerParam,
+        stateParam,
+        session: req.session,
+        originalUrl: req.originalUrl,
+        query: req.query,
+        cookies: req.headers.cookie,
+      });
+
       if (!validateState(req, providerParam, stateParam)) {
         clearOAuthState(req);
         fail(res, "state_mismatch", "Vérification d'intégrité échouée", 400);
@@ -392,20 +416,15 @@ export const authController = {
       const scopes = new Set((connection.scope ?? []).map(scope => scope.toLowerCase()));
       const missing = SPOTIFY_PLAYBACK_SCOPES.filter(scope => !scopes.has(scope));
       if (missing.length > 0) {
-        fail(
-          res,
-          "spotify_scope_insufficient",
-          "Spotify permissions changed. Please reconnect your Spotify account to enable playback.",
-          400,
-          { missingScopes: missing }
-        );
-        return;
+        // We no longer block on playback scopes because preview lookups only need a basic token.
+        console.warn("spotify_scope_missing_for_playback", { missing });
       }
 
       ok(res, {
         accessToken: connection.access_token,
         expiresAt: connection.expires_at,
         provider: connection.provider,
+        missingScopes: missing,
       });
     } catch (error) {
       console.error("spotify_token_failed", error);

@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BlindBeats - Paramètres</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #0a0a0a;
+            color: #ffffff;
+            line-height: 1.6;
+            min-height: 100vh;
+            padding: 24px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 48px;
+        }
+
+        .back-button {
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: #ffffff;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .back-button:hover {
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        h1 {
+            font-size: 36px;
+            font-weight: 700;
+            letter-spacing: -1px;
+        }
+
+        .section {
+            background: #0f0f0f;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 12px;
+            padding: 32px;
+            margin-bottom: 24px;
+        }
+
+        .section-title {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 24px;
+            letter-spacing: -0.5px;
+        }
+
+        .setting-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .setting-item:last-child {
+            border-bottom: none;
+        }
+
+        .setting-info {
+            flex: 1;
+            padding-right: 24px;
+        }
+
+        .setting-label {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .setting-description {
+            font-size: 13px;
+            color: #808080;
+            line-height: 1.5;
+        }
+
+        .toggle-switch {
+            position: relative;
+            width: 52px;
+            height: 28px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .toggle-switch.active {
+            background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);
+        }
+
+        .toggle-slider {
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 24px;
+            height: 24px;
+            background: #ffffff;
+            border-radius: 50%;
+            transition: all 0.3s ease;
+        }
+
+        .toggle-switch.active .toggle-slider {
+            left: 26px;
+        }
+
+        .select-wrapper {
+            position: relative;
+        }
+
+        .select {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: #ffffff;
+            padding: 10px 40px 10px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: inherit;
+            cursor: pointer;
+            appearance: none;
+        }
+
+        .select:focus {
+            outline: none;
+            border-color: rgba(168, 85, 247, 0.5);
+        }
+
+        .select-wrapper::after {
+            content: '▼';
+            position: absolute;
+            right: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 10px;
+            color: #808080;
+            pointer-events: none;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 12px;
+        }
+
+        .btn {
+            padding: 10px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: none;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);
+            color: #ffffff;
+        }
+
+        .btn-primary:hover {
+            transform: scale(1.03);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.06);
+            color: #ffffff;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .danger-zone {
+            border-color: rgba(244, 67, 54, 0.3);
+        }
+
+        .btn-danger {
+            background: rgba(244, 67, 54, 0.1);
+            color: #f44336;
+            border: 1px solid rgba(244, 67, 54, 0.3);
+        }
+
+        .btn-danger:hover {
+            background: rgba(244, 67, 54, 0.2);
+        }
+
+        .storage-info {
+            background: rgba(168, 85, 247, 0.1);
+            border: 1px solid rgba(168, 85, 247, 0.3);
+            border-radius: 8px;
+            padding: 16px;
+            margin-top: 12px;
+        }
+
+        .storage-bar {
+            width: 100%;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 12px 0;
+        }
+
+        .storage-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #a855f7 0%, #ec4899 100%);
+            width: 42%;
+            transition: width 0.3s ease;
+        }
+
+        .storage-text {
+            font-size: 13px;
+            color: #b0b0b0;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        @media (max-width: 768px) {
+            .setting-item {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 16px;
+            }
+
+            h1 {
+                font-size: 28px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <button class="back-button" onclick="alert('Retour')">← Retour</button>
+        </div>
+
+        <h1 style="margin-bottom: 48px;">Paramètres</h1>
+
+        <div class="section">
+            <h2 class="section-title">Compte</h2>
+            
+            <div class="setting-item">
+                <div class="setting-info">
+                    <div class="setting-label">Nom d'utilisateur</div>
+                    <div class="setting-description">Jean Dupont</div>
+                </div>
+                <button class="btn btn-secondary">Modifier</button>
+            </div>
+
+            <div class="setting-item">
+                <div class="setting-info">
+                    <div class="setting-label">Email</div>
+                    <div class="setting-description">jean.dupont@email.com</div>
+                </div>
+                <button class="btn btn-secondary">Modifier</button>
+            </div>
+
+            <div class="setting-item">
+                <div class="setting-info">
+                    <div class="setting-label">Compte Spotify</div>
+                    <div class="setting-description">Connecté</div>
+                </div>
+                <button class="btn btn-secondary">Déconnecter</button>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2 class="section-title">Jeu</h2>
+            
+            <div class="setting-item">
+                <div class="setting-info">
+                    <div class="setting-label">Télécharger les titres likés en avance</div>
+                    <div class="setting-description">Précharge vos morceaux favoris pour un démarrage instantané des parties</div>
+                </div>
+                <div class="toggle-switch active" onclick="this.classList.toggle('active')">
+                    <div class="toggle-slider"></div>
+                </div>
+            </div>
+
+            <div class="storage-info">
+                <div class="storage-text">
+                    <span>Espace utilisé</span>
+                    <span>164 MB / 387 MB</span>
+                </div>
+                <div class="storage-bar">
+                    <div class="storage-fill"></div>
+                </div>
+                <div style="font-size: 12px; color: #808080; margin-top: 8px;">
+                    Les morceaux sont téléchargés automatiquement lorsque vous êtes connecté au Wi-Fi
+                </div>
+            </div>
+
+            <div class="setting-item">
+                <div class="setting-info">
+                    <div class="setting-label">Durée des extraits</div>
+                    <div class="setting-description">Temps d'écoute pour deviner chaque morceau</div>
+                </div>
+                <div class="select-wrapper">
+                    <select class="select">
+                        <option>5 secondes</option>
+                        <option selected>10 secondes</option>
+                        <option>15 secondes</option>
+                        <option>20 secondes</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="setting-item">
+                <div class="setting-info">
+                    <div class="setting-label">Difficulté</div>
+                    <div class="setting-description">Niveau de difficulté des questions</div>
+                </div>
+                <div class="select-wrapper">
+                    <select class="select">
+                        <option>Facile</option>
+                        <option selected>Normal</option>
+                        <option>Difficile</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="setting-item">
+                <div class="setting-info">
+                    <div class="setting-label">Son des notifications</div>
+                    <div class="setting-description">Activer les sons pour les bonnes et mauvaises réponses</div>
+                </div>
+                <div class="toggle-switch active" onclick="this.classList.toggle('active')">
+                    <div class="toggle-slider"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2 class="section-title">Confidentialité</h2>
+            
+            <div class="setting-item">
+                <div class="setting-info">
+                    <div class="setting-label">Profil public</div>
+                    <div class="setting-description">Permettre aux autres utilisateurs de voir votre profil</div>
+                </div>
+                <div class="toggle-switch active" onclick="this.classList.toggle('active')">
+                    <div class="toggle-slider"></div>
+                </div>
+            </div>
+
+            <div class="setting-item">
+                <div class="setting-info">
+                    <div class="setting-label">Afficher dans les classements</div>
+                    <div class="setting-description">Apparaître dans les classements publics</div>
+                </div>
+                <div class="toggle-switch active" onclick="this.classList.toggle('active')">
+                    <div class="toggle-slider"></div>
+                </div>
+            </div>
+
+            <div class="setting-item">
+                <div class="setting-info">
+                    <div class="setting-label">Partage d'activité</div>
+                    <div class="setting-description">Partager automatiquement vos scores sur les réseaux sociaux</div>
+                </div>
+                <div class="toggle-switch" onclick="this.classList.toggle('active')">
+                    <div class="toggle-slider"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2 class="section-title">Notifications</h2>
+            
+            <div class="setting-item">
+                <div class="setting-info">
+                    <div class="setting-label">Invitations de jeu</div>
+                    <div class="setting-description">Recevoir des notifications pour les invitations multijoueur</div>
+                </div>
+                <div class="toggle-switch active" onclick="this.classList.toggle('active')">
+                    <div class="toggle-slider"></div>
+                </div>
+            </div>
+
+            <div class="setting-item">
+                <div class="setting-info">
+                    <div class="setting-label">Nouveaux succès</div>
+                    <div class="setting-description">Être notifié lors du déblocage de succès</div>
+                </div>
+                <div class="toggle-switch active" onclick="this.classList.toggle('active')">
+                    <div class="toggle-slider"></div>
+                </div>
+            </div>
+
+            <div class="setting-item">
+                <div class="setting-info">
+                    <div class="setting-label">Nouveautés</div>
+                    <div class="setting-description">Recevoir des notifications sur les nouvelles fonctionnalités</div>
+                </div>
+                <div class="toggle-switch" onclick="this.classList.toggle('active')">
+                    <div class="toggle-slider"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section danger-zone">
+            <h2 class="section-title">Zone de danger</h2>
+            
+            <div class="setting-item">
+                <div class="setting-info">
+                    <div class="setting-label">Supprimer les données téléchargées</div>
+                    <div class="setting-description">Libérer l'espace de stockage en supprimant les morceaux téléchargés</div>
+                </div>
+                <button class="btn btn-danger" onclick="alert('Données supprimées')">Supprimer</button>
+            </div>
+
+            <div class="setting-item">
+                <div class="setting-info">
+                    <div class="setting-label">Réinitialiser les statistiques</div>
+                    <div class="setting-description">Remettre à zéro toutes vos statistiques et succès</div>
+                </div>
+                <button class="btn btn-danger" onclick="if(confirm('Êtes-vous sûr ?')) alert('Statistiques réinitialisées')">Réinitialiser</button>
+            </div>
+
+            <div class="setting-item">
+                <div class="setting-info">
+                    <div class="setting-label">Supprimer le compte</div>
+                    <div class="setting-description">Supprimer définitivement votre compte et toutes vos données</div>
+                </div>
+                <button class="btn btn-danger" onclick="if(confirm('Êtes-vous vraiment sûr ? Cette action est irréversible.')) alert('Compte supprimé')">Supprimer</button>
+            </div>
+        </div>
+
+        <div style="text-align: center; padding: 32px 0; color: #606060; font-size: 13px;">
+            BlindBeats v1.0.0 · <a href="#" style="color: #808080;">Conditions d'utilisation</a> · <a href="#" style="color: #808080;">Confidentialité</a>
+        </div>
+    </div>
+</body>
+</html>
