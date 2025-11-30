@@ -5,9 +5,19 @@ let socket: Socket | null = null
 
 export function getSocket(): Socket {
   if (!socket) {
-    socket = io(API_BASE_URL, {
+    const origin =
+      typeof window !== "undefined"
+        ? window.location.origin
+        : API_BASE_URL.replace(/\/blindify$/, "")
+    // Use base path for socket to avoid proxy issues in subpaths
+    const path =
+      API_BASE_URL.includes("/blindify") || (typeof window !== "undefined" && window.location.pathname.startsWith("/blindify"))
+        ? "/blindify/socket.io"
+        : "/socket.io"
+    socket = io(origin, {
       withCredentials: true,
-      transports: ["websocket"],
+      path,
+      transports: ["websocket", "polling"],
     })
   }
   return socket

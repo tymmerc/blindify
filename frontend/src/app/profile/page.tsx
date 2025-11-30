@@ -4,14 +4,8 @@ import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { api, type CurrentUserPayload } from "@/lib/api"
-import type { UserSummary } from "@/lib/types"
-
-const stats = [
-  { label: "Parties", value: "147" },
-  { label: "Précision", value: "87%" },
-  { label: "Points", value: "2 840" },
-  { label: "Série max", value: "18" },
-]
+import type { GameSessionSummary, UserSummary, UserStats } from "@/lib/types"
+import { BottomNav } from "@/components/BottomNav"
 
 const achievements = [
   { icon: "🏆", name: "Première victoire", desc: "Gagner votre première partie", unlocked: true },
@@ -22,18 +16,30 @@ const achievements = [
   { icon: "👑", name: "Champion", desc: "Gagner 50 parties en multijoueur", unlocked: false },
 ]
 
-const games = [
-  { title: "Top 2024", meta: "Aujourd'hui à 14:32 · Solo", score: "18/20" },
-  { title: "Workout Mix", meta: "Hier à 19:15 · Solo", score: "15/20" },
-  { title: "Chill Vibes", meta: "Il y a 2 jours · Multijoueur", score: "20/20" },
-  { title: "Road Trip", meta: "Il y a 3 jours · Solo", score: "16/20" },
-  { title: "Titres likés", meta: "Il y a 4 jours · Solo", score: "19/20" },
-]
+function formatDate(dateString: string | null | undefined): string {
+  if (!dateString) return "—"
+  const date = new Date(dateString)
+  if (Number.isNaN(date.getTime())) return "—"
+  return date.toLocaleDateString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
+}
+
+function formatAccuracy(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "0%"
+  return `${Math.round(value)}%`
+}
+
+function stateLabel(state: string): string {
+  if (state === "finished") return "Terminé"
+  if (state === "in_progress") return "En cours"
+  return state || "—"
+}
 
 export default function ProfilePage() {
   const router = useRouter()
   const [userPayload, setUserPayload] = useState<CurrentUserPayload | null>(null)
   const [loading, setLoading] = useState(true)
+  const [stats, setStats] = useState<UserStats | null>(null)
+  const [history, setHistory] = useState<GameSessionSummary[]>([])
 
   useEffect(() => {
     let active = true
@@ -46,6 +52,10 @@ export default function ProfilePage() {
           return
         }
         setUserPayload(me)
+        const [statsRes, historyRes] = await Promise.all([api.detailedStats(), api.gameHistory()])
+        if (!active) return
+        setStats(statsRes?.stats ?? null)
+        setHistory(historyRes?.sessions ?? [])
       } finally {
         if (active) setLoading(false)
       }
@@ -58,6 +68,7 @@ export default function ProfilePage() {
 
   const user: UserSummary | null = userPayload?.user ?? null
   const displayName = user?.username || "Jean Dupont"
+  const providerLabel = user?.provider ? user.provider.toUpperCase() : "Blindify"
   const initials = useMemo(() => {
     if (!displayName) return "?"
     return displayName
@@ -68,6 +79,19 @@ export default function ProfilePage() {
       .toUpperCase()
   }, [displayName])
 
+  const statCards = useMemo(() => {
+    const totalGames = stats?.totalGames ?? 0
+    const accuracy = formatAccuracy(stats?.accuracyRate ?? 0)
+    const bestStreak = stats?.bestStreak ?? 0
+    const avgTime = stats?.averageReactionTime ?? 0
+    return [
+      { label: "Parties", value: `${totalGames}` },
+      { label: "Précision", value: accuracy },
+      { label: "Temps moyen", value: avgTime ? `${avgTime} ms` : "—" },
+      { label: "Série max", value: `${bestStreak}` },
+    ]
+  }, [stats])
+
   if (loading) {
     return (
       <div className="grid min-h-screen place-items-center text-sm uppercase tracking-[0.3em] text-[var(--ma-muted)]">
@@ -77,7 +101,7 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--ma-bg)] text-white pb-16">
+    <div className="min-h-screen bg-[var(--ma-bg)] text-white pb-28">
       <div className="ma-container">
         <div className="mb-8 flex items-center justify-between">
           <Link
@@ -100,15 +124,15 @@ export default function ProfilePage() {
             {initials}
           </div>
           <h1 className="text-4xl font-bold tracking-[-0.04em]">{displayName}</h1>
-          <p className="mt-2 text-sm text-[var(--ma-muted)]">Membre depuis mars 2024</p>
+          <p className="mt-2 text-sm text-[var(--ma-muted)]">Compte {providerLabel}</p>
           <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-[rgba(168,85,247,0.3)] bg-[rgba(168,85,247,0.12)] px-4 py-2 text-sm font-semibold">
             <span>⭐</span>
-            <span>Niveau 12 · Expert</span>
+            <span>Niveau {Math.max(1, Math.floor((stats?.totalXp ?? 0) / 100) + 1)}</span>
           </div>
         </div>
 
         <div className="ma-stat-grid mb-10">
-          {stats.map(item => (
+          {statCards.map(item => (
             <div key={item.label} className="ma-card text-center">
               <div
                 className="text-3xl font-bold"
@@ -144,23 +168,28 @@ export default function ProfilePage() {
         <section>
           <h2 className="mb-4 text-2xl font-semibold tracking-[-0.02em]">Parties récentes</h2>
           <div className="ma-card divide-y divide-[var(--ma-border)]">
-            {games.map(game => (
-              <div key={game.title} className="flex items-center justify-between gap-4 py-4">
-                <div>
-                  <h4 className="text-base font-semibold">{game.title}</h4>
-                  <p className="text-sm text-[var(--ma-muted)]">{game.meta}</p>
+            {history.length === 0 ? (
+              <div className="py-6 text-center text-sm text-[var(--ma-muted)]">Aucune partie enregistrée.</div>
+            ) : (
+              history.slice(0, 6).map(game => (
+                <div key={game.id} className="flex items-center justify-between gap-4 py-4">
+                  <div>
+                    <h4 className="text-base font-semibold">
+                      {game.mode ? game.mode.charAt(0).toUpperCase() + game.mode.slice(1) : "Partie"} · {game.difficulty ?? "normal"}
+                    </h4>
+                    <p className="text-sm text-[var(--ma-muted)]">{formatDate(game.started_at)} · {game.source_provider ?? "—"}</p>
+                  </div>
+                  <div className="text-xs text-[var(--ma-muted)]">
+                    <span className="rounded-full border border-[var(--ma-border-strong)] px-3 py-1">{stateLabel(game.state)}</span>
+                    <div className="mt-1 text-right text-[11px]">{game.total_rounds ?? 0} manches</div>
+                  </div>
                 </div>
-                <div
-                  className="text-2xl font-bold"
-                  style={{ backgroundImage: "var(--ma-gradient)", WebkitBackgroundClip: "text", color: "transparent" }}
-                >
-                  {game.score}
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </section>
       </div>
+      <BottomNav active="profile" />
     </div>
   )
 }

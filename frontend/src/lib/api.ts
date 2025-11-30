@@ -4,6 +4,7 @@ import type {
   MultiplayerParticipant,
   MultiplayerRoom,
   ProviderConnectionSummary,
+  RoomSelfPreference,
   SoloGameResponse,
   SoloTrack,
   UserSummary,
@@ -44,10 +45,14 @@ export const api = {
   async startSoloGame(params: {
     difficulty?: "easy" | "normal" | "hard"
     source?: string
+    playlistId?: string
     count?: number
     provider?: string
   } = {}): Promise<SoloGameResponse> {
     return clientApi.startSoloGame(params)
+  },
+  async recordSoloResult(payload: { sessionId: number; rounds: number; correct: number; bestStreak: number }) {
+    return clientApi.recordSoloResult(payload)
   },
   async addLike(_userId: number | null | undefined, audioSourceId: string): Promise<void> {
     return clientApi.addLike(audioSourceId)
@@ -60,16 +65,38 @@ export const api = {
     difficulty?: "easy" | "normal" | "hard"
     maxPlayers?: number
     questionCount?: number
+    autoAdvance?: boolean
   }): Promise<{ room: MultiplayerRoom }> {
     return clientApi.createRoom(options)
   },
   async joinRoom(code: string): Promise<{ room: MultiplayerRoom }> {
     return clientApi.joinRoom(code)
   },
-  async roomDetails(code: string): Promise<{ room: MultiplayerRoom; participants: MultiplayerParticipant[] }> {
+  async roomDetails(code: string): Promise<{ room: MultiplayerRoom; participants: MultiplayerParticipant[]; selfPreference: RoomSelfPreference }> {
     return clientApi.roomDetails(code)
   },
-  async startMultiplayerGame(code: string, payload?: { provider?: string }): Promise<{
+  async roomState(code: string): Promise<{
+    room: MultiplayerRoom
+    session: {
+      id: number
+      mode: string
+      difficulty: string
+      provider: string
+      totalRounds: number
+      startedAt: string
+      roomCode: string
+    } | null
+    tracks: SoloTrack[]
+  }> {
+    return clientApi.roomState(code)
+  },
+  async setRoomPreference(code: string, payload: { source: string; playlistId?: string | null }) {
+    return clientApi.setRoomPreference(code, payload)
+  },
+  async startMultiplayerGame(
+    code: string,
+    payload?: { provider?: string; source?: string; playlistId?: string }
+  ): Promise<{
     session: {
       id: number
       mode: string
@@ -93,6 +120,9 @@ export const api = {
   },
   async detailedStats() {
     return clientApi.detailedStats()
+  },
+  async gameHistory() {
+    return clientApi.gameHistory()
   },
   setSessionCookie,
   clearSessionCookie,

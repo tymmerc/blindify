@@ -1,8 +1,10 @@
 import { API_BASE_URL } from "./config"
 import type {
+  GameSessionSummary,
   MultiplayerParticipant,
   MultiplayerRoom,
   ProviderConnectionSummary,
+  RoomSelfPreference,
   SoloGameResponse,
   SoloTrack,
   UserSummary,
@@ -115,6 +117,7 @@ export const clientApi = {
   async startSoloGame(options: {
     difficulty?: "easy" | "normal" | "hard"
     source?: string
+    playlistId?: string
     count?: number
     provider?: string
   } = {}): Promise<SoloGameResponse> {
@@ -127,8 +130,18 @@ export const clientApi = {
         difficulty: options.difficulty ?? "normal",
         source: options.source ?? "library",
         count: options.count ?? 10,
+        playlistId: options.playlistId,
         provider: options.provider,
       }),
+    })
+  },
+  async recordSoloResult(payload: { sessionId: number; rounds: number; correct: number; bestStreak: number }) {
+    await request("/api/games/solo/complete", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
     })
   },
   async addLike(audioSourceId: string): Promise<void> {
@@ -150,6 +163,7 @@ export const clientApi = {
     difficulty?: "easy" | "normal" | "hard"
     maxPlayers?: number
     questionCount?: number
+    autoAdvance?: boolean
   } = {}): Promise<{ room: MultiplayerRoom }> {
     return request<{ room: MultiplayerRoom }>("/api/rooms/create", {
       method: "POST",
@@ -163,12 +177,13 @@ export const clientApi = {
       headers: { "Content-Type": "application/json" },
     })
   },
-  async roomDetails(code: string): Promise<{ room: MultiplayerRoom; participants: MultiplayerParticipant[] }> {
-    return request<{ room: MultiplayerRoom; participants: MultiplayerParticipant[] }>(`/api/rooms/${code}`, {
+  async roomDetails(code: string): Promise<{ room: MultiplayerRoom; participants: MultiplayerParticipant[]; selfPreference: RoomSelfPreference }> {
+    return request<{ room: MultiplayerRoom; participants: MultiplayerParticipant[]; selfPreference: RoomSelfPreference }>(`/api/rooms/${code}`, {
       method: "GET",
     })
   },
-  async startMultiplayerGame(code: string, payload: { provider?: string } = {}): Promise<{
+  async roomState(code: string): Promise<{
+    room: MultiplayerRoom
     session: {
       id: number
       mode: string
@@ -177,6 +192,31 @@ export const clientApi = {
       totalRounds: number
       startedAt: string
       roomCode: string
+    } | null
+    tracks: SoloTrack[]
+  }> {
+    return request(`/api/rooms/${code}/state`, { method: "GET" })
+  },
+  async setRoomPreference(code: string, payload: { source: string; playlistId?: string | null }) {
+    return request(`/api/rooms/${code}/preferences`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })
+  },
+  async startMultiplayerGame(
+    code: string,
+    payload: { provider?: string; source?: string; playlistId?: string; autoAdvance?: boolean } = {}
+  ): Promise<{
+    session: {
+      id: number
+      mode: string
+      difficulty: string
+      provider: string
+      totalRounds: number
+      startedAt: string
+      roomCode: string
+      autoAdvance?: boolean
     }
     tracks: SoloTrack[]
   }> {
@@ -189,6 +229,7 @@ export const clientApi = {
         totalRounds: number
         startedAt: string
         roomCode: string
+        autoAdvance?: boolean
       }
       tracks: SoloTrack[]
     }>(`/api/rooms/${code}/start`, {
@@ -225,6 +266,9 @@ export const clientApi = {
     }
   }> {
     return request("/api/stats/detailed")
+  },
+  async gameHistory(): Promise<{ sessions: GameSessionSummary[] }> {
+    return request("/api/games/history")
   },
 }
 

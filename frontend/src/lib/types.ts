@@ -49,6 +49,17 @@ export type UserStats = {
   lastPlayedAt: string | null
 }
 
+export type GameSessionSummary = {
+  id: number
+  mode: string
+  difficulty: string
+  source_provider: MusicProvider | string
+  total_rounds: number
+  started_at: string
+  ended_at: string | null
+  state: string
+}
+
 export type MultiplayerRoom = {
   id: number
   room_code: string
@@ -58,9 +69,15 @@ export type MultiplayerRoom = {
   question_count: number
   difficulty: string
   session_id?: number | null
+  auto_advance?: boolean
 }
 
 export type MultiplayerParticipant = {
   user_id: number
   username: string | null
 }
+
+export type RoomSelfPreference = {
+  source_pref: string | null
+  playlist_pref: string | null
+} | null

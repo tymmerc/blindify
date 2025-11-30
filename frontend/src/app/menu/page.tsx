@@ -5,7 +5,10 @@ import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { api, type CurrentUserPayload } from "@/lib/api"
-import type { UserSummary } from "@/lib/types"
+import type { GameSessionSummary, UserSummary } from "@/lib/types"
+import { fetchUserDashboard } from "@/lib/userData"
+import { BottomNav } from "@/components/BottomNav"
+import { ArrowRight, Play, Users } from "lucide-react"
 
 type Playlist = {
   id: string
@@ -23,11 +26,38 @@ const fallbackPlaylists: Playlist[] = [
   { title: "Road Trip", count: 156, emoji: "🚗", id: "road-trip" },
 ]
 
-const activity = [
-  { title: "Top 2024", time: "Aujourd'hui à 14:32", score: "18/20" },
-  { title: "Workout Mix", time: "Hier à 19:15", score: "15/20" },
-  { title: "Chill Vibes", time: "Il y a 2 jours", score: "20/20" },
+const friends = [
+  { name: "Lina M.", status: "En ligne", nowPlaying: "Solo — Road Trip", accent: "purple" },
+  { name: "Ethan", status: "En ligne", nowPlaying: "Multijoueur — Top 2024", accent: "pink" },
+  { name: "Nora", status: "Hors ligne", nowPlaying: "Dernière partie: Chill Vibes", accent: "emerald" },
+  { name: "Malik", status: "En ligne", nowPlaying: "Solo — Focus Mix", accent: "blue" },
 ]
+
+type ActivityItem = {
+  title: string
+  time: string
+  meta: string
+  rounds: number
+  state: string
+}
+
+const fallbackActivity = [
+  { title: "Partie rapide", time: "Aujourd'hui", meta: "Solo · normal", rounds: 10, state: "Terminé" },
+  { title: "Top 2024", time: "Hier", meta: "Multijoueur · hard", rounds: 12, state: "Terminé" },
+]
+
+function formatDate(dateString: string | null | undefined): string {
+  if (!dateString) return "—"
+  const date = new Date(dateString)
+  if (Number.isNaN(date.getTime())) return "—"
+  return date.toLocaleDateString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
+}
+
+function stateLabel(state: string | null | undefined): string {
+  if (state === "finished") return "Terminé"
+  if (state === "in_progress") return "En cours"
+  return state || "—"
+}
 
 export default function MenuPage() {
   const router = useRouter()
@@ -42,6 +72,8 @@ export default function MenuPage() {
     { label: "Points", value: "—" },
     { label: "Niveau", value: "—" },
   ])
+  const [history, setHistory] = useState<GameSessionSummary[]>([])
+  const [quickJoin, setQuickJoin] = useState("")
 
   useEffect(() => {
     let active = true
@@ -122,27 +154,29 @@ export default function MenuPage() {
   }, [userPayload])
 
   useEffect(() => {
+    if (!userPayload) return
     let cancelled = false
-    async function loadStats() {
+    async function loadDashboard() {
       try {
-        const res = await api.detailedStats()
+        const { stats: fetchedStats, history: fetchedHistory } = await fetchUserDashboard()
         if (cancelled) return
-        const level = Math.max(1, Math.floor((res.stats.totalXp ?? 0) / 100) + 1)
+        const level = Math.max(1, Math.floor((fetchedStats?.totalXp ?? 0) / 100) + 1)
         setStats([
-          { label: "Parties", value: String(res.stats.totalGames ?? 0) },
-          { label: "Précision", value: `${Math.round(res.stats.accuracyRate ?? 0)}%` },
-          { label: "Points", value: String(res.stats.totalXp ?? 0) },
+          { label: "Parties", value: String(fetchedStats?.totalGames ?? 0) },
+          { label: "Précision", value: `${Math.round(fetchedStats?.accuracyRate ?? 0)}%` },
+          { label: "Points", value: String(fetchedStats?.totalXp ?? 0) },
           { label: "Niveau", value: String(level) },
         ])
+        setHistory(fetchedHistory ?? [])
       } catch (err) {
-        console.error("load_stats_failed", err)
+        console.error("load_dashboard_failed", err)
       }
     }
-    loadStats()
+    loadDashboard()
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [userPayload])
 
   const user: UserSummary | null = userPayload?.user ?? null
   const isSpotifyUser = user?.provider === "spotify"
@@ -155,6 +189,40 @@ export default function MenuPage() {
       .join("")
       .toUpperCase()
   }, [user])
+  const greeting = useMemo(() => {
+    const hour = new Date().getHours()
+    return hour >= 18 || hour < 6 ? "Bonsoir" : "Bonjour"
+  }, [])
+
+  const activityItems =
+    history.length > 0
+      ? history.slice(0, 6).map(item => ({
+          title: item.mode ? item.mode.charAt(0).toUpperCase() + item.mode.slice(1) : "Partie",
+          time: formatDate(item.started_at),
+          meta: `${item.difficulty ?? "normal"} · ${item.source_provider ?? "—"}`,
+          rounds: item.total_rounds ?? 0,
+          state: stateLabel(item.state),
+        }))
+      : []
+
+  const resumeSession = useMemo(() => {
+    if (!history.length) return null
+    const candidate = history.find(item => item.state === "in_progress") ?? history[0]
+    const href = candidate.mode === "multiplayer" ? "/multiplayer" : "/solo"
+    return {
+      href,
+      title: candidate.mode === "multiplayer" ? "Rejoindre ta room en cours" : "Reprendre ta partie solo",
+      meta: `${stateLabel(candidate.state)} · ${candidate.total_rounds ?? 0} manches`,
+      time: formatDate(candidate.started_at),
+    }
+  }, [history])
+
+  const quickJoinSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const code = quickJoin.trim().toUpperCase()
+    if (!code) return
+    router.push(`/multiplayer?code=${encodeURIComponent(code)}`)
+  }
 
   if (loading) {
     return (
@@ -165,133 +233,199 @@ export default function MenuPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--ma-bg)] text-white pb-28">
-      <div className="ma-container">
-        <div className="relative overflow-hidden rounded-3xl border border-[var(--ma-border)] bg-[#0b0b0f] px-6 py-8 shadow-[0_25px_70px_rgba(0,0,0,0.4)]">
-          <div className="absolute -left-20 -top-20 h-56 w-56 rounded-full bg-[rgba(168,85,247,0.15)] blur-3xl" />
-          <div className="absolute -right-10 top-0 h-48 w-48 rounded-full bg-[rgba(34,197,94,0.12)] blur-3xl" />
-          <div className="relative grid gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
-            <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--ma-gradient)] text-lg font-semibold shadow-[0_10px_30px_rgba(168,85,247,0.35)]">
-                {initials}
-              </div>
-              <div className="greeting">
-                <p className="text-xs uppercase tracking-[0.3em] text-[var(--ma-muted)]">Bienvenue</p>
-                <h1 className="text-2xl font-semibold tracking-[-0.02em]">Bonjour, {user?.username ?? "Joueur"}</h1>
-                <p className="text-sm text-[var(--ma-muted)]">Prêt pour une nouvelle session ?</p>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center justify-start gap-3 lg:justify-end">
-              <Link
-                href="/modes"
-                className="rounded-xl border border-[var(--ma-border-strong)] px-4 py-2 text-sm font-semibold text-white/90 transition hover:bg-white/5"
-              >
-                Choisir un mode
-              </Link>
-            </div>
+    <div className="min-h-screen bg-black text-white pb-20">
+      <div className="w-full px-3 sm:px-4 lg:px-6 mx-auto max-w-none">
+        <div className="grid auto-rows-min gap-5 lg:gap-7 md:grid-cols-[240px,minmax(0,1fr),240px] xl:grid-cols-[280px,minmax(0,1fr),280px] items-start">
+          <div className="hidden md:block sticky top-4">
+            <FriendsPanel />
           </div>
 
-          <div className="ma-stat-grid mt-8">
-            {stats.map(item => (
-              <div key={item.label} className="ma-stat-card shadow-[0_10px_30px_rgba(0,0,0,0.35)] text-center">
-                <div className="ma-stat-label">{item.label}</div>
-                <div className="ma-stat-value">{item.value}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="my-10 overflow-hidden rounded-3xl bg-[var(--ma-gradient)] px-6 py-10 shadow-[0_30px_80px_rgba(168,85,247,0.3)] lg:px-10">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-            <div className="space-y-2">
-              <p className="text-xs uppercase tracking-[0.3em] text-white/80">Mode express</p>
-              <h2 className="text-3xl font-bold leading-tight">Partie rapide</h2>
-              <p className="text-white/85">20 morceaux aléatoires de votre bibliothèque</p>
+          <div className="space-y-7 max-w-[1100px] w-full mx-auto">
+            <div className="grid gap-4 md:hidden">
+              <FriendsPanel />
+              <HistoryPanel items={activityItems.length ? activityItems : fallbackActivity} />
             </div>
-            <Link
-              href="/solo?source=liked&count=10"
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-white/95 px-6 py-3 text-sm font-semibold text-[#a855f7] shadow-[0_12px_32px_rgba(0,0,0,0.25)] transition hover:scale-[1.02]"
-            >
-              Jouer maintenant
-            </Link>
-          </div>
-        </div>
 
-        <section className="ma-section">
-          <div className="mb-6 flex items-center justify-between gap-3">
-            <div>
-              <h2 className="text-xl font-semibold">Vos playlists</h2>
-              <p className="text-sm text-[var(--ma-muted)]">
-                {isSpotifyUser
-                  ? playlistError ?? "Synchronisées depuis votre bibliothèque Spotify"
-                  : "Connectez Spotify pour charger vos playlists"}
-              </p>
-            </div>
-            <Link href="/playlists" className="text-sm font-semibold text-white underline-offset-4 hover:underline">
-              Voir tout
-            </Link>
-          </div>
-          {!isSpotifyUser ? (
-            <div className="ma-card flex flex-col items-start gap-3 border-[rgba(168,85,247,0.25)] bg-[rgba(168,85,247,0.08)] md:flex-row md:items-center md:justify-between">
-              <div>
-                <p className="text-base font-semibold">Connectez votre compte Spotify</p>
-                <p className="text-sm text-[var(--ma-muted)]">
-                  Récupérez vos playlists et lancez des parties personnalisées.
-                </p>
-              </div>
-              <Link
-                href="/auth/login"
-                className="ma-btn-primary px-4 py-3 text-sm font-semibold shadow-[0_12px_32px_rgba(168,85,247,0.3)]"
-              >
-                Se connecter à Spotify
-              </Link>
-            </div>
-          ) : null}
-          <PlaylistGrid playlists={playlists} loading={loadingPlaylists} />
-        </section>
-
-        <section className="mb-16">
-          <h2 className="text-xl font-semibold mb-6">Activité récente</h2>
-          <div className="ma-card px-0">
-            {activity.map((item, index) => (
-              <div
-                key={item.title}
-                className={`activity-item flex items-center justify-between px-6 py-5 ${
-                  index < activity.length - 1 ? "border-b border-[var(--ma-border)]" : ""
-                }`}
-              >
-                <div className="activity-info">
-                  <h4 className="text-base font-semibold">{item.title}</h4>
-                  <p className="text-sm text-[var(--ma-muted)]">{item.time}</p>
+            <div className="relative overflow-hidden rounded-[18px] border border-[var(--ma-border)] bg-gradient-to-r from-[#0b0b0f] via-[#121222] to-[#0f0f0f] px-5 py-8 shadow-[0_10px_24px_rgba(0,0,0,0.25)]">
+              <div className="relative grid gap-8 lg:grid-cols-[1.2fr_0.8fr] lg:items-center">
+                <div className="flex flex-col gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#4a4a4a] text-base font-semibold">
+                      {initials}
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.3em] text-[#8a8a8a]">Bienvenue</p>
+                      <h1 className="text-2xl font-semibold tracking-[-0.02em]">{greeting}, {user?.username ?? "Joueur"}</h1>
+                      <p className="text-sm text-[#8a8a8a]">Prêt à lancer une partie ?</p>
+                    </div>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Link href="/solo?source=liked&count=20" className="ma-btn-primary flex items-center justify-center gap-2 rounded-xl px-5 py-4 text-base font-semibold">
+                      <Play className="h-4 w-4" />
+                      Jouer en solo
+                    </Link>
+                    <Link href="/multiplayer" className="flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-5 py-4 text-base font-semibold shadow-[0_12px_32px_rgba(255,255,255,0.05)] transition hover:border-white/20">
+                      <Users className="h-4 w-4" />
+                      Lancer un multi
+                    </Link>
+                  </div>
+                  <form onSubmit={quickJoinSubmit} className="flex flex-col gap-2 rounded-xl border border-white/10 bg-black/40 p-4 sm:flex-row sm:items-center sm:gap-3">
+                    <div className="flex-1">
+                      <p className="text-xs uppercase tracking-[0.3em] text-[var(--ma-muted)]">Quick join</p>
+                      <div className="mt-1 flex gap-2">
+                        <input
+                          value={quickJoin}
+                          onChange={event => setQuickJoin(event.target.value.toUpperCase())}
+                          placeholder="Code room"
+                          className="w-full rounded-lg border border-[var(--ma-border)] bg-black/60 px-3 py-3 text-sm text-white outline-none focus:border-[rgba(168,85,247,0.6)]"
+                        />
+                      </div>
+                    </div>
+                    <button
+                      type="submit"
+                      className="ma-btn-primary flex items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-semibold disabled:opacity-60"
+                      disabled={!quickJoin.trim()}
+                    >
+                      <ArrowRight className="h-4 w-4" />
+                      Rejoindre
+                    </button>
+                  </form>
                 </div>
-                <div className="activity-score text-2xl font-bold bg-clip-text text-transparent" style={{ backgroundImage: "var(--ma-gradient)" }}>
-                  {item.score}
+
+                <div className="space-y-4 rounded-2xl border border-white/10 bg-black/40 p-5 shadow-[0_16px_48px_rgba(0,0,0,0.35)]">
+                  <p className="text-xs uppercase tracking-[0.3em] text-[var(--ma-muted)]">Action rapide</p>
+                  {resumeSession ? (
+                    <Link
+                      href={resumeSession.href}
+                      className="block rounded-xl border border-[rgba(59,130,246,0.3)] bg-[rgba(59,130,246,0.12)] p-4 transition hover:border-[rgba(59,130,246,0.5)]"
+                    >
+                      <p className="text-sm font-semibold text-white">{resumeSession.title}</p>
+                      <p className="text-xs text-[var(--ma-muted)]">{resumeSession.meta}</p>
+                      <p className="text-[11px] text-[var(--ma-muted)] mt-1">Commencée : {resumeSession.time}</p>
+                    </Link>
+                  ) : (
+                    <div className="rounded-xl border border-[var(--ma-border)] bg-white/5 p-4 text-sm text-[var(--ma-muted)]">
+                      Aucune session en cours. Lance un mode express ou rejoins une room.
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2 gap-3 text-sm text-[var(--ma-muted)]">
+                    {stats.map(item => (
+                      <div key={item.label} className="rounded-lg border border-white/5 bg-white/5 px-3 py-3">
+                        <p className="text-[11px] uppercase tracking-[0.2em]">{item.label}</p>
+                        <p className="text-lg font-semibold text-white">{item.value}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
-            ))}
+            </div>
+
+            <div className="overflow-hidden rounded-[18px] border border-[var(--ma-border)] bg-[#0f0f0f] px-5 py-8 shadow-[0_10px_24px_rgba(0,0,0,0.25)] lg:px-8">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="space-y-2">
+                  <p className="text-xs uppercase tracking-[0.3em] text-[#8a8a8a]">Mode express</p>
+                  <h2 className="text-3xl font-bold leading-tight">Partie rapide</h2>
+                  <p className="text-[#cfcfcf]">20 morceaux aléatoires de votre bibliothèque</p>
+                </div>
+                <Link
+                  href="/solo?source=liked&count=10"
+                  className="uiverse-btn shrink-0"
+                >
+                  <span className="uiverse-inner">Jouer maintenant</span>
+                </Link>
+              </div>
+            </div>
+
+            <section id="modes" className="ma-section p-0">
+              <h2 className="mb-6 text-xl font-semibold">Choisir un mode</h2>
+              <div className="grid gap-6 md:grid-cols-2">
+                {[
+                  {
+                    title: "Solo",
+                    icon: "🎧",
+                    description: "Jouez à votre rythme et améliorez votre score personnel.",
+                    features: ["Pas de limite de temps", "Historique des manches", "Statistiques détaillées"],
+                    href: "/solo",
+                    cta: "Jouer en solo",
+                  },
+                  {
+                    title: "Multijoueur",
+                    icon: "👥",
+                    description: "Défiez vos amis en temps réel et montez au classement.",
+                    features: ["Chat en direct", "Classement en temps réel", "Jusqu'à 10 joueurs"],
+                    href: "/multiplayer",
+                    cta: "Jouer en multijoueur",
+                  },
+                ].map(mode => (
+                  <div
+                    key={mode.title}
+                    className="relative overflow-hidden rounded-2xl border border-[var(--ma-border)] bg-[var(--ma-surface)] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.25)]"
+                  >
+                  <div className="relative z-10 flex flex-col gap-3">
+                      <div className="text-4xl">{mode.icon}</div>
+                      <h3 className="text-2xl font-bold">{mode.title}</h3>
+                      <p className="text-sm text-[var(--ma-muted)]">{mode.description}</p>
+                      <div className="mt-1 flex flex-col gap-2 text-[var(--ma-muted)]">
+                        {mode.features.map(f => (
+                          <div key={f} className="flex items-center gap-2 text-sm">
+                            <span className="text-[#a855f7]">✓</span>
+                            <span>{f}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <Link href={mode.href} className="ma-btn-primary mt-2 w-full justify-center">
+                        {mode.cta}
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="ma-section p-0">
+              <div className="mb-6 flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-xl font-semibold">Vos playlists</h2>
+                  <p className="text-sm text-[var(--ma-muted)]">
+                    {isSpotifyUser
+                      ? playlistError ?? "Synchronisées depuis votre bibliothèque Spotify"
+                      : "Connectez Spotify pour charger vos playlists"}
+                  </p>
+                </div>
+                <Link href="/playlists" className="text-sm font-semibold text-white underline-offset-4 hover:underline">
+                  Voir tout
+                </Link>
+              </div>
+              {!isSpotifyUser ? (
+                <div className="ma-card flex flex-col items-start gap-3 border-[rgba(168,85,247,0.25)] bg-[rgba(168,85,247,0.08)] md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <p className="text-base font-semibold">Connectez votre compte Spotify</p>
+                    <p className="text-sm text-[var(--ma-muted)]">
+                      Récupérez vos playlists et lancez des parties personnalisées.
+                    </p>
+                  </div>
+                  <Link
+                    href="/auth/login"
+                  className="ma-btn-primary px-4 py-3 text-sm font-semibold shadow-[0_12px_32px_rgba(168,85,247,0.25)]"
+                >
+                  Se connecter à Spotify
+                </Link>
+              </div>
+            ) : null}
+              <PlaylistGrid playlists={playlists} loading={loadingPlaylists} />
+            </section>
+
+            {/* Activité récente retirée pour alléger la page */}
           </div>
-        </section>
+
+          <div className="hidden md:block sticky top-4">
+            <HistoryPanel items={activityItems.length ? activityItems : fallbackActivity} />
+          </div>
+        </div>
       </div>
 
       <nav className="ma-nav-bottom">
-        <div className="ma-nav-inner">
-          <Link href="/menu" className="ma-nav-item active">
-            <span className="text-lg">○</span>
-            <span className="text-[11px] font-semibold uppercase tracking-[0.4px]">Accueil</span>
-          </Link>
-          <Link href="/modes" className="ma-nav-item">
-            <span className="text-lg">▶</span>
-            <span className="text-[11px] font-semibold uppercase tracking-[0.4px]">Jouer</span>
-          </Link>
-          <Link href="/stats" className="ma-nav-item">
-            <span className="text-lg">◆</span>
-            <span className="text-[11px] font-semibold uppercase tracking-[0.4px]">Stats</span>
-          </Link>
-          <Link href="/profile" className="ma-nav-item">
-            <span className="text-lg">◉</span>
-            <span className="text-[11px] font-semibold uppercase tracking-[0.4px]">Profil</span>
-          </Link>
-        </div>
+        <BottomNav active="menu" />
       </nav>
     </div>
   )
@@ -324,7 +458,7 @@ function PlaylistGrid({ playlists, loading }: { playlists: Playlist[]; loading: 
       {playlists.map(item => (
         <div
           key={item.id}
-          className="ma-card relative overflow-hidden cursor-pointer border-[rgba(255,255,255,0.08)] bg-[#0f0f0f] transition duration-200 hover:-translate-y-1 hover:border-[rgba(168,85,247,0.3)] hover:shadow-[0_12px_32px_rgba(168,85,247,0.15)]"
+          className="ma-card relative overflow-hidden border-[rgba(255,255,255,0.08)] bg-[#0f0f0f] transition-colors duration-150 hover:border-[rgba(168,85,247,0.3)]"
         >
           <div className="relative mb-4 aspect-square w-full overflow-hidden rounded-lg bg-[var(--ma-gradient)]">
             {item.cover ? (
@@ -339,8 +473,127 @@ function PlaylistGrid({ playlists, loading }: { playlists: Playlist[]; loading: 
             <p className="text-sm text-[var(--ma-muted)]">{item.count} morceaux</p>
             {item.owner ? <p className="text-xs text-[var(--ma-muted)]">Par {item.owner}</p> : null}
           </div>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <Link
+              href={`/solo?source=playlist&playlistId=${encodeURIComponent(item.id)}`}
+              className="flex items-center justify-center rounded-lg bg-white/10 px-3 py-2 text-sm font-semibold text-white transition hover:bg-white/20"
+            >
+              Solo
+            </Link>
+            <Link
+              href={`/multiplayer?source=playlist&playlistId=${encodeURIComponent(item.id)}`}
+              className="flex items-center justify-center rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm font-semibold text-white transition hover:border-white/20"
+            >
+              Room
+            </Link>
+          </div>
         </div>
       ))}
+    </div>
+  )
+}
+
+function FriendsPanel({ floating = false, className = "" }: { floating?: boolean; className?: string }) {
+  const online = friends.filter(friend => friend.status === "En ligne").length
+
+  const gradientFor = (accent: string) => {
+    switch (accent) {
+      case "pink":
+        return "linear-gradient(135deg, rgba(236,72,153,0.6), rgba(126,34,206,0.4))"
+      case "emerald":
+        return "linear-gradient(135deg, rgba(16,185,129,0.6), rgba(59,130,246,0.35))"
+      case "blue":
+        return "linear-gradient(135deg, rgba(59,130,246,0.6), rgba(168,85,247,0.45))"
+      default:
+        return "linear-gradient(135deg, rgba(168,85,247,0.6), rgba(109,40,217,0.35))"
+    }
+  }
+
+  return (
+    <div
+      className={`ma-card relative overflow-hidden bg-[#0d0d11] ${floating ? "sticky top-6 shadow-[0_8px_18px_rgba(0,0,0,0.3)]" : ""} ${className}`}
+    >
+      <div className="relative space-y-4">
+        <div className="flex items-center justify-between">
+          <p className="text-xs uppercase tracking-[0.35em] text-[var(--ma-muted)]">Amis</p>
+          <span className="text-xs text-[var(--ma-muted)]">{online} en ligne</span>
+        </div>
+        <div className="space-y-4">
+          {friends.map(friend => {
+            const initials = friend.name
+              .split(" ")
+              .map(part => part[0])
+              .join("")
+              .slice(0, 2)
+              .toUpperCase()
+            return (
+              <div
+                key={friend.name}
+                className="flex items-center gap-4 rounded-xl border border-[var(--ma-border)] bg-white/5 px-4 py-4 shadow-[0_6px_14px_rgba(0,0,0,0.2)]"
+              >
+                <div className="relative h-12 w-12 overflow-hidden rounded-lg">
+                  <div
+                    className="absolute inset-0"
+                    style={{
+                      backgroundImage: gradientFor(friend.accent),
+                    }}
+                  />
+                  <div className="relative z-10 grid h-full w-full place-items-center text-base font-semibold">
+                    {initials}
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <p className="text-base font-semibold">{friend.name}</p>
+                  <p className="text-sm text-[var(--ma-muted)]">{friend.nowPlaying}</p>
+                </div>
+                <div
+                  className={`h-2 w-2 rounded-full ${friend.status === "En ligne" ? "bg-emerald-400" : "bg-gray-500"}`}
+                  title={friend.status}
+                />
+              </div>
+            )
+          })}
+        </div>
+        <Link href="/multiplayer" className="ma-btn-primary w-full justify-center">
+          Inviter des amis
+        </Link>
+      </div>
+    </div>
+  )
+}
+
+function HistoryPanel({ floating = false, className = "", items = fallbackActivity }: { floating?: boolean; className?: string; items?: ActivityItem[] }) {
+  return (
+    <div
+      className={`ma-card relative overflow-hidden bg-[#0d0d11] ${floating ? "sticky top-6 shadow-[0_16px_40px_rgba(0,0,0,0.4)]" : ""} ${className}`}
+    >
+      <div className="relative space-y-4">
+        <div className="flex items-center justify-between">
+          <p className="text-xs uppercase tracking-[0.35em] text-[var(--ma-muted)]">Historique</p>
+          <Link href="/stats" className="text-xs text-white/80 underline-offset-4 hover:underline">
+            Voir +
+          </Link>
+        </div>
+        <div className="space-y-4">
+          {items.map(item => (
+            <div
+              key={item.title}
+              className="rounded-xl border border-[var(--ma-border)] bg-white/5 p-4 shadow-[0_10px_30px_rgba(0,0,0,0.25)] backdrop-blur"
+            >
+              <div className="flex items-center justify-between">
+                <p className="text-base font-semibold">{item.title}</p>
+                <span className="text-xs text-[var(--ma-muted)]">{item.time}</span>
+              </div>
+              <div className="mt-1 flex items-center justify-between">
+                <p className="text-xs text-[var(--ma-muted)]">{item.meta}</p>
+                <span className="rounded-full border border-[var(--ma-border)] px-2 py-1 text-[11px] text-[var(--ma-muted)]">
+                  {item.rounds} manches
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }

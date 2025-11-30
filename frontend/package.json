@@ -3,11 +3,11 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+    "dev": "NEXT_IGNORE_NODE_VERSION_CHECK=1 next dev",
+    "build": "NEXT_IGNORE_NODE_VERSION_CHECK=1 next build",
+    "start": "NEXT_IGNORE_NODE_VERSION_CHECK=1 next start",
     "lint": "next lint",
-    "export": "next build"
+    "export": "NEXT_IGNORE_NODE_VERSION_CHECK=1 next build && NEXT_IGNORE_NODE_VERSION_CHECK=1 next export"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.1.1",

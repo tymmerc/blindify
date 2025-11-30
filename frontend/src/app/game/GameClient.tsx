@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { api } from "@/lib/api"
 import type { CurrentUserPayload } from "@/lib/api"
@@ -8,13 +8,25 @@ import type { SoloGameResponse, SoloTrack } from "@/lib/types"
 import { SoloGameClient } from "@/components/game/SoloGameClient"
 import { Button } from "@/components/ui/button"
 import { AlertTriangle } from "lucide-react"
+import { clearUserDashboardCache } from "@/lib/userData"
 
 function normalizeDifficulty(value: string | null): "easy" | "normal" | "hard" {
   return value === "easy" || value === "hard" ? value : "normal"
 }
 
-function normalizeSource(value: string | null): "library" | "top" | "recent" | "liked" {
-  if (value === "top" || value === "recent" || value === "liked") return value
+function normalizeSource(
+  value: string | null
+): "library" | "top" | "recent" | "liked" | "playlist" | "top_week" | "top_month" | "top_all" {
+  if (
+    value === "top" ||
+    value === "recent" ||
+    value === "liked" ||
+    value === "playlist" ||
+    value === "top_week" ||
+    value === "top_month" ||
+    value === "top_all"
+  )
+    return value
   return "library"
 }
 
@@ -29,6 +41,7 @@ export default function GameClient() {
 
   const difficulty = normalizeDifficulty(searchParams.get("difficulty"))
   const source = normalizeSource(searchParams.get("source"))
+  const playlistId = searchParams.get("playlistId")
   const roundsCount = (() => {
     const raw = searchParams.get("count")
     const parsed = raw ? Number(raw) : NaN
@@ -56,6 +69,7 @@ export default function GameClient() {
           difficulty,
           source,
           count: roundsCount,
+          playlistId: playlistId ?? undefined,
         })
 
         if (!active) return
@@ -79,9 +93,27 @@ export default function GameClient() {
     return () => {
       active = false
     }
-  }, [router, difficulty, source])
+  }, [router, difficulty, source, playlistId, roundsCount])
 
   const hasTracks = useMemo(() => tracks.length > 0, [tracks])
+
+  const handleGameComplete = useCallback(
+    async (summary: { rounds: number; correct: number; bestStreak: number; points?: number }) => {
+      if (!sessionInfo?.id) return
+      try {
+        await api.recordSoloResult({
+          sessionId: sessionInfo.id,
+          rounds: summary.rounds,
+          correct: summary.correct,
+          bestStreak: summary.bestStreak ?? 0,
+        })
+        clearUserDashboardCache()
+      } catch (err) {
+        console.error("record_solo_result_failed", err)
+      }
+    },
+    [sessionInfo?.id]
+  )
 
   if (loading) {
     return (
@@ -121,44 +153,16 @@ export default function GameClient() {
   }
 
   return (
-    <main className="relative min-h-screen overflow-hidden">
-      <div className="absolute inset-0 opacity-40">
-        <div
-          className="absolute inset-0"
-          style={{
-            backgroundImage:
-              "radial-gradient(circle at 20% 15%, rgba(168,85,247,0.16), transparent 55%), radial-gradient(circle at 80% 10%, rgba(34,197,94,0.2), transparent 55%), radial-gradient(circle at 50% 80%, rgba(59,130,246,0.18), transparent 60%)",
-          }}
-        />
-      </div>
-
-      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-10 px-6 py-10">
-        <header className="surface flex flex-col gap-4 rounded-3xl border border-white/10 p-8">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div className="space-y-1">
-              <p className="text-xs uppercase tracking-[0.5em] text-slate-400">Solo session</p>
-              <h1 className="text-3xl font-semibold text-white sm:text-4xl">
-                Round up your guesses
-              </h1>
-            </div>
-            <div className="rounded-full border border-white/10 bg-white/5 px-5 py-2 text-xs uppercase tracking-[0.5em] text-slate-300">
-              {sessionInfo.provider.toUpperCase()} · {sessionInfo.totalRounds} rounds
-            </div>
-          </div>
-          <p className="text-xs text-slate-400">
-            Difficulty <span className="text-neon">{difficulty}</span> · Source{" "}
-            <span className="text-neon">{source}</span>
-          </p>
-        </header>
-
-        <SoloGameClient
-          user={userPayload.user}
-          tracks={tracks}
-          mode="solo"
-          difficulty={difficulty}
-          source={source}
-        />
-      </div>
+    <main className="min-h-screen bg-black text-white">
+      <SoloGameClient
+        user={userPayload.user}
+        tracks={tracks}
+        sessionId={sessionInfo.id}
+        mode="solo"
+        difficulty={difficulty}
+        source={source}
+        onGameComplete={handleGameComplete}
+      />
     </main>
   )
 }

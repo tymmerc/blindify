@@ -1,40 +1,100 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
+import { api } from "@/lib/api"
 
 type Playlist = {
+  id: string
   title: string
   count: string
   emoji: string
+  cover?: string | null
+  owner?: string | null
 }
 
 const quickOptions = [
-  { title: "Titres likés", description: "387 morceaux · Tous vos favoris", icon: "❤️" },
-  { title: "Mix aléatoire", description: "20 morceaux · De toute votre bibliothèque", icon: "🎲" },
+  { title: "Titres likés", description: "Vos favoris", icon: "❤️", href: "/solo?source=liked&count=10" },
+  { title: "Mix aléatoire", description: "Bibliothèque complète", icon: "🎲", href: "/solo?source=library&count=10" },
+  { title: "Top semaine", description: "20 plus écoutés (7j)", icon: "📈", href: "/solo?source=top_week&count=20" },
+  { title: "Top mois", description: "20 plus écoutés (30j)", icon: "📊", href: "/solo?source=top_month&count=20" },
 ]
 
 const recommended: Playlist[] = [
-  { title: "Discover Weekly", count: "30 morceaux", emoji: "🎵" },
-  { title: "Release Radar", count: "45 morceaux", emoji: "⚡" },
-  { title: "Daily Mix 1", count: "50 morceaux", emoji: "🌟" },
-  { title: "Repeat Rewind", count: "100 morceaux", emoji: "🔁" },
+  { id: "discover-weekly", title: "Discover Weekly", count: "30 morceaux", emoji: "🎵" },
+  { id: "release-radar", title: "Release Radar", count: "45 morceaux", emoji: "⚡" },
+  { id: "daily-mix-1", title: "Daily Mix 1", count: "50 morceaux", emoji: "🌟" },
+  { id: "repeat-rewind", title: "Repeat Rewind", count: "100 morceaux", emoji: "🔁" },
 ]
 
 const userPlaylists: Playlist[] = [
-  { title: "Top 2024", count: "142 morceaux", emoji: "🎸" },
-  { title: "Workout Mix", count: "87 morceaux", emoji: "💪" },
-  { title: "Chill Vibes", count: "234 morceaux", emoji: "🌙" },
-  { title: "Road Trip", count: "156 morceaux", emoji: "🚗" },
-  { title: "Summer Hits", count: "203 morceaux", emoji: "☀️" },
-  { title: "Party Time", count: "178 morceaux", emoji: "🎉" },
-  { title: "Focus Flow", count: "95 morceaux", emoji: "🎧" },
-  { title: "Throwback Classics", count: "267 morceaux", emoji: "📻" },
+  { id: "top-2024", title: "Top 2024", count: "142 morceaux", emoji: "🎸" },
+  { id: "workout-mix", title: "Workout Mix", count: "87 morceaux", emoji: "💪" },
+  { id: "chill-vibes", title: "Chill Vibes", count: "234 morceaux", emoji: "🌙" },
+  { id: "road-trip", title: "Road Trip", count: "156 morceaux", emoji: "🚗" },
+  { id: "summer-hits", title: "Summer Hits", count: "203 morceaux", emoji: "☀️" },
+  { id: "party-time", title: "Party Time", count: "178 morceaux", emoji: "🎉" },
+  { id: "focus-flow", title: "Focus Flow", count: "95 morceaux", emoji: "🎧" },
+  { id: "throwback-classics", title: "Throwback Classics", count: "267 morceaux", emoji: "📻" },
 ]
 
 export default function PlaylistSelectionPage() {
   const [query, setQuery] = useState("")
+  const [spotifyPlaylists, setSpotifyPlaylists] = useState<Playlist[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const normalizedQuery = query.trim().toLowerCase()
+
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      try {
+        setLoading(true)
+        setError(null)
+        const token = await api.getSpotifyToken()
+        const resp = await fetch("https://api.spotify.com/v1/me/playlists?limit=50", {
+          headers: { Authorization: `Bearer ${token.accessToken}` },
+        })
+        if (!resp.ok) {
+          throw new Error(`Spotify API error ${resp.status}`)
+        }
+        const data = (await resp.json()) as {
+          items?: Array<{
+            id?: string
+            name?: string
+            tracks?: { total?: number }
+            images?: { url?: string }[]
+            owner?: { display_name?: string }
+          }>
+        }
+        if (cancelled) return
+        const mapped =
+          data.items
+            ?.filter(pl => pl.id && pl.name)
+            .map(pl => ({
+              id: pl.id as string,
+              title: pl.name as string,
+              count: `${pl.tracks?.total ?? 0} morceaux`,
+              emoji: "🎵",
+              cover: pl.images?.[0]?.url ?? null,
+              owner: pl.owner?.display_name ?? null,
+            })) ?? []
+        setSpotifyPlaylists(mapped)
+      } catch (err) {
+        console.error("load_spotify_playlists_failed", err)
+        if (!cancelled) {
+          setError("Impossible de récupérer vos playlists Spotify.")
+          setSpotifyPlaylists([])
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    load()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const filteredRecommended = useMemo(() => {
     if (!normalizedQuery) return recommended
@@ -42,9 +102,10 @@ export default function PlaylistSelectionPage() {
   }, [normalizedQuery])
 
   const filteredUserPlaylists = useMemo(() => {
-    if (!normalizedQuery) return userPlaylists
-    return userPlaylists.filter(playlist => playlist.title.toLowerCase().includes(normalizedQuery))
-  }, [normalizedQuery])
+    const base = spotifyPlaylists.length ? spotifyPlaylists : userPlaylists
+    if (!normalizedQuery) return base
+    return base.filter(playlist => playlist.title.toLowerCase().includes(normalizedQuery))
+  }, [normalizedQuery, spotifyPlaylists])
 
   return (
     <div className="min-h-screen bg-[var(--ma-bg)] text-white">
@@ -79,8 +140,9 @@ export default function PlaylistSelectionPage() {
 
         <div className="mt-8 grid gap-5 md:grid-cols-2">
           {quickOptions.map(option => (
-            <div
+            <Link
               key={option.title}
+              href={option.href}
               className="group relative overflow-hidden rounded-2xl border border-[var(--ma-border)] bg-[var(--ma-surface)] p-6 transition duration-300 hover:-translate-y-1 hover:shadow-[0_16px_40px_rgba(168,85,247,0.25)]"
             >
               <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_30%_30%,rgba(168,85,247,0.12),transparent_55%),radial-gradient(circle_at_80%_10%,rgba(236,72,153,0.12),transparent_45%)] opacity-80" />
@@ -91,7 +153,7 @@ export default function PlaylistSelectionPage() {
                   <p className="text-sm text-[var(--ma-muted)]">{option.description}</p>
                 </div>
               </div>
-            </div>
+            </Link>
           ))}
         </div>
 
@@ -107,6 +169,8 @@ export default function PlaylistSelectionPage() {
 
         <section className="ma-section">
           <h2 className="mb-6 text-2xl font-semibold tracking-[-0.02em]">Vos playlists</h2>
+          {error ? <p className="text-sm text-red-400 mb-2">{error}</p> : null}
+          {loading ? <p className="text-sm text-[var(--ma-muted)]">Chargement…</p> : null}
           <PlaylistGrid playlists={filteredUserPlaylists} emptyLabel="Aucune playlist ne correspond à votre recherche" />
         </section>
       </div>
@@ -122,13 +186,21 @@ function PlaylistGrid({ playlists, emptyLabel }: { playlists: Playlist[]; emptyL
   return (
     <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
       {playlists.map(playlist => (
-        <div
+        <Link
           key={playlist.title}
-          className="group relative cursor-pointer overflow-hidden rounded-xl border border-[var(--ma-border)] bg-[var(--ma-surface)] p-4 transition duration-200 hover:-translate-y-1 hover:border-[rgba(168,85,247,0.3)] hover:shadow-[0_12px_32px_rgba(168,85,247,0.15)]"
+          href={`/solo?source=playlist&playlistId=${encodeURIComponent(playlist.id)}`}
+          className="group relative block cursor-pointer overflow-hidden rounded-xl border border-[var(--ma-border)] bg-[var(--ma-surface)] p-4 transition duration-200 hover:-translate-y-1 hover:border-[rgba(168,85,247,0.3)] hover:shadow-[0_12px_32px_rgba(168,85,247,0.15)]"
+          aria-label={`Lancer un blindtest sur ${playlist.title}`}
         >
           <div className="relative mb-4 aspect-square w-full overflow-hidden rounded-lg bg-[var(--ma-gradient)] text-5xl">
-            <div className="grid h-full w-full place-items-center">{playlist.emoji}</div>
-            <div className="absolute inset-0 grid place-items-center bg-black/60 opacity-0 transition group-hover:opacity-100">
+            {playlist.cover ? (
+              <div
+                className="pointer-events-none absolute inset-0 scale-105 blur-sm"
+                style={{ backgroundImage: `url(${playlist.cover})`, backgroundSize: "cover", backgroundPosition: "center" }}
+              />
+            ) : null}
+            <div className="relative grid h-full w-full place-items-center">{playlist.emoji}</div>
+            <div className="pointer-events-none absolute inset-0 grid place-items-center bg-black/60 opacity-0 transition group-hover:opacity-100">
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-lg font-semibold text-[var(--ma-bg)] shadow-lg">
                 ▶
               </div>
@@ -141,7 +213,7 @@ function PlaylistGrid({ playlists, emptyLabel }: { playlists: Playlist[]; emptyL
               <span>{playlist.count}</span>
             </div>
           </div>
-        </div>
+        </Link>
       ))}
     </div>
   )

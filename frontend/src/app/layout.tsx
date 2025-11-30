@@ -27,8 +27,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.variable} font-sans antialiased min-h-screen`}>
         <div className="fixed inset-0 -z-10 overflow-hidden">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(168,85,247,0.18),transparent_55%),radial-gradient(circle_at_80%_10%,rgba(34,197,94,0.2),transparent_52%),linear-gradient(135deg,#050510_0%,#090922_40%,#030109_100%)]" />
-          <div className="absolute inset-0 backdrop-blur-[2px]" />
+          <div className="absolute inset-0 bg-gradient-to-br from-[#090915] via-[#0a0a12] to-[#050510]" />
         </div>
         {children}
       </body>
