@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import type { Socket } from "socket.io-client"
 import { getSocket, disconnectSocket } from "@/lib/socket"
@@ -53,7 +53,15 @@ type ScoreUpdatePayload = {
   accuracy: number
 }
 
-export default function MultiplayerPage() {
+export default function MultiplayerPageWrapper() {
+  return (
+    <Suspense fallback={<div className="grid min-h-screen place-items-center text-sm text-[var(--ma-muted)]">Chargement…</div>}>
+      <MultiplayerPage />
+    </Suspense>
+  )
+}
+
+function MultiplayerPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [userPayload, setUserPayload] = useState<CurrentUserPayload | null>(null)
@@ -83,6 +91,7 @@ export default function MultiplayerPage() {
   )
   const [finalStats, setFinalStats] = useState<Record<number, { username: string | null; score: number; accuracy: number }>>({})
   const [sharedDeadlineMs, setSharedDeadlineMs] = useState<number | null>(null)
+  const lastNextRoundRef = useRef<number>(0)
 
   const socketRef = useRef<Socket | null>(null)
   const handlersRef = useRef<{
@@ -242,6 +251,7 @@ export default function MultiplayerPage() {
         setTracks(payload.tracks)
         setAutoAdvance(Boolean(payload.session.autoAdvance ?? payload.autoAdvance))
         setSharedDeadlineMs(null)
+        lastNextRoundRef.current = 0
         setResultsOpen(false)
         setView("playing")
         if (pollRef.current) {
@@ -264,8 +274,13 @@ export default function MultiplayerPage() {
         })
       }
 
-      const nextHandler = (payload: { roomCode: string; serverTimestamp: number; revealAt?: number }) => {
+      const nextHandler = (payload: { roomCode: string; serverTimestamp: number; revealAt?: number; round?: number }) => {
         if (payload.roomCode !== roomCode) return
+        // Avoid duplicate/early signals: only advance if target round > last seen
+        if (typeof payload.round === "number") {
+          if (payload.round <= lastNextRoundRef.current) return
+          lastNextRoundRef.current = payload.round
+        }
         if (payload.revealAt) setSharedDeadlineMs(payload.revealAt)
         setNextSignal(Date.now())
       }
@@ -306,7 +321,7 @@ export default function MultiplayerPage() {
   const handleCreateRoom = useCallback(async () => {
     try {
       setError(null)
-      const { room: created } = await api.createRoom({ autoAdvance })
+      const { room: created } = await api.createRoom({ autoAdvance, questionCount: 10 })
       setRoom(created)
       setView("hosting")
       attachSocketListeners(created.room_code)

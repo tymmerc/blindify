@@ -8,7 +8,7 @@ import { api, type CurrentUserPayload } from "@/lib/api"
 import type { GameSessionSummary, UserSummary } from "@/lib/types"
 import { fetchUserDashboard } from "@/lib/userData"
 import { BottomNav } from "@/components/BottomNav"
-import { ArrowRight, Play, Users } from "lucide-react"
+import { Play, Users } from "lucide-react"
 
 type Playlist = {
   id: string
@@ -73,7 +73,6 @@ export default function MenuPage() {
     { label: "Niveau", value: "—" },
   ])
   const [history, setHistory] = useState<GameSessionSummary[]>([])
-  const [quickJoin, setQuickJoin] = useState("")
 
   useEffect(() => {
     let active = true
@@ -205,25 +204,6 @@ export default function MenuPage() {
         }))
       : []
 
-  const resumeSession = useMemo(() => {
-    if (!history.length) return null
-    const candidate = history.find(item => item.state === "in_progress") ?? history[0]
-    const href = candidate.mode === "multiplayer" ? "/multiplayer" : "/solo"
-    return {
-      href,
-      title: candidate.mode === "multiplayer" ? "Rejoindre ta room en cours" : "Reprendre ta partie solo",
-      meta: `${stateLabel(candidate.state)} · ${candidate.total_rounds ?? 0} manches`,
-      time: formatDate(candidate.started_at),
-    }
-  }, [history])
-
-  const quickJoinSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    const code = quickJoin.trim().toUpperCase()
-    if (!code) return
-    router.push(`/multiplayer?code=${encodeURIComponent(code)}`)
-  }
-
   if (loading) {
     return (
       <div className="grid min-h-screen place-items-center text-sm uppercase tracking-[0.3em] text-[var(--ma-muted)]">
@@ -233,7 +213,7 @@ export default function MenuPage() {
   }
 
   return (
-    <div className="min-h-screen bg-black text-white pb-20">
+    <div className="min-h-screen bg-black text-white pb-40">
       <div className="w-full px-3 sm:px-4 lg:px-6 mx-auto max-w-none">
         <div className="grid auto-rows-min gap-5 lg:gap-7 md:grid-cols-[240px,minmax(0,1fr),240px] xl:grid-cols-[280px,minmax(0,1fr),280px] items-start">
           <div className="hidden md:block sticky top-4">
@@ -246,76 +226,37 @@ export default function MenuPage() {
               <HistoryPanel items={activityItems.length ? activityItems : fallbackActivity} />
             </div>
 
-            <div className="relative overflow-hidden rounded-[18px] border border-[var(--ma-border)] bg-gradient-to-r from-[#0b0b0f] via-[#121222] to-[#0f0f0f] px-5 py-8 shadow-[0_10px_24px_rgba(0,0,0,0.25)]">
-              <div className="relative grid gap-8 lg:grid-cols-[1.2fr_0.8fr] lg:items-center">
-                <div className="flex flex-col gap-4">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#4a4a4a] text-base font-semibold">
+            <div className="relative overflow-hidden rounded-3xl border border-[var(--ma-border)] bg-[#0f0f0f] px-6 py-7 shadow-[0_12px_28px_rgba(0,0,0,0.3)]">
+              <div className="relative flex flex-col gap-5">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-4">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[var(--ma-gradient)] text-base font-semibold shadow-[0_10px_24px_rgba(168,85,247,0.35)]">
                       {initials}
                     </div>
                     <div>
-                      <p className="text-xs uppercase tracking-[0.3em] text-[#8a8a8a]">Bienvenue</p>
-                      <h1 className="text-2xl font-semibold tracking-[-0.02em]">{greeting}, {user?.username ?? "Joueur"}</h1>
-                      <p className="text-sm text-[#8a8a8a]">Prêt à lancer une partie ?</p>
+                      <p className="text-xs uppercase tracking-[0.3em] text-[var(--ma-muted)]">Bienvenue</p>
+                      <h1 className="text-xl font-semibold tracking-[-0.02em]">{greeting}, {user?.username ?? "Joueur"}</h1>
+                      <p className="text-sm text-[var(--ma-muted)]">Prêt pour une nouvelle session ?</p>
                     </div>
                   </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <Link href="/solo?source=liked&count=20" className="ma-btn-primary flex items-center justify-center gap-2 rounded-xl px-5 py-4 text-base font-semibold">
-                      <Play className="h-4 w-4" />
-                      Jouer en solo
-                    </Link>
-                    <Link href="/multiplayer" className="flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-5 py-4 text-base font-semibold shadow-[0_12px_32px_rgba(255,255,255,0.05)] transition hover:border-white/20">
-                      <Users className="h-4 w-4" />
-                      Lancer un multi
-                    </Link>
-                  </div>
-                  <form onSubmit={quickJoinSubmit} className="flex flex-col gap-2 rounded-xl border border-white/10 bg-black/40 p-4 sm:flex-row sm:items-center sm:gap-3">
-                    <div className="flex-1">
-                      <p className="text-xs uppercase tracking-[0.3em] text-[var(--ma-muted)]">Quick join</p>
-                      <div className="mt-1 flex gap-2">
-                        <input
-                          value={quickJoin}
-                          onChange={event => setQuickJoin(event.target.value.toUpperCase())}
-                          placeholder="Code room"
-                          className="w-full rounded-lg border border-[var(--ma-border)] bg-black/60 px-3 py-3 text-sm text-white outline-none focus:border-[rgba(168,85,247,0.6)]"
-                        />
-                      </div>
-                    </div>
-                    <button
-                      type="submit"
-                      className="ma-btn-primary flex items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-semibold disabled:opacity-60"
-                      disabled={!quickJoin.trim()}
-                    >
-                      <ArrowRight className="h-4 w-4" />
-                      Rejoindre
-                    </button>
-                  </form>
+                  <Link
+                    href="/modes"
+                    className="rounded-lg border border-[var(--ma-border)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/5"
+                  >
+                    Choisir un mode
+                  </Link>
                 </div>
 
-                <div className="space-y-4 rounded-2xl border border-white/10 bg-black/40 p-5 shadow-[0_16px_48px_rgba(0,0,0,0.35)]">
-                  <p className="text-xs uppercase tracking-[0.3em] text-[var(--ma-muted)]">Action rapide</p>
-                  {resumeSession ? (
-                    <Link
-                      href={resumeSession.href}
-                      className="block rounded-xl border border-[rgba(59,130,246,0.3)] bg-[rgba(59,130,246,0.12)] p-4 transition hover:border-[rgba(59,130,246,0.5)]"
+                <div className="grid gap-3 sm:grid-cols-4">
+                  {stats.map(item => (
+                    <div
+                      key={item.label}
+                      className="rounded-2xl border border-[var(--ma-border)] bg-[#121212] px-4 py-3 text-center shadow-[0_10px_24px_rgba(0,0,0,0.25)]"
                     >
-                      <p className="text-sm font-semibold text-white">{resumeSession.title}</p>
-                      <p className="text-xs text-[var(--ma-muted)]">{resumeSession.meta}</p>
-                      <p className="text-[11px] text-[var(--ma-muted)] mt-1">Commencée : {resumeSession.time}</p>
-                    </Link>
-                  ) : (
-                    <div className="rounded-xl border border-[var(--ma-border)] bg-white/5 p-4 text-sm text-[var(--ma-muted)]">
-                      Aucune session en cours. Lance un mode express ou rejoins une room.
+                      <div className="text-[11px] uppercase tracking-[0.2em] text-[var(--ma-muted)]">{item.label}</div>
+                      <div className="text-xl font-semibold">{item.value}</div>
                     </div>
-                  )}
-                  <div className="grid grid-cols-2 gap-3 text-sm text-[var(--ma-muted)]">
-                    {stats.map(item => (
-                      <div key={item.label} className="rounded-lg border border-white/5 bg-white/5 px-3 py-3">
-                        <p className="text-[11px] uppercase tracking-[0.2em]">{item.label}</p>
-                        <p className="text-lg font-semibold text-white">{item.value}</p>
-                      </div>
-                    ))}
-                  </div>
+                  ))}
                 </div>
               </div>
             </div>
@@ -329,14 +270,14 @@ export default function MenuPage() {
                 </div>
                 <Link
                   href="/solo?source=liked&count=10"
-                  className="uiverse-btn shrink-0"
+                  className="inline-flex items-center justify-center rounded-lg border border-white/10 bg-white/10 px-4 py-2 text-sm font-semibold text-white shadow-none transition hover:bg-white/15"
                 >
-                  <span className="uiverse-inner">Jouer maintenant</span>
+                  Jouer maintenant
                 </Link>
               </div>
             </div>
 
-            <section id="modes" className="ma-section p-0">
+            <section id="modes" className="ma-section p-0 mb-8">
               <h2 className="mb-6 text-xl font-semibold">Choisir un mode</h2>
               <div className="grid gap-6 md:grid-cols-2">
                 {[

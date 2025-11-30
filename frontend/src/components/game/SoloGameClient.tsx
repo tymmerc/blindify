@@ -650,17 +650,20 @@ export function SoloGameClient({
   }, [cleanupTimers, hasMoreRounds, total, mode, onHostNext, index, isHost])
 
   const handleSkipQuestion = useCallback(() => {
+    // En multi, seul l'hôte peut skipper pour éviter des fins prématurées côté invités
+    if (isMultiplayer && !isHost) return
     if (!current || phase === "reveal") return
     const submittedGuess = guessRef.current ?? guess
     const finalVerdict = verdictRef.current ?? "wrong"
     finalizeRound(finalVerdict, "reveal", current, submittedGuess)
     // finalizeRound already avance au round suivant après délai; pas besoin d'un saut supplémentaire ici.
-  }, [current, phase, finalizeRound, guess])
+  }, [current, phase, finalizeRound, guess, isMultiplayer, isHost])
 
   useEffect(() => {
     if (!isMultiplayer || isHost || nextSignal === 0) return
+    if (!hasMoreRounds) return
     handleNext(false)
-  }, [nextSignal, isMultiplayer, isHost, handleNext])
+  }, [nextSignal, isMultiplayer, isHost, hasMoreRounds, handleNext])
 
   const handleToggleMute = useCallback(() => {
     setMuted(prev => {
