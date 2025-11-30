@@ -1,9 +1,12 @@
 // Minimal File polyfill for Node 18 (used by undici dependencies)
 if (!(globalThis as any).File) {
+  // Local type shims to avoid relying on DOM lib in tsconfig
+  type PolyfillBlobPart = any;
+  type PolyfillFileOptions = { lastModified?: number; type?: string };
   class PolyfillFile extends Blob {
     name: string;
     lastModified: number;
-    constructor(bits: BlobPart[], name: string, options: FilePropertyBag = {}) {
+    constructor(bits: PolyfillBlobPart[] = [], name: string, options: PolyfillFileOptions = {}) {
       super(bits, options);
       this.name = name;
       this.lastModified = options.lastModified ?? Date.now();
