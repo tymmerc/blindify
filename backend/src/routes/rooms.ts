@@ -4,6 +4,9 @@ import { roomsController } from "../controllers/roomsController";
 const router = express.Router();
 
 router.post("/create", roomsController.createRoom);
+// Place the state endpoint before the generic :code route to ensure it matches
+router.get("/:code/state", roomsController.state);
+router.post("/:code/preferences", roomsController.preferences);
 router.get("/:code", roomsController.details);
 router.post("/:code/start", roomsController.startGame);
 router.post("/join", (req, res) => {

@@ -1,3 +1,17 @@
+// Minimal File polyfill for Node 18 (used by undici dependencies)
+if (!(globalThis as any).File) {
+  class PolyfillFile extends Blob {
+    name: string;
+    lastModified: number;
+    constructor(bits: BlobPart[], name: string, options: FilePropertyBag = {}) {
+      super(bits, options);
+      this.name = name;
+      this.lastModified = options.lastModified ?? Date.now();
+    }
+  }
+  (globalThis as any).File = PolyfillFile as unknown as typeof File;
+}
+
 import express, { type NextFunction, type Request, type Response } from "express";
 import http from "http";
 import cors from "cors";
@@ -22,9 +36,15 @@ dotenv.config();
 const app = express();
 app.set("trust proxy", 1);
 
+const sessionSecret = process.env.SESSION_SECRET;
+if (!sessionSecret || sessionSecret === "CHANGE_ME") {
+  console.error("❌ SESSION_SECRET is not set. Please define a strong secret in the environment.");
+  process.exit(1);
+}
+
 const server = http.createServer(app);
 
-const frontendBase = (process.env.FRONTEND_URL || "http://localhost:3000").replace(/\/$/, "");
+const frontendBase = (process.env.FRONTEND_URL || "https://tymmerc.eu/blindify").replace(/\/$/, "");
 const isProd = process.env.NODE_ENV === "production";
 const isFrontendHttps = frontendBase.startsWith("https://");
 const secureCookies = process.env.COOKIE_SECURE
@@ -35,6 +55,8 @@ const cookieDomain = process.env.COOKIE_DOMAIN || (isProd ? "tymmerc.eu" : undef
 
 const allowedOrigins = [
   frontendBase,
+  "https://tymmerc.eu",
+  "https://tymmerc.eu/blindify",
   "https://blindify-chi.vercel.app",
   "https://blindify-production.up.railway.app",
   "http://localhost:3000",
@@ -45,7 +67,20 @@ const io = initSocket(server, allowedOrigins);
 
 app.use(
   helmet({
-    contentSecurityPolicy: false,
+    contentSecurityPolicy: {
+      useDefaults: false,
+      directives: {
+        "default-src": ["'self'"],
+        "script-src": ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+        "style-src": ["'self'", "'unsafe-inline'"],
+        "img-src": ["'self'", "data:", "blob:", "*"],
+        "font-src": ["'self'", "data:"],
+        "connect-src": ["'self'", "https://api.spotify.com", ...allowedOrigins],
+        "frame-ancestors": ["'none'"],
+        "base-uri": ["'self'"],
+        "form-action": allowedOrigins.length ? allowedOrigins : ["'self'"],
+      },
+    },
     crossOriginEmbedderPolicy: false,
   })
 );
@@ -60,27 +95,35 @@ app.use(
 app.use(express.json({ limit: "15mb" }));
 app.use(express.urlencoded({ extended: true }));
 
-app.use(
-  rateLimit({
-    windowMs: 60_000,
-    max: 150,
-    standardHeaders: true,
-    legacyHeaders: false,
-  })
-);
+const apiLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 600, // higher burst
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: req =>
+    req.path?.startsWith("/api/rooms") ||
+    req.path?.startsWith("/api/auth") ||
+    req.path?.startsWith("/socket.io"),
+});
+
+app.use(apiLimiter);
 
 app.use(
   slowDown({
     windowMs: 60_000,
-    delayAfter: 75,
-    delayMs: () => 100,
+    delayAfter: 120,
+    delayMs: () => 50,
+    skip: req =>
+      req.path?.startsWith("/api/rooms") ||
+      req.path?.startsWith("/api/auth") ||
+      req.path?.startsWith("/socket.io"),
   })
 );
 
 app.use(
   cookieSession({
     name: "blindify_session",
-    secret: process.env.SESSION_SECRET || "CHANGE_ME",
+    secret: sessionSecret,
     maxAge: 1000 * 60 * 60 * 24,
     sameSite,
     secure: secureCookies,
@@ -88,6 +131,20 @@ app.use(
     httpOnly: true,
   })
 );
+
+// Simple Origin/Referer check for state-changing requests
+app.use((req, res, next) => {
+  if (["GET", "HEAD", "OPTIONS"].includes(req.method)) {
+    return next();
+  }
+  const origin = req.headers.origin || "";
+  const referer = req.headers.referer || "";
+  const allowed = allowedOrigins.some(o => origin.startsWith(o) || referer.startsWith(o));
+  if (!allowed) {
+    return fail(res, "forbidden", "Requête refusée (origine non autorisée)", 403);
+  }
+  next();
+});
 
 app.get("/health", (_req, res) => {
   ok(res, { status: "ok" });
@@ -175,6 +232,18 @@ io.on("connection", socket => {
       });
     }
   );
+
+  socket.on("round:next", (payload: { roomCode: string; round?: number; revealAt?: number }) => {
+    if (!payload?.roomCode) return;
+    const now = Date.now();
+    const revealAt = payload.revealAt && Number.isFinite(payload.revealAt) ? payload.revealAt : now + 45000;
+    io.to(payload.roomCode).emit("round:next", {
+      roomCode: payload.roomCode,
+      round: payload.round,
+      revealAt,
+      serverTimestamp: now,
+    });
+  });
 
   socket.on("disconnecting", () => {
     const rooms = Array.from(socket.rooms).filter(room => room !== socket.id);

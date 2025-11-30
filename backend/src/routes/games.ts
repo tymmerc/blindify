@@ -5,6 +5,7 @@ const router = Router();
 
 router.post("/solo", gamesController.startSoloGame);
 router.post("/solo/start", gamesController.startSoloGame); // legacy alias
+router.post("/solo/complete", gamesController.recordSoloResult);
 router.get("/history", gamesController.history);
 
 export default router;
