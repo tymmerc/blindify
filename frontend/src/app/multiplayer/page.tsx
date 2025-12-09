@@ -10,6 +10,8 @@ import type { MultiplayerParticipant, MultiplayerRoom, SoloTrack } from "@/lib/t
 import { SoloGameClient, type RoundStats } from "@/components/game/SoloGameClient"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft, ArrowRight, Copy, Loader2, PartyPopper, ShieldCheck, Sparkles, Users } from "lucide-react"
+import { useServerTime } from "@/hooks/useServerTime"
+import { useInterval } from "@/hooks/useInterval"
 
 type View = "landing" | "hosting" | "waiting" | "playing" | "results"
 
@@ -37,9 +39,12 @@ type MultiplayerStartPayload = {
     startedAt: string
     roomCode: string
     autoAdvance?: boolean
+    stateHash?: string | null
+    currentRound?: number | null
   } 
   tracks: SoloTrack[]
   autoAdvance?: boolean
+  stateHash?: string | null
   host: {
     id: number
     username: string | null
@@ -51,6 +56,7 @@ type ScoreUpdatePayload = {
   userId: number
   score: number
   accuracy: number
+  stateHash?: string | null
 }
 
 export default function MultiplayerPageWrapper() {
@@ -84,7 +90,11 @@ function MultiplayerPage() {
   const [myPlaylistId, setMyPlaylistId] = useState("")
   const [savingPref, setSavingPref] = useState(false)
   const [autoAdvance, setAutoAdvance] = useState(false)
+  const [gameStateHash, setGameStateHash] = useState<string>("")
   const [nextSignal, setNextSignal] = useState<number>(0)
+  const [nextRoundNumber, setNextRoundNumber] = useState<number | null>(null)
+  const [nextTrackId, setNextTrackId] = useState<string | null>(null)
+  const sharedDeadlineRef = useRef<number | null>(null)
 
   const [scores, setScores] = useState<Record<number, { username: string | null; score: number; accuracy: number }>>(
     {}
@@ -99,7 +109,16 @@ function MultiplayerPage() {
     start?: (payload: MultiplayerStartPayload) => void
     score?: (payload: ScoreUpdatePayload) => void
     playerJoined?: (payload: { userId: number; username?: string | null; roomCode: string }) => void
-    next?: (payload: { roomCode: string; serverTimestamp: number }) => void
+    started?: (payload: {
+      roomCode: string
+      serverTimestamp: number
+      revealAt?: number
+      round?: number
+      trackId?: string | number
+      audioSourceId?: string | number
+      stateHash?: string | null
+    }) => void
+    invalid?: (payload: { roomCode: string }) => void
   }>({})
   const roomRef = useRef<MultiplayerRoom | null>(null)
   const userRef = useRef<CurrentUserPayload | null>(null)
@@ -107,6 +126,8 @@ function MultiplayerPage() {
   const [joinCode, setJoinCode] = useState("")
   const [resultsOpen, setResultsOpen] = useState(false)
   const pollRef = useRef<NodeJS.Timeout | null>(null)
+  const LISTENING_MS = 45_000
+  const serverNow = useServerTime(socketRef.current)
 
   useEffect(() => {
     const codeParam = searchParams.get("code")
@@ -154,7 +175,9 @@ function MultiplayerPage() {
         if (handlersRef.current.start) socket.off("multiplayer:start", handlersRef.current.start)
         if (handlersRef.current.score) socket.off("score:update", handlersRef.current.score)
         if (handlersRef.current.playerJoined) socket.off("player-joined", handlersRef.current.playerJoined)
-        if (handlersRef.current.next) socket.off("round:next", handlersRef.current.next)
+        if (handlersRef.current.started) socket.off("round:started", handlersRef.current.started)
+        if (handlersRef.current.invalid) socket.off("state:invalid", handlersRef.current.invalid)
+        socket.off("server:tick")
       }
       if (pollRef.current) {
         clearInterval(pollRef.current)
@@ -224,7 +247,8 @@ function MultiplayerPage() {
       }
       if (handlersRef.current.score) socket.off("score:update", handlersRef.current.score)
       if (handlersRef.current.playerJoined) socket.off("player-joined", handlersRef.current.playerJoined)
-      if (handlersRef.current.next) socket.off("round:next", handlersRef.current.next)
+      if (handlersRef.current.started) socket.off("round:started", handlersRef.current.started)
+      if (handlersRef.current.invalid) socket.off("state:invalid", handlersRef.current.invalid)
 
       const presenceHandler = (payload: RoomPresenceEvent) => {
         if (payload.roomCode !== roomCode) return
@@ -247,11 +271,16 @@ function MultiplayerPage() {
 
       const startHandler = (payload: MultiplayerStartPayload) => {
         if (payload.session.roomCode !== roomCode) return
+        setGameStateHash(payload.stateHash || payload.session.stateHash || "")
         setSession(payload.session)
         setTracks(payload.tracks)
         setAutoAdvance(Boolean(payload.session.autoAdvance ?? payload.autoAdvance))
         setSharedDeadlineMs(null)
-        lastNextRoundRef.current = 0
+        setNextTrackId(null)
+        setNextRoundNumber(payload.session.currentRound ?? null)
+        setNextSignal(0)
+        sharedDeadlineRef.current = null
+        lastNextRoundRef.current = payload.session.currentRound ?? 0
         setResultsOpen(false)
         setView("playing")
         if (pollRef.current) {
@@ -262,6 +291,7 @@ function MultiplayerPage() {
 
       const scoreHandler = (payload: ScoreUpdatePayload) => {
         if (payload.roomCode !== roomCode) return
+        if (payload.stateHash) setGameStateHash(payload.stateHash)
         setScores(prev => {
           const next = { ...prev }
           const participant = participantsRef.current.find(p => p.user_id === payload.userId)
@@ -274,15 +304,33 @@ function MultiplayerPage() {
         })
       }
 
-      const nextHandler = (payload: { roomCode: string; serverTimestamp: number; revealAt?: number; round?: number }) => {
+      const startedHandler = (payload: {
+        roomCode: string
+        serverTimestamp: number
+        revealAt?: number
+        round?: number
+        trackId?: string | number
+        audioSourceId?: string | number
+        stateHash?: string | null
+      }) => {
         if (payload.roomCode !== roomCode) return
-        // Avoid duplicate/early signals: only advance if target round > last seen
+        // Allow re-playing the same round index to resync late guests (only drop older rounds)
         if (typeof payload.round === "number") {
-          if (payload.round <= lastNextRoundRef.current) return
-          lastNextRoundRef.current = payload.round
+          if (payload.round < lastNextRoundRef.current) return
+          lastNextRoundRef.current = Math.max(lastNextRoundRef.current, payload.round)
         }
-        if (payload.revealAt) setSharedDeadlineMs(payload.revealAt)
-        setNextSignal(Date.now())
+        if (payload.stateHash) setGameStateHash(payload.stateHash)
+        const now = Date.now()
+        const safeReveal =
+          payload.revealAt && Number.isFinite(payload.revealAt) && payload.revealAt > now - 1000
+            ? payload.revealAt
+            : now + LISTENING_MS
+        sharedDeadlineRef.current = safeReveal
+        setSharedDeadlineMs(safeReveal)
+        if (typeof payload.round === "number") setNextRoundNumber(payload.round)
+        const resolvedTrackId = payload.trackId ?? payload.audioSourceId
+        setNextTrackId(resolvedTrackId != null ? String(resolvedTrackId) : null)
+        setNextSignal(prev => prev + 1)
       }
 
       const playerJoinedHandler = (payload: { userId: number; username?: string | null; roomCode: string }) => {
@@ -293,19 +341,46 @@ function MultiplayerPage() {
         })
       }
 
+      const invalidHandler = async (payload: { roomCode: string }) => {
+        if (payload.roomCode !== roomCode) return
+        try {
+          const latest = await api.roomState(roomCode)
+          setRoom(latest.room)
+          setAutoAdvance(Boolean(latest.session?.autoAdvance ?? latest.room.auto_advance ?? autoAdvance))
+          if (latest.session && latest.tracks.length) {
+            setSession(latest.session)
+            setTracks(latest.tracks)
+            setGameStateHash(latest.session.stateHash || "")
+            lastNextRoundRef.current = latest.session.currentRound ?? 0
+            setNextRoundNumber(latest.session.currentRound ?? null)
+            setNextTrackId(null)
+            setNextSignal(0)
+            sharedDeadlineRef.current = null
+            setSharedDeadlineMs(null)
+            setView("playing")
+          }
+        } catch (err) {
+          console.error("state_resync_failed", err)
+          setError(err instanceof Error ? err.message : "Impossible de resynchroniser la partie.")
+        }
+      }
+
       socket.on("room:presence", presenceHandler)
       socket.on("multiplayer:start", startHandler)
       socket.on("game:start", startHandler) // compat
       socket.on("score:update", scoreHandler)
       socket.on("player-joined", playerJoinedHandler)
-      socket.on("round:next", nextHandler)
+      socket.on("round:started", startedHandler)
+      socket.on("server:tick", () => {})
+      socket.on("state:invalid", invalidHandler)
 
       handlersRef.current = {
         presence: presenceHandler,
         start: startHandler,
         score: scoreHandler,
         playerJoined: playerJoinedHandler,
-        next: nextHandler,
+        started: startedHandler,
+        invalid: invalidHandler,
       }
 
       if (userPayload?.user) {
@@ -315,7 +390,7 @@ function MultiplayerPage() {
         })
       }
     },
-    [ensureSocket, userPayload]
+    [ensureSocket, userPayload, autoAdvance]
   )
 
   const handleCreateRoom = useCallback(async () => {
@@ -346,9 +421,13 @@ function MultiplayerPage() {
             if (updated.room.status === "in_progress") {
               const state = await api.roomState(created.room_code)
               if (state.session && state.tracks.length) {
+                setGameStateHash(state.session.stateHash || "")
                 setSession(state.session)
                 setTracks(state.tracks)
+                lastNextRoundRef.current = state.session.currentRound ?? 0
                 setResultsOpen(false)
+                setNextRoundNumber(state.session.currentRound ?? null)
+                sharedDeadlineRef.current = null
                 setView("playing")
                 if (pollRef.current) {
                   clearInterval(pollRef.current)
@@ -406,8 +485,11 @@ function MultiplayerPage() {
             if (updated.room.status === "in_progress") {
               const state = await api.roomState(joined.room_code)
               if (state.session && state.tracks.length) {
+                setGameStateHash(state.session.stateHash || "")
                 setSession(state.session)
                 setTracks(state.tracks)
+                lastNextRoundRef.current = state.session.currentRound ?? 0
+                sharedDeadlineRef.current = null
                 setResultsOpen(false)
                 setView("playing")
                 if (pollRef.current) {
@@ -446,6 +528,7 @@ function MultiplayerPage() {
         room.room_code,
         payload
       )
+      setGameStateHash(sessionPayload.stateHash || "")
       setSession(sessionPayload)
       setTracks(generatedTracks)
       setCompletedTracks([])
@@ -477,9 +560,10 @@ function MultiplayerPage() {
         userId: userPayload.user.id,
         score: stats.points,
         accuracy,
+        stateHash: gameStateHash,
       })
     },
-    [room, userPayload]
+    [room, userPayload, gameStateHash]
   )
 
   const handleGameComplete = useCallback(
@@ -553,10 +637,16 @@ function MultiplayerPage() {
     setScores({})
     setTracks([])
     setSession(null)
+    setGameStateHash("")
     setSource("library")
     setPlaylistId("")
     setView("landing")
   }, [room, userPayload])
+
+  const handleExit = useCallback(() => {
+    handleLeaveRoom()
+    router.replace("/menu")
+  }, [handleLeaveRoom, router])
 
   if (loading) {
     return (
@@ -664,15 +754,22 @@ function MultiplayerPage() {
       autoAdvance={autoAdvance}
       sharedDeadlineMs={sharedDeadlineMs}
       nextSignal={nextSignal}
+      nextRoundNumber={nextRoundNumber ?? undefined}
+      nextTrackId={nextTrackId ?? undefined}
       onHostNext={(nextRound, revealAt) => {
         const socket = socketRef.current
         if (!socket || !room) return
-        socket.emit("round:next", { roomCode: room.room_code, round: nextRound, revealAt })
-        setSharedDeadlineMs(revealAt)
+        socket.emit("round:next", {
+          stateHash: gameStateHash,
+          roomCode: room.room_code,
+          round: nextRound,
+          revealAt,
+        })
       }}
       leaderboard={leaderboard}
       onRoundComplete={handleRoundComplete}
       onGameComplete={handleGameComplete}
+      roomCode={room?.room_code}
     />
         )}
 
@@ -687,6 +784,9 @@ function MultiplayerPage() {
               setParticipants([])
               setScores({})
               setResultsOpen(false)
+              setSession(null)
+              setTracks([])
+              setGameStateHash("")
               setSource("library")
               setPlaylistId("")
               setCompletedTracks([])
@@ -700,28 +800,28 @@ function MultiplayerPage() {
 
 function Header({ onLeave, view }: { onLeave: () => void; view: View }) {
   return (
-    <div className="flex flex-col gap-6 rounded-2xl border border-[var(--ma-border)] bg-[var(--ma-surface)] p-8 md:flex-row md:items-center md:justify-between">
-      <div className="flex items-center gap-5">
-        <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-[var(--ma-muted)]">Multijoueur</p>
-          <h1 className="text-3xl font-bold text-white">Blindify Rooms</h1>
-          <p className="text-sm text-[var(--ma-muted)]">
-            {view === "landing"
-              ? "Crée une salle ou rejoins tes amis pour des blind tests synchronisés."
-              : "Reste synchro avec tes amis et suis le score en direct."}
-          </p>
+    <div className="flex flex-col gap-6 rounded-2xl border border-[var(--ma-border)] bg-[var(--ma-surface)] p-8">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-5">
+          <div>
+            <p className="text-xs uppercase tracking-[0.3em] text-[var(--ma-muted)]">Multijoueur</p>
+            <h1 className="text-3xl font-bold text-white">Blindify Rooms</h1>
+            <p className="text-sm text-[var(--ma-muted)]">
+              {view === "landing"
+                ? "Crée une salle ou rejoins tes amis pour des blind tests synchronisés."
+                : "Reste synchro avec tes amis et suis le score en direct."}
+            </p>
+          </div>
         </div>
-      </div>
-      {view !== "landing" && (
         <Button
           variant="outline"
           onClick={onLeave}
-          className="gap-2 self-start rounded-lg border border-[var(--ma-border)] bg-transparent text-white hover:bg-white/10 md:self-auto"
+          className="gap-2 rounded-full border border-[var(--ma-border)] bg-transparent text-white hover:bg-white/10"
         >
           <ArrowLeft className="h-4 w-4" />
           Quitter
         </Button>
-      )}
+      </div>
     </div>
   )
 }

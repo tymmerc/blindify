@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { api } from "@/lib/api"
+import { Logo } from "@/components/Logo"
 
 const providers = [
   {
@@ -67,7 +68,7 @@ export default function AuthLoginPage() {
 
       <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl flex-col justify-center gap-16 px-6 py-16 lg:flex-row lg:items-center">
         <section className="flex-1 space-y-6">
-          <span className="ma-pill">Blindify</span>
+          <Logo withText priority className="w-fit" />
           <div className="space-y-4">
             <h1 className="text-4xl font-bold leading-tight tracking-[-0.03em] sm:text-5xl">Blindify — jouez différemment.</h1>
             <p className="text-sm text-[var(--ma-muted)]">

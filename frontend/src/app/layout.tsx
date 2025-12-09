@@ -3,6 +3,8 @@ import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
 
+import { publicPath } from "@/lib/publicPath"
+
 const inter = Inter({
   subsets: ["latin"],
   variable: "--font-sans",
@@ -14,7 +16,12 @@ export const metadata: Metadata = {
   description:
     "Connect your favorite music services and battle friends in a neon-soaked blind test experience with universal audio sources.",
   icons: {
-    icon: "/favicon.ico",
+    icon: [
+      { url: publicPath("/favicon.ico") },
+      { url: publicPath("/favicon-32x32.png"), sizes: "32x32", type: "image/png" },
+      { url: publicPath("/favicon-16x16.png"), sizes: "16x16", type: "image/png" },
+    ],
+    apple: publicPath("/apple-touch-icon.png"),
   },
 }
 

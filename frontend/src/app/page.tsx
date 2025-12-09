@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { Logo } from "@/components/Logo"
 
 const heroCards = [
   { icon: "🎵", title: "Votre musique", desc: "Utilisez vos propres playlists pour des parties personnalisées" },
@@ -31,13 +32,7 @@ export default function LandingPage() {
     <div className="min-h-screen bg-[var(--ma-bg)] text-white">
       <header className="fixed top-0 left-0 right-0 z-30 border-b border-[var(--ma-border)] bg-[rgba(10,10,10,0.82)] backdrop-blur-md">
         <div className="ma-container flex items-center justify-between py-6">
-          <Link
-            href="/"
-            className="text-2xl font-bold tracking-tight bg-clip-text text-transparent"
-            style={{ backgroundImage: "var(--ma-gradient)" }}
-          >
-            Blindify
-          </Link>
+          <Logo withText priority />
         </div>
       </header>
 

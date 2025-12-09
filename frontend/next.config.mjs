@@ -1,6 +1,9 @@
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "/blindify"
+
 const nextConfig = {
   output: "export",
-  basePath: "/blindify",
+  basePath,
+  assetPrefix: basePath,
   trailingSlash: true,
   images: {
     unoptimized: true,

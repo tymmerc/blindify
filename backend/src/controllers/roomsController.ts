@@ -8,6 +8,7 @@ import { ok, fail } from "../utils/response";
 import type { MusicProvider } from "../types/user";
 import type { AudioSourceRow } from "../types/audio";
 import { syncSpotifyLibrary } from "../services/providers/spotifySync";
+import { createRoomState, getRoomState } from "../services/gameState";
 
 async function ensureUsedTracksTable(): Promise<void> {
   await pool.query(`
@@ -565,6 +566,16 @@ export const roomsController = {
       [session.id]
     );
 
+    let gameState = getRoomState(room.room_code);
+    if (!gameState) {
+      gameState = createRoomState({
+        sessionId: session.id,
+        roomCode: room.room_code,
+        totalRounds: session.total_rounds ?? trackRows.length ?? room.question_count ?? 10,
+        round: 1,
+      });
+    }
+
     ok(res, {
       room,
       session: {
@@ -575,6 +586,9 @@ export const roomsController = {
         totalRounds: session.total_rounds,
         startedAt: session.started_at,
         roomCode: room.room_code,
+        stateHash: gameState?.stateHash ?? null,
+        currentRound: gameState?.round ?? null,
+        autoAdvance: room.auto_advance ?? false,
       },
       tracks: trackRows,
     });
@@ -751,6 +765,7 @@ export const roomsController = {
 
     // Prélever un quota par joueur pour garantir la diversité
     const perUserCount = Math.max(1, Math.ceil(room.question_count / Math.max(1, participantIds.length)));
+    const contribution = new Map<number, number>();
     for (const pid of participantIds) {
       const pref = prefMap.get(pid);
       const choice = normalizeSource(pref?.source ?? sourceParam);
@@ -785,8 +800,18 @@ export const roomsController = {
         playlistId: playlistChoice,
         timeRange: timeChoice,
       });
+      contribution.set(pid, (contribution.get(pid) ?? 0) + slice.length);
       pushUnique(slice);
       if (collected.length >= room.question_count) break;
+    }
+
+    // Si au moins un participant n'a aucun titre exploitable, on bloque le lancement
+    const missing = participantIds.filter(pid => (contribution.get(pid) ?? 0) === 0);
+    if (missing.length) {
+      fail(res, "insufficient_tracks", "Pas assez de titres pour tous les joueurs, synchronise une source Spotify ou change de mode.", 400, {
+        missingPlayers: missing.length,
+      });
+      return;
     }
 
     // Compléter avec le pool commun si besoin
@@ -892,6 +917,14 @@ export const roomsController = {
       );
     }
 
+    const totalRounds = Number(session.total_rounds ?? room.question_count ?? normalizedTracks.length ?? 10);
+    const gameState = createRoomState({
+      sessionId: session.id,
+      roomCode: room.room_code,
+      totalRounds,
+      round: 1,
+    });
+
     const startPayload = {
       session: {
         id: session.id,
@@ -902,6 +935,7 @@ export const roomsController = {
         startedAt: session.started_at,
         roomCode: room.room_code,
         autoAdvance: room.auto_advance ?? false,
+        stateHash: gameState.stateHash,
       },
       tracks: normalizedTracks,
       host: {
@@ -909,6 +943,7 @@ export const roomsController = {
         username: context.user.username,
       },
       autoAdvance: room.auto_advance ?? false,
+      stateHash: gameState.stateHash,
     };
 
     // Emit on both event names for backward/forward compatibility
@@ -924,6 +959,7 @@ export const roomsController = {
         totalRounds: session.total_rounds,
         startedAt: session.started_at,
         roomCode: room.room_code,
+        stateHash: gameState.stateHash,
       },
       tracks: normalizedTracks,
     });

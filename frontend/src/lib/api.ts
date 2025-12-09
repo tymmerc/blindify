@@ -85,6 +85,9 @@ export const api = {
       totalRounds: number
       startedAt: string
       roomCode: string
+      stateHash?: string | null
+      currentRound?: number | null
+      autoAdvance?: boolean
     } | null
     tracks: SoloTrack[]
   }> {
@@ -95,7 +98,7 @@ export const api = {
   },
   async startMultiplayerGame(
     code: string,
-    payload?: { provider?: string; source?: string; playlistId?: string }
+    payload?: { provider?: string; source?: string; playlistId?: string; autoAdvance?: boolean }
   ): Promise<{
     session: {
       id: number
@@ -105,6 +108,8 @@ export const api = {
       totalRounds: number
       startedAt: string
       roomCode: string
+      stateHash?: string | null
+      autoAdvance?: boolean
     }
     tracks: SoloTrack[]
   }> {

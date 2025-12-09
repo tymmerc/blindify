@@ -3,11 +3,18 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "NEXT_IGNORE_NODE_VERSION_CHECK=1 next dev",
-    "build": "NEXT_IGNORE_NODE_VERSION_CHECK=1 next build",
-    "start": "NEXT_IGNORE_NODE_VERSION_CHECK=1 next start",
-    "lint": "next lint",
-    "export": "NEXT_IGNORE_NODE_VERSION_CHECK=1 next build && NEXT_IGNORE_NODE_VERSION_CHECK=1 next export"
+    "predev": "bash ./scripts/ensure-node20.sh",
+    "prebuild": "bash ./scripts/ensure-node20.sh",
+    "prestart": "bash ./scripts/ensure-node20.sh",
+    "preexport": "bash ./scripts/ensure-node20.sh",
+    "pretest": "bash ./scripts/ensure-node20.sh",
+    "dev": "PATH=\"./.node/bin:$PATH\" NEXT_IGNORE_NODE_VERSION_CHECK=1 next dev",
+    "build": "PATH=\"./.node/bin:$PATH\" NEXT_IGNORE_NODE_VERSION_CHECK=1 next build",
+    "start": "PATH=\"./.node/bin:$PATH\" NEXT_IGNORE_NODE_VERSION_CHECK=1 next start",
+    "lint": "PATH=\"./.node/bin:$PATH\" next lint",
+    "export": "PATH=\"./.node/bin:$PATH\" NEXT_IGNORE_NODE_VERSION_CHECK=1 next build && PATH=\"./.node/bin:$PATH\" NEXT_IGNORE_NODE_VERSION_CHECK=1 next export",
+    "test": "PATH=\"./.node/bin:$PATH\" vitest run",
+    "test:watch": "PATH=\"./.node/bin:$PATH\" vitest watch"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.1.1",
@@ -27,11 +34,16 @@
     "@types/node": "^22.19.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.2.0",
+    "@testing-library/user-event": "^14.5.2",
     "autoprefixer": "10.4.21",
     "eslint": "^8",
     "eslint-config-next": "^15.0.0",
     "postcss": "8",
     "tailwindcss": "3.4.14",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^2.1.4",
+    "jsdom": "^25.0.0"
   }
 }

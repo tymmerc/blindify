@@ -5,6 +5,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { Play, ArrowRight } from "lucide-react";
 
+import { publicPath } from "@/lib/publicPath";
+
 export function Hero() {
   return (
     <section className="relative max-w-7xl mx-auto px-6 py-12 lg:py-20">
@@ -55,7 +57,7 @@ export function Hero() {
         >
           <div className="relative w-[300px] md:w-[400px] lg:w-[460px] aspect-[9/16] rounded-3xl overflow-hidden shadow-xl border border-border">
             <Image
-              src="/music-blindtest-game-interface-modern-dark.jpg"
+              src={publicPath("/music-blindtest-game-interface-modern-dark.jpg")}
               alt="Interface Blindify"
               fill
               className="object-cover"

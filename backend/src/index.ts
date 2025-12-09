@@ -23,6 +23,7 @@ import rateLimit from "express-rate-limit";
 import slowDown from "express-slow-down";
 import cookieSession from "cookie-session";
 import dotenv from "dotenv";
+import type { Socket } from "socket.io";
 
 import { pool } from "./config/db";
 import { initSocket } from "./socket";
@@ -33,6 +34,8 @@ import roomsRoutes from "./routes/rooms";
 import statsRoutes from "./routes/stats";
 import audioSourcesRoutes from "./routes/audioSources";
 import { fail, ok } from "./utils/response";
+import { getRoomState, touchRoomState, updateRoomRound } from "./services/gameState";
+import { getSessionContextFromToken, type SessionContext } from "./utils/session";
 
 dotenv.config();
 
@@ -66,7 +69,109 @@ const allowedOrigins = [
   "http://localhost:5173",
 ].filter(Boolean) as string[];
 
+function parseCookies(header: string | string[] | undefined): Record<string, string> {
+  if (!header) return {};
+  const raw = Array.isArray(header) ? header.join(";") : header;
+  return raw.split(";").reduce<Record<string, string>>((acc, part) => {
+    const [key, ...rest] = part.trim().split("=");
+    if (!key) return acc;
+    const value = rest.join("=");
+    try {
+      acc[key] = decodeURIComponent(value || "");
+    } catch {
+      acc[key] = value || "";
+    }
+    return acc;
+  }, {});
+}
+
+function extractSessionToken(socket: Socket): string | null {
+  const authToken = typeof socket.handshake.auth?.token === "string" ? socket.handshake.auth.token : null;
+  const headerAuth = socket.handshake.headers.authorization;
+  const bearer =
+    typeof headerAuth === "string" && headerAuth.toLowerCase().startsWith("bearer ")
+      ? headerAuth.slice(7).trim()
+      : null;
+  const cookies = parseCookies(socket.handshake.headers.cookie);
+  const cookieToken = cookies["blindify_session_token"] ?? null;
+  return authToken || bearer || cookieToken || null;
+}
+
+type RoomAccess = {
+  id: number;
+  room_code: string;
+  host_user_id: number;
+  status: string;
+  session_id: number | null;
+};
+
+async function requireRoomAccess(roomCode: string, userId: number): Promise<{ room: RoomAccess; isHost: boolean } | null> {
+  const { rows: roomRows } = await pool.query<RoomAccess>(
+    `SELECT id, room_code, host_user_id, status, session_id
+     FROM multiplayer_rooms
+     WHERE room_code=$1
+     LIMIT 1`,
+    [roomCode]
+  );
+  const room = roomRows[0];
+  if (!room) return null;
+  const membership = await pool.query(`SELECT 1 FROM room_participants WHERE room_id=$1 AND user_id=$2 LIMIT 1`, [
+    room.id,
+    userId,
+  ]);
+  if (!membership.rows.length) return null;
+  return { room, isHost: room.host_user_id === userId };
+}
+
+function emitRoomError(socket: Socket, roomCode: string, message: string, code = "forbidden"): void {
+  socket.emit("room:error", {
+    roomCode,
+    code,
+    message,
+    serverTimestamp: Date.now(),
+  });
+}
+
+type ReadyState = {
+  round: number;
+  ready: Set<number>;
+};
+
+const readyStates = new Map<string, ReadyState>();
+
+function resetReadyState(roomCode: string, round: number): void {
+  readyStates.set(roomCode, { round, ready: new Set() });
+}
+
+function markReady(roomCode: string, round: number, userId: number): void {
+  const current = readyStates.get(roomCode);
+  if (!current || current.round !== round) {
+    readyStates.set(roomCode, { round, ready: new Set([userId]) });
+    return;
+  }
+  current.ready.add(userId);
+}
+
+function isEveryoneReady(roomCode: string, round: number, participants: number[]): boolean {
+  const state = readyStates.get(roomCode);
+  if (!state || state.round !== round) return false;
+  return participants.every(p => state.ready.has(p));
+}
+
 const io = initSocket(server, allowedOrigins);
+
+io.use(async (socket, next) => {
+  try {
+    const token = extractSessionToken(socket);
+    if (!token) return next(new Error("unauthorized"));
+    const context = await getSessionContextFromToken(token, { autoExtend: true });
+    if (!context) return next(new Error("unauthorized"));
+    (socket.data as { auth?: SessionContext }).auth = context;
+    return next();
+  } catch (err) {
+    return next(new Error("unauthorized"));
+  }
+});
 
 app.use(
   helmet({
@@ -100,7 +205,7 @@ app.use(express.urlencoded({ extended: true }));
 
 const apiLimiter = rateLimit({
   windowMs: 60_000,
-  max: 600, // higher burst
+  max: 600,
   standardHeaders: true,
   legacyHeaders: false,
   skip: req =>
@@ -135,7 +240,6 @@ app.use(
   })
 );
 
-// Simple Origin/Referer check for state-changing requests
 app.use((req, res, next) => {
   if (["GET", "HEAD", "OPTIONS"].includes(req.method)) {
     return next();
@@ -165,50 +269,88 @@ app.use("/api/stats", statsRoutes);
 app.use("/api/audio-sources", audioSourcesRoutes);
 
 io.on("connection", socket => {
-  socket.on("room:join", ({ roomCode, user }: { roomCode: string; user?: { id?: number; username?: string } }) => {
+  const auth = (socket.data as { auth?: SessionContext }).auth;
+  if (!auth?.user) {
+    socket.emit("room:error", {
+      code: "unauthorized",
+      message: "Authentification requise",
+      serverTimestamp: Date.now(),
+    });
+    socket.disconnect(true);
+    return;
+  }
+
+  const currentUser = auth.user;
+
+  const rejectState = (roomCode: string, state?: { stateHash: string; round: number; totalRounds: number }, message?: string) => {
+    socket.emit("state:invalid", {
+      roomCode,
+      currentState: state ?? null,
+      message: message ?? "Game state mismatch. Refreshing...",
+    });
+  };
+
+  const requireState = (roomCode: string, incomingHash?: string) => {
+    const state = getRoomState(roomCode);
+    if (!state) {
+      rejectState(roomCode, undefined, "Missing game state for this room. Please refresh.");
+      return null;
+    }
+    if (!incomingHash || incomingHash !== state.stateHash) {
+      rejectState(roomCode, state);
+      return null;
+    }
+    return state;
+  };
+
+  socket.on("room:join", async ({ roomCode }: { roomCode: string }) => {
     if (!roomCode) return;
+    const access = await requireRoomAccess(roomCode, currentUser.id);
+    if (!access) {
+      emitRoomError(socket, roomCode, "Accès refusé à cette salle.");
+      return;
+    }
     socket.join(roomCode);
     io.to(roomCode).emit("room:presence", {
       type: "joined",
       roomCode,
-      user,
+      user: { id: currentUser.id, username: currentUser.username ?? undefined },
       serverTimestamp: Date.now(),
     });
   });
 
-  socket.on("room:leave", ({ roomCode, userId }: { roomCode: string; userId?: number }) => {
+  socket.on("room:leave", async ({ roomCode }: { roomCode: string }) => {
     if (!roomCode) return;
     socket.leave(roomCode);
+    const access = await requireRoomAccess(roomCode, currentUser.id);
+    if (!access) return;
     io.to(roomCode).emit("room:presence", {
       type: "left",
       roomCode,
-      userId,
+      userId: currentUser.id,
       serverTimestamp: Date.now(),
     });
   });
 
   socket.on(
-    "game:start",
-    (payload: {
-      roomCode: string;
-      sessionId: number;
-      hostId: number;
-      trackIds: string[];
-    }) => {
-      if (!payload?.roomCode) return;
-      io.to(payload.roomCode).emit("game:start", {
-        ...payload,
-        serverTimestamp: Date.now(),
-      });
-    }
-  );
-
-  socket.on(
     "round:start",
-    (payload: { roomCode: string; round: number; audioSourceId: string; revealAt: number }) => {
+    async (payload: { roomCode: string; round: number; audioSourceId: string; revealAt: number; stateHash?: string }) => {
       if (!payload?.roomCode) return;
+      const access = await requireRoomAccess(payload.roomCode, currentUser.id);
+      if (!access) {
+        emitRoomError(socket, payload.roomCode, "Accès refusé à cette salle.");
+        return;
+      }
+      if (!access.isHost) {
+        emitRoomError(socket, payload.roomCode, "Seul l'hôte peut démarrer un round.", "host_only");
+        return;
+      }
+      const state = requireState(payload.roomCode, payload.stateHash);
+      if (!state) return;
+      touchRoomState(payload.roomCode);
       io.to(payload.roomCode).emit("round:start", {
         ...payload,
+        stateHash: state.stateHash,
         serverTimestamp: Date.now(),
       });
     }
@@ -216,10 +358,27 @@ io.on("connection", socket => {
 
   socket.on(
     "round:end",
-    (payload: { roomCode: string; round: number; leaderboard: unknown }) => {
+    async (payload: { roomCode: string; round: number; leaderboard: unknown; stateHash?: string }) => {
       if (!payload?.roomCode) return;
+      const access = await requireRoomAccess(payload.roomCode, currentUser.id);
+      if (!access) {
+        emitRoomError(socket, payload.roomCode, "Accès refusé à cette salle.");
+        return;
+      }
+      if (!access.isHost) {
+        emitRoomError(socket, payload.roomCode, "Seul l'hôte peut arrêter un round.", "host_only");
+        return;
+      }
+      const state = requireState(payload.roomCode, payload.stateHash);
+      if (!state) return;
+      if (payload.round !== state.round) {
+        rejectState(payload.roomCode, state, "Round index mismatch. Refreshing room state.");
+        return;
+      }
+      touchRoomState(payload.roomCode);
       io.to(payload.roomCode).emit("round:end", {
         ...payload,
+        stateHash: state.stateHash,
         serverTimestamp: Date.now(),
       });
     }
@@ -227,25 +386,127 @@ io.on("connection", socket => {
 
   socket.on(
     "score:update",
-    (payload: { roomCode: string; userId: number; score: number; accuracy: number }) => {
+    async (payload: { roomCode: string; userId: number; score: number; accuracy: number; stateHash?: string }) => {
       if (!payload?.roomCode) return;
+      const access = await requireRoomAccess(payload.roomCode, currentUser.id);
+      if (!access) {
+        emitRoomError(socket, payload.roomCode, "Accès refusé à cette salle.");
+        return;
+      }
+      if (payload.userId !== currentUser.id) {
+        emitRoomError(socket, payload.roomCode, "Mise à jour de score refusée pour un autre joueur.", "invalid_score");
+        return;
+      }
+      const state = requireState(payload.roomCode, payload.stateHash);
+      if (!state) return;
+      const score = Number.isFinite(payload.score) ? Math.max(0, Math.floor(payload.score)) : 0;
+      const accuracy = Number.isFinite(payload.accuracy) ? Math.max(0, Math.min(100, Math.floor(payload.accuracy))) : 0;
       io.to(payload.roomCode).emit("score:update", {
-        ...payload,
+        roomCode: payload.roomCode,
+        userId: currentUser.id,
+        score,
+        accuracy,
+        stateHash: state.stateHash,
         serverTimestamp: Date.now(),
       });
     }
   );
 
-  socket.on("round:next", (payload: { roomCode: string; round?: number; revealAt?: number }) => {
+  socket.on("round:ready", async ({ roomCode, round }: { roomCode: string; round: number }) => {
+    if (!roomCode || typeof round !== "number") return;
+    const access = await requireRoomAccess(roomCode, currentUser.id);
+    if (!access) {
+      emitRoomError(socket, roomCode, "Accès refusé à cette salle.");
+      return;
+    }
+    markReady(roomCode, round, currentUser.id);
+    io.to(roomCode).emit("round:ready:update", {
+      roomCode,
+      round,
+      userId: currentUser.id,
+      serverTimestamp: Date.now(),
+    });
+  });
+
+  socket.on("round:next", async (payload: { roomCode: string; round?: number; revealAt?: number; stateHash?: string }) => {
     if (!payload?.roomCode) return;
+    const access = await requireRoomAccess(payload.roomCode, currentUser.id);
+    if (!access) {
+      emitRoomError(socket, payload.roomCode, "Accès refusé à cette salle.");
+      return;
+    }
+    if (!access.isHost) {
+      emitRoomError(socket, payload.roomCode, "Seul l'hôte peut avancer les rounds.", "host_only");
+      return;
+    }
+    const targetRound = typeof payload.round === "number" ? payload.round : null;
+    const state = requireState(payload.roomCode, payload.stateHash);
+    if (!state) return;
+    const nextRound = targetRound ?? state.round + 1;
+    if (nextRound <= state.round || nextRound > state.totalRounds) {
+      rejectState(payload.roomCode, state, "Invalid round transition.");
+      return;
+    }
+    // Gating: ensure all participants have marked ready for the current round before advancing
+    const { rows: participantRows } = await pool.query<{ user_id: number }>(
+      `SELECT user_id FROM room_participants WHERE room_id=$1`,
+      [access.room.id]
+    );
+    const participantIds = participantRows.map(r => r.user_id);
+    if (participantIds.length) {
+      const everyoneReady = isEveryoneReady(payload.roomCode, state.round, participantIds);
+      if (!everyoneReady) {
+        emitRoomError(socket, payload.roomCode, "Tous les joueurs n'ont pas confirmé la manche.", "waiting_players");
+        return;
+      }
+    }
+    const { rows: nextTrackRows } = await pool.query<{
+      round: number;
+      audioSourceId: number | string;
+      trackId: string;
+      provider: string | null;
+      title: string | null;
+      artist: string | null;
+      audioUrl: string | null;
+      metadata: Record<string, unknown> | null;
+    }>(
+      `SELECT gr.round_index AS round,
+              s.id AS "audioSourceId",
+              COALESCE(s.external_id, s.id::text) AS "trackId",
+              s.provider AS provider,
+              s.title,
+              s.artist,
+              s.audio_url AS "audioUrl",
+              s.metadata
+       FROM game_rounds gr
+       LEFT JOIN audio_sources s ON s.id = gr.audio_source_id
+       WHERE gr.session_id=$1 AND gr.round_index=$2
+       LIMIT 1`,
+      [state.sessionId, nextRound]
+    );
+    const nextTrack = nextTrackRows[0];
+    if (!nextTrack) {
+      rejectState(payload.roomCode, state, "Track introuvable pour la prochaine manche.");
+      return;
+    }
+    const updated = updateRoomRound(payload.roomCode, nextRound) ?? state;
+    resetReadyState(payload.roomCode, nextRound);
     const now = Date.now();
     const revealAt = payload.revealAt && Number.isFinite(payload.revealAt) ? payload.revealAt : now + 45000;
-    io.to(payload.roomCode).emit("round:next", {
+    const startPayload = {
       roomCode: payload.roomCode,
-      round: payload.round,
+      round: nextRound,
+      trackId: nextTrack.trackId,
+      audioSourceId: nextTrack.audioSourceId,
       revealAt,
+      stateHash: updated.stateHash,
       serverTimestamp: now,
-    });
+      provider: nextTrack.provider,
+    };
+    // Canonical event for synchronising all players (host + invités)
+    io.to(payload.roomCode).emit("round:started", startPayload);
+    // Backwards compatibility with older clients still listening to round:next
+    io.to(payload.roomCode).emit("round:next", startPayload);
   });
 
   socket.on("disconnecting", () => {
@@ -255,10 +516,13 @@ io.on("connection", socket => {
         type: "disconnected",
         roomCode,
         socketId: socket.id,
+        userId: currentUser.id,
         serverTimestamp: Date.now(),
       });
     }
   });
+
+  // Always publish the current server time to help clients sync timers
 });
 
 app.use((_req, res) => {

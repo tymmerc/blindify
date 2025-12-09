@@ -1,8 +1,10 @@
 "use client";
 
-import { Music, Play } from "lucide-react";
+import { Play } from "lucide-react";
 import Link from "next/link";
 import { motion } from "framer-motion";
+
+import { Logo } from "@/components/Logo";
 
 export default function Navbar() {
   return (
@@ -14,12 +16,7 @@ export default function Navbar() {
     >
       <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
         {/* Logo + nom */}
-        <Link href="/" className="flex items-center gap-2 text-foreground hover:opacity-80 transition">
-          <div className="w-8 h-8 bg-gradient-to-br from-primary to-accent rounded-lg flex items-center justify-center">
-            <Music className="w-5 h-5 text-primary-foreground" />
-          </div>
-          <span className="font-bold text-lg">Blindify</span>
-        </Link>
+        <Logo withText priority className="hover:opacity-80" />
 
         {/* Bouton menu */}
         <Link

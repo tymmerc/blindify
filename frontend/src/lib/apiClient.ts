@@ -192,6 +192,9 @@ export const clientApi = {
       totalRounds: number
       startedAt: string
       roomCode: string
+      stateHash?: string | null
+      currentRound?: number | null
+      autoAdvance?: boolean
     } | null
     tracks: SoloTrack[]
   }> {
@@ -217,6 +220,7 @@ export const clientApi = {
       startedAt: string
       roomCode: string
       autoAdvance?: boolean
+      stateHash?: string | null
     }
     tracks: SoloTrack[]
   }> {
@@ -230,6 +234,7 @@ export const clientApi = {
         startedAt: string
         roomCode: string
         autoAdvance?: boolean
+        stateHash?: string | null
       }
       tracks: SoloTrack[]
     }>(`/api/rooms/${code}/start`, {

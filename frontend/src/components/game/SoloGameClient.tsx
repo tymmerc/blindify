@@ -7,6 +7,7 @@ import { api } from "@/lib/api"
 import type { SoloTrack, UserSummary } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import { ArrowRight, Check, Flame, Heart, Loader2, Play, Sparkles, Timer, Volume2, VolumeX } from "lucide-react"
+import { getSocket } from "@/lib/socket"
 
 type Phase = "countdown" | "listening" | "reveal"
 type Verdict = "correct" | "close" | "wrong"
@@ -27,6 +28,9 @@ export interface SoloGameClientProps {
   leaderboard?: Array<{ userId: number; username: string | null; score: number; accuracy: number }>
   sharedDeadlineMs?: number | null
   nextSignal?: number
+  nextRoundNumber?: number
+  nextTrackId?: string
+  roomCode?: string
   onHostNext?: (nextRound: number, revealAt: number) => void
   onRoundComplete?: (payload: {
     track: SoloTrack
@@ -101,10 +105,13 @@ export function SoloGameClient({
   leaderboard,
   sharedDeadlineMs = null,
   nextSignal = 0,
+  nextRoundNumber,
+  nextTrackId,
   onHostNext,
   onRoundComplete,
   onGameComplete,
   sessionId,
+  roomCode,
 }: SoloGameClientProps) {
   const [trackList, setTrackList] = useState<SoloTrack[]>(tracks)
   const [index, setIndex] = useState(0)
@@ -157,6 +164,10 @@ export function SoloGameClient({
   const dismissedRoundsRef = useRef<Set<number>>(new Set())
   const historyContainerRef = useRef<HTMLDivElement | null>(null)
   const historyItemRefs = useRef<Record<number, HTMLDivElement | null>>({})
+  const sharedDeadlineRef = useRef<number | null>(null)
+  const pausedByUserRef = useRef(false)
+  const skipCountdownRef = useRef(false)
+  const playStartedRef = useRef<string | null>(null)
 
   const statsRef = useRef(stats)
   const guessRef = useRef(guess)
@@ -168,9 +179,11 @@ export function SoloGameClient({
   const listeningDeadlineRef = useRef<number>(0)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const previewUrlRef = useRef<string | null>(null)
+  const lastSyncedRoundRef = useRef<number | null>(null)
 
   const prevTracksKeyRef = useRef<string | null>(null)
   const autoAdvanceTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const lastStartSignalRef = useRef<number>(0)
   const isMultiplayer = mode === "multiplayer"
 
   useEffect(() => {
@@ -182,6 +195,7 @@ export function SoloGameClient({
     setRoundStates(tracks.map((_, i) => (i === 0 ? "current" : "pending")))
     setIndex(0)
     lastDialogRoundRef.current = 0
+    lastStartSignalRef.current = 0
     setResultDialog(null)
     dismissedRoundsRef.current.clear()
   }, [tracks])
@@ -240,6 +254,108 @@ export function SoloGameClient({
       audioRef.current = null
     }
   }, [])
+
+  const hideCorrectAnswerPopup = useCallback(
+    (roundToDismiss?: number) => {
+      if (autoAdvanceTimerRef.current) {
+        clearTimeout(autoAdvanceTimerRef.current)
+        autoAdvanceTimerRef.current = null
+      }
+      setResultDialog(prev => {
+        const closingRound = roundToDismiss ?? prev?.round ?? index + 1
+        if (closingRound) {
+          dismissedRoundsRef.current.add(closingRound)
+          lastDialogRoundRef.current = Math.max(lastDialogRoundRef.current, closingRound)
+        }
+        return null
+      })
+    },
+    [index]
+  )
+
+  const resolveTargetIndex = useCallback(
+    (targetRound?: number, targetTrackId?: string | number) => {
+      if (total <= 0) return 0
+      if (targetTrackId) {
+        const targetKey = String(targetTrackId)
+        const found = trackList.findIndex(track => {
+          const candidates = [track.audioSourceId, track.track_id]
+            .filter(Boolean)
+            .map(value => String(value))
+          return candidates.includes(targetKey)
+        })
+        if (found >= 0) return found
+      }
+      if (typeof targetRound === "number" && Number.isFinite(targetRound)) {
+        return Math.min(Math.max(0, targetRound - 1), total - 1)
+      }
+      return Math.min(Math.max(0, index + 1), total - 1)
+    },
+    [index, total, trackList]
+  )
+
+  const resetRoundState = useCallback(
+    (targetRound: number, targetTrackId?: string | number, revealAt?: number) => {
+      const targetIndex = resolveTargetIndex(targetRound, targetTrackId)
+      cleanupTimers()
+      setVerdict(null)
+      setFeedback(null)
+      setGuess("")
+      setGuessTitle("")
+      setGuessArtist("")
+      setError(null)
+      setManualPlayRequired(false)
+      setIsPlaying(false)
+      pausedByUserRef.current = false
+      setMuted(false)
+      setTimer(LISTENING_DURATION)
+      setCountdown(COUNTDOWN_DURATION)
+      setGameFinished(false)
+      sharedDeadlineRef.current = revealAt ?? sharedDeadlineRef.current ?? null
+      listeningDeadlineRef.current = revealAt ?? listeningDeadlineRef.current ?? 0
+      previewUrlRef.current = null
+      playStartedRef.current = null
+      setRoundStates(prev => {
+        const next = [...prev]
+        next.forEach((state, idx) => {
+          if (idx === targetIndex) {
+            next[idx] = state === "correct" || state === "close" || state === "wrong" ? state : "current"
+          } else if (idx > targetIndex && state === "current") {
+            next[idx] = "pending"
+          }
+        })
+        return next
+      })
+      setIndex(Math.min(Math.max(0, targetIndex), Math.max(0, total - 1)))
+      return targetIndex
+    },
+    [cleanupTimers, resolveTargetIndex, total]
+  )
+
+  const startTrackForRound = useCallback(
+    (targetRound: number, targetTrackId?: string | number, revealAt?: number, opts?: { skipCountdown?: boolean }) => {
+      const now = Date.now()
+      const deadline =
+        revealAt && Number.isFinite(revealAt) && revealAt > now - 2000 ? revealAt : now + LISTENING_DURATION * 1000
+      const targetIndex = resetRoundState(targetRound, targetTrackId, deadline)
+      listeningDeadlineRef.current = deadline
+      sharedDeadlineRef.current = deadline
+      if (opts?.skipCountdown) {
+        skipCountdownRef.current = true
+        lastSyncedRoundRef.current = null
+        setPhase("listening")
+        setTimer(Math.max(0, Math.ceil((deadline - now) / 1000)))
+      } else {
+        skipCountdownRef.current = false
+        lastSyncedRoundRef.current = null
+        setPhase("countdown")
+        setTimer(LISTENING_DURATION)
+        setCountdown(COUNTDOWN_DURATION)
+      }
+      return targetIndex
+    },
+    [resetRoundState]
+  )
 
   const finalizeRound = useCallback(
     (nextVerdict: Verdict, reason: FinalizeReason, track: SoloTrack, submittedGuess: string) => {
@@ -343,9 +459,16 @@ export function SoloGameClient({
   useEffect(() => {
     if (!current || gameFinished) return
 
+    if (skipCountdownRef.current) {
+      skipCountdownRef.current = false
+      return
+    }
+
+    // Only run countdown when explicitly in countdown phase.
+    if (phase !== "countdown") return
+
     cleanupTimers()
 
-    setPhase("countdown")
     setCountdown(COUNTDOWN_DURATION)
     setTimer(LISTENING_DURATION)
     setGuess("")
@@ -357,6 +480,8 @@ export function SoloGameClient({
     setIsPlaying(false)
     setError(null)
     setManualPlayRequired(false)
+    pausedByUserRef.current = false
+    playStartedRef.current = null
     previewUrlRef.current = null
 
     let remaining = COUNTDOWN_DURATION
@@ -374,7 +499,7 @@ export function SoloGameClient({
     return () => {
       cleanupTimers()
     }
-  }, [current, cleanupTimers, gameFinished])
+  }, [current, cleanupTimers, gameFinished, phase])
 
   useEffect(() => {
     setRoundStates(prev =>
@@ -385,11 +510,21 @@ export function SoloGameClient({
     )
   }, [trackList])
 
-  // Synchronise le timer avec une échéance partagée (round:start socket)
+  // Synchronise le timer avec une échéance partagée (round:start/started socket)
   useEffect(() => {
-    if (!sharedDeadlineMs || phase !== "listening") return
-    listeningDeadlineRef.current = sharedDeadlineMs
-  }, [sharedDeadlineMs, phase])
+    if (phase !== "listening") return
+    const roundNumber = Math.floor(index / 1) + 1
+    if (lastSyncedRoundRef.current === roundNumber) return
+    lastSyncedRoundRef.current = roundNumber
+    const now = Date.now()
+    const deadline =
+      sharedDeadlineMs && sharedDeadlineMs > now
+        ? sharedDeadlineMs
+        : now + LISTENING_DURATION * 1000
+    listeningDeadlineRef.current = deadline
+    sharedDeadlineRef.current = deadline
+    setTimer(Math.max(0, Math.ceil((deadline - now) / 1000)))
+  }, [sharedDeadlineMs, phase, index])
 
   useEffect(() => {
     if (!autoAdvanceTimerRef.current) return
@@ -482,8 +617,19 @@ export function SoloGameClient({
       setManualPlayRequired(false)
       setFeedback(null)
       setIsPlaying(true)
+      pausedByUserRef.current = false
 
-      listeningDeadlineRef.current = Date.now() + LISTENING_DURATION * 1000
+      const now = Date.now()
+      const externalDeadline =
+        sharedDeadlineRef.current && sharedDeadlineRef.current > now
+          ? sharedDeadlineRef.current
+          : sharedDeadlineMs && sharedDeadlineMs > now
+            ? sharedDeadlineMs
+            : null
+      listeningDeadlineRef.current = externalDeadline ?? now + LISTENING_DURATION * 1000
+      if (listeningDeadlineRef.current <= now) {
+        listeningDeadlineRef.current = now + LISTENING_DURATION * 1000
+      }
 
       const tick = () => {
         if (cancelled) return
@@ -513,6 +659,7 @@ export function SoloGameClient({
       }
 
       previewUrlRef.current = previewUrl
+      playStartedRef.current = current?.audioSourceId ?? current?.track_id ?? "round"
 
       try {
         await startAudio(previewUrl, current)
@@ -525,6 +672,8 @@ export function SoloGameClient({
         }
         console.error("html_audio_play_failed", err)
         setFeedback("Impossible de lire l'extrait.")
+        setManualPlayRequired(true)
+        setIsPlaying(false)
       }
     }
 
@@ -570,8 +719,15 @@ export function SoloGameClient({
       await audio.play()
       setManualPlayRequired(false)
       setIsPlaying(true)
+      pausedByUserRef.current = false
 
-      listeningDeadlineRef.current = Date.now() + LISTENING_DURATION * 1000
+      const externalDeadline =
+        sharedDeadlineRef.current && sharedDeadlineRef.current > Date.now()
+          ? sharedDeadlineRef.current
+          : sharedDeadlineMs && sharedDeadlineMs > Date.now()
+            ? sharedDeadlineMs
+            : null
+      listeningDeadlineRef.current = externalDeadline ?? Date.now() + LISTENING_DURATION * 1000
       const tick = () => {
         const remainingMs = listeningDeadlineRef.current - Date.now()
         const nextSeconds = Math.max(0, Math.ceil(remainingMs / 1000))
@@ -590,7 +746,7 @@ export function SoloGameClient({
       console.error("manual_play_failed", err)
       setFeedback("Impossible de lancer l'extrait.")
     }
-  }, [current, finalizeRound])
+  }, [current, finalizeRound, sharedDeadlineMs, muted])
 
   const albumName = useMemo(() => {
     if (!current?.metadata) return null
@@ -621,33 +777,36 @@ export function SoloGameClient({
     finalizeRound(finalVerdict, "reveal", current, guess)
   }, [current, verdict, guess, finalizeRound])
 
-  const handleNext = useCallback((emitHost = true) => {
-    cleanupTimers()
-    setResultDialog(null)
-    setVerdict(null)
-    setFeedback(null)
-    setManualPlayRequired(false)
-    setIsPlaying(false)
-    setMuted(false)
-    setTimer(LISTENING_DURATION)
-    setCountdown(COUNTDOWN_DURATION)
-    // Marquer la manche comme déjà vue pour ne pas réouvrir le pop-up
-    const roundNumber = index + 1
-    lastDialogRoundRef.current = roundNumber
-    dismissedRoundsRef.current.add(roundNumber)
-    if (!hasMoreRounds) {
-      setGameFinished(true)
-      return
-    }
-    if (mode === "multiplayer" && onHostNext && isHost && emitHost) {
-      const nextRound = index + 2
-      const revealAt = Date.now() + LISTENING_DURATION * 1000
-      onHostNext(nextRound, revealAt)
-    }
-    setGameFinished(false)
-    setIndex(prev => Math.min(prev + 1, total - 1))
-    setPhase("countdown")
-  }, [cleanupTimers, hasMoreRounds, total, mode, onHostNext, index, isHost])
+  const handleNext = useCallback(
+    (emitHost = true, targetRound?: number, skipCountdown = false) => {
+      const nextRound = typeof targetRound === "number" ? targetRound : index + 2
+      if (mode === "multiplayer" && onHostNext && isHost && emitHost) {
+        // Host only emits the intent; the round:started broadcast will close the popup for everyone.
+        const revealAt = Date.now() + LISTENING_DURATION * 1000
+        onHostNext(nextRound, revealAt)
+        return
+      }
+      hideCorrectAnswerPopup()
+      if (!hasMoreRounds) {
+        setGameFinished(true)
+        return
+      }
+      startTrackForRound(nextRound, undefined, sharedDeadlineMs ?? undefined, { skipCountdown })
+    },
+    [mode, onHostNext, isHost, index, hideCorrectAnswerPopup, hasMoreRounds, startTrackForRound, sharedDeadlineMs]
+  )
+
+  const forceAdvanceTo = useCallback(
+    (targetIndex: number, revealAt?: number) => {
+      const clamped = Math.min(Math.max(0, targetIndex), total - 1)
+      const targetTrack = trackList[clamped]
+      const targetTrackId = targetTrack?.audioSourceId ?? targetTrack?.track_id
+      hideCorrectAnswerPopup()
+      const deadline = revealAt ?? sharedDeadlineMs ?? sharedDeadlineRef.current ?? undefined
+      startTrackForRound(clamped + 1, targetTrackId, deadline, { skipCountdown: false })
+    },
+    [total, trackList, hideCorrectAnswerPopup, startTrackForRound, sharedDeadlineMs]
+  )
 
   const handleSkipQuestion = useCallback(() => {
     // En multi, seul l'hôte peut skipper pour éviter des fins prématurées côté invités
@@ -659,11 +818,32 @@ export function SoloGameClient({
     // finalizeRound already avance au round suivant après délai; pas besoin d'un saut supplémentaire ici.
   }, [current, phase, finalizeRound, guess, isMultiplayer, isHost])
 
+  // Server-driven round start (round:started): close the popup everywhere, then sync timers and playback.
   useEffect(() => {
-    if (!isMultiplayer || isHost || nextSignal === 0) return
-    if (!hasMoreRounds) return
-    handleNext(false)
-  }, [nextSignal, isMultiplayer, isHost, hasMoreRounds, handleNext])
+    if (!isMultiplayer) return
+    if (nextSignal === 0) return
+    if (lastStartSignalRef.current === nextSignal) return
+    lastStartSignalRef.current = nextSignal
+    const targetRound = typeof nextRoundNumber === "number" ? nextRoundNumber : index + 2
+    hideCorrectAnswerPopup()
+    startTrackForRound(targetRound, nextTrackId, sharedDeadlineMs ?? undefined, { skipCountdown: false })
+  }, [
+    isMultiplayer,
+    nextSignal,
+    nextRoundNumber,
+    index,
+    hideCorrectAnswerPopup,
+    startTrackForRound,
+    nextTrackId,
+    sharedDeadlineMs,
+  ])
+
+  // Fallback: si l'hôte annonce une manche supérieure à la nôtre, on skip même sans signal horodaté
+  useEffect(() => {
+    if (!isMultiplayer || isHost) return
+    if (!nextRoundNumber || nextRoundNumber <= index + 1) return
+    forceAdvanceTo(nextRoundNumber - 1, sharedDeadlineMs ?? undefined)
+  }, [isMultiplayer, isHost, nextRoundNumber, index, forceAdvanceTo, sharedDeadlineMs])
 
   const handleToggleMute = useCallback(() => {
     setMuted(prev => {
@@ -691,6 +871,7 @@ export function SoloGameClient({
       audio.play().then(() => setIsPlaying(true)).catch(() => setManualPlayRequired(true))
     } else {
       audio.pause()
+      pausedByUserRef.current = true
       setIsPlaying(false)
     }
   }, [handleManualPlay])
@@ -709,6 +890,14 @@ export function SoloGameClient({
       handleManualPlay()
     }
   }, [handleManualPlay])
+
+  // Signaler la disponibilité sur chaque manche une fois la révélation affichée (multijoueur)
+  useEffect(() => {
+    if (!roomCode || mode !== "multiplayer") return
+    if (phase !== "reveal") return
+    const socket = getSocket()
+    socket.emit("round:ready", { roomCode, round: index + 1 })
+  }, [roomCode, mode, phase, index])
 
   const handleVolumeChange = useCallback(
     (value: number) => {
@@ -790,10 +979,11 @@ export function SoloGameClient({
   useEffect(() => {
     if (!resultDialog) return
     const currentRoundNumber = index + 1
-    if (phase !== "reveal" || resultDialog.round < currentRoundNumber || dismissedRoundsRef.current.has(resultDialog.round)) {
-      setResultDialog(null)
+    // Keep the popup visible while we stay on the same round; only close once we truly advance or it was dismissed.
+    if (resultDialog.round < currentRoundNumber || dismissedRoundsRef.current.has(resultDialog.round)) {
+      hideCorrectAnswerPopup(resultDialog.round)
     }
-  }, [phase, index, resultDialog])
+  }, [index, resultDialog, hideCorrectAnswerPopup])
 
   const handleLike = useCallback(
     async (track?: SoloTrack) => {
@@ -1142,7 +1332,7 @@ export function SoloGameClient({
             </div>
             <button
               className="text-sm text-[var(--ma-muted,#9b9b9b)] hover:text-white"
-              onClick={() => handleNext(isMultiplayer && isHost)}
+              onClick={() => hideCorrectAnswerPopup(resultDialog.round)}
             >
               ✕
             </button>

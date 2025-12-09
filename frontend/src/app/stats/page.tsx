@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 import { api, type CurrentUserPayload } from "@/lib/api"
 import type { GameSessionSummary, UserStats } from "@/lib/types"
 import { BottomNav } from "@/components/BottomNav"
+import { Logo } from "@/components/Logo"
 import { fetchUserDashboard } from "@/lib/userData"
 import { ArrowRight, Brain, Flame, Sparkles, TrendingUp } from "lucide-react"
 
@@ -182,11 +183,14 @@ export default function StatsPage() {
   return (
     <div className="min-h-screen bg-[var(--ma-bg)] text-white pb-24">
       <div className="ma-container pt-10">
-        <div className="mb-8 flex items-center justify-between">
-          <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-[var(--ma-muted)]">Coach musical</p>
-            <h1 className="text-3xl font-bold tracking-[-0.03em]">Plan de progression</h1>
-            <p className="text-sm text-[var(--ma-muted)]">Profil : {displayName}</p>
+        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-4">
+            <Logo withText priority className="shrink-0" />
+            <div>
+              <p className="text-xs uppercase tracking-[0.3em] text-[var(--ma-muted)]">Coach musical</p>
+              <h1 className="text-3xl font-bold tracking-[-0.03em]">Plan de progression</h1>
+              <p className="text-sm text-[var(--ma-muted)]">Profil : {displayName}</p>
+            </div>
           </div>
           <Link
             href="/menu"

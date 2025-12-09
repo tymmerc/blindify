@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { motion } from "framer-motion";
 import PageHeader from "@/components/ui/PageHeader";
+import { publicPath } from "@/lib/publicPath";
 
 export function HowItWorks() {
   return (
@@ -24,7 +25,7 @@ export function HowItWorks() {
             </motion.div>
             <motion.div initial={{ opacity: 0, x: 40 }} whileInView={{ opacity: 1, x: 0 }} transition={{ duration: 0.5 }}>
               <Image
-                src="/user-registration-modern-interface.jpg"
+                src={publicPath("/user-registration-modern-interface.jpg")}
                 alt="Connexion utilisateur"
                 width={600}
                 height={400}
@@ -38,7 +39,7 @@ export function HowItWorks() {
           <div className="grid lg:grid-cols-2 gap-16 items-center">
             <motion.div initial={{ opacity: 0, x: -40 }} whileInView={{ opacity: 1, x: 0 }} transition={{ duration: 0.5 }}>
               <Image
-                src="/music-playlist-selection-interface.jpg"
+                src={publicPath("/music-playlist-selection-interface.jpg")}
                 alt="Sélection playlist"
                 width={600}
                 height={400}
@@ -63,7 +64,7 @@ export function HowItWorks() {
             </motion.div>
             <motion.div initial={{ opacity: 0, x: 40 }} whileInView={{ opacity: 1, x: 0 }} transition={{ duration: 0.5 }}>
               <Image
-                src="/friends-invitation-social-sharing.jpg"
+                src={publicPath("/friends-invitation-social-sharing.jpg")}
                 alt="Partage avec des amis"
                 width={600}
                 height={400}
@@ -76,7 +77,7 @@ export function HowItWorks() {
           <div className="grid lg:grid-cols-2 gap-16 items-center">
             <motion.div initial={{ opacity: 0, x: -40 }} whileInView={{ opacity: 1, x: 0 }} transition={{ duration: 0.5 }}>
               <Image
-                src="/game-winner-celebration-trophy.jpg"
+                src={publicPath("/game-winner-celebration-trophy.jpg")}
                 alt="Victoire"
                 width={600}
                 height={400}

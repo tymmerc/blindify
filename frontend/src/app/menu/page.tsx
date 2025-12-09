@@ -8,6 +8,7 @@ import { api, type CurrentUserPayload } from "@/lib/api"
 import type { GameSessionSummary, UserSummary } from "@/lib/types"
 import { fetchUserDashboard } from "@/lib/userData"
 import { BottomNav } from "@/components/BottomNav"
+import { Logo } from "@/components/Logo"
 import { Play, Users } from "lucide-react"
 
 type Playlist = {
@@ -215,6 +216,10 @@ export default function MenuPage() {
   return (
     <div className="min-h-screen bg-black text-white pb-40">
       <div className="w-full px-3 sm:px-4 lg:px-6 mx-auto max-w-none">
+        <div className="flex items-center justify-between py-6">
+          <Logo withText priority />
+        </div>
+
         <div className="grid auto-rows-min gap-5 lg:gap-7 md:grid-cols-[240px,minmax(0,1fr),240px] xl:grid-cols-[280px,minmax(0,1fr),280px] items-start">
           <div className="hidden md:block sticky top-4">
             <FriendsPanel />

@@ -9,7 +9,7 @@ import type {
 } from "../types/user";
 import { fail } from "./response";
 
-interface SessionOptions {
+export interface SessionOptions {
   provider?: MusicProvider;
   requireConnection?: boolean;
   autoExtend?: boolean;
@@ -99,6 +99,44 @@ export async function extendSessionToken(token: string, ttlMs = DEFAULT_SESSION_
 
 export async function revokeSessionToken(token: string): Promise<void> {
   await pool.query(`DELETE FROM user_sessions WHERE token=$1`, [token]);
+}
+
+export async function getSessionContextFromToken(
+  token: string,
+  options: SessionOptions = {}
+): Promise<SessionContext | null> {
+  const ttlMs = options.ttlMs ?? DEFAULT_SESSION_TTL;
+  const sessionRow = await querySessionByToken(token);
+  if (!sessionRow) {
+    return null;
+  }
+  if (sessionRow.expires_at && new Date(sessionRow.expires_at) <= new Date()) {
+    await revokeSessionToken(token);
+    return null;
+  }
+
+  const user = await queryUserById(sessionRow.user_id);
+  if (!user) {
+    return null;
+  }
+
+  const desiredProvider: MusicProvider | undefined =
+    options.provider ?? (user.provider as MusicProvider | undefined);
+  const connection = await queryConnection(user.id, desiredProvider);
+
+  if (options.requireConnection && !connection) {
+    return null;
+  }
+
+  if (options.autoExtend !== false) {
+    await extendSessionToken(token, ttlMs);
+  }
+
+  return {
+    user,
+    connection,
+    sessionToken: token,
+  };
 }
 
 export async function getSessionContext(
