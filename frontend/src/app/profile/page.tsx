@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { api, type CurrentUserPayload } from "@/lib/api"
@@ -120,8 +121,20 @@ export default function ProfilePage() {
         </div>
 
         <div className="ma-card mb-6 text-center">
-          <div className="mx-auto mb-4 flex h-28 w-28 items-center justify-center rounded-full bg-[var(--ma-gradient)] text-4xl font-bold shadow-[0_12px_32px_rgba(168,85,247,0.3)]">
-            {initials}
+          <div className="relative mx-auto mb-4 h-28 w-28 overflow-hidden rounded-full border border-[var(--ma-border)] bg-black/50 shadow-[0_12px_32px_rgba(0,0,0,0.25)]">
+            {user?.avatar ? (
+              <Image
+                src={user.avatar}
+                alt={displayName}
+                fill
+                sizes="112px"
+                className="object-cover"
+              />
+            ) : (
+              <div className="grid h-full w-full place-items-center bg-[var(--ma-gradient)] text-4xl font-bold text-white">
+                {initials}
+              </div>
+            )}
           </div>
           <h1 className="text-4xl font-bold tracking-[-0.04em]">{displayName}</h1>
           <p className="mt-2 text-sm text-[var(--ma-muted)]">Compte {providerLabel}</p>

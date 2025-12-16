@@ -57,10 +57,10 @@ export default function GameClient() {
         setLoading(true)
         setError(null)
 
-        const me = await api.checkAuth()
+        const me = await api.ensureUserSession("Invité")
         if (!active) return
         if (!me) {
-          router.replace("/auth/login")
+          setError("Impossible de démarrer une session invité.")
           return
         }
         setUserPayload(me)

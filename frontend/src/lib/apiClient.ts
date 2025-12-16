@@ -192,11 +192,11 @@ export const clientApi = {
       totalRounds: number
       startedAt: string
       roomCode: string
-      stateHash?: string | null
       currentRound?: number | null
       autoAdvance?: boolean
     } | null
     tracks: SoloTrack[]
+    gameState?: unknown
   }> {
     return request(`/api/rooms/${code}/state`, { method: "GET" })
   },
@@ -220,9 +220,9 @@ export const clientApi = {
       startedAt: string
       roomCode: string
       autoAdvance?: boolean
-      stateHash?: string | null
     }
     tracks: SoloTrack[]
+    gameState?: unknown
   }> {
     return request<{
       session: {
@@ -234,14 +234,34 @@ export const clientApi = {
         startedAt: string
         roomCode: string
         autoAdvance?: boolean
-        stateHash?: string | null
       }
       tracks: SoloTrack[]
+      gameState?: unknown
     }>(`/api/rooms/${code}/start`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     })
+  },
+  async friends(): Promise<{
+    friends: import("./types").FriendEntry[]
+    incoming: import("./types").FriendEntry[]
+    outgoing: import("./types").FriendEntry[]
+  }> {
+    return request("/api/friends", { method: "GET" })
+  },
+  async requestFriend(username: string): Promise<{ friendship: import("./types").FriendEntry; autoAccepted?: boolean }> {
+    return request("/api/friends/request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username }),
+    })
+  },
+  async acceptFriend(userId: number): Promise<{ friendship: import("./types").FriendEntry }> {
+    return request(`/api/friends/${userId}/accept`, { method: "POST" })
+  },
+  async removeFriend(userId: number): Promise<{ removed: boolean }> {
+    return request(`/api/friends/${userId}`, { method: "DELETE" })
   },
   async logout(): Promise<void> {
     await request("/api/auth/logout", {

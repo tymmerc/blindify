@@ -6,12 +6,11 @@ import type { Socket } from "socket.io-client"
 import { getSocket, disconnectSocket } from "@/lib/socket"
 import { api } from "@/lib/api"
 import type { CurrentUserPayload } from "@/lib/api"
-import type { MultiplayerParticipant, MultiplayerRoom, SoloTrack } from "@/lib/types"
-import { SoloGameClient, type RoundStats } from "@/components/game/SoloGameClient"
+import type { MultiplayerGameState, MultiplayerParticipant, MultiplayerRoom, SoloTrack } from "@/lib/types"
+import { MultiplayerGameClient } from "@/components/game/MultiplayerGameClient"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, ArrowRight, Copy, Loader2, PartyPopper, ShieldCheck, Sparkles, Users } from "lucide-react"
+import { ArrowLeft, ArrowRight, Copy, Heart, Loader2, PartyPopper, ShieldCheck, Sparkles, Users } from "lucide-react"
 import { useServerTime } from "@/hooks/useServerTime"
-import { useInterval } from "@/hooks/useInterval"
 
 type View = "landing" | "hosting" | "waiting" | "playing" | "results"
 
@@ -28,36 +27,6 @@ type RoomPresenceEvent =
       userId?: number
       serverTimestamp: number
     }
-
-type MultiplayerStartPayload = {
-  session: {
-    id: number
-    mode: string
-    difficulty: string
-    provider: string
-    totalRounds: number
-    startedAt: string
-    roomCode: string
-    autoAdvance?: boolean
-    stateHash?: string | null
-    currentRound?: number | null
-  } 
-  tracks: SoloTrack[]
-  autoAdvance?: boolean
-  stateHash?: string | null
-  host: {
-    id: number
-    username: string | null
-  }
-}
-
-type ScoreUpdatePayload = {
-  roomCode: string
-  userId: number
-  score: number
-  accuracy: number
-  stateHash?: string | null
-}
 
 export default function MultiplayerPageWrapper() {
   return (
@@ -80,78 +49,40 @@ function MultiplayerPage() {
   const participantsRef = useRef<MultiplayerParticipant[]>([])
 
   const [tracks, setTracks] = useState<SoloTrack[]>([])
-  const [completedTracks, setCompletedTracks] = useState<SoloTrack[]>([])
-  const [session, setSession] = useState<MultiplayerStartPayload["session"] | null>(null)
+  const [gameState, setGameState] = useState<MultiplayerGameState | null>(null)
   const [starting, setStarting] = useState(false)
   const [joining, setJoining] = useState(false)
-  const [source, setSource] = useState<string>("library")
-  const [playlistId, setPlaylistId] = useState("")
-  const [mySource, setMySource] = useState<string>("library")
-  const [myPlaylistId, setMyPlaylistId] = useState("")
-  const [savingPref, setSavingPref] = useState(false)
   const [autoAdvance, setAutoAdvance] = useState(false)
-  const [gameStateHash, setGameStateHash] = useState<string>("")
-  const [nextSignal, setNextSignal] = useState<number>(0)
-  const [nextRoundNumber, setNextRoundNumber] = useState<number | null>(null)
-  const [nextTrackId, setNextTrackId] = useState<string | null>(null)
-  const sharedDeadlineRef = useRef<number | null>(null)
-
-  const [scores, setScores] = useState<Record<number, { username: string | null; score: number; accuracy: number }>>(
-    {}
-  )
-  const [finalStats, setFinalStats] = useState<Record<number, { username: string | null; score: number; accuracy: number }>>({})
-  const [sharedDeadlineMs, setSharedDeadlineMs] = useState<number | null>(null)
-  const lastNextRoundRef = useRef<number>(0)
 
   const socketRef = useRef<Socket | null>(null)
   const handlersRef = useRef<{
     presence?: (payload: RoomPresenceEvent) => void
-    start?: (payload: MultiplayerStartPayload) => void
-    score?: (payload: ScoreUpdatePayload) => void
     playerJoined?: (payload: { userId: number; username?: string | null; roomCode: string }) => void
-    started?: (payload: {
-      roomCode: string
-      serverTimestamp: number
-      revealAt?: number
-      round?: number
-      trackId?: string | number
-      audioSourceId?: string | number
-      stateHash?: string | null
-    }) => void
-    invalid?: (payload: { roomCode: string }) => void
+    gameState?: (payload: MultiplayerGameState) => void
+    roundStart?: (payload: { roomCode: string; round: number; track: MultiplayerGameState["currentTrack"]; timing: { startAt: number | null; revealAt: number | null } }) => void
+    roundReveal?: (payload: { roomCode: string; round: number; players: MultiplayerGameState["players"]; timing: { startAt: number | null; revealAt: number | null } }) => void
+    gameOver?: (payload: { roomCode: string; players: MultiplayerGameState["players"] }) => void
   }>({})
   const roomRef = useRef<MultiplayerRoom | null>(null)
   const userRef = useRef<CurrentUserPayload | null>(null)
 
   const [joinCode, setJoinCode] = useState("")
   const [resultsOpen, setResultsOpen] = useState(false)
-  const pollRef = useRef<NodeJS.Timeout | null>(null)
-  const LISTENING_MS = 45_000
   const serverNow = useServerTime(socketRef.current)
 
   useEffect(() => {
     const codeParam = searchParams.get("code")
-    const sourceParam = searchParams.get("source")
-    const playlistParam = searchParams.get("playlistId")
     if (codeParam) setJoinCode(codeParam.toUpperCase())
-    if (sourceParam) {
-      setSource(sourceParam)
-      setMySource(sourceParam)
-    }
-    if (playlistParam) {
-      setPlaylistId(playlistParam)
-      setMyPlaylistId(playlistParam)
-    }
   }, [searchParams])
 
   useEffect(() => {
     let active = true
     async function bootstrap() {
       try {
-        const me = await api.checkAuth()
+        const me = await api.ensureUserSession("Invité")
         if (!active) return
         if (!me) {
-          router.replace("/auth/login")
+          setError("Impossible de créer une session invité.")
           return
         }
         setUserPayload(me)
@@ -172,16 +103,14 @@ function MultiplayerPage() {
       const socket = socketRef.current
       if (socket && handlersRef.current) {
         if (handlersRef.current.presence) socket.off("room:presence", handlersRef.current.presence)
-        if (handlersRef.current.start) socket.off("multiplayer:start", handlersRef.current.start)
-        if (handlersRef.current.score) socket.off("score:update", handlersRef.current.score)
         if (handlersRef.current.playerJoined) socket.off("player-joined", handlersRef.current.playerJoined)
-        if (handlersRef.current.started) socket.off("round:started", handlersRef.current.started)
-        if (handlersRef.current.invalid) socket.off("state:invalid", handlersRef.current.invalid)
-        socket.off("server:tick")
-      }
-      if (pollRef.current) {
-        clearInterval(pollRef.current)
-        pollRef.current = null
+        if (handlersRef.current.gameState) socket.off("game:state", handlersRef.current.gameState)
+        if (handlersRef.current.roundStart) socket.off("game:round:start", handlersRef.current.roundStart)
+        if (handlersRef.current.roundReveal) socket.off("game:round:reveal", handlersRef.current.roundReveal)
+        if (handlersRef.current.gameOver) {
+          socket.off("game:over", handlersRef.current.gameOver)
+          socket.off("game:game:over", handlersRef.current.gameOver)
+        }
       }
       disconnectSocket()
     }
@@ -206,49 +135,37 @@ function MultiplayerPage() {
     return socketRef.current
   }, [])
 
-  const savePreference = useCallback(
-    async (roomCode: string, nextSource: string, nextPlaylistId?: string) => {
-      setSavingPref(true)
-      try {
-        await api.setRoomPreference(roomCode, { source: nextSource, playlistId: nextPlaylistId })
-      } catch (err) {
-        console.error("save_pref_failed", err)
-      } finally {
-        setSavingPref(false)
-      }
-    },
-    []
-  )
-
   const syncParticipants = useCallback((list: MultiplayerParticipant[]) => {
     setParticipants(list)
-    setScores(prev => {
-      const next: Record<number, { username: string | null; score: number; accuracy: number }> = {}
-      for (const participant of list) {
-        const existing = prev[participant.user_id]
-        next[participant.user_id] = {
-          username: participant.username,
-          score: existing?.score ?? 0,
-          accuracy: existing?.accuracy ?? 0,
-        }
-      }
-      return next
-    })
   }, [])
+
+  const refreshParticipants = useCallback(
+    async (roomCode: string) => {
+      try {
+        const details = await api.roomDetails(roomCode)
+        setRoom(details.room)
+        setAutoAdvance(Boolean(details.room.auto_advance))
+        syncParticipants(details.participants)
+      } catch {
+        // ignore transient errors
+      }
+    },
+    [syncParticipants]
+  )
 
   const attachSocketListeners = useCallback(
     (roomCode: string) => {
       const socket = ensureSocket()
 
       if (handlersRef.current.presence) socket.off("room:presence", handlersRef.current.presence)
-      if (handlersRef.current.start) {
-        socket.off("multiplayer:start", handlersRef.current.start)
-        socket.off("game:start", handlersRef.current.start)
-      }
-      if (handlersRef.current.score) socket.off("score:update", handlersRef.current.score)
       if (handlersRef.current.playerJoined) socket.off("player-joined", handlersRef.current.playerJoined)
-      if (handlersRef.current.started) socket.off("round:started", handlersRef.current.started)
-      if (handlersRef.current.invalid) socket.off("state:invalid", handlersRef.current.invalid)
+      if (handlersRef.current.gameState) socket.off("game:state", handlersRef.current.gameState)
+      if (handlersRef.current.roundStart) socket.off("game:round:start", handlersRef.current.roundStart)
+      if (handlersRef.current.roundReveal) socket.off("game:round:reveal", handlersRef.current.roundReveal)
+      if (handlersRef.current.gameOver) {
+        socket.off("game:over", handlersRef.current.gameOver)
+        socket.off("game:game:over", handlersRef.current.gameOver)
+      }
 
       const presenceHandler = (payload: RoomPresenceEvent) => {
         if (payload.roomCode !== roomCode) return
@@ -259,78 +176,10 @@ function MultiplayerPage() {
             if (prev.find(p => p.user_id === userId)) return prev
             return [...prev, { user_id: userId, username: payload.user?.username ?? null }]
           })
+          refreshParticipants(roomCode)
         } else if ((payload.type === "left" || payload.type === "disconnected") && payload.userId) {
           setParticipants(prev => prev.filter(p => p.user_id !== payload.userId))
-          setScores(prev => {
-            const next = { ...prev }
-            delete next[payload.userId!]
-            return next
-          })
         }
-      }
-
-      const startHandler = (payload: MultiplayerStartPayload) => {
-        if (payload.session.roomCode !== roomCode) return
-        setGameStateHash(payload.stateHash || payload.session.stateHash || "")
-        setSession(payload.session)
-        setTracks(payload.tracks)
-        setAutoAdvance(Boolean(payload.session.autoAdvance ?? payload.autoAdvance))
-        setSharedDeadlineMs(null)
-        setNextTrackId(null)
-        setNextRoundNumber(payload.session.currentRound ?? null)
-        setNextSignal(0)
-        sharedDeadlineRef.current = null
-        lastNextRoundRef.current = payload.session.currentRound ?? 0
-        setResultsOpen(false)
-        setView("playing")
-        if (pollRef.current) {
-          clearInterval(pollRef.current)
-          pollRef.current = null
-        }
-      }
-
-      const scoreHandler = (payload: ScoreUpdatePayload) => {
-        if (payload.roomCode !== roomCode) return
-        if (payload.stateHash) setGameStateHash(payload.stateHash)
-        setScores(prev => {
-          const next = { ...prev }
-          const participant = participantsRef.current.find(p => p.user_id === payload.userId)
-          next[payload.userId] = {
-            username: participant?.username ?? prev[payload.userId]?.username ?? null,
-            score: payload.score,
-            accuracy: payload.accuracy,
-          }
-          return next
-        })
-      }
-
-      const startedHandler = (payload: {
-        roomCode: string
-        serverTimestamp: number
-        revealAt?: number
-        round?: number
-        trackId?: string | number
-        audioSourceId?: string | number
-        stateHash?: string | null
-      }) => {
-        if (payload.roomCode !== roomCode) return
-        // Allow re-playing the same round index to resync late guests (only drop older rounds)
-        if (typeof payload.round === "number") {
-          if (payload.round < lastNextRoundRef.current) return
-          lastNextRoundRef.current = Math.max(lastNextRoundRef.current, payload.round)
-        }
-        if (payload.stateHash) setGameStateHash(payload.stateHash)
-        const now = Date.now()
-        const safeReveal =
-          payload.revealAt && Number.isFinite(payload.revealAt) && payload.revealAt > now - 1000
-            ? payload.revealAt
-            : now + LISTENING_MS
-        sharedDeadlineRef.current = safeReveal
-        setSharedDeadlineMs(safeReveal)
-        if (typeof payload.round === "number") setNextRoundNumber(payload.round)
-        const resolvedTrackId = payload.trackId ?? payload.audioSourceId
-        setNextTrackId(resolvedTrackId != null ? String(resolvedTrackId) : null)
-        setNextSignal(prev => prev + 1)
       }
 
       const playerJoinedHandler = (payload: { userId: number; username?: string | null; roomCode: string }) => {
@@ -339,48 +188,104 @@ function MultiplayerPage() {
           if (prev.find(p => p.user_id === payload.userId)) return prev
           return [...prev, { user_id: payload.userId, username: payload.username ?? null }]
         })
+        // Re-sync from API to avoid drift if a join event was missed earlier
+        ;(async () => {
+          try {
+            const updated = await api.roomDetails(payload.roomCode)
+            setParticipants(updated.participants)
+            setAutoAdvance(Boolean(updated.room.auto_advance))
+          } catch (err) {
+            console.error("sync_participants_after_join_failed", err)
+          }
+        })()
       }
 
-      const invalidHandler = async (payload: { roomCode: string }) => {
+      const gameStateHandler = (payload: MultiplayerGameState) => {
         if (payload.roomCode !== roomCode) return
+        setGameState(payload)
+        setView(payload.status === "finished" ? "results" : "playing")
+        setResultsOpen(payload.status === "finished")
+      }
+
+      const roundStartHandler = (payload: {
+        roomCode: string
+        round: number
+        track: MultiplayerGameState["currentTrack"]
+        timing: { startAt: number | null; revealAt: number | null }
+      }) => {
+        if (payload.roomCode !== roomCode) return
+        setView("playing")
+        setGameState(prev => {
+          const fallbackTotal = prev?.totalRounds ?? tracks.length ?? gameState?.totalRounds ?? 10
+          const base = prev ?? {
+            roomCode,
+            hostUserId: room?.host_user_id ?? null,
+            status: "playing" as const,
+            currentRound: payload.round,
+            totalRounds: fallbackTotal,
+            currentTrack: payload.track,
+            timing: payload.timing,
+            players: {},
+          }
+          return {
+            ...base,
+            status: "playing",
+            currentRound: payload.round,
+            currentTrack: payload.track,
+            timing: payload.timing,
+          }
+        })
+      }
+
+      const roundRevealHandler = (payload: {
+        roomCode: string
+        round: number
+        players: MultiplayerGameState["players"]
+        timing: { startAt: number | null; revealAt: number | null }
+      }) => {
+        if (payload.roomCode !== roomCode) return
+        setGameState(prev => {
+          if (!prev) return prev
+          return {
+            ...prev,
+            status: "reveal",
+            currentRound: payload.round,
+            players: payload.players,
+            timing: payload.timing,
+          }
+        })
+      }
+
+      const gameOverHandler = async (payload: { roomCode: string; players: MultiplayerGameState["players"] }) => {
+        if (payload.roomCode !== roomCode) return
+        setGameState(prev => (prev ? { ...prev, status: "finished", players: payload.players } : prev))
         try {
-          const latest = await api.roomState(roomCode)
-          setRoom(latest.room)
-          setAutoAdvance(Boolean(latest.session?.autoAdvance ?? latest.room.auto_advance ?? autoAdvance))
-          if (latest.session && latest.tracks.length) {
-            setSession(latest.session)
+          const latest = await api.roomState(payload.roomCode)
+          if (latest.tracks?.length) {
             setTracks(latest.tracks)
-            setGameStateHash(latest.session.stateHash || "")
-            lastNextRoundRef.current = latest.session.currentRound ?? 0
-            setNextRoundNumber(latest.session.currentRound ?? null)
-            setNextTrackId(null)
-            setNextSignal(0)
-            sharedDeadlineRef.current = null
-            setSharedDeadlineMs(null)
-            setView("playing")
           }
         } catch (err) {
-          console.error("state_resync_failed", err)
-          setError(err instanceof Error ? err.message : "Impossible de resynchroniser la partie.")
+          console.error("room_state_results_sync_failed", err)
         }
+        setResultsOpen(true)
+        setView("results")
       }
 
       socket.on("room:presence", presenceHandler)
-      socket.on("multiplayer:start", startHandler)
-      socket.on("game:start", startHandler) // compat
-      socket.on("score:update", scoreHandler)
       socket.on("player-joined", playerJoinedHandler)
-      socket.on("round:started", startedHandler)
-      socket.on("server:tick", () => {})
-      socket.on("state:invalid", invalidHandler)
+      socket.on("game:state", gameStateHandler)
+      socket.on("game:round:start", roundStartHandler)
+      socket.on("game:round:reveal", roundRevealHandler)
+      socket.on("game:over", gameOverHandler)
+      socket.on("game:game:over", gameOverHandler)
 
       handlersRef.current = {
         presence: presenceHandler,
-        start: startHandler,
-        score: scoreHandler,
         playerJoined: playerJoinedHandler,
-        started: startedHandler,
-        invalid: invalidHandler,
+        gameState: gameStateHandler,
+        roundStart: roundStartHandler,
+        roundReveal: roundRevealHandler,
+        gameOver: gameOverHandler,
       }
 
       if (userPayload?.user) {
@@ -389,8 +294,23 @@ function MultiplayerPage() {
           user: { id: userPayload.user.id, username: userPayload.user.username ?? undefined },
         })
       }
+
+      refreshParticipants(roomCode)
+
+      ;(async () => {
+        try {
+          const latest = await api.roomState(roomCode)
+          if (latest.tracks?.length) setTracks(latest.tracks)
+          if (latest.gameState) {
+            setGameState(latest.gameState as MultiplayerGameState)
+            setView(latest.gameState.status === "finished" ? "results" : "playing")
+          }
+        } catch (err) {
+          console.error("room_state_sync_failed", err)
+        }
+      })()
     },
-    [ensureSocket, userPayload, autoAdvance]
+    [ensureSocket, userPayload, autoAdvance, refreshParticipants]
   )
 
   const handleCreateRoom = useCallback(async () => {
@@ -398,47 +318,13 @@ function MultiplayerPage() {
       setError(null)
       const { room: created } = await api.createRoom({ autoAdvance, questionCount: 10 })
       setRoom(created)
+      setGameState(null)
       setView("hosting")
       attachSocketListeners(created.room_code)
       const details = await api.roomDetails(created.room_code)
       setRoom(details.room)
       setAutoAdvance(Boolean(details.room.auto_advance))
       syncParticipants(details.participants)
-      if (details.selfPreference) {
-        setMySource(details.selfPreference.source_pref ?? "library")
-        setMyPlaylistId(details.selfPreference.playlist_pref ?? "")
-      }
-      if (pollRef.current) clearInterval(pollRef.current)
-      pollRef.current = setInterval(async () => {
-        try {
-          const updated = await api.roomDetails(created.room_code)
-          setAutoAdvance(Boolean(updated.room.auto_advance))
-          setParticipants(prev => {
-            const next = updated.participants
-            if (JSON.stringify(prev) !== JSON.stringify(next)) return next
-            return prev
-          })
-            if (updated.room.status === "in_progress") {
-              const state = await api.roomState(created.room_code)
-              if (state.session && state.tracks.length) {
-                setGameStateHash(state.session.stateHash || "")
-                setSession(state.session)
-                setTracks(state.tracks)
-                lastNextRoundRef.current = state.session.currentRound ?? 0
-                setResultsOpen(false)
-                setNextRoundNumber(state.session.currentRound ?? null)
-                sharedDeadlineRef.current = null
-                setView("playing")
-                if (pollRef.current) {
-                  clearInterval(pollRef.current)
-                  pollRef.current = null
-                }
-              }
-            }
-        } catch {
-          // ignore polling errors
-        }
-      }, 4000)
     } catch (err) {
       console.error("create_room_failed", err)
       setError(
@@ -461,6 +347,7 @@ function MultiplayerPage() {
         setError(null)
         const { room: joined } = await api.joinRoom(normalizedCode)
         setRoom(joined)
+        setGameState(null)
         setAutoAdvance(Boolean(joined.auto_advance))
         setView("waiting")
         attachSocketListeners(joined.room_code)
@@ -468,40 +355,6 @@ function MultiplayerPage() {
         setRoom(details.room)
         setAutoAdvance(Boolean(details.room.auto_advance))
         syncParticipants(details.participants)
-        if (details.selfPreference) {
-          setMySource(details.selfPreference.source_pref ?? "library")
-          setMyPlaylistId(details.selfPreference.playlist_pref ?? "")
-        }
-        if (pollRef.current) clearInterval(pollRef.current)
-        pollRef.current = setInterval(async () => {
-          try {
-            const updated = await api.roomDetails(joined.room_code)
-            setAutoAdvance(Boolean(updated.room.auto_advance))
-            setParticipants(prev => {
-              const next = updated.participants
-              if (JSON.stringify(prev) !== JSON.stringify(next)) return next
-              return prev
-            })
-            if (updated.room.status === "in_progress") {
-              const state = await api.roomState(joined.room_code)
-              if (state.session && state.tracks.length) {
-                setGameStateHash(state.session.stateHash || "")
-                setSession(state.session)
-                setTracks(state.tracks)
-                lastNextRoundRef.current = state.session.currentRound ?? 0
-                sharedDeadlineRef.current = null
-                setResultsOpen(false)
-                setView("playing")
-                if (pollRef.current) {
-                  clearInterval(pollRef.current)
-                  pollRef.current = null
-                }
-              }
-            }
-          } catch {
-            // ignore polling errors
-          }
-        }, 4000)
       } catch (err) {
         console.error("join_room_failed", err)
         setError(err instanceof Error ? err.message : "Unable to join this room right now.")
@@ -518,21 +371,28 @@ function MultiplayerPage() {
       setStarting(true)
       setError(null)
       const payload: { source?: string; playlistId?: string; autoAdvance?: boolean } = {
-        source,
+        source: "library",
         autoAdvance,
       }
-      if (source === "playlist" && playlistId.trim()) {
-        payload.playlistId = playlistId.trim()
-      }
-      const { session: sessionPayload, tracks: generatedTracks } = await api.startMultiplayerGame(
+      const { tracks: generatedTracks, gameState: initialState } = await api.startMultiplayerGame(
         room.room_code,
         payload
       )
-      setGameStateHash(sessionPayload.stateHash || "")
-      setSession(sessionPayload)
       setTracks(generatedTracks)
-      setCompletedTracks([])
+      if (initialState) {
+        setGameState(initialState)
+      } else {
+        // Safety: resynchronise with server snapshot if the initial payload is missing
+        try {
+          const latest = await api.roomState(room.room_code)
+          if (latest.tracks?.length) setTracks(latest.tracks)
+          if (latest.gameState) setGameState(latest.gameState)
+        } catch (err) {
+          console.error("start_game_resync_failed", err)
+        }
+      }
       setView("playing")
+      setResultsOpen(false)
     } catch (err) {
       console.error("start_multiplayer_failed", err)
       setError(
@@ -541,105 +401,40 @@ function MultiplayerPage() {
     } finally {
       setStarting(false)
     }
-  }, [room, playlistId, source])
+  }, [room, autoAdvance])
 
-  const handleRoundComplete = useCallback(
-    ({ stats }: { stats: RoundStats }) => {
-      if (!room || !userPayload) return
-      const accuracy = stats.rounds > 0 ? Math.round((stats.correct / stats.rounds) * 100) : 0
-      setScores(prev => ({
-        ...prev,
-        [userPayload.user.id]: {
-          username: userPayload.user.username,
-          score: stats.points,
-          accuracy,
-        },
-      }))
-      socketRef.current?.emit("score:update", {
-        roomCode: room.room_code,
-        userId: userPayload.user.id,
-        score: stats.points,
-        accuracy,
-        stateHash: gameStateHash,
-      })
-    },
-    [room, userPayload, gameStateHash]
-  )
-
-  const handleGameComplete = useCallback(
-    (stats: RoundStats) => {
-      if (!room || !userPayload) return
-      const accuracyValue = stats.rounds > 0 ? Math.round((stats.correct / stats.rounds) * 100) : 0
-      const leaderboardSnapshot: Record<number, { username: string | null; score: number; accuracy: number }> = {
-        ...scores,
-        [userPayload.user.id]: {
-          username: userPayload.user.username,
-          score: stats.points,
-          accuracy: accuracyValue,
-        },
+  const scores = useMemo(() => {
+    const next: Record<number, { username: string | null; score: number; accuracy: number }> = {}
+    for (const participant of participants) {
+      const snapshot = gameState?.players?.[participant.user_id]
+      next[participant.user_id] = {
+        username: participant.username,
+        score: snapshot?.score ?? 0,
+        accuracy: snapshot?.accuracy ?? 0,
       }
-      setScores(leaderboardSnapshot)
-      setFinalStats(leaderboardSnapshot)
-      setCompletedTracks(tracks)
-      setView("results")
-      setResultsOpen(true)
-    },
-    [room, scores, userPayload, tracks]
-  )
+    }
+    return next
+  }, [participants, gameState?.players])
 
   const leaderboard = useMemo(() => {
-    const source = resultsOpen ? finalStats : scores
-    return participants
-      .map(participant => ({
-        userId: participant.user_id,
-        username: participant.username,
-        score: source[participant.user_id]?.score ?? 0,
-        accuracy: source[participant.user_id]?.accuracy ?? 0,
-      }))
+    if (!gameState?.players) return []
+    return Object.values(gameState.players)
+      .map(p => ({ userId: p.userId, username: p.username, score: p.score, accuracy: p.accuracy, avatar: p.avatar }))
       .sort((a, b) => {
         if (b.score !== a.score) return b.score - a.score
         return b.accuracy - a.accuracy
       })
-  }, [participants, scores, finalStats, resultsOpen])
-
-  const handleMySourceChange = useCallback(
-    (value: string) => {
-      setMySource(value)
-      if (room) {
-        const playlistValue = value === "playlist" ? myPlaylistId : ""
-        savePreference(room.room_code, value, playlistValue)
-        setMyPlaylistId(playlistValue)
-      }
-    },
-    [room, myPlaylistId, savePreference]
-  )
-
-  const handleMyPlaylistChange = useCallback(
-    (value: string) => {
-      setMyPlaylistId(value)
-      if (room) {
-        savePreference(room.room_code, mySource, value)
-      }
-    },
-    [room, mySource, savePreference]
-  )
+  }, [gameState?.players])
 
   const handleLeaveRoom = useCallback(() => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current)
-      pollRef.current = null
-    }
     if (room && userPayload) {
       socketRef.current?.emit("room:leave", { roomCode: room.room_code, userId: userPayload.user.id })
+      socketRef.current?.emit("game:leave", { roomCode: room.room_code })
     }
     setRoom(null)
     setParticipants([])
-    setScores({})
     setTracks([])
-    setSession(null)
-    setGameStateHash("")
-    setSource("library")
-    setPlaylistId("")
+    setGameState(null)
     setView("landing")
   }, [room, userPayload])
 
@@ -657,13 +452,22 @@ function MultiplayerPage() {
   }
 
   if (!userPayload) {
-    return null
+    return (
+      <div className="grid min-h-screen place-items-center px-6">
+        <div className="surface max-w-md rounded-3xl border border-white/10 p-8 text-center text-sm text-slate-200">
+          <p>{error || "Impossible de préparer une session invité."}</p>
+          <Button variant="outline" onClick={() => router.replace("/auth/login")} className="mt-4">
+            Retour
+          </Button>
+        </div>
+      </div>
+    )
   }
 
   return (
     <main className="min-h-screen bg-black text-white">
-      <div className="relative mx-auto flex w-full max-w-6xl flex-col gap-10 px-6 py-10">
-        <Header onLeave={handleLeaveRoom} view={view} />
+      <div className="relative mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-8">
+        {view !== "results" && <Header onLeave={handleLeaveRoom} view={view} />}
 
         {error ? (
           <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-6 py-4 text-sm text-red-200">
@@ -688,30 +492,6 @@ function MultiplayerPage() {
             onStart={handleStartGame}
             starting={starting}
             scores={scores}
-            source={source}
-            setSource={setSource}
-            playlistId={playlistId}
-            setPlaylistId={setPlaylistId}
-            mySource={mySource}
-            setMySource={value => {
-              setMySource(value)
-              if (room) {
-                const playlistValue = value === "playlist" ? myPlaylistId : ""
-                setMyPlaylistId(playlistValue)
-                savePreference(room.room_code, value, playlistValue)
-              }
-            }}
-            myPlaylistId={myPlaylistId}
-            setMyPlaylistId={value => {
-              setMyPlaylistId(value)
-              if (room) {
-                savePreference(room.room_code, mySource, value)
-              }
-            }}
-            onSavePreference={() => {
-              if (room) savePreference(room.room_code, mySource, myPlaylistId)
-            }}
-            savingPref={savingPref}
             autoAdvance={autoAdvance}
             setAutoAdvance={setAutoAdvance}
           />
@@ -722,74 +502,40 @@ function MultiplayerPage() {
             room={room}
             participants={participants}
             scores={scores}
-            mySource={mySource}
-            setMySource={value => {
-              setMySource(value)
-              if (room) {
-                const playlistValue = value === "playlist" ? myPlaylistId : ""
-                setMyPlaylistId(playlistValue)
-                savePreference(room.room_code, value, playlistValue)
-              }
-            }}
-            myPlaylistId={myPlaylistId}
-            setMyPlaylistId={value => {
-              setMyPlaylistId(value)
-              if (room) {
-                savePreference(room.room_code, mySource, value)
-              }
-            }}
-            onSavePreference={() => {
-              if (room) savePreference(room.room_code, mySource, myPlaylistId)
-            }}
-            savingPref={savingPref}
           />
         )}
 
-        {view === "playing" && session && tracks.length > 0 && (
-    <SoloGameClient
-      user={userPayload.user}
-      tracks={tracks}
-      mode="multiplayer"
-      isHost={room?.host_user_id === userPayload.user.id}
-      autoAdvance={autoAdvance}
-      sharedDeadlineMs={sharedDeadlineMs}
-      nextSignal={nextSignal}
-      nextRoundNumber={nextRoundNumber ?? undefined}
-      nextTrackId={nextTrackId ?? undefined}
-      onHostNext={(nextRound, revealAt) => {
-        const socket = socketRef.current
-        if (!socket || !room) return
-        socket.emit("round:next", {
-          stateHash: gameStateHash,
-          roomCode: room.room_code,
-          round: nextRound,
-          revealAt,
-        })
-      }}
-      leaderboard={leaderboard}
-      onRoundComplete={handleRoundComplete}
-      onGameComplete={handleGameComplete}
-      roomCode={room?.room_code}
-    />
+        {view === "playing" && gameState && room && (
+          <MultiplayerGameClient
+            user={userPayload.user}
+            state={gameState}
+            serverNow={serverNow}
+            onAnswer={(guess, sourceUserId) => {
+              const socket = socketRef.current
+              if (!socket) return
+              socket.emit("game:answer", { roomCode: room.room_code, guess, sourceUserId })
+            }}
+            onReady={() => {
+              const socket = socketRef.current
+              if (!socket) return
+              socket.emit("game:ready", { roomCode: room.room_code })
+            }}
+          />
         )}
 
         {view === "results" && (
           <ResultsView
             leaderboard={leaderboard}
-            tracks={completedTracks}
+            tracks={tracks}
+            currentUserId={userPayload.user.id}
             onReturn={() => router.replace("/menu")}
             onReplay={() => {
               setView("landing")
               setRoom(null)
               setParticipants([])
-              setScores({})
               setResultsOpen(false)
-              setSession(null)
               setTracks([])
-              setGameStateHash("")
-              setSource("library")
-              setPlaylistId("")
-              setCompletedTracks([])
+              setGameState(null)
             }}
           />
         )}
@@ -839,6 +585,17 @@ function LandingView({
   setJoinCode: (value: string) => void
   joining: boolean
 }) {
+  const handlePasteJoinCode = useCallback(async () => {
+    try {
+      const text = await navigator.clipboard.readText()
+      if (text) {
+        setJoinCode(text.trim().toUpperCase())
+      }
+    } catch (err) {
+      console.error("paste_join_code_failed", err)
+    }
+  }, [setJoinCode])
+
   return (
     <section className="grid gap-6 md:grid-cols-2">
       <div className="flex flex-col gap-5 rounded-2xl border border-[var(--ma-border)] bg-[var(--ma-surface)] p-8">
@@ -859,12 +616,22 @@ function LandingView({
         <p className="text-sm text-[var(--ma-muted)]">
           Entre le code à 6 caractères pour rejoindre le lobby en cours.
         </p>
-        <input
-          value={joinCode}
-          onChange={event => setJoinCode(event.target.value.toUpperCase())}
-          placeholder="Room code"
-          className="w-full rounded-lg border border-[var(--ma-border)] bg-black/40 px-4 py-3 text-sm text-white outline-none transition focus:border-[rgba(168,85,247,0.5)]"
-        />
+        <div className="flex items-center gap-3">
+          <input
+            value={joinCode}
+            onChange={event => setJoinCode(event.target.value.toUpperCase())}
+            placeholder="Room code"
+            className="w-full rounded-lg border border-[var(--ma-border)] bg-black/40 px-4 py-3 text-sm text-white outline-none transition focus:border-[rgba(168,85,247,0.5)]"
+          />
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handlePasteJoinCode}
+            className="shrink-0 rounded-lg border border-[var(--ma-border)] bg-white/5 px-3 py-2 text-xs font-semibold uppercase tracking-[0.15em] text-white transition hover:border-[rgba(168,85,247,0.6)]"
+          >
+            Paste
+          </Button>
+        </div>
         <Button type="submit" className="gap-2 self-start rounded-lg px-5 py-3 text-sm" disabled={joining}>
           {joining ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
           Rejoindre
@@ -880,16 +647,6 @@ function HostLobby({
   onStart,
   starting,
   scores,
-  source,
-  setSource,
-  playlistId,
-  setPlaylistId,
-  mySource,
-  setMySource,
-  myPlaylistId,
-  setMyPlaylistId,
-  onSavePreference,
-  savingPref,
   autoAdvance,
   setAutoAdvance,
 }: {
@@ -898,16 +655,6 @@ function HostLobby({
   onStart: () => void
   starting: boolean
   scores: Record<number, { username: string | null; score: number; accuracy: number }>
-  source: string
-  setSource: (value: string) => void
-  playlistId: string
-  setPlaylistId: (value: string) => void
-  mySource: string
-  setMySource: (value: string) => void
-  myPlaylistId: string
-  setMyPlaylistId: (value: string) => void
-  onSavePreference: () => void
-  savingPref: boolean
   autoAdvance: boolean
   setAutoAdvance: (value: boolean) => void
 }) {
@@ -931,63 +678,11 @@ function HostLobby({
         </p>
 
         <div className="grid gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
-          <label className="text-xs uppercase tracking-[0.3em] text-slate-400">Source</label>
-          <select
-            value={source}
-            onChange={event => setSource(event.target.value)}
-            className="w-full rounded-lg border border-white/10 bg-black/50 px-3 py-2 text-sm text-white outline-none focus:border-neon focus:ring-2 focus:ring-neon/30"
-          >
-            <option value="library">Bibliothèque (aléatoire)</option>
-            <option value="liked">Titres likés</option>
-            <option value="top_week">Top semaine</option>
-            <option value="top_month">Top mois</option>
-            <option value="top_all">Top toujours</option>
-            <option value="playlist">Playlist (ID Spotify)</option>
-          </select>
-          {source === "playlist" && (
-            <input
-              value={playlistId}
-              onChange={event => setPlaylistId(event.target.value)}
-              placeholder="ID ou URL de playlist Spotify"
-              className="w-full rounded-lg border border-white/10 bg-black/50 px-3 py-2 text-sm text-white outline-none focus:border-neon focus:ring-2 focus:ring-neon/30"
-            />
-          )}
-          <p className="text-xs text-slate-400">
-            Les modes playlist/top nécessitent une connexion Spotify du host (token valide).
-          </p>
-        </div>
-
-        <div className="grid gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
-          <div className="flex items-center justify-between text-xs uppercase tracking-[0.3em] text-slate-400">
-            <span>Ta source à partager</span>
-            {savingPref ? <Loader2 className="h-4 w-4 animate-spin text-white" /> : null}
+          <div className="text-xs uppercase tracking-[0.3em] text-slate-400">Source</div>
+          <div className="rounded-lg border border-white/10 bg-black/50 px-3 py-2 text-sm text-white">
+            Source fixée : Bibliothèque (aléatoire)
           </div>
-          <select
-            value={mySource}
-            onChange={event => setMySource(event.target.value)}
-            className="w-full rounded-lg border border-white/10 bg-black/50 px-3 py-2 text-sm text-white outline-none focus:border-neon focus:ring-2 focus:ring-neon/30"
-          >
-            <option value="library">Ma bibliothèque</option>
-            <option value="liked">Mes titres likés</option>
-            <option value="playlist">Ma playlist (ID)</option>
-            <option value="top_week">Top semaine</option>
-            <option value="top_month">Top mois</option>
-            <option value="top_all">Top toujours</option>
-          </select>
-          {mySource === "playlist" && (
-            <input
-              value={myPlaylistId}
-              onChange={event => setMyPlaylistId(event.target.value)}
-              placeholder="ID ou URL de playlist Spotify"
-              className="w-full rounded-lg border border-white/10 bg-black/50 px-3 py-2 text-sm text-white outline-none focus:border-neon focus:ring-2 focus:ring-neon/30"
-            />
-          )}
-          <div className="flex justify-end">
-            <Button type="button" variant="outline" onClick={onSavePreference} disabled={savingPref} className="gap-2">
-              {savingPref ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              Enregistrer ma source
-            </Button>
-          </div>
+          <p className="text-xs text-slate-400">Le choix de source sera disponible plus tard dans les paramètres.</p>
         </div>
 
         <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
@@ -1022,22 +717,10 @@ function WaitingLobby({
   room,
   participants,
   scores,
-  mySource,
-  setMySource,
-  myPlaylistId,
-  setMyPlaylistId,
-  onSavePreference,
-  savingPref,
 }: {
   room: MultiplayerRoom
   participants: MultiplayerParticipant[]
   scores: Record<number, { username: string | null; score: number; accuracy: number }>
-  mySource: string
-  setMySource: (value: string) => void
-  myPlaylistId: string
-  setMyPlaylistId: (value: string) => void
-  onSavePreference: () => void
-  savingPref: boolean
 }) {
   return (
     <section className="surface flex flex-col gap-6 rounded-3xl border border-white/10 p-8 text-center">
@@ -1047,35 +730,9 @@ function WaitingLobby({
         Once the host starts the game, a synchronized blind test will begin automatically. Keep Spotify open and ready.
       </p>
       <div className="grid gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 text-left">
-        <div className="flex items-center justify-between text-xs uppercase tracking-[0.3em] text-slate-400">
-          <span>Ta source à partager</span>
-          {savingPref ? <Loader2 className="h-4 w-4 animate-spin text-white" /> : null}
-        </div>
-        <select
-          value={mySource}
-          onChange={event => setMySource(event.target.value)}
-          className="w-full rounded-lg border border-white/10 bg-black/50 px-3 py-2 text-sm text-white outline-none focus:border-neon focus:ring-2 focus:ring-neon/30"
-        >
-          <option value="library">Ma bibliothèque</option>
-          <option value="liked">Mes titres likés</option>
-          <option value="playlist">Ma playlist (ID)</option>
-          <option value="top_week">Top semaine</option>
-          <option value="top_month">Top mois</option>
-          <option value="top_all">Top toujours</option>
-        </select>
-        {mySource === "playlist" && (
-          <input
-            value={myPlaylistId}
-            onChange={event => setMyPlaylistId(event.target.value)}
-            placeholder="ID ou URL de playlist Spotify"
-            className="w-full rounded-lg border border-white/10 bg-black/50 px-3 py-2 text-sm text-white outline-none focus:border-neon focus:ring-2 focus:ring-neon/30"
-          />
-        )}
-        <div className="flex justify-end">
-          <Button type="button" variant="outline" onClick={onSavePreference} disabled={savingPref} className="gap-2">
-            {savingPref ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            Enregistrer ma source
-          </Button>
+        <div className="text-xs uppercase tracking-[0.3em] text-slate-400">Source</div>
+        <div className="rounded-lg border border-white/10 bg-black/50 px-3 py-2 text-sm text-white">
+          Source fixée : Bibliothèque (aléatoire)
         </div>
       </div>
       <ParticipantPanel participants={participants} scores={scores} title="Players in room" compact />
@@ -1125,46 +782,115 @@ function ParticipantPanel({
 function ResultsView({
   leaderboard,
   tracks,
+  currentUserId,
   onReturn,
   onReplay,
 }: {
-  leaderboard: Array<{ userId: number; username: string | null; score: number; accuracy: number }>
+  leaderboard: Array<{ userId: number; username: string | null; score: number; accuracy: number; avatar?: string | null }>
   tracks: SoloTrack[]
+  currentUserId?: number | null
   onReturn: () => void
   onReplay: () => void
 }) {
+  const [liking, setLiking] = useState<Record<string, boolean>>({})
+  const [likedIds, setLikedIds] = useState<Set<string>>(new Set())
+
   const podium = leaderboard.slice(0, 3)
+  const podiumOrdered = [podium[1], podium[0], podium[2]].filter(Boolean)
   const rest = leaderboard.slice(3)
 
-  return (
-    <section className="surface flex flex-col gap-6 rounded-3xl border border-white/10 p-8 text-center">
-      <PartyPopper className="mx-auto h-12 w-12 text-neon" />
-      <h2 className="text-3xl font-semibold text-white">Résumé de la manche</h2>
-      <p className="text-sm text-slate-300">Top 3 en mode podium et récap des titres joués.</p>
+  const contributorById = useMemo(() => {
+    const map = new Map<number, string>()
+    leaderboard.forEach(entry => {
+      const displayName = entry.username?.trim() || `Joueur ${entry.userId}`
+      map.set(entry.userId, displayName)
+    })
+    return map
+  }, [leaderboard])
 
-      <div className="grid gap-4 rounded-3xl border border-white/10 bg-white/5 p-4 md:grid-cols-3">
-        {podium.map((entry, index) => {
-          const rank = index + 1
-          const colors = [
-            "from-amber-400/50 to-yellow-500/30",
-            "from-slate-200/40 to-blue-400/30",
-            "from-rose-400/40 to-purple-500/30",
-          ]
-          return (
-            <div
-              key={entry.userId}
-              className={`rounded-2xl border border-white/10 bg-gradient-to-br ${colors[index] ?? "from-white/10 to-white/5"} px-4 py-5 text-left shadow-[0_15px_40px_rgba(0,0,0,0.25)]`}
-            >
-              <div className="flex items-center justify-between text-xs uppercase tracking-[0.35em] text-white/70">
-                <span>#{rank}</span>
-                <span>{entry.accuracy}% précision</span>
+  const resolveContributor = useCallback(
+    (track: SoloTrack) => {
+      const meta = (track.metadata ?? {}) as Record<string, unknown>
+      const ownerUsername = (meta.owner_username as string | undefined)?.trim()
+      const ownerIdRaw = (meta.owner_user_id as number | string | undefined) ?? (meta.user_id as number | string | undefined)
+      const ownerId = typeof ownerIdRaw === "string" ? Number(ownerIdRaw) : ownerIdRaw
+      if (ownerUsername) return ownerUsername
+      if (ownerId) return contributorById.get(ownerId) ?? `Joueur ${ownerId}`
+      return null
+    },
+    [contributorById]
+  )
+
+  const initials = (name: string | null | undefined, id: number) => {
+    const safe = name?.trim();
+    if (safe) {
+      const parts = safe.split(" ").filter(Boolean);
+      if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+      return safe.slice(0, 2).toUpperCase();
+    }
+    return `#${id}`.slice(0, 2);
+  };
+
+  const handleLike = async (track: SoloTrack) => {
+    const id = track.audioSourceId ?? track.track_id
+    if (!id || liking[id]) return
+    setLiking(prev => ({ ...prev, [id]: true }))
+    try {
+      await api.addLike(currentUserId, track.audioSourceId ?? track.track_id)
+      setLikedIds(prev => new Set(prev).add(id))
+    } catch (err) {
+      console.error("like_track_failed", err)
+    } finally {
+      setLiking(prev => ({ ...prev, [id]: false }))
+    }
+  }
+
+  return (
+    <section className="surface flex flex-col gap-5 rounded-3xl border border-white/10 bg-black/60 p-7 text-center shadow-[0_20px_80px_rgba(0,0,0,0.35)]">
+      <div className="flex flex-col items-center gap-1 text-center">
+        <div className="flex items-center gap-2 text-sm text-slate-300">
+          <PartyPopper className="h-5 w-5 text-neon" />
+          <span>Bravo ! Voici le podium</span>
+        </div>
+        <h2 className="text-2xl font-semibold text-white">Résumé de la manche</h2>
+      </div>
+
+      <div className="flex flex-col items-center">
+        <div className="grid w-full max-w-4xl grid-cols-1 items-end gap-4 md:grid-cols-3 md:gap-6">
+          {podiumOrdered.map((entry, idx) => {
+            const rank = idx === 1 ? 1 : idx === 0 ? 2 : 3;
+            const height = rank === 1 ? "h-56" : rank === 2 ? "h-44" : "h-40";
+            const gradient =
+              rank === 1
+                ? "from-amber-400 via-yellow-300 to-orange-400"
+                : rank === 2
+                  ? "from-slate-200 via-blue-200 to-indigo-400"
+                  : "from-amber-700 via-amber-600 to-amber-500";
+            const colOrder = rank === 1 ? "md:col-start-2" : rank === 2 ? "md:col-start-1" : "md:col-start-3";
+            return (
+              <div key={entry.userId} className={`flex flex-col items-center gap-3 ${colOrder}`}>
+                <div
+                  className={`relative flex items-center justify-center overflow-hidden rounded-full border-4 border-white/20 bg-white text-xl font-bold text-black shadow-[0_15px_35px_rgba(0,0,0,0.35)] ${rank === 1 ? "h-24 w-24" : "h-20 w-20"}`}
+                >
+                  {rank === 1 && <span className="absolute -top-5 text-2xl">👑</span>}
+                  {entry.avatar ? (
+                    <img src={entry.avatar} alt={entry.username ?? `Joueur ${entry.userId}`} className="h-full w-full object-cover" />
+                  ) : (
+                    <span>{initials(entry.username, entry.userId)}</span>
+                  )}
+                </div>
+                <div
+                  className={`flex w-48 flex-col items-center justify-end rounded-3xl border border-white/10 bg-gradient-to-b ${gradient} px-4 pb-4 pt-6 text-black shadow-[0_25px_70px_rgba(0,0,0,0.35)] ${height}`}
+                >
+                  <div className="text-4xl font-black drop-shadow-sm text-black/80">{rank}</div>
+                  <div className="mt-1 text-base font-semibold text-black">{entry.username || `Joueur ${entry.userId}`}</div>
+                  <div className="text-sm font-semibold text-black/80">{entry.score} pts • {entry.accuracy}%</div>
+                </div>
               </div>
-              <div className="mt-2 text-lg font-semibold text-white">{entry.username || `Joueur ${entry.userId}`}</div>
-              <div className="text-sm text-white/80">{entry.score} pts</div>
-            </div>
-          )
-        })}
-        {podium.length === 0 && <div className="col-span-3 text-sm text-slate-400">Aucun score.</div>}
+            );
+          })}
+        </div>
+        {podium.length === 0 && <div className="text-sm text-slate-400">Aucun score.</div>}
       </div>
 
       {rest.length ? (
@@ -1194,25 +920,50 @@ function ResultsView({
 
       <div className="rounded-3xl border border-white/10 bg-white/5 p-5 text-left">
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-white">Titres joués</h3>
+          <div>
+            <h3 className="text-lg font-semibold text-white">Titres joués</h3>
+            <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Joueur source affiché et ajout aux likes</p>
+          </div>
           <span className="text-xs uppercase tracking-[0.35em] text-slate-400">{tracks.length} titres</span>
         </div>
         <div className="grid gap-2 sm:grid-cols-2">
           {tracks.length === 0 ? (
             <p className="text-sm text-slate-400">Aucun titre disponible.</p>
           ) : (
-            tracks.map((track, idx) => (
-              <div
-                key={`${track.audioSourceId ?? track.track_id}-${idx}`}
-                className="flex items-center justify-between rounded-xl border border-white/5 bg-black/30 px-4 py-3 text-sm"
-              >
-                <div>
-                  <div className="font-semibold text-white">{track.title}</div>
-                  <div className="text-xs text-slate-400">{track.artist}</div>
+            tracks.map((track, idx) => {
+              const owner = resolveContributor(track)
+              const id = track.audioSourceId ?? track.track_id
+              const isLiking = liking[id ?? ""] || false
+              const isLiked = likedIds.has(id ?? "")
+              return (
+                <div
+                  key={`${id}-${idx}`}
+                  className="flex items-center justify-between rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm shadow-[0_10px_30px_rgba(0,0,0,0.25)]"
+                >
+                  <div className="flex flex-col gap-1">
+                    <div className="font-semibold text-white">{track.title}</div>
+                    <div className="text-xs text-slate-400">{track.artist}</div>
+                    <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                      <span className="rounded-full border border-white/10 bg-white/5 px-2 py-[2px] uppercase tracking-[0.2em] text-[10px] text-slate-300">
+                        Joueur
+                      </span>
+                      <span className="text-slate-200">{owner ?? "Inconnu"}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button
+                      disabled={!id || isLiking}
+                      onClick={() => handleLike(track)}
+                      className={`flex h-9 w-9 items-center justify-center rounded-full border border-white/10 transition hover:border-rose-400/60 hover:text-rose-300 ${isLiked ? "bg-rose-500/20 text-rose-200" : "bg-white/5 text-white"}`}
+                      title="Ajouter aux likes"
+                    >
+                      <Heart className={`h-4 w-4 ${isLiked ? "fill-current" : ""}`} />
+                    </button>
+                    <span className="text-xs text-slate-400">#{idx + 1}</span>
+                  </div>
                 </div>
-                <span className="text-xs text-slate-400">#{idx + 1}</span>
-              </div>
-            ))
+              )
+            })
           )}
         </div>
       </div>

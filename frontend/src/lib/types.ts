@@ -77,7 +77,58 @@ export type MultiplayerParticipant = {
   username: string | null
 }
 
+export type MultiplayerPlayerState = {
+  userId: number
+  username: string | null
+  avatar?: string | null
+  score: number
+  accuracy: number
+  rounds: number
+  correct: number
+  streak: number
+  bestStreak: number
+  hasAnswered: boolean
+  isReady: boolean
+  lastGuess?: string
+  lastSourceGuess?: number | null
+  lastVerdict?: "correct" | "close" | "wrong"
+}
+
+export type MultiplayerGameState = {
+  roomCode: string
+  hostUserId: number | null
+  status: "lobby" | "playing" | "reveal" | "finished"
+  currentRound: number
+  totalRounds: number
+  currentTrack: {
+    round: number
+    trackId: string
+    audioSourceId?: string | number
+    title: string
+    artist: string
+    previewUrl: string | null
+    albumCover?: string | null
+    metadata?: Record<string, unknown> | null
+  } | null
+  timing: {
+    startAt: number | null
+    revealAt: number | null
+  }
+  players: Record<number, MultiplayerPlayerState>
+}
+
 export type RoomSelfPreference = {
   source_pref: string | null
   playlist_pref: string | null
 } | null
+
+export type FriendEntry = {
+  id: number
+  userId: number
+  username: string | null
+  avatar: string | null
+  provider: MusicProvider
+  status: "pending" | "accepted"
+  direction: "incoming" | "outgoing" | "accepted"
+  createdAt: string
+}

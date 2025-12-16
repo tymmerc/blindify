@@ -1,15 +1,15 @@
 "use client"
 
 import Image from "next/image"
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { api, type CurrentUserPayload } from "@/lib/api"
-import type { GameSessionSummary, UserSummary } from "@/lib/types"
+import type { FriendEntry, GameSessionSummary, UserSummary } from "@/lib/types"
 import { fetchUserDashboard } from "@/lib/userData"
 import { BottomNav } from "@/components/BottomNav"
 import { Logo } from "@/components/Logo"
-import { Play, Users } from "lucide-react"
+import { Check, Loader2, Plus, Users, X } from "lucide-react"
 
 type Playlist = {
   id: string
@@ -25,13 +25,6 @@ const fallbackPlaylists: Playlist[] = [
   { title: "Workout Mix", count: 87, emoji: "💪", id: "workout-mix" },
   { title: "Chill Vibes", count: 234, emoji: "🌙", id: "chill-vibes" },
   { title: "Road Trip", count: 156, emoji: "🚗", id: "road-trip" },
-]
-
-const friends = [
-  { name: "Lina M.", status: "En ligne", nowPlaying: "Solo — Road Trip", accent: "purple" },
-  { name: "Ethan", status: "En ligne", nowPlaying: "Multijoueur — Top 2024", accent: "pink" },
-  { name: "Nora", status: "Hors ligne", nowPlaying: "Dernière partie: Chill Vibes", accent: "emerald" },
-  { name: "Malik", status: "En ligne", nowPlaying: "Solo — Focus Mix", accent: "blue" },
 ]
 
 type ActivityItem = {
@@ -74,18 +67,19 @@ export default function MenuPage() {
     { label: "Niveau", value: "—" },
   ])
   const [history, setHistory] = useState<GameSessionSummary[]>([])
+  const [friends, setFriends] = useState<FriendEntry[]>([])
+  const [incomingFriends, setIncomingFriends] = useState<FriendEntry[]>([])
+  const [outgoingFriends, setOutgoingFriends] = useState<FriendEntry[]>([])
+  const [friendsLoading, setFriendsLoading] = useState(false)
+  const [friendsError, setFriendsError] = useState<string | null>(null)
 
   useEffect(() => {
     let active = true
 
     async function load() {
       try {
-        const me = await api.checkAuth()
+        const me = await api.ensureUserSession("Invité")
         if (!active) return
-        if (!me) {
-          router.replace("/auth/login")
-          return
-        }
         setUserPayload(me)
       } finally {
         if (active) setLoading(false)
@@ -178,6 +172,85 @@ export default function MenuPage() {
     }
   }, [userPayload])
 
+  const refreshFriends = useCallback(async () => {
+    if (!userPayload?.user) return
+    setFriendsLoading(true)
+    setFriendsError(null)
+    try {
+      const payload = await api.listFriends()
+      setFriends(payload.friends)
+      setIncomingFriends(payload.incoming)
+      setOutgoingFriends(payload.outgoing)
+    } catch (err) {
+      console.error("load_friends_failed", err)
+      setFriendsError(err instanceof Error ? err.message : "Impossible de charger vos amis.")
+    } finally {
+      setFriendsLoading(false)
+    }
+  }, [userPayload])
+
+  useEffect(() => {
+    refreshFriends()
+  }, [refreshFriends])
+
+  const handleAddFriend = useCallback(
+    async (username: string) => {
+      const clean = username.trim()
+      if (!clean) {
+        throw new Error("Pseudo requis")
+      }
+      setFriendsError(null)
+      setFriendsLoading(true)
+      try {
+        await api.requestFriend(clean)
+        await refreshFriends()
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Impossible d'ajouter cet ami."
+        setFriendsError(message)
+        throw err instanceof Error ? err : new Error(message)
+      } finally {
+        setFriendsLoading(false)
+      }
+    },
+    [refreshFriends]
+  )
+
+  const handleAcceptFriend = useCallback(
+    async (userId: number) => {
+      setFriendsError(null)
+      setFriendsLoading(true)
+      try {
+        await api.acceptFriend(userId)
+        await refreshFriends()
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Impossible d'accepter cette invitation."
+        setFriendsError(message)
+        throw err instanceof Error ? err : new Error(message)
+      } finally {
+        setFriendsLoading(false)
+      }
+    },
+    [refreshFriends]
+  )
+
+  const handleRemoveFriend = useCallback(
+    async (userId: number) => {
+      setFriendsError(null)
+      setFriendsLoading(true)
+      try {
+        await api.removeFriend(userId)
+        await refreshFriends()
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Impossible de supprimer cet ami."
+        setFriendsError(message)
+        throw err instanceof Error ? err : new Error(message)
+      } finally {
+        setFriendsLoading(false)
+      }
+    },
+    [refreshFriends]
+  )
+
   const user: UserSummary | null = userPayload?.user ?? null
   const isSpotifyUser = user?.provider === "spotify"
   const initials = useMemo(() => {
@@ -222,12 +295,30 @@ export default function MenuPage() {
 
         <div className="grid auto-rows-min gap-5 lg:gap-7 md:grid-cols-[240px,minmax(0,1fr),240px] xl:grid-cols-[280px,minmax(0,1fr),280px] items-start">
           <div className="hidden md:block sticky top-4">
-            <FriendsPanel />
+            <FriendsPanel
+              friends={friends}
+              incoming={incomingFriends}
+              outgoing={outgoingFriends}
+              loading={friendsLoading}
+              error={friendsError}
+              onAdd={handleAddFriend}
+              onAccept={handleAcceptFriend}
+              onRemove={handleRemoveFriend}
+            />
           </div>
 
           <div className="space-y-7 max-w-[1100px] w-full mx-auto">
             <div className="grid gap-4 md:hidden">
-              <FriendsPanel />
+              <FriendsPanel
+                friends={friends}
+                incoming={incomingFriends}
+                outgoing={outgoingFriends}
+                loading={friendsLoading}
+                error={friendsError}
+                onAdd={handleAddFriend}
+                onAccept={handleAcceptFriend}
+                onRemove={handleRemoveFriend}
+              />
               <HistoryPanel items={activityItems.length ? activityItems : fallbackActivity} />
             </div>
 
@@ -235,8 +326,20 @@ export default function MenuPage() {
               <div className="relative flex flex-col gap-5">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-4">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[var(--ma-gradient)] text-base font-semibold shadow-[0_10px_24px_rgba(168,85,247,0.35)]">
-                      {initials}
+                    <div className="relative h-11 w-11 overflow-hidden rounded-full border border-[var(--ma-border)] bg-black/50 shadow-[0_10px_24px_rgba(0,0,0,0.35)]">
+                      {user?.avatar ? (
+                        <Image
+                          src={user.avatar}
+                          alt={user.username ?? "Avatar"}
+                          fill
+                          sizes="44px"
+                          className="object-cover"
+                        />
+                      ) : (
+                        <div className="grid h-full w-full place-items-center text-base font-semibold text-white">
+                          {initials}
+                        </div>
+                      )}
                     </div>
                     <div>
                       <p className="text-xs uppercase tracking-[0.3em] text-[var(--ma-muted)]">Bienvenue</p>
@@ -439,10 +542,42 @@ function PlaylistGrid({ playlists, loading }: { playlists: Playlist[]; loading: 
   )
 }
 
-function FriendsPanel({ floating = false, className = "" }: { floating?: boolean; className?: string }) {
-  const online = friends.filter(friend => friend.status === "En ligne").length
+type FriendsPanelProps = {
+  friends: FriendEntry[]
+  incoming: FriendEntry[]
+  outgoing: FriendEntry[]
+  loading?: boolean
+  error?: string | null
+  floating?: boolean
+  className?: string
+  onAdd: (username: string) => Promise<void>
+  onAccept: (userId: number) => Promise<void>
+  onRemove: (userId: number) => Promise<void>
+}
 
-  const gradientFor = (accent: string) => {
+function FriendsPanel({
+  friends,
+  incoming,
+  outgoing,
+  loading = false,
+  error = null,
+  floating = false,
+  className = "",
+  onAdd,
+  onAccept,
+  onRemove,
+}: FriendsPanelProps) {
+  const [identifier, setIdentifier] = useState("")
+  const [message, setMessage] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [actionBusy, setActionBusy] = useState<number | null>(null)
+
+  const online = friends.length
+  const totalFriends = friends.length
+  const palette = ["purple", "pink", "emerald", "blue"]
+
+  const gradientFor = (seed: number) => {
+    const accent = palette[Math.abs(seed) % palette.length]
     switch (accent) {
       case "pink":
         return "linear-gradient(135deg, rgba(236,72,153,0.6), rgba(126,34,206,0.4))"
@@ -455,53 +590,237 @@ function FriendsPanel({ floating = false, className = "" }: { floating?: boolean
     }
   }
 
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (submitting) return
+    const value = identifier.trim()
+    if (!value) {
+      setMessage("Entre le pseudo de ton ami.")
+      return
+    }
+    setSubmitting(true)
+    setMessage(null)
+    try {
+      await onAdd(value)
+      setIdentifier("")
+      setMessage("Invitation envoyée ✉️")
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Impossible d'ajouter cet ami.")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleAccept = async (userId: number) => {
+    setActionBusy(userId)
+    setMessage(null)
+    try {
+      await onAccept(userId)
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Impossible d'accepter cette invitation.")
+    } finally {
+      setActionBusy(null)
+    }
+  }
+
+  const handleRemove = async (userId: number) => {
+    setActionBusy(userId)
+    setMessage(null)
+    try {
+      await onRemove(userId)
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Impossible de mettre à jour cette relation.")
+    } finally {
+      setActionBusy(null)
+    }
+  }
+
+  const renderAvatar = (friend: FriendEntry) => {
+    const initials = friend.username
+      ? friend.username
+          .split(" ")
+          .map(part => part[0])
+          .join("")
+          .slice(0, 2)
+          .toUpperCase()
+      : "??"
+    return (
+      <div className="relative h-12 w-12 overflow-hidden rounded-lg">
+        {friend.avatar ? (
+          <Image src={friend.avatar} alt={friend.username ?? "ami"} fill className="object-cover" sizes="48px" />
+        ) : (
+          <div
+            className="absolute inset-0"
+            style={{
+              backgroundImage: gradientFor(friend.userId),
+            }}
+          />
+        )}
+        <div className="relative z-10 grid h-full w-full place-items-center text-base font-semibold">
+          {initials}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div
       className={`ma-card relative overflow-hidden bg-[#0d0d11] ${floating ? "sticky top-6 shadow-[0_8px_18px_rgba(0,0,0,0.3)]" : ""} ${className}`}
     >
       <div className="relative space-y-4">
         <div className="flex items-center justify-between">
-          <p className="text-xs uppercase tracking-[0.35em] text-[var(--ma-muted)]">Amis</p>
-          <span className="text-xs text-[var(--ma-muted)]">{online} en ligne</span>
+          <div>
+            <p className="text-xs uppercase tracking-[0.35em] text-[var(--ma-muted)]">Amis</p>
+            <p className="text-sm text-[var(--ma-muted)]">
+              {totalFriends} ami{totalFriends > 1 ? "s" : ""} · {online} en ligne (statut local)
+            </p>
+          </div>
+          <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-white">
+            <Users className="mr-1 inline h-4 w-4" />
+            {totalFriends}
+          </span>
         </div>
-        <div className="space-y-4">
-          {friends.map(friend => {
-            const initials = friend.name
-              .split(" ")
-              .map(part => part[0])
-              .join("")
-              .slice(0, 2)
-              .toUpperCase()
-            return (
+
+        <form onSubmit={handleSubmit} className="rounded-2xl border border-[var(--ma-border)] bg-black/30 p-3">
+          <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-[var(--ma-muted)]">
+            Ajouter un ami
+          </label>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <input
+              value={identifier}
+              onChange={event => setIdentifier(event.target.value)}
+              placeholder="Pseudo (nom complet ou début)"
+              className="w-full rounded-lg border border-[var(--ma-border)] bg-black/50 px-3 py-2 text-sm outline-none transition focus:border-[rgba(168,85,247,0.4)]"
+              disabled={submitting || loading}
+            />
+            <button
+              type="submit"
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-[var(--ma-gradient)] px-3 py-2 text-sm font-semibold text-white shadow-[0_10px_20px_rgba(168,85,247,0.3)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={submitting || loading}
+            >
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+              Ajouter
+            </button>
+          </div>
+          {(message || error) && (
+            <p className="mt-2 text-xs text-[var(--ma-muted)]">{message ?? error}</p>
+          )}
+        </form>
+
+        {incoming.length ? (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs uppercase tracking-[0.2em] text-[var(--ma-muted)]">Invitations reçues</p>
+              <span className="text-xs text-[var(--ma-muted)]">{incoming.length}</span>
+            </div>
+            {incoming.map(friend => (
               <div
-                key={friend.name}
-                className="flex items-center gap-4 rounded-xl border border-[var(--ma-border)] bg-white/5 px-4 py-4 shadow-[0_6px_14px_rgba(0,0,0,0.2)]"
+                key={friend.id}
+                className="flex items-center gap-3 rounded-xl border border-[var(--ma-border)] bg-white/5 px-3 py-3"
               >
-                <div className="relative h-12 w-12 overflow-hidden rounded-lg">
-                  <div
-                    className="absolute inset-0"
-                    style={{
-                      backgroundImage: gradientFor(friend.accent),
-                    }}
-                  />
-                  <div className="relative z-10 grid h-full w-full place-items-center text-base font-semibold">
-                    {initials}
+                {renderAvatar(friend)}
+                <div className="flex-1">
+                  <p className="text-sm font-semibold">{friend.username ?? "Joueur"}</p>
+                  <p className="text-xs text-[var(--ma-muted)]">Souhaite te suivre</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleAccept(friend.userId)}
+                    className="inline-flex items-center justify-center rounded-lg bg-emerald-500/80 px-2.5 py-2 text-xs font-semibold text-white shadow-[0_6px_14px_rgba(16,185,129,0.4)] transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={actionBusy === friend.userId || loading}
+                    type="button"
+                  >
+                    {actionBusy === friend.userId ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-4 w-4" />}
+                    <span className="ml-1">Accepter</span>
+                  </button>
+                  <button
+                    onClick={() => handleRemove(friend.userId)}
+                    className="inline-flex items-center justify-center rounded-lg border border-white/10 px-2.5 py-2 text-xs font-semibold text-white transition hover:border-red-400 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={actionBusy === friend.userId || loading}
+                    type="button"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-xs uppercase tracking-[0.2em] text-[var(--ma-muted)]">Mes amis</p>
+            <span className="text-xs text-[var(--ma-muted)]">{totalFriends}</span>
+          </div>
+          {loading && !friends.length ? (
+            <div className="space-y-2">
+              {Array.from({ length: 3 }).map((_, index) => (
+                <div key={index} className="flex items-center gap-3 rounded-xl border border-[var(--ma-border)] bg-white/5 px-3 py-3">
+                  <div className="h-12 w-12 rounded-lg bg-white/10" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-3 w-1/2 rounded bg-white/10" />
+                    <div className="h-3 w-1/3 rounded bg-white/5" />
                   </div>
                 </div>
-                <div className="flex-1">
-                  <p className="text-base font-semibold">{friend.name}</p>
-                  <p className="text-sm text-[var(--ma-muted)]">{friend.nowPlaying}</p>
-                </div>
-                <div
-                  className={`h-2 w-2 rounded-full ${friend.status === "En ligne" ? "bg-emerald-400" : "bg-gray-500"}`}
-                  title={friend.status}
-                />
+              ))}
+            </div>
+          ) : null}
+          {!loading && !friends.length ? (
+            <p className="text-sm text-[var(--ma-muted)]">Aucun ami pour l'instant. Envoie une invitation pour commencer.</p>
+          ) : null}
+          {friends.map(friend => (
+            <div
+              key={friend.id}
+              className="flex items-center gap-3 rounded-xl border border-[var(--ma-border)] bg-white/5 px-3 py-3 shadow-[0_6px_14px_rgba(0,0,0,0.2)]"
+            >
+              {renderAvatar(friend)}
+              <div className="flex-1">
+                <p className="text-sm font-semibold">{friend.username ?? "Joueur"}</p>
+                <p className="text-xs text-[var(--ma-muted)]">Connecté via {friend.provider}</p>
               </div>
-            )
-          })}
+              <button
+                onClick={() => handleRemove(friend.userId)}
+                className="rounded-lg border border-white/10 px-2.5 py-1.5 text-xs text-[var(--ma-muted)] transition hover:border-red-400 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={actionBusy === friend.userId || loading}
+                type="button"
+              >
+                Retirer
+              </button>
+            </div>
+          ))}
         </div>
+
+        {outgoing.length ? (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs uppercase tracking-[0.2em] text-[var(--ma-muted)]">Invitations envoyées</p>
+              <span className="text-xs text-[var(--ma-muted)]">{outgoing.length}</span>
+            </div>
+            {outgoing.map(friend => (
+              <div
+                key={friend.id}
+                className="flex items-center gap-3 rounded-xl border border-[var(--ma-border)] bg-black/30 px-3 py-3"
+              >
+                {renderAvatar(friend)}
+                <div className="flex-1">
+                  <p className="text-sm font-semibold">{friend.username ?? "Joueur"}</p>
+                  <p className="text-xs text-[var(--ma-muted)]">En attente d'acceptation</p>
+                </div>
+                <button
+                  onClick={() => handleRemove(friend.userId)}
+                  className="rounded-lg border border-white/10 px-2.5 py-1.5 text-xs text-[var(--ma-muted)] transition hover:border-red-400 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={actionBusy === friend.userId || loading}
+                  type="button"
+                >
+                  Annuler
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
         <Link href="/multiplayer" className="ma-btn-primary w-full justify-center">
-          Inviter des amis
+          Inviter des amis en room
         </Link>
       </div>
     </div>

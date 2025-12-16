@@ -3,6 +3,8 @@ import type {
   MusicProvider,
   MultiplayerParticipant,
   MultiplayerRoom,
+  MultiplayerGameState,
+  FriendEntry,
   ProviderConnectionSummary,
   RoomSelfPreference,
   SoloGameResponse,
@@ -41,6 +43,23 @@ export const api = {
   },
   async checkAuth(): Promise<CurrentUserPayload | null> {
     return clientApi.currentUser()
+  },
+  async ensureUserSession(nickname?: string): Promise<CurrentUserPayload | null> {
+    try {
+      const existing = await clientApi.currentUser()
+      if (existing) return existing
+    } catch (err) {
+      console.error("ensure_session_check_failed", err)
+    }
+
+    try {
+      const { sessionToken } = await clientApi.createGuestSession(nickname)
+      setSessionCookie(sessionToken, 60 * 60 * 4)
+      return await clientApi.currentUser()
+    } catch (err) {
+      console.error("ensure_guest_session_failed", err)
+      return null
+    }
   },
   async startSoloGame(params: {
     difficulty?: "easy" | "normal" | "hard"
@@ -85,13 +104,28 @@ export const api = {
       totalRounds: number
       startedAt: string
       roomCode: string
-      stateHash?: string | null
       currentRound?: number | null
       autoAdvance?: boolean
     } | null
     tracks: SoloTrack[]
+    gameState?: MultiplayerGameState | null
   }> {
-    return clientApi.roomState(code)
+    return clientApi.roomState(code) as Promise<{
+      room: MultiplayerRoom
+      session: {
+        id: number
+        mode: string
+        difficulty: string
+        provider: string
+        totalRounds: number
+        startedAt: string
+        roomCode: string
+        currentRound?: number | null
+        autoAdvance?: boolean
+      } | null
+      tracks: SoloTrack[]
+      gameState?: MultiplayerGameState | null
+    }>
   },
   async setRoomPreference(code: string, payload: { source: string; playlistId?: string | null }) {
     return clientApi.setRoomPreference(code, payload)
@@ -108,12 +142,41 @@ export const api = {
       totalRounds: number
       startedAt: string
       roomCode: string
-      stateHash?: string | null
       autoAdvance?: boolean
     }
     tracks: SoloTrack[]
+    gameState?: MultiplayerGameState
   }> {
-    return clientApi.startMultiplayerGame(code, payload)
+    return clientApi.startMultiplayerGame(code, payload) as Promise<{
+      session: {
+        id: number
+        mode: string
+        difficulty: string
+        provider: string
+        totalRounds: number
+        startedAt: string
+        roomCode: string
+        autoAdvance?: boolean
+      }
+      tracks: SoloTrack[]
+      gameState?: MultiplayerGameState
+    }>
+  },
+  async listFriends(): Promise<{
+    friends: FriendEntry[]
+    incoming: FriendEntry[]
+    outgoing: FriendEntry[]
+  }> {
+    return clientApi.friends()
+  },
+  async requestFriend(username: string): Promise<{ friendship: FriendEntry; autoAccepted?: boolean }> {
+    return clientApi.requestFriend(username)
+  },
+  async acceptFriend(userId: number): Promise<{ friendship: FriendEntry }> {
+    return clientApi.acceptFriend(userId)
+  },
+  async removeFriend(userId: number): Promise<{ removed: boolean }> {
+    return clientApi.removeFriend(userId)
   },
   async logout(): Promise<void> {
     await clientApi.logout()
