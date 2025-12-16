@@ -199,6 +199,22 @@ CREATE TABLE IF NOT EXISTS room_participants (
     UNIQUE(room_id, user_id)
 );
 
+-- Friendships --------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS friendships (
+    id SERIAL PRIMARY KEY,
+    user_a INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_b INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'pending',
+    requested_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CHECK (user_a <> user_b),
+    UNIQUE(user_a, user_b)
+);
+
+CREATE INDEX IF NOT EXISTS idx_friendships_user_a ON friendships(user_a);
+CREATE INDEX IF NOT EXISTS idx_friendships_user_b ON friendships(user_b);
+
 -- Seed default badges ---------------------------------------------------
 INSERT INTO badges (slug, name, description, icon, tier, requirement_type, requirement_value)
 VALUES

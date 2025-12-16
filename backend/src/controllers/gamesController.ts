@@ -8,6 +8,58 @@ import { syncSpotifyLibrary } from "../services/providers/spotifySync";
 import axios from "axios";
 import previewFinder from "spotify-preview-finder";
 
+async function importItunesTopTracks(limit: number): Promise<AudioSourceRow[]> {
+  try {
+    const capped = Math.max(5, Math.min(limit, 50));
+    const { data } = await axios.get(`https://itunes.apple.com/us/rss/topsongs/limit=${capped}/json`, {
+      timeout: 8000,
+    });
+    const entries: any[] = data?.feed?.entry ?? [];
+    const results: AudioSourceRow[] = [];
+
+    for (const entry of entries.slice(0, capped)) {
+      const externalId =
+        entry?.id?.attributes?.["im:id"] ??
+        entry?.id?.label ??
+        entry?.id ??
+        null;
+      const title = entry?.["im:name"]?.label ?? entry?.title?.label ?? null;
+      const artist = entry?.["im:artist"]?.label ?? entry?.artist?.label ?? "Artiste inconnu";
+      const cover =
+        Array.isArray(entry?.["im:image"]) && entry["im:image"].length
+          ? entry["im:image"][entry["im:image"].length - 1]?.label ?? null
+          : null;
+      const previewUrl =
+        Array.isArray(entry?.link)
+          ? entry.link.find((link: any) => link?.rel === "enclosure")?.attributes?.href ?? null
+          : entry?.link?.attributes?.href ?? null;
+
+      if (!title || !previewUrl) continue;
+
+      const metadata = { source: "itunes_top", feed: "us", fetched_at: new Date().toISOString() };
+      const { rows } = await pool.query<AudioSourceRow>(
+        `INSERT INTO audio_sources (provider, external_id, user_id, title, artist, album_cover, audio_url, duration_ms, metadata)
+         VALUES ($1,$2,NULL,$3,$4,$5,$6,$7,$8)
+         ON CONFLICT (provider, external_id)
+         DO UPDATE SET
+           title=EXCLUDED.title,
+           artist=EXCLUDED.artist,
+           album_cover=EXCLUDED.album_cover,
+           audio_url=EXCLUDED.audio_url,
+           metadata=EXCLUDED.metadata
+         RETURNING id, provider, external_id, title, artist, album_cover, audio_url, duration_ms, metadata`,
+        ["apple", externalId, title, artist, cover, previewUrl, null, metadata]
+      );
+      if (rows[0]) results.push(rows[0]);
+    }
+
+    return results;
+  } catch (err) {
+    console.error("itunes_top_import_failed", err);
+    return [];
+  }
+}
+
 async function ensureUsedTracksTable(): Promise<void> {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS used_tracks (
@@ -33,6 +85,27 @@ async function markTracksAsUsed(audioSourceIds: (string | undefined | null)[]): 
     ids
   );
   await pool.query(`DELETE FROM used_tracks WHERE used_at < NOW() - INTERVAL '12 hours'`);
+}
+
+async function fetchGlobalRandomSources(count: number): Promise<AudioSourceRow[]> {
+  if (count <= 0) return [];
+  const { rows } = await pool.query<AudioSourceRow>(
+    `SELECT s.id,
+            s.user_id AS user_id,
+            s.provider,
+            s.external_id,
+            s.title,
+            s.artist,
+            s.album_cover,
+            s.audio_url,
+            s.duration_ms,
+            s.metadata
+     FROM audio_sources s
+     ORDER BY RANDOM()
+     LIMIT $1`,
+    [Math.max(1, count * 2)]
+  );
+  return rows;
 }
 
 async function fetchAudioSources(
@@ -428,9 +501,9 @@ export const gamesController = {
     const preferredProvider = (req.body?.provider as MusicProvider | undefined) ?? undefined;
     const difficulty = typeof req.body?.difficulty === "string" ? req.body.difficulty : "normal";
     const count = Number.isFinite(Number(req.body?.count)) ? Math.min(Math.max(Number(req.body.count), 5), 25) : 10;
-    const likedOnly = sourceParam === "liked";
-    const playlistId = typeof req.body?.playlistId === "string" ? req.body.playlistId.trim() : null;
-    const topRange =
+    let likedOnly = sourceParam === "liked";
+    let playlistId = typeof req.body?.playlistId === "string" ? req.body.playlistId.trim() : null;
+    let topRange =
       sourceParam === "top_week"
         ? "short_term"
         : sourceParam === "top_month"
@@ -445,23 +518,26 @@ export const gamesController = {
     });
     if (!context) return;
 
-    const provider: MusicProvider =
+    let provider: MusicProvider =
       preferredProvider ?? context.connection?.provider ?? context.user.provider ?? "guest";
 
+    // Si aucune connexion et provider non invité, on bascule en invité avec catalogue global.
     if (provider !== "guest" && !context.connection) {
-      fail(res, "provider_connection_missing", "Aucune connexion active pour ce mode", 400);
-      return;
+      provider = "guest";
+      likedOnly = false;
+      playlistId = null;
+      topRange = null;
     }
 
     // Pull a larger candidate set so we can filter out tracks without preview_url
-    // If a playlist is requested, ensure Spotify connection
+    // If a playlist is requested, ensure Spotify connection (otherwise fallback to guest pool)
     if ((playlistId || topRange) && provider !== "spotify") {
-      fail(res, "playlist_provider_invalid", "Les playlists nécessitent Spotify.", 400);
-      return;
+      playlistId = null;
+      topRange = null;
+      likedOnly = false;
     }
     if (topRange && !context.connection?.access_token) {
-      fail(res, "provider_connection_missing", "Connexion Spotify requise pour ce mode.", 400);
-      return;
+      topRange = null;
     }
 
     // Load playlist tracks if requested
@@ -555,6 +631,33 @@ export const gamesController = {
 
     if (isQuickGame) {
       sources = prioritizeFreshFirstTrack(sources, recentFirstIds, recentFirstExternalList);
+    }
+
+    if (sources.length < count) {
+      const remaining = count - sources.length;
+      const globalPool = await fetchGlobalRandomSources(remaining * 2);
+      const existingKeys = new Set(sources.map(src => src.external_id ?? String(src.id)));
+      for (const candidate of globalPool) {
+        const key = candidate.external_id ?? String(candidate.id);
+        if (!candidate.audio_url || existingKeys.has(key)) continue;
+        sources.push(candidate);
+        existingKeys.add(key);
+        if (sources.length >= count) break;
+      }
+    }
+
+    // Fallback invité : puiser dans le top iTunes si on manque encore de pistes jouables
+    if (provider === "guest" && sources.length < count) {
+      const remaining = count - sources.length;
+      const topTracks = await importItunesTopTracks(Math.max(10, remaining * 2));
+      const existingKeys = new Set(sources.map(src => src.external_id ?? String(src.id)));
+      for (const track of topTracks) {
+        const key = track.external_id ?? String(track.id);
+        if (!track.audio_url || existingKeys.has(key)) continue;
+        sources.push(track);
+        existingKeys.add(key);
+        if (sources.length >= count) break;
+      }
     }
 
     const totalRounds = sources.length;

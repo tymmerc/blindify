@@ -8,33 +8,28 @@ import { ok, fail } from "../utils/response";
 import type { MusicProvider } from "../types/user";
 import type { AudioSourceRow } from "../types/audio";
 import { syncSpotifyLibrary } from "../services/providers/spotifySync";
-import { createRoomState, getRoomState } from "../services/gameState";
+import { bootstrapGameState, gameStateSnapshot, type RoundTrack } from "../services/realtimeGame";
+import { broadcastState, startRoundAndBroadcast } from "../services/realtimeOrchestrator";
 
-async function ensureUsedTracksTable(): Promise<void> {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS used_tracks (
-      id SERIAL PRIMARY KEY,
-      audio_source_id UUID NOT NULL REFERENCES audio_sources(id) ON DELETE CASCADE,
-      used_at TIMESTAMP DEFAULT NOW(),
-      UNIQUE (audio_source_id)
-    )
-  `);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_used_tracks_used_at ON used_tracks (used_at)`);
-  await pool.query(`DELETE FROM used_tracks WHERE used_at < NOW() - INTERVAL '12 hours'`);
-}
-
-async function markTracksAsUsed(audioSourceIds: (string | undefined | null)[]): Promise<void> {
-  const ids = audioSourceIds.filter((id): id is string => Boolean(id));
-  if (!ids.length) return;
-  await ensureUsedTracksTable();
-  const values = ids.map((_, idx) => `($${idx + 1}, NOW())`).join(",");
-  await pool.query(
-    `INSERT INTO used_tracks (audio_source_id, used_at)
-     VALUES ${values}
-     ON CONFLICT (audio_source_id) DO UPDATE SET used_at = EXCLUDED.used_at`,
-    ids
+async function fetchGlobalRandomSources(count: number): Promise<AudioSourceRow[]> {
+  if (count <= 0) return [];
+  const { rows } = await pool.query<AudioSourceRow>(
+    `SELECT s.id,
+            s.user_id AS user_id,
+            s.provider,
+            s.external_id,
+            s.title,
+            s.artist,
+            s.album_cover,
+            s.audio_url,
+            s.duration_ms,
+            s.metadata
+     FROM audio_sources s
+     ORDER BY RANDOM()
+     LIMIT $1`,
+    [count * 2]
   );
-  await pool.query(`DELETE FROM used_tracks WHERE used_at < NOW() - INTERVAL '12 hours'`);
+  return rows;
 }
 
 function generateRoomCode(): string {
@@ -60,8 +55,6 @@ async function fetchAudioSources(
   count: number,
   opts: { likedOnly?: boolean; playlistId?: string; timeRange?: string } = {}
 ): Promise<AudioSourceRow[]> {
-  await ensureUsedTracksTable();
-
   const extraConds: string[] = [];
   const params: unknown[] = [];
   const userList = Array.isArray(userIds) ? userIds : [userIds];
@@ -84,19 +77,13 @@ async function fetchAudioSources(
     extraConds.push(`metadata->>'time_range' = $${params.length}`);
   }
 
-  const usedFilter = `NOT EXISTS (
-    SELECT 1 FROM used_tracks ut
-    WHERE ut.audio_source_id = s.id
-      AND ut.used_at >= NOW() - INTERVAL '12 hours'
-  )`;
-
-  const extraClause = extraConds.length ? `AND ${extraConds.join(" AND ")} AND ${usedFilter}` : `AND ${usedFilter}`;
+  const extraClause = extraConds.length ? `AND ${extraConds.join(" AND ")}` : "";
 
   if (opts.likedOnly) {
     params.push(count);
     const limitIndex = params.length;
     const { rows } = await pool.query<AudioSourceRow>(
-      `SELECT s.id, s.provider, s.external_id, s.title, s.artist, s.album_cover, s.audio_url, s.duration_ms, s.metadata
+      `SELECT s.id, s.user_id AS user_id, s.provider, s.external_id, s.title, s.artist, s.album_cover, s.audio_url, s.duration_ms, s.metadata
        FROM audio_sources s
        INNER JOIN likes l ON l.audio_source_id = s.id
        WHERE ${userCond} ${providerCond} ${extraClause}
@@ -110,7 +97,7 @@ async function fetchAudioSources(
   params.push(count);
   const limitIndex = params.length;
   const { rows } = await pool.query<AudioSourceRow>(
-    `SELECT s.id, s.provider, s.external_id, s.title, s.artist, s.album_cover, s.audio_url, s.duration_ms, s.metadata
+    `SELECT s.id, s.user_id AS user_id, s.provider, s.external_id, s.title, s.artist, s.album_cover, s.audio_url, s.duration_ms, s.metadata
      FROM audio_sources s
      WHERE ${userCond} ${providerCond} ${extraClause}
      ORDER BY RANDOM()
@@ -566,15 +553,7 @@ export const roomsController = {
       [session.id]
     );
 
-    let gameState = getRoomState(room.room_code);
-    if (!gameState) {
-      gameState = createRoomState({
-        sessionId: session.id,
-        roomCode: room.room_code,
-        totalRounds: session.total_rounds ?? trackRows.length ?? room.question_count ?? 10,
-        round: 1,
-      });
-    }
+    const gameState = gameStateSnapshot(room.room_code) ?? null;
 
     ok(res, {
       room,
@@ -586,11 +565,11 @@ export const roomsController = {
         totalRounds: session.total_rounds,
         startedAt: session.started_at,
         roomCode: room.room_code,
-        stateHash: gameState?.stateHash ?? null,
-        currentRound: gameState?.round ?? null,
+        currentRound: gameState?.currentRound ?? null,
         autoAdvance: room.auto_advance ?? false,
       },
       tracks: trackRows,
+      gameState,
     });
   },
 
@@ -802,16 +781,6 @@ export const roomsController = {
       });
       contribution.set(pid, (contribution.get(pid) ?? 0) + slice.length);
       pushUnique(slice);
-      if (collected.length >= room.question_count) break;
-    }
-
-    // Si au moins un participant n'a aucun titre exploitable, on bloque le lancement
-    const missing = participantIds.filter(pid => (contribution.get(pid) ?? 0) === 0);
-    if (missing.length) {
-      fail(res, "insufficient_tracks", "Pas assez de titres pour tous les joueurs, synchronise une source Spotify ou change de mode.", 400, {
-        missingPlayers: missing.length,
-      });
-      return;
     }
 
     // Compléter avec le pool commun si besoin
@@ -859,22 +828,68 @@ export const roomsController = {
       }
     }
 
-    // Mélange final pour intercaler les sources entre joueurs
-    sources = shuffle(sources).slice(0, room.question_count);
+    // Garantir au moins une piste par joueur en tirant directement dans sa bibliothèque, puis dans le pool global
+    for (const pid of participantIds) {
+      const hasOne = sources.some(src => src.user_id === pid);
+      if (hasOne) continue;
+      const existingKeys = new Set(sources.map(src => src.external_id ?? String(src.id)));
+      const personalPool = await fetchAudioSources(pid, poolProvider, 3, {});
+      let injected = false;
+      for (const candidate of personalPool) {
+        const key = candidate.external_id ?? String(candidate.id);
+        if (existingKeys.has(key)) continue;
+        sources.push(candidate);
+        existingKeys.add(key);
+        injected = true;
+        break;
+      }
+      if (!injected) {
+        const globals = await fetchGlobalRandomSources(3);
+        for (const candidate of globals) {
+          const key = candidate.external_id ?? String(candidate.id);
+          if (existingKeys.has(key)) continue;
+          sources.push(candidate);
+          existingKeys.add(key);
+          break;
+        }
+      }
+      if (sources.length >= room.question_count) break;
+    }
 
+    // Fallback ultime : tirer dans la table globale (sans filtre user) pour éviter l'erreur bloquante
     if (sources.length < room.question_count) {
+      const missing = room.question_count - sources.length;
+      const globals = await fetchGlobalRandomSources(missing * 2);
+      const existingKeys = new Set(sources.map(src => src.external_id ?? String(src.id)));
+      for (const candidate of globals) {
+        const key = candidate.external_id ?? String(candidate.id);
+        if (existingKeys.has(key)) continue;
+        sources.push(candidate);
+        existingKeys.add(key);
+        if (sources.length >= room.question_count) break;
+      }
+    }
+
+    // Dernier filet : si rien du tout, on s'arrête avec un message explicite
+    if (sources.length === 0) {
       fail(res, "insufficient_tracks", "Pas assez de titres pour lancer la partie", 400, {
         needed: room.question_count,
-        available: sources.length,
+        available: 0,
       });
       return;
     }
+
+    // Mélange final pour intercaler les sources entre joueurs (et accepter un nombre réduit si besoin)
+    sources = shuffle(sources).slice(0, Math.max(1, sources.length, room.question_count));
+
+    // Ajuster le nombre de rounds à ce qui est réellement disponible
+    const effectiveRounds = Math.max(1, sources.length);
 
     const { rows: sessionRows } = await pool.query(
       `INSERT INTO game_sessions (host_user_id, mode, difficulty, source_provider, total_rounds, state, room_code)
        VALUES ($1,'multiplayer',$2,$3,$4,'in_progress',$5)
        RETURNING id, mode, difficulty, source_provider, total_rounds, started_at`,
-      [context.user.id, room.difficulty, provider, room.question_count, room.room_code]
+      [context.user.id, room.difficulty, provider, effectiveRounds, room.room_code]
     );
     const session = sessionRows[0];
 
@@ -894,6 +909,17 @@ export const roomsController = {
       );
     }
 
+    const { rows: participantUsers } = await pool.query<{ id: number; username: string | null; avatar: string | null }>(
+      `SELECT id, username, avatar FROM users WHERE id = ANY($1::int[])`,
+      [participantIds]
+    );
+    const usernameMap = new Map<number, string | null>();
+    const avatarMap = new Map<number, string | null>();
+    participantUsers.forEach(u => {
+      usernameMap.set(u.id, u.username);
+      avatarMap.set(u.id, u.avatar);
+    });
+
     const normalizedTracks = sources.map((source, index) => ({
       round: index + 1,
       audioSourceId: source.id,
@@ -903,52 +929,53 @@ export const roomsController = {
       artist: source.artist,
       album_cover: source.album_cover,
       audio_url: source.audio_url,
-      metadata: source.metadata ?? {},
+      metadata: {
+        ...(source.metadata ?? {}),
+        owner_user_id: (source as { user_id?: number | null }).user_id ?? null,
+        owner_username: (source as { user_id?: number | null }).user_id
+          ? usernameMap.get((source as { user_id?: number | null }).user_id ?? 0) ?? null
+          : null,
+        owner_avatar: (source as { user_id?: number | null }).user_id
+          ? avatarMap.get((source as { user_id?: number | null }).user_id ?? 0) ?? null
+          : null,
+      },
     }));
-
-    await markTracksAsUsed(normalizedTracks.map(t => t.audioSourceId));
 
     for (const track of normalizedTracks) {
       await pool.query(
         `INSERT INTO game_rounds (session_id, round_index, audio_source_id, correct_title, correct_artist)
          VALUES ($1,$2,$3,$4,$5)
-         ON CONFLICT (session_id, round_index) DO NOTHING`,
+        ON CONFLICT (session_id, round_index) DO NOTHING`,
         [session.id, track.round, track.audioSourceId, track.title, track.artist]
       );
     }
 
-    const totalRounds = Number(session.total_rounds ?? room.question_count ?? normalizedTracks.length ?? 10);
-    const gameState = createRoomState({
-      sessionId: session.id,
+    const roundTracks: RoundTrack[] = normalizedTracks.map(t => ({
+      round: t.round,
+      trackId: String(t.track_id),
+      audioSourceId: t.audioSourceId,
+      title: t.title,
+      artist: t.artist,
+      previewUrl: t.audio_url,
+      albumCover: t.album_cover,
+      metadata: t.metadata ?? {},
+    }));
+
+    bootstrapGameState({
       roomCode: room.room_code,
-      totalRounds,
-      round: 1,
+      hostUserId: room.host_user_id,
+      tracks: roundTracks,
+      participantIds: participantIds.map(id => ({
+        userId: id,
+        username: usernameMap.get(id) ?? null,
+        avatar: avatarMap.get(id) ?? null,
+      })),
     });
 
-    const startPayload = {
-      session: {
-        id: session.id,
-        mode: session.mode,
-        difficulty: session.difficulty,
-        provider: session.source_provider,
-        totalRounds: session.total_rounds,
-        startedAt: session.started_at,
-        roomCode: room.room_code,
-        autoAdvance: room.auto_advance ?? false,
-        stateHash: gameState.stateHash,
-      },
-      tracks: normalizedTracks,
-      host: {
-        id: context.user.id,
-        username: context.user.username,
-      },
-      autoAdvance: room.auto_advance ?? false,
-      stateHash: gameState.stateHash,
-    };
+    // Start round 1 immediately in a server-authoritative way
+    startRoundAndBroadcast(io, room.room_code, { forceRound: 1, startAt: Date.now() + 1000 });
 
-    // Emit on both event names for backward/forward compatibility
-    io.to(room.room_code).emit("multiplayer:start", startPayload);
-    io.to(room.room_code).emit("game:start", { ...startPayload, serverTimestamp: Date.now() });
+    const snapshot = broadcastState(io, room.room_code);
 
     ok(res, {
       session: {
@@ -959,9 +986,9 @@ export const roomsController = {
         totalRounds: session.total_rounds,
         startedAt: session.started_at,
         roomCode: room.room_code,
-        stateHash: gameState.stateHash,
       },
       tracks: normalizedTracks,
+      gameState: snapshot,
     });
   },
 };

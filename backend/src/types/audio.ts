@@ -2,6 +2,7 @@ import type { MusicProvider } from "./user";
 
 export interface AudioSourceRow {
   id: string;
+  user_id?: number | null;
   provider: MusicProvider;
   external_id: string | null;
   title: string;
