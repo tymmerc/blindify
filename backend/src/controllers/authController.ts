@@ -101,7 +101,31 @@ async function performSpotifyCallback(req: Request, res: Response): Promise<void
   }
 
   const spotify = makeSpotify();
-  const grant = await spotify.authorizationCodeGrant(code);
+  let grant: Awaited<ReturnType<ReturnType<typeof makeSpotify>["authorizationCodeGrant"]>>;
+  try {
+    grant = await spotify.authorizationCodeGrant(code);
+  } catch (err) {
+    const status =
+      (err as { statusCode?: number })?.statusCode ??
+      (err as { body?: { error?: { status?: number } } })?.body?.error?.status;
+    const message =
+      (err as { body?: { error?: { message?: string } } })?.body?.error?.message ||
+      (err as Error)?.message;
+
+    if (status && [400, 401, 403].includes(status)) {
+      fail(
+        res,
+        "spotify_auth_forbidden",
+        "Spotify a refusé le code de connexion. Vérifie les autorisations de l'application dans la console Spotify.",
+        status
+      );
+      return;
+    }
+
+    console.error("spotify_authorization_failed", { status, message, error: err });
+    fail(res, "spotify_auth_failed", "Impossible de valider le code d'authentification Spotify", 500);
+    return;
+  }
   const { access_token, refresh_token, expires_in } = grant.body;
 
   let profile: { id: string; display_name?: string; email?: string; images?: { url?: string }[] };

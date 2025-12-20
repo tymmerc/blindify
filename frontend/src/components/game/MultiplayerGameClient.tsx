@@ -14,9 +14,10 @@ type Props = {
   onAnswer: (guess: string, sourceUserId?: number | null) => void
   onReady: () => void
   disabled?: boolean
+  autoAdvance?: boolean
 }
 
-export function MultiplayerGameClient({ user, state, serverNow, onAnswer, onReady, disabled }: Props) {
+export function MultiplayerGameClient({ user, state, serverNow, onAnswer, onReady, disabled, autoAdvance }: Props) {
   const [guessTitle, setGuessTitle] = useState("")
   const [guessArtist, setGuessArtist] = useState("")
   const [sourceGuess, setSourceGuess] = useState<number | null>(null)
@@ -60,6 +61,14 @@ export function MultiplayerGameClient({ user, state, serverNow, onAnswer, onRead
       setSourceGuess(null)
     }
   }, [phase, state?.currentRound])
+
+  useEffect(() => {
+    if (!autoAdvance || phase !== "reveal" || disabled || player?.isReady) return
+    const timer = setTimeout(() => {
+      onReady()
+    }, 900)
+    return () => clearTimeout(timer)
+  }, [autoAdvance, phase, disabled, player?.isReady])
 
   const leaderboard = useMemo(() => {
     if (!state?.players) return []

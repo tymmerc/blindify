@@ -880,9 +880,10 @@ export const roomsController = {
     }
 
     // Mélange final pour intercaler les sources entre joueurs (et accepter un nombre réduit si besoin)
-    sources = shuffle(sources).slice(0, Math.max(1, sources.length, room.question_count));
+    const cappedCount = Math.max(1, Math.min(sources.length, room.question_count));
+    sources = shuffle(sources).slice(0, cappedCount);
 
-    // Ajuster le nombre de rounds à ce qui est réellement disponible
+    // Ajuster le nombre de rounds à ce qui est réellement disponible (borné par la demande)
     const effectiveRounds = Math.max(1, sources.length);
 
     const { rows: sessionRows } = await pool.query(

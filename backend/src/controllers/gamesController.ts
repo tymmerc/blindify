@@ -503,7 +503,7 @@ export const gamesController = {
     const count = Number.isFinite(Number(req.body?.count)) ? Math.min(Math.max(Number(req.body.count), 5), 25) : 10;
     let likedOnly = sourceParam === "liked";
     let playlistId = typeof req.body?.playlistId === "string" ? req.body.playlistId.trim() : null;
-    let topRange =
+    let topRange: "short_term" | "medium_term" | "long_term" | null =
       sourceParam === "top_week"
         ? "short_term"
         : sourceParam === "top_month"

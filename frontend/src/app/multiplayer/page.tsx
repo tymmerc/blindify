@@ -510,6 +510,7 @@ function MultiplayerPage() {
             user={userPayload.user}
             state={gameState}
             serverNow={serverNow}
+            autoAdvance={autoAdvance}
             onAnswer={(guess, sourceUserId) => {
               const socket = socketRef.current
               if (!socket) return
