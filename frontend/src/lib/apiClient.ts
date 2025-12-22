@@ -263,6 +263,11 @@ export const clientApi = {
   async removeFriend(userId: number): Promise<{ removed: boolean }> {
     return request(`/api/friends/${userId}`, { method: "DELETE" })
   },
+  async friendsActivity(): Promise<{
+    friends: Array<{ userId: number; username: string | null; roomCode: string; state: string; updatedAt: number }>
+  }> {
+    return request("/api/friends/activity", { cache: "no-store" })
+  },
   async logout(): Promise<void> {
     await request("/api/auth/logout", {
       method: "POST",

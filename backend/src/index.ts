@@ -50,9 +50,14 @@ import {
   clearRevealTimer,
   scheduleReveal,
 } from "./services/realtimeOrchestrator";
-import { getSessionContextFromToken, type SessionContext } from "./utils/session";
+import { getSessionContext, getSessionContextFromToken, type SessionContext } from "./utils/session";
 
 dotenv.config();
+
+// Track sockets per user to push friend activity
+const userSockets = new Map<number, Set<string>>();
+// Track current room activity per user
+const userActivity = new Map<number, { roomCode: string | null; state: string; updatedAt: number }>();
 
 const app = express();
 app.set("trust proxy", 1);
@@ -249,6 +254,45 @@ app.get("/api/health", (_req, res) => {
   ok(res, { status: "ok" });
 });
 
+app.get("/api/friends/activity", async (req, res) => {
+  const context = await getSessionContext(req, res);
+  if (!context) return;
+  // Fetch accepted friends
+  const { rows: friendRows } = await pool.query<{ friend_id: number }>(
+    `SELECT CASE WHEN user_a=$1 THEN user_b ELSE user_a END AS friend_id
+     FROM friendships
+     WHERE (user_a=$1 OR user_b=$1) AND status='accepted'`,
+    [context.user.id]
+  );
+  const friendIds = friendRows.map(r => r.friend_id);
+  if (!friendIds.length) {
+    ok(res, { friends: [] });
+    return;
+  }
+  const { rows: userRows } = await pool.query<{ id: number; username: string | null }>(
+    `SELECT id, username FROM users WHERE id = ANY($1::int[])`,
+    [friendIds]
+  );
+  const nameMap = new Map<number, string | null>();
+  userRows.forEach(u => nameMap.set(u.id, u.username));
+
+  const friends = friendIds
+    .map(id => {
+      const activity = userActivity.get(id);
+      if (!activity || !activity.roomCode) return null;
+      return {
+        userId: id,
+        username: nameMap.get(id) ?? null,
+        roomCode: activity.roomCode,
+        state: activity.state,
+        updatedAt: activity.updatedAt,
+      };
+    })
+    .filter(Boolean);
+
+  ok(res, { friends });
+});
+
 app.use("/auth", authRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/games", gamesRoutes);
@@ -257,6 +301,33 @@ app.use("/api/rooms", roomsRoutes);
 app.use("/api/stats", statsRoutes);
 app.use("/api/audio-sources", audioSourcesRoutes);
 app.use("/api/friends", friendsRoutes);
+
+async function getFriendIds(userId: number): Promise<number[]> {
+  const { rows } = await pool.query<{ friend_id: number }>(
+    `SELECT CASE WHEN user_a=$1 THEN user_b ELSE user_a END AS friend_id
+     FROM friendships
+     WHERE (user_a=$1 OR user_b=$1) AND status='accepted'`,
+    [userId]
+  );
+  return rows.map(r => r.friend_id);
+}
+
+async function broadcastFriendActivity(userId: number, username: string | null) {
+  const activity = userActivity.get(userId);
+  const payload = {
+    userId,
+    username,
+    roomCode: activity?.roomCode ?? null,
+    state: activity?.state ?? "idle",
+    updatedAt: activity?.updatedAt ?? Date.now(),
+  };
+  const friendIds = await getFriendIds(userId);
+  for (const fid of friendIds) {
+    const sockets = userSockets.get(fid);
+    if (!sockets) continue;
+    sockets.forEach(sid => io.to(sid).emit("friend:activity", payload));
+  }
+}
 
 io.on("connection", socket => {
   const auth = (socket.data as { auth?: SessionContext }).auth;
@@ -271,6 +342,10 @@ io.on("connection", socket => {
   }
 
   const currentUser = auth.user;
+  // track socket for friend notifications
+  const socketsForUser = userSockets.get(currentUser.id) ?? new Set<string>();
+  socketsForUser.add(socket.id);
+  userSockets.set(currentUser.id, socketsForUser);
 
   const sendStateToSocket = (roomCode: string) => {
     const snapshot = gameStateSnapshot(roomCode);
@@ -299,6 +374,13 @@ io.on("connection", socket => {
       serverTimestamp: Date.now(),
     });
     sendStateToSocket(roomCode);
+
+    userActivity.set(currentUser.id, {
+      roomCode,
+      state: access.isHost ? "hosting" : "waiting",
+      updatedAt: Date.now(),
+    });
+    broadcastFriendActivity(currentUser.id, currentUser.username ?? null).catch(() => {});
   });
 
   socket.on("room:leave", async ({ roomCode }: { roomCode: string }) => {
@@ -314,6 +396,9 @@ io.on("connection", socket => {
       serverTimestamp: Date.now(),
     });
     broadcastState(io, roomCode);
+
+    userActivity.set(currentUser.id, { roomCode: null, state: "idle", updatedAt: Date.now() });
+    broadcastFriendActivity(currentUser.id, currentUser.username ?? null).catch(() => {});
   });
 
   socket.on(
@@ -416,6 +501,18 @@ io.on("connection", socket => {
 
   socket.on("disconnect", () => {
     clearInterval(tick);
+
+    const sockets = userSockets.get(currentUser.id);
+    if (sockets) {
+      sockets.delete(socket.id);
+      if (!sockets.size) {
+        userSockets.delete(currentUser.id);
+        userActivity.set(currentUser.id, { roomCode: null, state: "offline", updatedAt: Date.now() });
+        broadcastFriendActivity(currentUser.id, currentUser.username ?? null).catch(() => {});
+      } else {
+        userSockets.set(currentUser.id, sockets);
+      }
+    }
   });
 
   // Always publish the current server time to help clients sync timers

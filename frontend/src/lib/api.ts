@@ -178,6 +178,11 @@ export const api = {
   async removeFriend(userId: number): Promise<{ removed: boolean }> {
     return clientApi.removeFriend(userId)
   },
+  async friendsActivity(): Promise<{
+    friends: Array<{ userId: number; username: string | null; roomCode: string; state: string; updatedAt: number }>
+  }> {
+    return clientApi.friendsActivity()
+  },
   async logout(): Promise<void> {
     await clientApi.logout()
     clearSessionCookie()

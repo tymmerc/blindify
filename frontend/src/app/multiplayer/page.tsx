@@ -6,10 +6,10 @@ import type { Socket } from "socket.io-client"
 import { getSocket, disconnectSocket } from "@/lib/socket"
 import { api } from "@/lib/api"
 import type { CurrentUserPayload } from "@/lib/api"
-import type { MultiplayerGameState, MultiplayerParticipant, MultiplayerRoom, SoloTrack } from "@/lib/types"
+import type { FriendEntry, MultiplayerGameState, MultiplayerParticipant, MultiplayerRoom, SoloTrack } from "@/lib/types"
 import { MultiplayerGameClient } from "@/components/game/MultiplayerGameClient"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, ArrowRight, Copy, Heart, Loader2, PartyPopper, ShieldCheck, Sparkles, Users } from "lucide-react"
+import { ArrowLeft, ArrowRight, Copy, Heart, Loader2, PartyPopper, ShieldCheck, Share2, Sparkles, Users } from "lucide-react"
 import { useServerTime } from "@/hooks/useServerTime"
 
 type View = "landing" | "hosting" | "waiting" | "playing" | "results"
@@ -52,7 +52,13 @@ function MultiplayerPage() {
   const [gameState, setGameState] = useState<MultiplayerGameState | null>(null)
   const [starting, setStarting] = useState(false)
   const [joining, setJoining] = useState(false)
-  const [autoAdvance, setAutoAdvance] = useState(false)
+
+  const [friends, setFriends] = useState<FriendEntry[]>([])
+  const [friendsLoading, setFriendsLoading] = useState(false)
+  const [friendsError, setFriendsError] = useState<string | null>(null)
+  const [activeFriends, setActiveFriends] = useState<
+    Array<{ userId: number; username: string | null; roomCode: string; state: string; updatedAt: number }>
+  >([])
 
   const socketRef = useRef<Socket | null>(null)
   const handlersRef = useRef<{
@@ -128,6 +134,47 @@ function MultiplayerPage() {
     userRef.current = userPayload
   }, [userPayload])
 
+  useEffect(() => {
+    if (!userPayload) return
+    let active = true
+    const loadFriends = async () => {
+      try {
+        setFriendsLoading(true)
+        const payload = await api.listFriends()
+        if (!active) return
+        setFriends(payload.friends ?? [])
+      } catch (err) {
+        if (!active) return
+        setFriendsError(err instanceof Error ? err.message : "Impossible de charger les amis.")
+      } finally {
+        if (active) setFriendsLoading(false)
+      }
+    }
+    loadFriends()
+    return () => {
+      active = false
+    }
+  }, [userPayload])
+
+  useEffect(() => {
+    if (!userPayload) return
+    let stop = false
+    const load = async () => {
+      try {
+        const res = await api.friendsActivity()
+        if (!stop) setActiveFriends(res.friends ?? [])
+      } catch {
+        if (!stop) setActiveFriends([])
+      }
+    }
+    load()
+    const interval = setInterval(load, 5000)
+    return () => {
+      stop = true
+      clearInterval(interval)
+    }
+  }, [userPayload])
+
   const ensureSocket = useCallback((): Socket => {
     if (!socketRef.current) {
       socketRef.current = getSocket()
@@ -144,7 +191,6 @@ function MultiplayerPage() {
       try {
         const details = await api.roomDetails(roomCode)
         setRoom(details.room)
-        setAutoAdvance(Boolean(details.room.auto_advance))
         syncParticipants(details.participants)
       } catch {
         // ignore transient errors
@@ -193,7 +239,6 @@ function MultiplayerPage() {
           try {
             const updated = await api.roomDetails(payload.roomCode)
             setParticipants(updated.participants)
-            setAutoAdvance(Boolean(updated.room.auto_advance))
           } catch (err) {
             console.error("sync_participants_after_join_failed", err)
           }
@@ -310,20 +355,19 @@ function MultiplayerPage() {
         }
       })()
     },
-    [ensureSocket, userPayload, autoAdvance, refreshParticipants]
+    [ensureSocket, userPayload, refreshParticipants]
   )
 
   const handleCreateRoom = useCallback(async () => {
     try {
       setError(null)
-      const { room: created } = await api.createRoom({ autoAdvance, questionCount: 10 })
+    const { room: created } = await api.createRoom({ questionCount: 10 })
       setRoom(created)
       setGameState(null)
       setView("hosting")
       attachSocketListeners(created.room_code)
       const details = await api.roomDetails(created.room_code)
       setRoom(details.room)
-      setAutoAdvance(Boolean(details.room.auto_advance))
       syncParticipants(details.participants)
     } catch (err) {
       console.error("create_room_failed", err)
@@ -333,11 +377,10 @@ function MultiplayerPage() {
     }
   }, [attachSocketListeners, syncParticipants])
 
-  const handleJoinRoom = useCallback(
-    async (event: React.FormEvent<HTMLFormElement>) => {
-      event.preventDefault()
+  const joinRoomCode = useCallback(
+    async (code: string) => {
       if (joining) return
-      const normalizedCode = joinCode.trim().toUpperCase()
+      const normalizedCode = code.trim().toUpperCase()
       if (!normalizedCode) {
         setError("Enter a room code to join.")
         return
@@ -348,12 +391,10 @@ function MultiplayerPage() {
         const { room: joined } = await api.joinRoom(normalizedCode)
         setRoom(joined)
         setGameState(null)
-        setAutoAdvance(Boolean(joined.auto_advance))
         setView("waiting")
         attachSocketListeners(joined.room_code)
         const details = await api.roomDetails(joined.room_code)
         setRoom(details.room)
-        setAutoAdvance(Boolean(details.room.auto_advance))
         syncParticipants(details.participants)
       } catch (err) {
         console.error("join_room_failed", err)
@@ -362,7 +403,15 @@ function MultiplayerPage() {
         setJoining(false)
       }
     },
-    [attachSocketListeners, joinCode, joining, syncParticipants]
+    [attachSocketListeners, joining, syncParticipants]
+  )
+
+  const handleJoinRoom = useCallback(
+    async (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault()
+      joinRoomCode(joinCode)
+    },
+    [joinCode, joinRoomCode]
   )
 
   const handleStartGame = useCallback(async () => {
@@ -370,9 +419,8 @@ function MultiplayerPage() {
     try {
       setStarting(true)
       setError(null)
-      const payload: { source?: string; playlistId?: string; autoAdvance?: boolean } = {
+      const payload: { source?: string; playlistId?: string } = {
         source: "library",
-        autoAdvance,
       }
       const { tracks: generatedTracks, gameState: initialState } = await api.startMultiplayerGame(
         room.room_code,
@@ -401,7 +449,7 @@ function MultiplayerPage() {
     } finally {
       setStarting(false)
     }
-  }, [room, autoAdvance])
+  }, [room])
 
   const scores = useMemo(() => {
     const next: Record<number, { username: string | null; score: number; accuracy: number }> = {}
@@ -492,8 +540,11 @@ function MultiplayerPage() {
             onStart={handleStartGame}
             starting={starting}
             scores={scores}
-            autoAdvance={autoAdvance}
-            setAutoAdvance={setAutoAdvance}
+            friends={friends}
+            friendsLoading={friendsLoading}
+            friendsError={friendsError}
+            activeFriends={activeFriends}
+            onQuickJoin={joinRoomCode}
           />
         )}
 
@@ -502,6 +553,8 @@ function MultiplayerPage() {
             room={room}
             participants={participants}
             scores={scores}
+            activeFriends={activeFriends}
+            onQuickJoin={joinRoomCode}
           />
         )}
 
@@ -510,7 +563,6 @@ function MultiplayerPage() {
             user={userPayload.user}
             state={gameState}
             serverNow={serverNow}
-            autoAdvance={autoAdvance}
             onAnswer={(guess, sourceUserId) => {
               const socket = socketRef.current
               if (!socket) return
@@ -602,7 +654,7 @@ function LandingView({
       <div className="flex flex-col gap-5 rounded-2xl border border-[var(--ma-border)] bg-[var(--ma-surface)] p-8">
         <h2 className="text-2xl font-semibold text-white">Créer une salle</h2>
         <p className="text-sm text-[var(--ma-muted)]">
-          Génère un code, partage-le, choisis une source (likés, top semaine/mois, playlist) et lance les manches.
+          Génère un code et invite tes amis directement depuis ta liste d&apos;amis Blindify pour lancer les manches.
         </p>
         <Button onClick={onHost} className="ma-btn-primary mt-auto gap-2 self-start rounded-lg px-5 py-3 text-sm">
           <Sparkles className="h-4 w-4" />
@@ -648,20 +700,42 @@ function HostLobby({
   onStart,
   starting,
   scores,
-  autoAdvance,
-  setAutoAdvance,
+  friends,
+  friendsLoading,
+  friendsError,
+  activeFriends,
+  onQuickJoin,
 }: {
   room: MultiplayerRoom
   participants: MultiplayerParticipant[]
   onStart: () => void
   starting: boolean
   scores: Record<number, { username: string | null; score: number; accuracy: number }>
-  autoAdvance: boolean
-  setAutoAdvance: (value: boolean) => void
+  friends: FriendEntry[]
+  friendsLoading: boolean
+  friendsError: string | null
+  activeFriends: Array<{ userId: number; username: string | null; roomCode: string; state: string; updatedAt: number }>
+  onQuickJoin: (code: string) => void
 }) {
   const copyCode = useCallback(() => {
     navigator.clipboard.writeText(room.room_code).catch(() => undefined)
   }, [room.room_code])
+
+  const inviteLink =
+    typeof window !== "undefined" ? `${window.location.origin}/blindify/multiplayer/?code=${room.room_code}` : ""
+
+  const shareInvite = useCallback(() => {
+    const fallback = async () => {
+      if (inviteLink) await navigator.clipboard.writeText(inviteLink)
+    }
+    if (navigator.share && inviteLink) {
+      navigator
+        .share({ title: "Blindify", text: "Rejoins ma salle Blindify", url: inviteLink })
+        .catch(() => fallback())
+    } else {
+      fallback().catch(() => undefined)
+    }
+  }, [inviteLink])
 
   return (
     <section className="grid gap-6 md:grid-cols-[minmax(0,0.7fr)_minmax(0,1fr)]">
@@ -675,32 +749,48 @@ function HostLobby({
           </Button>
         </div>
         <p className="text-sm text-slate-300">
-          Share this code with friends. Choisissez la source puis démarrez le blind test.
+          Invite tes amis déjà ajoutés : un clic envoie le lien, sans qu&apos;ils aient à taper le code.
         </p>
 
-        <div className="grid gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
-          <div className="text-xs uppercase tracking-[0.3em] text-slate-400">Source</div>
-          <div className="rounded-lg border border-white/10 bg-black/50 px-3 py-2 text-sm text-white">
-            Source fixée : Bibliothèque (aléatoire)
-          </div>
-          <p className="text-xs text-slate-400">Le choix de source sera disponible plus tard dans les paramètres.</p>
-        </div>
-
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-4 space-y-3">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-[0.35em] text-slate-400">Avancement</p>
-              <p className="text-sm text-slate-300">Auto-enchainement des manches</p>
-            </div>
-            <label className="flex items-center gap-2 text-sm text-white">
-              <input
-                type="checkbox"
-                checked={autoAdvance}
-                onChange={event => setAutoAdvance(event.target.checked)}
-                className="h-4 w-4 rounded border-white/30 bg-black/50 text-neon focus:ring-2 focus:ring-neon/40"
-              />
-              Auto-advance
-            </label>
+            <span className="text-xs uppercase tracking-[0.35em] text-slate-400">Amis</span>
+            <span className="text-xs text-slate-400">
+              {friendsLoading ? "Chargement..." : `${friends.filter(f => f.status === "accepted").length} prêts`}
+            </span>
+          </div>
+          {friendsError ? (
+            <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-200">{friendsError}</div>
+          ) : null}
+          <div className="space-y-2">
+            {friends
+              .filter(friend => friend.status === "accepted")
+              .map(friend => (
+                <div
+                  key={friend.userId}
+                  className="flex items-center justify-between rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
+                >
+                  <span className="truncate">{friend.username || `Ami ${friend.userId}`}</span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={shareInvite}
+                    className="shrink-0 gap-1"
+                    aria-label={`Inviter ${friend.username || "ami"}`}
+                  >
+                    <Share2 className="h-4 w-4" />
+                    Envoyer l&apos;invite
+                  </Button>
+                </div>
+              ))}
+            {!friendsLoading && friends.filter(f => f.status === "accepted").length === 0 ? (
+              <div className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs text-slate-400">
+                Aucun ami accepté pour l'instant. Ajoute-les depuis le menu puis reviens lancer la salle.
+              </div>
+            ) : null}
+          </div>
+          <div className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs text-slate-400">
+            Lien direct : <span className="text-white">{inviteLink || "Disponible après création"}</span>
           </div>
         </div>
 
@@ -710,6 +800,32 @@ function HostLobby({
         </Button>
       </div>
       <ParticipantPanel participants={participants} scores={scores} title="Lobby players" />
+
+      {activeFriends.length > 0 && (
+        <div className="mt-6 rounded-3xl border border-white/10 bg-white/5 p-6 text-left">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold uppercase tracking-[0.35em] text-slate-400">Amis en salle</h3>
+            <span className="text-xs text-slate-400">Clique pour les rejoindre</span>
+          </div>
+          <div className="mt-3 grid gap-3">
+            {activeFriends.map(friend => (
+              <div
+                key={`${friend.userId}-${friend.roomCode}`}
+                className="flex items-center justify-between rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white"
+              >
+                <div className="flex flex-col">
+                  <span className="font-semibold">{friend.username || `Ami ${friend.userId}`}</span>
+                  <span className="text-xs text-slate-400">Room {friend.roomCode}</span>
+                </div>
+                <Button size="sm" variant="outline" onClick={() => onQuickJoin(friend.roomCode)} className="shrink-0 gap-1">
+                  <Users className="h-4 w-4" />
+                  Rejoindre
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </section>
   )
 }
@@ -718,11 +834,18 @@ function WaitingLobby({
   room,
   participants,
   scores,
+  activeFriends,
+  onQuickJoin,
 }: {
   room: MultiplayerRoom
   participants: MultiplayerParticipant[]
   scores: Record<number, { username: string | null; score: number; accuracy: number }>
+  activeFriends: Array<{ userId: number; username: string | null; roomCode: string; state: string; updatedAt: number }>
+  onQuickJoin: (code: string) => void
 }) {
+  const inviteLink =
+    typeof window !== "undefined" ? `${window.location.origin}/blindify/multiplayer/?code=${room.room_code}` : ""
+
   return (
     <section className="surface flex flex-col gap-6 rounded-3xl border border-white/10 p-8 text-center">
       <p className="text-xs uppercase tracking-[0.5em] text-slate-400">Waiting for host</p>
@@ -731,13 +854,42 @@ function WaitingLobby({
         Once the host starts the game, a synchronized blind test will begin automatically. Keep Spotify open and ready.
       </p>
       <div className="grid gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 text-left">
-        <div className="text-xs uppercase tracking-[0.3em] text-slate-400">Source</div>
-        <div className="rounded-lg border border-white/10 bg-black/50 px-3 py-2 text-sm text-white">
-          Source fixée : Bibliothèque (aléatoire)
+        <div className="text-xs uppercase tracking-[0.3em] text-slate-400">Invite tes amis</div>
+        <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white">
+          <span className="truncate">{inviteLink || "Lien disponible en ligne"}</span>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => navigator.share
+              ? navigator.share({ title: "Blindify", text: "Rejoins ma salle", url: inviteLink }).catch(() => navigator.clipboard.writeText(inviteLink))
+              : navigator.clipboard.writeText(inviteLink)
+            }
+            className="shrink-0 gap-1"
+          >
+            <Share2 className="h-4 w-4" />
+            Envoyer
+          </Button>
         </div>
       </div>
       <ParticipantPanel participants={participants} scores={scores} title="Players in room" compact />
       <p className="text-xs text-slate-500">Room {room.room_code} · {participants.length} player(s)</p>
+
+      {activeFriends.length > 0 && (
+        <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-left">
+          <div className="text-xs uppercase tracking-[0.3em] text-slate-400 mb-2">Tes amis en partie</div>
+          <div className="grid gap-2">
+            {activeFriends.map(friend => (
+              <div key={`${friend.userId}-${friend.roomCode}`} className="flex items-center justify-between rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white">
+                <span>{friend.username || `Ami ${friend.userId}`}</span>
+                <Button size="sm" variant="outline" onClick={() => onQuickJoin(friend.roomCode)} className="shrink-0 gap-1">
+                  <Users className="h-4 w-4" />
+                  Rejoindre
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </section>
   )
 }
