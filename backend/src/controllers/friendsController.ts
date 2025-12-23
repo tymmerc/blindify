@@ -5,7 +5,13 @@ import { fail, ok } from "../utils/response";
 import type { MusicProvider } from "../types/user";
 import type { PresenceState } from "../services/presence";
 import { emitToUser, getPresenceForUsers } from "../services/presence";
-import { ensureSocialTables, type FriendRow, type FriendStatus, getFriendshipBetween } from "../services/social";
+import {
+  ensureSocialTables,
+  expireInvitationsBetween,
+  type FriendRow,
+  type FriendStatus,
+  getFriendshipBetween,
+} from "../services/social";
 
 type FriendView = {
   id: number;
@@ -330,6 +336,13 @@ export const friendsController = {
       fail(res, "friendship_not_found", "Lien d'amitié introuvable", 404);
       return;
     }
+
+    const expiredInvites = await expireInvitationsBetween(context.user.id, targetId);
+    expiredInvites.forEach(invite => {
+      const payload = { invitationId: invite.id, roomCode: invite.room_code };
+      emitToUser(invite.to_user, "room:invite:expired", payload);
+      emitToUser(invite.from_user, "room:invite:expired", payload);
+    });
 
     emitToUser(targetId, "friend:removed", { userId: context.user.id });
     ok(res, { removed: true });

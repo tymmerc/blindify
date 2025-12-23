@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { api } from "@/lib/api"
@@ -8,8 +8,10 @@ import type { SoloTrack, UserSummary } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import { ArrowRight, Check, Flame, Heart, Loader2, Play, Sparkles, Timer, Volume2, VolumeX } from "lucide-react"
 import { getSocket } from "@/lib/socket"
+import { audioManager, DEFAULT_AUDIO_VOLUME } from "@/lib/audioManager"
+import { RoundUiState, roundFlowReducer, computeScore, resolveModeFlags, ROUND_FEEDBACK_MS } from "@/lib/roundFlow"
+import { useMode } from "@/contexts/ModeContext"
 
-type Phase = "countdown" | "listening" | "reveal"
 type Verdict = "correct" | "close" | "wrong"
 type FinalizeReason = "timeout" | "reveal" | "guess"
 type RoundState = "pending" | "current" | Verdict
@@ -53,6 +55,7 @@ export interface RoundStats {
 const LISTENING_DURATION = 45
 const COUNTDOWN_DURATION = 3
 const LISTENING_DURATION_MS = LISTENING_DURATION * 1000
+const AUDIO_OWNER = "solo"
 
 function ListeningSurface({ active }: { active: boolean }) {
   return (
@@ -114,16 +117,24 @@ export function SoloGameClient({
   sessionId,
   roomCode,
 }: SoloGameClientProps) {
+  const { mode: activeMode, accentColor } = useMode()
+  const modeFlags = resolveModeFlags(activeMode, accentColor)
   const [trackList, setTrackList] = useState<SoloTrack[]>(tracks)
   const [index, setIndex] = useState(0)
-  const [phase, setPhase] = useState<Phase>("countdown")
+  const [flow, dispatchFlow] = useReducer(roundFlowReducer, {
+    state: RoundUiState.Idle,
+    startAt: null,
+    deadline: null,
+    lockedAt: null,
+    revealedAt: null,
+  })
   const [countdown, setCountdown] = useState(COUNTDOWN_DURATION)
   const [timer, setTimer] = useState(LISTENING_DURATION)
   const [guess, setGuess] = useState("")
   const [guessTitle, setGuessTitle] = useState("")
   const [guessArtist, setGuessArtist] = useState("")
   const [verdict, setVerdict] = useState<Verdict | null>(null)
-  const [feedback, setFeedback] = useState<string | null>(null)
+  const [feedback, setFeedback] = useState(false)
   const [liking, setLiking] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [gameFinished, setGameFinished] = useState(false)
@@ -156,9 +167,9 @@ export function SoloGameClient({
     points: 0,
   })
   const [manualPlayRequired, setManualPlayRequired] = useState(false)
-  const [muted, setMuted] = useState(false)
-  const lastVolumeRef = useRef(1)
-  const [volume, setVolume] = useState(1)
+  const [muted, setMuted] = useState(audioManager.getState().muted)
+  const lastVolumeRef = useRef(DEFAULT_AUDIO_VOLUME)
+  const [volume, setVolume] = useState(DEFAULT_AUDIO_VOLUME)
   const [showVolume, setShowVolume] = useState(false)
   const volumeHoverRef = useRef<NodeJS.Timeout | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -188,6 +199,37 @@ export function SoloGameClient({
   const autoAdvanceTimerRef = useRef<NodeJS.Timeout | null>(null)
   const lastStartSignalRef = useRef<number>(0)
   const isMultiplayer = mode === "multiplayer"
+  const uiState = flow.state
+  const isArmed = uiState === RoundUiState.Armed
+  const isLocked = uiState === RoundUiState.Locked
+  const isRevealed = uiState === RoundUiState.Revealed
+  const accentTint = useCallback(
+    (alpha: number) => {
+      const hex = accentColor.startsWith("#") ? accentColor.slice(1) : accentColor
+      if (hex.length !== 6) return accentColor
+      const clamped = Math.min(255, Math.max(0, Math.round(alpha * 255)))
+      const channel = clamped.toString(16).padStart(2, "0")
+      return `#${hex}${channel}`
+    },
+    [accentColor]
+  )
+
+  useEffect(() => {
+    return audioManager.subscribe(snapshot => {
+      setMuted(snapshot.muted)
+      setVolume(snapshot.volume)
+      if (snapshot.volume > 0) {
+        lastVolumeRef.current = snapshot.volume
+      }
+      if (snapshot.owner === AUDIO_OWNER) {
+        setIsPlaying(snapshot.playing)
+        audioRef.current = audioManager.getCurrent(AUDIO_OWNER)
+      } else {
+        setIsPlaying(false)
+        audioRef.current = null
+      }
+    })
+  }, [])
 
   useEffect(() => {
     const key = tracks.map(t => t.audioSourceId ?? t.track_id).join("|")
@@ -258,15 +300,8 @@ export function SoloGameClient({
       cancelAnimationFrame(listeningRafRef.current)
       listeningRafRef.current = null
     }
-    if (audioRef.current) {
-      try {
-        audioRef.current.pause()
-        audioRef.current.src = ""
-      } catch {
-        // ignore cleanup errors
-      }
-      audioRef.current = null
-    }
+    audioManager.stop("solo_cleanup", AUDIO_OWNER)
+    audioRef.current = null
   }, [])
 
   useEffect(() => {
@@ -322,8 +357,9 @@ export function SoloGameClient({
     (targetRound: number, targetTrackId?: string | number, revealAt?: number) => {
       const targetIndex = resolveTargetIndex(targetRound, targetTrackId)
       cleanupTimers()
+      dispatchFlow({ type: "RESET" })
       setVerdict(null)
-      setFeedback(null)
+      setFeedback(false)
       setGuess("")
       setGuessTitle("")
       setGuessArtist("")
@@ -360,66 +396,57 @@ export function SoloGameClient({
     (targetRound: number, targetTrackId?: string | number, revealAt?: number, opts?: { skipCountdown?: boolean }) => {
       readyRoundRef.current = null
       const now = Date.now()
-      const deadline =
-        revealAt && Number.isFinite(revealAt) && revealAt > now - 2000 ? revealAt : now + LISTENING_DURATION_MS
+      const warmupMs = opts?.skipCountdown ? 0 : COUNTDOWN_DURATION * 1000
+      const providedDeadline =
+        revealAt && Number.isFinite(revealAt) && revealAt > now - 2000 ? revealAt : null
+      const deadlineCandidate = providedDeadline ?? now + warmupMs + LISTENING_DURATION_MS
+      const startAt = Math.max(now + warmupMs, deadlineCandidate - LISTENING_DURATION_MS)
+      const deadline = Math.max(startAt + LISTENING_DURATION_MS, deadlineCandidate)
       listeningDeadlineRef.current = deadline
-      const startAt = Math.max(now, deadline - LISTENING_DURATION_MS)
       listeningStartAtRef.current = startAt
-      const countdownMs = opts?.skipCountdown ? 0 : Math.max(0, startAt - now)
+      const countdownMs = Math.max(0, startAt - now)
       const targetIndex = resetRoundState(targetRound, targetTrackId, deadline)
       sharedDeadlineRef.current = deadline
+      dispatchFlow({ type: "ARM", startAt, deadline })
       skipCountdownRef.current = countdownMs === 0
       lastSyncedRoundRef.current = null
       setTimer(Math.max(0, Math.ceil((deadline - now) / 1000)))
       if (countdownMs === 0) {
         setCountdown(0)
-        setPhase("listening")
+        dispatchFlow({ type: "START", at: startAt })
       } else {
         setCountdown(Math.max(1, Math.ceil(countdownMs / 1000)))
-        setPhase("countdown")
       }
       return targetIndex
     },
-    [resetRoundState]
+    [resetRoundState, dispatchFlow]
   )
 
   const finalizeRound = useCallback(
     (nextVerdict: Verdict, reason: FinalizeReason, track: SoloTrack, submittedGuess: string) => {
       if (!track) return
-      if (phase === "reveal") return
+      if (uiState === RoundUiState.Revealed) return
 
       cleanupTimers()
 
-      const startedAt = listeningDeadlineRef.current
-        ? listeningDeadlineRef.current - LISTENING_DURATION * 1000
-        : null
-      const reactionMs = startedAt ? Math.max(0, Date.now() - startedAt) : null
+      const now = Date.now()
+      dispatchFlow({ type: "LOCK", at: now })
+
+      const startedAt = flow.startAt ?? (listeningDeadlineRef.current ? listeningDeadlineRef.current - LISTENING_DURATION * 1000 : null)
+      const reactionMs = startedAt ? Math.max(0, now - startedAt) : null
       const detail = evaluateGuessDetail(submittedGuess, track)
       const finalVerdict = detail.verdict ?? nextVerdict
 
       const prevStats = statsRef.current
       const correct = finalVerdict === "correct"
-      const streak = correct ? prevStats.streak + 1 : 0
-      const basePoints =
-        detail.matchedTitle && detail.matchedArtist
-          ? 120
-          : detail.matchedTitle
-            ? 70
-            : detail.matchedArtist
-              ? 50
-              : finalVerdict === "close"
-                ? 25
-                : 0
-      const speedBonus =
-        reactionMs !== null
-          ? reactionMs <= 5000
-            ? 40
-            : reactionMs <= 10000
-              ? 20
-              : 0
-          : 0
-      const streakBonus = correct ? Math.max(prevStats.streak, 0) * 5 : 0
-      const gainedPoints = basePoints + speedBonus + streakBonus
+      const scoreResult = computeScore({
+        correct,
+        reactionMs,
+        maxDurationMs: LISTENING_DURATION_MS,
+        streak: prevStats.streak,
+      })
+      const gainedPoints = scoreResult.gained
+      const streak = scoreResult.nextStreak
 
       const updatedStats: RoundStats = {
         rounds: prevStats.rounds + 1,
@@ -433,21 +460,11 @@ export function SoloGameClient({
       setStats(updatedStats)
       setVerdict(finalVerdict)
       verdictRef.current = finalVerdict
-      setPhase("reveal")
+      dispatchFlow({ type: "REVEAL", at: Date.now() })
       // Signal readiness for this round in multiplayer so the host can advance
       markReady(index + 1)
 
-      const feedbackMessage =
-        finalVerdict === "correct"
-          ? reason === "guess"
-            ? "Spot on! You nailed it."
-            : "Great job — the reveal confirms your ear."
-          : finalVerdict === "close"
-            ? "So close! Try adding the full title or artist next time."
-            : reason === "timeout"
-              ? "Time's up. Ready for another shot?"
-              : "Not quite. Revealing the answer for the next round."
-      setFeedback(feedbackMessage)
+      setFeedback(false)
       setResultDialog({
         track,
         verdict: finalVerdict,
@@ -456,7 +473,7 @@ export function SoloGameClient({
         guessTitle: guessTitleRef.current,
         guessArtist: guessArtistRef.current,
         points: gainedPoints,
-        breakdown: { base: basePoints, speed: speedBonus, streak: streakBonus },
+        breakdown: scoreResult.breakdown,
       })
       lastDialogRoundRef.current = index + 1
 
@@ -481,7 +498,40 @@ export function SoloGameClient({
         onGameComplete?.(updatedStats)
       }
     },
-    [cleanupTimers, phase, index, total, onRoundComplete, onGameComplete, markReady]
+    [cleanupTimers, uiState, flow.startAt, dispatchFlow, index, total, onRoundComplete, onGameComplete, markReady]
+  )
+
+  const scheduleListeningTimer = useCallback(
+    (track: SoloTrack) => {
+      const now = Date.now()
+      const externalDeadline =
+        sharedDeadlineRef.current && sharedDeadlineRef.current > now
+          ? sharedDeadlineRef.current
+          : sharedDeadlineMs && sharedDeadlineMs > now
+            ? sharedDeadlineMs
+            : null
+      listeningDeadlineRef.current = externalDeadline ?? now + LISTENING_DURATION_MS
+      if (listeningDeadlineRef.current <= now) {
+        listeningDeadlineRef.current = now + LISTENING_DURATION_MS
+      }
+      listeningStartAtRef.current = Math.max(now, listeningDeadlineRef.current - LISTENING_DURATION_MS)
+
+      const tick = () => {
+        const remainingMs = listeningDeadlineRef.current - Date.now()
+        const nextSeconds = Math.max(0, Math.ceil(remainingMs / 1000))
+        setTimer(prev => (prev === nextSeconds ? prev : nextSeconds))
+        if (remainingMs <= 0) {
+          const latestGuess = guessRef.current
+          const computedVerdict = verdictRef.current ?? evaluateGuess(latestGuess, track)
+          finalizeRound(computedVerdict, "timeout", track, latestGuess)
+        } else {
+          listeningRafRef.current = requestAnimationFrame(tick)
+        }
+      }
+
+      listeningRafRef.current = requestAnimationFrame(tick)
+    },
+    [finalizeRound, sharedDeadlineMs]
   )
 
   useEffect(() => {
@@ -493,7 +543,7 @@ export function SoloGameClient({
     }
 
     // Only run countdown when explicitly in countdown phase.
-    if (phase !== "countdown") return
+    if (uiState !== RoundUiState.Armed) return
 
     cleanupTimers()
 
@@ -506,7 +556,7 @@ export function SoloGameClient({
       setCountdown(untilStart)
       setTimer(untilReveal)
       if (untilStart <= 0) {
-        setPhase("listening")
+        dispatchFlow({ type: "START", at: startAt })
         return true
       }
       return false
@@ -526,7 +576,7 @@ export function SoloGameClient({
     setGuessTitle("")
     setGuessArtist("")
     setVerdict(null)
-    setFeedback(null)
+    setFeedback(false)
     setMuted(false)
     setIsPlaying(false)
     setError(null)
@@ -541,7 +591,7 @@ export function SoloGameClient({
       if (remaining <= 0) {
         clearInterval(countdownRef.current!)
         countdownRef.current = null
-        setPhase("listening")
+        dispatchFlow({ type: "START" })
       } else {
         setCountdown(remaining)
       }
@@ -550,7 +600,7 @@ export function SoloGameClient({
     return () => {
       cleanupTimers()
     }
-  }, [current, cleanupTimers, gameFinished, phase])
+  }, [current, cleanupTimers, gameFinished, uiState, dispatchFlow])
 
   useEffect(() => {
     setRoundStates(prev =>
@@ -561,9 +611,17 @@ export function SoloGameClient({
     )
   }, [trackList])
 
+  useEffect(() => {
+    if (flow.state !== RoundUiState.Idle) return
+    if (!trackList[index]) return
+    const targetTrack = trackList[index]
+    const targetId = targetTrack?.audioSourceId ?? targetTrack?.track_id
+    startTrackForRound(index + 1, targetId, sharedDeadlineMs ?? undefined, { skipCountdown: false })
+  }, [flow.state, trackList, index, startTrackForRound, sharedDeadlineMs])
+
   // Synchronise le timer avec une échéance partagée (round:start/started socket)
   useEffect(() => {
-    if (phase !== "listening") return
+    if (uiState !== RoundUiState.Playing) return
     const roundNumber = Math.floor(index / 1) + 1
     if (lastSyncedRoundRef.current === roundNumber) return
     lastSyncedRoundRef.current = roundNumber
@@ -575,7 +633,7 @@ export function SoloGameClient({
     listeningDeadlineRef.current = deadline
     sharedDeadlineRef.current = deadline
     setTimer(Math.max(0, Math.ceil((deadline - now) / 1000)))
-  }, [sharedDeadlineMs, phase, index])
+  }, [sharedDeadlineMs, uiState, index])
 
   useEffect(() => {
     if (!autoAdvanceTimerRef.current) return
@@ -609,7 +667,7 @@ export function SoloGameClient({
 
   useEffect(() => {
     if (!current || gameFinished) return
-    if (phase !== "listening") return
+    if (uiState !== RoundUiState.Playing) return
 
     cleanupTimers()
     setTimer(LISTENING_DURATION)
@@ -651,60 +709,28 @@ export function SoloGameClient({
     }
 
     const startAudio = async (previewUrl: string, track: SoloTrack) => {
-      if (audioRef.current) {
-        try {
-          audioRef.current.pause()
-        } catch {
-          // ignore pause errors
-        }
-      }
-
-      const audio = new Audio(previewUrl)
-      audioRef.current = audio
-      audio.loop = true
-      audio.volume = muted ? 0 : lastVolumeRef.current
-      await audio.play()
+      audioManager.stop("solo_replace")
+      await audioManager.play({
+        src: previewUrl,
+        loop: true,
+        volume: muted ? 0 : lastVolumeRef.current,
+        owner: AUDIO_OWNER,
+      })
       if (cancelled) return
+      audioManager.setMuted(muted, AUDIO_OWNER)
+      audioManager.setVolume(muted ? 0 : lastVolumeRef.current, AUDIO_OWNER)
+      audioRef.current = audioManager.getCurrent(AUDIO_OWNER)
       setManualPlayRequired(false)
-      setFeedback(null)
+      setFeedback(false)
       setIsPlaying(true)
       pausedByUserRef.current = false
-
-      const now = Date.now()
-      const externalDeadline =
-        sharedDeadlineRef.current && sharedDeadlineRef.current > now
-          ? sharedDeadlineRef.current
-          : sharedDeadlineMs && sharedDeadlineMs > now
-            ? sharedDeadlineMs
-            : null
-      listeningDeadlineRef.current = externalDeadline ?? now + LISTENING_DURATION_MS
-      if (listeningDeadlineRef.current <= now) {
-        listeningDeadlineRef.current = now + LISTENING_DURATION_MS
-      }
-      listeningStartAtRef.current = Math.max(now, listeningDeadlineRef.current - LISTENING_DURATION_MS)
-
-      const tick = () => {
-        if (cancelled) return
-        const remainingMs = listeningDeadlineRef.current - Date.now()
-        const nextSeconds = Math.max(0, Math.ceil(remainingMs / 1000))
-        setTimer(prev => (prev === nextSeconds ? prev : nextSeconds))
-        if (remainingMs <= 0) {
-          const latestGuess = guessRef.current
-          const computedVerdict =
-            verdictRef.current ?? evaluateGuess(latestGuess, track)
-          finalizeRound(computedVerdict, "timeout", track, latestGuess)
-        } else {
-          listeningRafRef.current = requestAnimationFrame(tick)
-        }
-      }
-
-      listeningRafRef.current = requestAnimationFrame(tick)
+      scheduleListeningTimer(track)
     }
 
     const startPlayback = async () => {
       const previewUrl = await ensurePreview()
       if (!previewUrl) {
-        setFeedback("Aucun extrait audio disponible pour ce titre.")
+        setFeedback(true)
         const latestGuess = guessRef.current
         finalizeRound("wrong", "timeout", current, latestGuess)
         return
@@ -719,11 +745,11 @@ export function SoloGameClient({
         if (cancelled) return
         if ((err as DOMException)?.name === "NotAllowedError") {
           setManualPlayRequired(true)
-          setFeedback("Clique sur ▶ pour lancer l'extrait audio.")
+          setFeedback(true)
           return
         }
         console.error("html_audio_play_failed", err)
-        setFeedback("Impossible de lire l'extrait.")
+        setFeedback(true)
         setManualPlayRequired(true)
         setIsPlaying(false)
       }
@@ -737,9 +763,10 @@ export function SoloGameClient({
         cancelAnimationFrame(listeningRafRef.current)
         listeningRafRef.current = null
       }
+      audioManager.stop("solo_listening_cleanup", AUDIO_OWNER)
     }
   }, [
-    phase,
+    uiState,
     current,
     cleanupTimers,
     finalizeRound,
@@ -747,59 +774,37 @@ export function SoloGameClient({
     hasMoreRounds,
     total,
     setIndex,
+    scheduleListeningTimer,
+    muted,
   ])
 
   const handleManualPlay = useCallback(async () => {
     if (!current) return
     const previewUrl = previewUrlRef.current
     if (!previewUrl) {
-      setFeedback("Aucun extrait audio disponible pour ce titre.")
+      setFeedback(true)
       return
     }
     try {
-      const audio = new Audio(previewUrl)
-      if (audioRef.current) {
-        try {
-          audioRef.current.pause()
-        } catch {
-          // ignore pause errors
-        }
-      }
-      audioRef.current = audio
-      audio.loop = true
-      audio.volume = muted ? 0 : lastVolumeRef.current
-      await audio.play()
+      audioManager.stop("solo_manual_replace")
+      await audioManager.play({
+        src: previewUrl,
+        loop: true,
+        volume: muted ? 0 : lastVolumeRef.current,
+        owner: AUDIO_OWNER,
+      })
+      audioManager.setMuted(muted, AUDIO_OWNER)
+      audioManager.setVolume(muted ? 0 : lastVolumeRef.current, AUDIO_OWNER)
+      audioRef.current = audioManager.getCurrent(AUDIO_OWNER)
       setManualPlayRequired(false)
       setIsPlaying(true)
       pausedByUserRef.current = false
-
-      const now = Date.now()
-      const externalDeadline =
-        sharedDeadlineRef.current && sharedDeadlineRef.current > now
-          ? sharedDeadlineRef.current
-          : sharedDeadlineMs && sharedDeadlineMs > now
-            ? sharedDeadlineMs
-            : null
-      listeningDeadlineRef.current = externalDeadline ?? now + LISTENING_DURATION_MS
-      const tick = () => {
-        const remainingMs = listeningDeadlineRef.current - Date.now()
-        const nextSeconds = Math.max(0, Math.ceil(remainingMs / 1000))
-        setTimer(prev => (prev === nextSeconds ? prev : nextSeconds))
-        if (remainingMs <= 0) {
-          const latestGuess = guessRef.current
-          const computedVerdict =
-            verdictRef.current ?? evaluateGuess(latestGuess, current)
-          finalizeRound(computedVerdict, "timeout", current, latestGuess)
-        } else {
-          listeningRafRef.current = requestAnimationFrame(tick)
-        }
-      }
-      listeningRafRef.current = requestAnimationFrame(tick)
+      scheduleListeningTimer(current)
     } catch (err) {
       console.error("manual_play_failed", err)
-      setFeedback("Impossible de lancer l'extrait.")
+      setFeedback(true)
     }
-  }, [current, finalizeRound, sharedDeadlineMs, muted])
+  }, [current, scheduleListeningTimer, muted])
 
   const albumName = useMemo(() => {
     if (!current?.metadata) return null
@@ -816,12 +821,12 @@ export function SoloGameClient({
   const handleGuessSubmit = useCallback(
     (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault()
-      if (!current || phase === "reveal") return
+      if (!current || isRevealed || isLocked) return
       const currentVerdict = evaluateGuess(guess, current)
       setVerdict(currentVerdict)
       finalizeRound(currentVerdict, "guess", current, guess)
     },
-    [current, guess, phase, finalizeRound]
+    [current, guess, isRevealed, isLocked, finalizeRound]
   )
 
   const handleReveal = useCallback(() => {
@@ -864,12 +869,12 @@ export function SoloGameClient({
   const handleSkipQuestion = useCallback(() => {
     // En multi, seul l'hôte peut skipper pour éviter des fins prématurées côté invités
     if (isMultiplayer && !isHost) return
-    if (!current || phase === "reveal") return
+    if (!current || isRevealed) return
     const submittedGuess = guessRef.current ?? guess
     const finalVerdict = verdictRef.current ?? "wrong"
     finalizeRound(finalVerdict, "reveal", current, submittedGuess)
     // finalizeRound already avance au round suivant après délai; pas besoin d'un saut supplémentaire ici.
-  }, [current, phase, finalizeRound, guess, isMultiplayer, isHost])
+  }, [current, isRevealed, finalizeRound, guess, isMultiplayer, isHost])
 
   // Server-driven round start (round:started): close the popup everywhere, then sync timers and playback.
   useEffect(() => {
@@ -901,40 +906,36 @@ export function SoloGameClient({
   const handleToggleMute = useCallback(() => {
     setMuted(prev => {
       const next = !prev
-      const audio = audioRef.current
-      if (audio) {
-        if (next) {
-          lastVolumeRef.current = audio.volume || 1
-          audio.volume = 0
-        } else {
-          audio.volume = lastVolumeRef.current || 1
-        }
+      audioManager.setMuted(next)
+      if (!next) {
+        audioManager.setVolume(lastVolumeRef.current, AUDIO_OWNER)
       }
       return next
     })
   }, [])
 
   const handleTogglePlay = useCallback(() => {
-    const audio = audioRef.current
+    const audio = audioManager.getCurrent(AUDIO_OWNER)
     if (!audio) {
       handleManualPlay()
       return
     }
     if (audio.paused) {
-      audio.play().then(() => setIsPlaying(true)).catch(() => setManualPlayRequired(true))
+      audioManager.resume(AUDIO_OWNER)
+      setIsPlaying(true)
     } else {
-      audio.pause()
+      audioManager.pause(AUDIO_OWNER)
       pausedByUserRef.current = true
       setIsPlaying(false)
     }
   }, [handleManualPlay])
 
   const handleRestart = useCallback(() => {
-    const audio = audioRef.current
+    const audio = audioManager.getCurrent(AUDIO_OWNER)
     if (audio) {
       try {
         audio.currentTime = 0
-        audio.play()
+        audioManager.resume(AUDIO_OWNER)
         setIsPlaying(true)
       } catch {
         // ignore
@@ -947,24 +948,21 @@ export function SoloGameClient({
   // Signaler la disponibilité sur chaque manche une fois la révélation affichée (multijoueur)
   useEffect(() => {
     if (!roomCode || mode !== "multiplayer") return
-    if (phase !== "reveal") return
+    if (uiState !== RoundUiState.Revealed) return
     markReady(index + 1)
-  }, [roomCode, mode, phase, index, markReady])
+  }, [roomCode, mode, uiState, index, markReady])
 
   const handleVolumeChange = useCallback(
     (value: number) => {
       const clamped = Math.min(1, Math.max(0, value))
       setVolume(clamped)
-      lastVolumeRef.current = clamped === 0 ? lastVolumeRef.current : clamped
-      const audio = audioRef.current
-      if (audio) {
-        audio.volume = clamped
+      if (clamped > 0) {
+        lastVolumeRef.current = clamped
       }
-      if (clamped === 0) {
-        setMuted(true)
-      } else {
-        setMuted(false)
-      }
+      audioManager.setVolume(clamped)
+      const shouldMute = clamped === 0
+      setMuted(shouldMute)
+      audioManager.setMuted(shouldMute)
     },
     []
   )
@@ -983,7 +981,7 @@ export function SoloGameClient({
   }, [])
 
   useEffect(() => {
-    if (phase !== "reveal") return
+    if (uiState !== RoundUiState.Revealed) return
     if (!current) return
     if (resultDialog) return
     const roundNumber = index + 1
@@ -1002,7 +1000,7 @@ export function SoloGameClient({
       breakdown: { base: 0, speed: 0, streak: 0 },
     })
     lastDialogRoundRef.current = roundNumber
-  }, [phase, current, index, verdict, guess, resultDialog])
+  }, [uiState, current, index, verdict, guess, resultDialog])
 
   useEffect(() => {
     if (stats.rounds === 0) return
@@ -1057,7 +1055,7 @@ export function SoloGameClient({
         console.debug("add_like_request", { sourceId, track: target })
         await api.addLike(user.id, sourceId)
         setError(null)
-        setFeedback("Ajouté aux titres likés ✨")
+        setFeedback(true)
         setLikeStatus({ type: "success", message: "Ajouté aux titres likés." })
         setLikedTrackIds(prev => ({ ...prev, [key]: true }))
       } catch (err) {
@@ -1114,12 +1112,18 @@ export function SoloGameClient({
     )
   }
 
-  const positionLabel = `${index + 1} / ${total}`
   const percent = Math.round(((index) / Math.max(1, total)) * 100)
+  const feedbackActive = isLocked || isRevealed
+  const feedbackSignal = feedback || feedbackActive
+  const containerData = {
+    "data-rivalry": modeFlags.isRivalry ? "1" : "0",
+    "data-readable": modeFlags.isReadableAtDistance ? "1" : "0",
+    "data-participation": modeFlags.isParticipationFocused ? "1" : "0",
+  }
 
   return (
     <>
-      <div className="min-h-screen bg-black text-white grid lg:grid-cols-[1fr_320px] relative">
+      <div className="min-h-screen bg-black text-white grid lg:grid-cols-[1fr_320px] relative" {...containerData}>
       <div className="px-6 pb-10 pt-6">
         <div className="flex items-center justify-between mb-6">
           <Link
@@ -1128,20 +1132,41 @@ export function SoloGameClient({
           >
             ← Quitter
           </Link>
-          <div className="rounded-lg border border-[#4c2c56] bg-[#2a1c2f] px-4 py-2 text-sm font-semibold text-[#f7e8ff] shadow flex flex-col sm:flex-row sm:items-center sm:gap-3">
+          <div
+            className="rounded-lg border px-4 py-2 text-sm font-semibold shadow flex flex-col sm:flex-row sm:items-center sm:gap-3"
+            style={{
+              borderColor: accentTint(0.55),
+              backgroundColor: accentTint(0.18),
+              color: accentColor,
+            }}
+          >
             <span>Score: {stats.points} pts</span>
             <span className="text-[11px] text-white/80">({stats.correct}/{total} correct)</span>
           </div>
         </div>
 
-        <div className="rounded-xl border border-[#1b1b1b] bg-[#0f0f0f] p-6 shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
+        <div
+          className="rounded-xl border bg-[#0f0f0f] p-6 shadow-[0_10px_30px_rgba(0,0,0,0.35)]"
+          style={{
+            borderColor: feedbackSignal ? accentColor : "#1b1b1b",
+            boxShadow: feedbackSignal ? `0 0 0 2px ${accentTint(0.45)}` : "0 10px 30px rgba(0,0,0,0.35)",
+            transition: `box-shadow ${ROUND_FEEDBACK_MS}ms ease, border-color ${ROUND_FEEDBACK_MS}ms ease`,
+          }}
+        >
           <div className="mb-6 flex flex-col gap-2">
             <div className="flex items-center justify-between text-sm text-[#8a8a8a]">
               <span>Question {index + 1} sur {total}</span>
               <span>{percent}%</span>
             </div>
             <div className="h-1.5 w-full rounded-full bg-[#161616]">
-              <div className="h-full rounded-full bg-gradient-to-r from-[#b155f0] to-[#f24f90]" style={{ width: `${percent}%` }} />
+              <div
+                className="h-full rounded-full"
+                style={{
+                  width: `${percent}%`,
+                  backgroundImage: `linear-gradient(90deg, ${accentColor}, ${accentTint(0.6)})`,
+                  transition: "width 200ms linear",
+                }}
+              />
             </div>
           </div>
 
@@ -1152,11 +1177,19 @@ export function SoloGameClient({
                 style={{ backgroundImage: `url(${current.album_cover})`, backgroundSize: "cover", backgroundPosition: "center" }}
               />
             ) : null}
-            <span className="relative z-10 text-5xl opacity-90">🎵</span>
+            <div className="relative z-10 opacity-90">
+              <AudioBars />
+            </div>
           </div>
 
-          <div className="text-center text-5xl font-bold mb-2">
-            {phase === "countdown" ? countdown.toString().padStart(2, "0") : timer.toString().padStart(2, "0")}
+          <div
+            className="text-center text-5xl font-bold mb-2 transition-all"
+            style={{
+              color: accentColor,
+              filter: isLocked || isRevealed ? "drop-shadow(0 0 12px rgba(0,0,0,0.35))" : undefined,
+            }}
+          >
+            {isArmed ? countdown.toString().padStart(2, "0") : timer.toString().padStart(2, "0")}
           </div>
           <div className="mb-6 text-center text-sm text-[#8a8a8a]">secondes restantes</div>
 
@@ -1168,7 +1201,7 @@ export function SoloGameClient({
                 setGuessTitle(value)
                 setGuess(`${value} ${guessArtist}`.trim())
               }}
-              disabled={phase === "reveal"}
+              disabled={isLocked || isRevealed || isArmed}
               placeholder="Titre du morceau"
               className="w-full rounded-md border border-[#1f1f1f] bg-[#0f0f0f] px-3 py-3 text-sm text-white outline-none focus:border-[#343434]"
             />
@@ -1180,14 +1213,20 @@ export function SoloGameClient({
                   setGuessArtist(value)
                   setGuess(`${guessTitle} ${value}`.trim())
                 }}
-                disabled={phase === "reveal"}
+                disabled={isLocked || isRevealed || isArmed}
                 placeholder="Artiste"
                 className="w-full rounded-md border border-[#1f1f1f] bg-[#0f0f0f] px-3 py-3 text-sm text-white outline-none focus:border-[#343434]"
               />
               <button
                 type="submit"
-                disabled={phase === "reveal"}
-                className="min-w-[110px] rounded-lg bg-gradient-to-r from-[#b155f0] to-[#f24f90] px-4 py-3 text-sm font-semibold text-white shadow-[0_10px_28px_rgba(178,82,217,0.35)] disabled:opacity-60"
+                disabled={isLocked || isRevealed || isArmed}
+                className="min-w-[110px] rounded-lg px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
+                style={{
+                  backgroundImage: `linear-gradient(135deg, ${accentColor}, ${accentTint(0.65)})`,
+                  boxShadow: `0 10px 28px ${accentTint(0.35)}`,
+                  transition: `opacity 120ms ease, filter ${ROUND_FEEDBACK_MS}ms ease`,
+                  filter: isLocked ? "saturate(0.6)" : "none",
+                }}
               >
                 Valider
               </button>
@@ -1196,7 +1235,14 @@ export function SoloGameClient({
 
           <div className="mt-6 flex justify-center gap-3 items-center">
             <button className="circle-btn" onClick={handleRestart} title="Rejouer l'extrait">⟳</button>
-            <label className="play-toggle" title={isPlaying ? "Pause" : "Lecture"}>
+            <label
+              className="play-toggle"
+              title={isPlaying ? "Pause" : "Lecture"}
+              style={{
+                backgroundImage: `linear-gradient(135deg, ${accentColor}, ${accentTint(0.7)})`,
+                boxShadow: `0 10px 30px ${accentTint(0.4)}`,
+              }}
+            >
               <input type="checkbox" checked={isPlaying} onChange={handleTogglePlay} />
               <svg viewBox="0 0 384 512" className="play-icon">
                 <path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"></path>
@@ -1311,37 +1357,52 @@ export function SoloGameClient({
               const showAnswer = item.state !== "pending" && item.state !== "current"
               const displayTitle = showAnswer ? item.title : "???"
               const displayArtist = showAnswer ? item.artist : "???"
+              const bgAlpha =
+                item.state === "correct"
+                  ? 0.18
+                  : item.state === "close"
+                    ? 0.14
+                    : item.state === "wrong"
+                      ? 0.1
+                      : item.state === "current"
+                        ? 0.16
+                        : 0.08
+              const borderAlpha = item.state === "current" ? 0.6 : 0.35
+              const badgeLabel =
+                item.state === "correct"
+                  ? "Validé"
+                  : item.state === "close"
+                    ? "Partiel"
+                    : item.state === "wrong"
+                      ? "Clos"
+                      : item.state === "current"
+                        ? "En cours"
+                        : "À venir"
               return (
             <div
               key={item.round}
               ref={el => {
                 historyItemRefs.current[item.round] = el
               }}
-              className={`rounded-lg border px-3 py-3 ${
-                item.state === "correct"
-                  ? "border-[#246b38] bg-[rgba(46,204,112,0.1)]"
-                  : item.state === "wrong"
-                    ? "border-[#813131] bg-[rgba(195,66,66,0.14)]"
-                    : item.state === "close"
-                      ? "border-[#8a6a2e] bg-[rgba(251,191,36,0.12)]"
-                    : item.state === "current"
-                      ? "border-[#2f2f2f] bg-[#161616]"
-                      : "border-[#1f1f1f] bg-[#0f0f0f]"
-              }`}
+              className="rounded-lg border px-3 py-3"
+              style={{
+                borderColor: accentTint(borderAlpha),
+                backgroundColor: accentTint(bgAlpha),
+                transition: `border-color ${ROUND_FEEDBACK_MS}ms ease, background-color ${ROUND_FEEDBACK_MS}ms ease`,
+              }}
               >
                 <div className="mb-1 flex items-center justify-between text-[12px] text-[#9b9b9b]">
                   <span>Manche {item.round}</span>
-                  {item.state === "correct" ? (
-                    <span className="rounded-full border border-[#2e8d55] bg-[rgba(46,204,112,0.14)] px-2 py-[2px] text-[11px] text-[#67e08f]">✔ Correct</span>
-                  ) : item.state === "close" ? (
-                    <span className="rounded-full border border-[#8a6a2e] bg-[rgba(251,191,36,0.14)] px-2 py-[2px] text-[11px] text-[#f5d67a]">~ Presque</span>
-                  ) : item.state === "wrong" ? (
-                    <span className="rounded-full border border-[#7f3030] bg-[rgba(195,66,66,0.12)] px-2 py-[2px] text-[11px] text-[#f19595]">✕ Incorrect</span>
-                  ) : item.state === "current" ? (
-                    <span className="rounded-full border border-[#2a2a2a] bg-[#1d1d1d] px-2 py-[2px] text-[11px] text-[#c9c9c9]">En cours…</span>
-                  ) : (
-                    <span className="rounded-full border border-[#2a2a2a] bg-[#1d1d1d] px-2 py-[2px] text-[11px] text-[#c9c9c9]">À venir</span>
-                  )}
+                  <span
+                    className="rounded-full border px-2 py-[2px] text-[11px] font-medium"
+                    style={{
+                      borderColor: accentTint(0.55),
+                      backgroundColor: accentTint(0.18),
+                      color: accentColor,
+                    }}
+                  >
+                    {badgeLabel}
+                  </span>
                 </div>
                 <div className="text-sm font-semibold text-white">{displayTitle}</div>
                 <div className="text-xs text-[#b5b5b5]">{displayArtist}</div>
@@ -1359,15 +1420,15 @@ export function SoloGameClient({
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <span
-                className={`flex h-10 w-10 items-center justify-center rounded-full text-lg ${
-                  resultDialog.verdict === "correct"
-                    ? "bg-emerald-600/20 text-emerald-300 border border-emerald-500/40"
-                    : resultDialog.verdict === "close"
-                      ? "bg-amber-500/20 text-amber-200 border border-amber-400/40"
-                      : "bg-rose-600/20 text-rose-200 border border-rose-400/40"
-                }`}
+                className="flex h-10 w-10 items-center justify-center rounded-full border text-sm font-semibold"
+                style={{
+                  borderColor: accentTint(0.55),
+                  backgroundColor: accentTint(0.2),
+                  color: accentColor,
+                  transition: `border-color ${ROUND_FEEDBACK_MS}ms ease, background-color ${ROUND_FEEDBACK_MS}ms ease`,
+                }}
               >
-                {resultDialog.verdict === "correct" ? "✔" : resultDialog.verdict === "close" ? "~" : "✕"}
+                {resultDialog.verdict === "correct" ? "OK" : resultDialog.verdict === "close" ? "PART" : "X"}
               </span>
               <div>
                 <p className="text-xs uppercase tracking-[0.3em] text-[var(--ma-muted,#9b9b9b)]">
@@ -1451,9 +1512,8 @@ export function SoloGameClient({
           </div>
           {likeStatus ? (
             <div
-              className={`mt-2 text-sm ${
-                likeStatus.type === "success" ? "text-emerald-300" : "text-rose-300"
-              }`}
+              className="mt-2 text-sm"
+              style={{ color: accentColor }}
             >
               {likeStatus.message}
             </div>

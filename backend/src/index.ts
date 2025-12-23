@@ -106,10 +106,12 @@ setInterval(() => {
   expireOldInvitations()
     .then((expired: ExpiredInvitation[]) => {
       expired.forEach(invite => {
-        emitToUser(invite.to_user, "room:invite:expired", {
+        const payload = {
           invitationId: invite.id,
           roomCode: invite.room_code,
-        });
+        };
+        emitToUser(invite.to_user, "room:invite:expired", payload);
+        emitToUser(invite.from_user, "room:invite:expired", payload);
       });
     })
     .catch(err => console.error("invitation_cleanup_failed", err));

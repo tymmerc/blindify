@@ -13,6 +13,7 @@ import { ArrowLeft, ArrowRight, Copy, Heart, Loader2, PartyPopper, ShieldCheck, 
 import { useServerTime } from "@/hooks/useServerTime"
 import { useFriends } from "@/hooks/useFriends"
 import { useInvitations } from "@/hooks/useInvitations"
+import { ModeGate } from "@/components/system/ModeGate"
 
 type View = "landing" | "hosting" | "waiting" | "playing" | "results"
 
@@ -32,9 +33,11 @@ type RoomPresenceEvent =
 
 export default function MultiplayerPageWrapper() {
   return (
-    <Suspense fallback={<div className="grid min-h-screen place-items-center text-sm text-[var(--ma-muted)]">Chargement…</div>}>
-      <MultiplayerPage />
-    </Suspense>
+    <ModeGate allowedModes={["friends", "event", "chat"]}>
+      <Suspense fallback={<div className="grid min-h-screen place-items-center text-sm text-[var(--ma-muted)]">Chargement…</div>}>
+        <MultiplayerPage />
+      </Suspense>
+    </ModeGate>
   )
 }
 

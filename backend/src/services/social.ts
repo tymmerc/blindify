@@ -49,6 +49,18 @@ export async function ensureSocialTables(): Promise<void> {
   await pool.query(`
     DO $$
     BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints
+        WHERE constraint_name='chk_friends_status' AND table_name='friends'
+      ) THEN
+        ALTER TABLE friends ADD CONSTRAINT chk_friends_status CHECK (status IN ('pending','accepted','blocked'));
+      END IF;
+    END
+    $$;
+  `);
+  await pool.query(`
+    DO $$
+    BEGIN
       IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename='friendships') THEN
         INSERT INTO friends (requester_id, receiver_id, status, created_at, updated_at)
         SELECT requested_by,
@@ -83,6 +95,18 @@ export async function ensureSocialTables(): Promise<void> {
   );
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_room_invitation_to_status ON room_invitations(to_user, status)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_room_invitation_expires ON room_invitations(expires_at)`);
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints
+        WHERE constraint_name='chk_room_invitation_status' AND table_name='room_invitations'
+      ) THEN
+        ALTER TABLE room_invitations ADD CONSTRAINT chk_room_invitation_status CHECK (status IN ('pending','accepted','declined','expired'));
+      END IF;
+    END
+    $$;
+  `);
   socialInitialized = true;
 }
 
@@ -110,14 +134,34 @@ export async function getFriendshipBetween(userA: number, userB: number): Promis
   return rows[0] ?? null;
 }
 
-export type ExpiredInvitation = { id: number; to_user: number; room_code: string };
+export type ExpiredInvitation = { id: number; to_user: number; from_user: number; room_code: string };
 
 export async function expireOldInvitations(): Promise<ExpiredInvitation[]> {
+  if (!socialInitialized) {
+    await ensureSocialTables();
+  }
   const { rows } = await pool.query<ExpiredInvitation>(
     `UPDATE room_invitations
      SET status='expired'
      WHERE status='pending' AND expires_at <= NOW()
-     RETURNING id, to_user, room_code`
+     RETURNING id, to_user, from_user, room_code`
+  );
+  return rows ?? [];
+}
+
+export async function expireInvitationsBetween(userA: number, userB: number): Promise<ExpiredInvitation[]> {
+  if (!socialInitialized) {
+    await ensureSocialTables();
+  }
+  const { rows } = await pool.query<ExpiredInvitation>(
+    `UPDATE room_invitations
+     SET status='expired'
+     WHERE status='pending' AND (
+       (from_user=$1 AND to_user=$2) OR
+       (from_user=$2 AND to_user=$1)
+     )
+     RETURNING id, to_user, from_user, room_code`,
+    [userA, userB]
   );
   return rows ?? [];
 }

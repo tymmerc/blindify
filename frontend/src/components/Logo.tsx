@@ -13,7 +13,7 @@ type LogoProps = {
 }
 
 export function Logo({ withText = false, className, imageClassName, priority = false, href = "/" }: LogoProps) {
-  const logoSrc = publicPath("/logo sans background.png")
+  const logoSrc = publicPath("/logo_blindify.png")
 
   return (
     <Link
@@ -25,19 +25,19 @@ export function Logo({ withText = false, className, imageClassName, priority = f
       aria-label="Blindify"
     >
       <div
-        className={cn(
-          "relative grid h-12 w-12 place-items-center rounded-xl border border-border bg-background/80 shadow-none",
-          imageClassName,
-        )}
-      >
-        <Image
-          src={logoSrc}
-          alt="Blindify"
-          fill
-          sizes="48px"
-          priority={priority}
-          className="object-contain"
-        />
+      className={cn(
+        "relative grid h-14 w-14 place-items-center rounded-xl border border-border bg-background/80 shadow-none",
+        imageClassName,
+      )}
+    >
+      <Image
+        src={logoSrc}
+        alt="Blindify"
+        fill
+        sizes="56px"
+        priority={priority}
+        className="object-contain"
+      />
       </div>
       {withText ? (
         <span className="text-xl font-semibold leading-none tracking-tight text-white">Blindify</span>

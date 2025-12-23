@@ -3,6 +3,8 @@ import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
 
+import { AudioLifecycleGuard } from "@/components/system/AudioLifecycleGuard"
+import { ModeProvider } from "@/contexts/ModeContext"
 import { publicPath } from "@/lib/publicPath"
 
 const inter = Inter({
@@ -36,7 +38,10 @@ export default function RootLayout({
         <div className="fixed inset-0 -z-10 overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-br from-[#090915] via-[#0a0a12] to-[#050510]" />
         </div>
-        {children}
+        <ModeProvider>
+          <AudioLifecycleGuard />
+          {children}
+        </ModeProvider>
       </body>
     </html>
   )

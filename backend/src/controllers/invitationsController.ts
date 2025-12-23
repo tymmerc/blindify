@@ -66,10 +66,12 @@ function checkExpiration(invitation: RoomInvitationRow): boolean {
 
 function emitExpired(expired: ExpiredInvitation[]): void {
   expired.forEach(invite => {
-    emitToUser(invite.to_user, "room:invite:expired", {
+    const payload = {
       invitationId: invite.id,
       roomCode: invite.room_code,
-    });
+    };
+    emitToUser(invite.to_user, "room:invite:expired", payload);
+    emitToUser(invite.from_user, "room:invite:expired", payload);
   });
 }
 

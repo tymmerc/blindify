@@ -83,12 +83,13 @@ export function useInvitations() {
       setPending(prev => prev.filter(inv => inv.id !== payload.invitationId))
     }
     const handleExpired = (payload: { invitationId?: number; roomCode?: string }) => {
-      if (!payload?.invitationId) return
-      setPending(prev => prev.filter(inv => inv.id !== payload.invitationId))
+      const id = typeof payload?.invitationId === "number" ? payload.invitationId : null
+      if (!id) return
+      setPending(prev => prev.filter(inv => inv.id !== id))
       setToasts(prev => [
         ...prev.slice(-2),
         {
-          id: payload.invitationId,
+          id,
           roomCode: payload.roomCode ?? "—",
           state: "expired",
           message: "Invitation expirée",
