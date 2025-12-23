@@ -4,6 +4,7 @@ import type {
   MultiplayerParticipant,
   MultiplayerRoom,
   ProviderConnectionSummary,
+  RoomInvitation,
   RoomSelfPreference,
   SoloGameResponse,
   SoloTrack,
@@ -46,6 +47,21 @@ function getCookie(name: string): string | null {
   if (typeof document === "undefined") return null
   const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]+)`))
   return match ? decodeURIComponent(match[1]) : null
+}
+
+function normalizeInvitation(raw: any): RoomInvitation {
+  return {
+    id: raw.id,
+    roomId: raw.room_id ?? raw.roomId ?? null,
+    roomCode: raw.room_code ?? raw.roomCode,
+    fromUser: raw.from_user ?? raw.fromUser,
+    toUser: raw.to_user ?? raw.toUser,
+    status: raw.status,
+    expiresAt: raw.expires_at ?? raw.expiresAt,
+    createdAt: raw.created_at ?? raw.createdAt,
+    fromUsername: raw.from_username ?? raw.fromUsername ?? null,
+    fromAvatar: raw.from_avatar ?? raw.fromAvatar ?? null,
+  }
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -258,15 +274,68 @@ export const clientApi = {
     })
   },
   async acceptFriend(userId: number): Promise<{ friendship: import("./types").FriendEntry }> {
-    return request(`/api/friends/${userId}/accept`, { method: "POST" })
+    return request(`/api/friends/accept`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId }),
+    })
   },
   async removeFriend(userId: number): Promise<{ removed: boolean }> {
     return request(`/api/friends/${userId}`, { method: "DELETE" })
   },
+  async declineFriend(userId: number): Promise<{ declined: boolean }> {
+    return request("/api/friends/decline", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId }),
+    })
+  },
   async friendsActivity(): Promise<{
-    friends: Array<{ userId: number; username: string | null; roomCode: string; state: string; updatedAt: number }>
+    friends: Array<{
+      userId: number
+      username: string | null
+      online: boolean
+      activity: "idle" | "playing" | "hosting" | "spectating"
+      context?: { type: "room" | "event"; id: string } | null
+      roomCode: string | null
+      state: string
+      updatedAt: number
+    }>
   }> {
     return request("/api/friends/activity", { cache: "no-store" })
+  },
+  async pendingInvitations(): Promise<{ invitations: RoomInvitation[] }> {
+    const res = await request<{ invitations: any[] }>("/api/invitations/pending", { method: "GET", cache: "no-store" })
+    return { invitations: (res.invitations ?? []).map(normalizeInvitation) }
+  },
+  async sendInvitation(toUserId: number, roomCode: string): Promise<{ invitation: RoomInvitation }> {
+    const res = await request<{ invitation: any }>("/api/invitations/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ toUserId, roomCode }),
+    })
+    return { invitation: normalizeInvitation(res.invitation) }
+  },
+  async acceptInvitation(
+    invitationId: number
+  ): Promise<{ invitation: RoomInvitation; room: MultiplayerRoom; joined: boolean }> {
+    const res = await request<{ invitation: any; room: MultiplayerRoom; joined: boolean }>("/api/invitations/accept", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ invitationId }),
+    })
+    return {
+      invitation: normalizeInvitation(res.invitation),
+      room: res.room,
+      joined: res.joined,
+    }
+  },
+  async declineInvitation(invitationId: number): Promise<{ declined: boolean }> {
+    return request("/api/invitations/decline", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ invitationId }),
+    })
   },
   async logout(): Promise<void> {
     await request("/api/auth/logout", {

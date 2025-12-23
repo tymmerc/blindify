@@ -6,6 +6,7 @@ import type {
   MultiplayerGameState,
   FriendEntry,
   ProviderConnectionSummary,
+  RoomInvitation,
   RoomSelfPreference,
   SoloGameResponse,
   SoloTrack,
@@ -175,13 +176,39 @@ export const api = {
   async acceptFriend(userId: number): Promise<{ friendship: FriendEntry }> {
     return clientApi.acceptFriend(userId)
   },
+  async declineFriend(userId: number): Promise<{ declined: boolean }> {
+    return clientApi.declineFriend(userId)
+  },
   async removeFriend(userId: number): Promise<{ removed: boolean }> {
     return clientApi.removeFriend(userId)
   },
   async friendsActivity(): Promise<{
-    friends: Array<{ userId: number; username: string | null; roomCode: string; state: string; updatedAt: number }>
+    friends: Array<{
+      userId: number
+      username: string | null
+      online: boolean
+      activity: "idle" | "playing" | "hosting" | "spectating"
+      context?: { type: "room" | "event"; id: string } | null
+      roomCode: string | null
+      state: string
+      updatedAt: number
+    }>
   }> {
     return clientApi.friendsActivity()
+  },
+  async listInvitations(): Promise<{ invitations: RoomInvitation[] }> {
+    return clientApi.pendingInvitations()
+  },
+  async sendInvitation(toUserId: number, roomCode: string): Promise<{ invitation: RoomInvitation }> {
+    return clientApi.sendInvitation(toUserId, roomCode)
+  },
+  async acceptInvitation(
+    invitationId: number
+  ): Promise<{ invitation: RoomInvitation; room: MultiplayerRoom; joined: boolean }> {
+    return clientApi.acceptInvitation(invitationId)
+  },
+  async declineInvitation(invitationId: number): Promise<{ declined: boolean }> {
+    return clientApi.declineInvitation(invitationId)
   },
   async logout(): Promise<void> {
     await clientApi.logout()

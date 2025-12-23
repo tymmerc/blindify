@@ -1,5 +1,16 @@
 export type MusicProvider = "spotify" | "deezer" | "apple" | "local" | "guest"
 
+export type PresenceContext = { type: "room" | "event"; id: string }
+
+export type FriendPresence = {
+  online: boolean
+  activity: "idle" | "playing" | "hosting" | "spectating"
+  context?: PresenceContext | null
+  status: "online" | "offline" | "playing" // legacy, derived server-side
+  roomCode: string | null // legacy, derived from context
+  updatedAt: number
+}
+
 export type UserSummary = {
   id: number
   provider: MusicProvider
@@ -131,4 +142,18 @@ export type FriendEntry = {
   status: "pending" | "accepted"
   direction: "incoming" | "outgoing" | "accepted"
   createdAt: string
+  presence?: FriendPresence
+}
+
+export type RoomInvitation = {
+  id: number
+  roomId: number | null
+  roomCode: string
+  fromUser: number
+  toUser: number
+  status: "pending" | "accepted" | "declined" | "expired"
+  expiresAt: string
+  createdAt: string
+  fromUsername?: string | null
+  fromAvatar?: string | null
 }

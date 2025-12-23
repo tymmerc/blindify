@@ -34,6 +34,7 @@ import roomsRoutes from "./routes/rooms";
 import statsRoutes from "./routes/stats";
 import audioSourcesRoutes from "./routes/audioSources";
 import friendsRoutes from "./routes/friends";
+import invitationsRoutes from "./routes/invitations";
 import { fail, ok } from "./utils/response";
 import {
   gameStateSnapshot,
@@ -51,13 +52,21 @@ import {
   scheduleReveal,
 } from "./services/realtimeOrchestrator";
 import { getSessionContext, getSessionContextFromToken, type SessionContext } from "./utils/session";
+import {
+  getPresence,
+  getPresenceForUsers,
+  emitToUser,
+  registerSocket,
+  recordHeartbeat,
+  findStalePresences,
+  PRESENCE_HEARTBEAT_TTL_MS,
+  setPresence,
+  getUserSockets,
+  unregisterSocket,
+} from "./services/presence";
+import { expireOldInvitations, getAcceptedFriendIds, type ExpiredInvitation } from "./services/social";
 
 dotenv.config();
-
-// Track sockets per user to push friend activity
-const userSockets = new Map<number, Set<string>>();
-// Track current room activity per user
-const userActivity = new Map<number, { roomCode: string | null; state: string; updatedAt: number }>();
 
 const app = express();
 app.set("trust proxy", 1);
@@ -88,6 +97,47 @@ const allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:5173",
 ].filter(Boolean) as string[];
+
+const lastKnownUsername = new Map<number, string | null>();
+const PRESENCE_SWEEP_INTERVAL_MS = 5_000;
+
+// Background cleanup for expired invitations (every 30s) + user feedback.
+setInterval(() => {
+  expireOldInvitations()
+    .then((expired: ExpiredInvitation[]) => {
+      expired.forEach(invite => {
+        emitToUser(invite.to_user, "room:invite:expired", {
+          invitationId: invite.id,
+          roomCode: invite.room_code,
+        });
+      });
+    })
+    .catch(err => console.error("invitation_cleanup_failed", err));
+}, 30_000);
+
+// Heartbeat-based presence expiry sweep
+setInterval(() => {
+  const staleUsers = findStalePresences(PRESENCE_HEARTBEAT_TTL_MS);
+  staleUsers.forEach(userId => {
+    const before = getPresence(userId);
+    const sockets = getUserSockets(userId);
+    const hasLiveSockets = Boolean(sockets && sockets.size);
+
+    // Distinguish missing heartbeat (keep online if socket alive) vs true disconnect (offline).
+    const after = hasLiveSockets
+      ? setPresence(userId, { online: true, activity: before.activity === "playing" ? "playing" : "idle", context: before.context })
+      : setPresence(userId, "offline", null);
+
+    const contextChanged =
+      before.context?.id !== after.context?.id || before.context?.type !== after.context?.type || before.roomCode !== after.roomCode;
+    const stateChanged = before.status !== after.status || before.online !== after.online || before.activity !== after.activity;
+
+    if (stateChanged || contextChanged) {
+      const username = lastKnownUsername.get(userId) ?? null;
+      broadcastFriendPresence(userId, username).catch(err => console.error("presence_sweep_broadcast_failed", err));
+    }
+  });
+}, PRESENCE_SWEEP_INTERVAL_MS);
 
 function parseCookies(header: string | string[] | undefined): Record<string, string> {
   if (!header) return {};
@@ -257,18 +307,15 @@ app.get("/api/health", (_req, res) => {
 app.get("/api/friends/activity", async (req, res) => {
   const context = await getSessionContext(req, res);
   if (!context) return;
-  // Fetch accepted friends
-  const { rows: friendRows } = await pool.query<{ friend_id: number }>(
-    `SELECT CASE WHEN user_a=$1 THEN user_b ELSE user_a END AS friend_id
-     FROM friendships
-     WHERE (user_a=$1 OR user_b=$1) AND status='accepted'`,
-    [context.user.id]
-  );
-  const friendIds = friendRows.map(r => r.friend_id);
+  // Deprecated: kept for debug/admin visibility. Presence source of truth stays on socket events.
+  res.setHeader("X-Deprecated-Endpoint", "true");
+  res.setHeader("X-Endpoint-Usage", "debug-only");
+  const friendIds = await getAcceptedFriendIds(context.user.id);
   if (!friendIds.length) {
     ok(res, { friends: [] });
     return;
   }
+  const presence = getPresenceForUsers(friendIds);
   const { rows: userRows } = await pool.query<{ id: number; username: string | null }>(
     `SELECT id, username FROM users WHERE id = ANY($1::int[])`,
     [friendIds]
@@ -276,19 +323,16 @@ app.get("/api/friends/activity", async (req, res) => {
   const nameMap = new Map<number, string | null>();
   userRows.forEach(u => nameMap.set(u.id, u.username));
 
-  const friends = friendIds
-    .map(id => {
-      const activity = userActivity.get(id);
-      if (!activity || !activity.roomCode) return null;
-      return {
-        userId: id,
-        username: nameMap.get(id) ?? null,
-        roomCode: activity.roomCode,
-        state: activity.state,
-        updatedAt: activity.updatedAt,
-      };
-    })
-    .filter(Boolean);
+  const friends = friendIds.map(id => ({
+    userId: id,
+    username: nameMap.get(id) ?? null,
+    online: presence[id]?.online ?? false,
+    activity: presence[id]?.activity ?? "idle",
+    context: presence[id]?.context ?? null,
+    roomCode: presence[id]?.roomCode ?? null,
+    state: presence[id]?.status ?? "offline",
+    updatedAt: presence[id]?.updatedAt ?? Date.now(),
+  }));
 
   ok(res, { friends });
 });
@@ -301,32 +345,48 @@ app.use("/api/rooms", roomsRoutes);
 app.use("/api/stats", statsRoutes);
 app.use("/api/audio-sources", audioSourcesRoutes);
 app.use("/api/friends", friendsRoutes);
+app.use("/api/invitations", invitationsRoutes);
 
-async function getFriendIds(userId: number): Promise<number[]> {
-  const { rows } = await pool.query<{ friend_id: number }>(
-    `SELECT CASE WHEN user_a=$1 THEN user_b ELSE user_a END AS friend_id
-     FROM friendships
-     WHERE (user_a=$1 OR user_b=$1) AND status='accepted'`,
-    [userId]
-  );
-  return rows.map(r => r.friend_id);
-}
-
-async function broadcastFriendActivity(userId: number, username: string | null) {
-  const activity = userActivity.get(userId);
+async function broadcastFriendPresence(userId: number, username: string | null) {
+  const friendIds = await getAcceptedFriendIds(userId);
+  if (!friendIds.length) return;
+  const state = getPresence(userId);
   const payload = {
     userId,
     username,
-    roomCode: activity?.roomCode ?? null,
-    state: activity?.state ?? "idle",
-    updatedAt: activity?.updatedAt ?? Date.now(),
+    online: state.online,
+    activity: state.activity,
+    context: state.context ?? null,
+    roomCode: state.roomCode,
+    status: state.status,
+    updatedAt: state.updatedAt,
   };
-  const friendIds = await getFriendIds(userId);
   for (const fid of friendIds) {
-    const sockets = userSockets.get(fid);
-    if (!sockets) continue;
-    sockets.forEach(sid => io.to(sid).emit("friend:activity", payload));
+    emitToUser(fid, "friends:status:update", payload);
   }
+}
+
+async function pushFriendPresenceSnapshot(userId: number, socketId: string) {
+  const friendIds = await getAcceptedFriendIds(userId);
+  if (!friendIds.length) return;
+  const presence = getPresenceForUsers(friendIds);
+  const { rows } = await pool.query<{ id: number; username: string | null }>(
+    `SELECT id, username FROM users WHERE id = ANY($1::int[])`,
+    [friendIds]
+  );
+  const nameMap = new Map<number, string | null>();
+  rows.forEach(u => nameMap.set(u.id, u.username));
+  const snapshot = friendIds.map(id => ({
+    userId: id,
+    username: nameMap.get(id) ?? null,
+    online: presence[id]?.online ?? false,
+    activity: presence[id]?.activity ?? "idle",
+    context: presence[id]?.context ?? null,
+    roomCode: presence[id]?.roomCode ?? null,
+    status: presence[id]?.status ?? "offline",
+    updatedAt: presence[id]?.updatedAt ?? Date.now(),
+  }));
+  io.to(socketId).emit("friends:status:init", snapshot);
 }
 
 io.on("connection", socket => {
@@ -342,10 +402,36 @@ io.on("connection", socket => {
   }
 
   const currentUser = auth.user;
-  // track socket for friend notifications
-  const socketsForUser = userSockets.get(currentUser.id) ?? new Set<string>();
-  socketsForUser.add(socket.id);
-  userSockets.set(currentUser.id, socketsForUser);
+  lastKnownUsername.set(currentUser.id, currentUser.username ?? null);
+
+  const beforePresence = getPresence(currentUser.id);
+  const presence = registerSocket(currentUser.id, socket.id);
+  const contextChanged =
+    beforePresence.context?.id !== presence.context?.id || beforePresence.context?.type !== presence.context?.type;
+  const stateChanged =
+    beforePresence.status !== presence.status ||
+    beforePresence.online !== presence.online ||
+    beforePresence.activity !== presence.activity ||
+    beforePresence.roomCode !== presence.roomCode;
+  if (stateChanged || contextChanged) {
+    broadcastFriendPresence(currentUser.id, currentUser.username ?? null).catch(() => {});
+  }
+  pushFriendPresenceSnapshot(currentUser.id, socket.id).catch(() => {});
+
+  socket.on("presence:heartbeat", () => {
+    const before = getPresence(currentUser.id);
+    const after = recordHeartbeat(currentUser.id);
+    const contextChanged =
+      before.context?.id !== after.context?.id || before.context?.type !== after.context?.type;
+    const stateChanged =
+      before.status !== after.status ||
+      before.online !== after.online ||
+      before.activity !== after.activity ||
+      before.roomCode !== after.roomCode;
+    if (stateChanged || contextChanged) {
+      broadcastFriendPresence(currentUser.id, currentUser.username ?? null).catch(() => {});
+    }
+  });
 
   const sendStateToSocket = (roomCode: string) => {
     const snapshot = gameStateSnapshot(roomCode);
@@ -375,12 +461,8 @@ io.on("connection", socket => {
     });
     sendStateToSocket(roomCode);
 
-    userActivity.set(currentUser.id, {
-      roomCode,
-      state: access.isHost ? "hosting" : "waiting",
-      updatedAt: Date.now(),
-    });
-    broadcastFriendActivity(currentUser.id, currentUser.username ?? null).catch(() => {});
+    setPresence(currentUser.id, { online: true, activity: "playing", context: { type: "room", id: roomCode } });
+    broadcastFriendPresence(currentUser.id, currentUser.username ?? null).catch(() => {});
   });
 
   socket.on("room:leave", async ({ roomCode }: { roomCode: string }) => {
@@ -397,8 +479,8 @@ io.on("connection", socket => {
     });
     broadcastState(io, roomCode);
 
-    userActivity.set(currentUser.id, { roomCode: null, state: "idle", updatedAt: Date.now() });
-    broadcastFriendActivity(currentUser.id, currentUser.username ?? null).catch(() => {});
+    setPresence(currentUser.id, { online: true, activity: "idle", context: null });
+    broadcastFriendPresence(currentUser.id, currentUser.username ?? null).catch(() => {});
   });
 
   socket.on(
@@ -409,40 +491,40 @@ io.on("connection", socket => {
       if (!access) {
         emitRoomError(socket, roomCode, "Accès refusé à cette salle.");
         return;
-    }
-    const state = getRealtimeState(roomCode);
+      }
+      const state = getRealtimeState(roomCode);
       if (!state) {
         emitRoomError(socket, roomCode, "Partie introuvable pour cette salle.");
         return;
       }
       recordAnswer(roomCode, currentUser.id, guess ?? "", sourceUserId);
       const updated = getRealtimeState(roomCode);
-    broadcastState(io, roomCode);
+      broadcastState(io, roomCode);
 
-    // Si tous les joueurs ont répondu, révéler immédiatement
-    const everyoneAnswered =
-      updated?.status === "playing" &&
-      updated.currentTrack &&
-      Object.values(updated.players).length > 0 &&
-      Object.values(updated.players).every(p => p.hasAnswered);
+      // Si tous les joueurs ont répondu, révéler immédiatement
+      const everyoneAnswered =
+        updated?.status === "playing" &&
+        updated.currentTrack &&
+        Object.values(updated.players).length > 0 &&
+        Object.values(updated.players).every(p => p.hasAnswered);
 
-    if (everyoneAnswered) {
-      clearRevealTimer(roomCode);
-      const revealed = revealRound(roomCode);
-      if (revealed) {
-        io.to(roomCode).emit("game:round:reveal", {
-          roomCode,
-          round: revealed.currentRound,
-          timing: revealed.timing,
-          players: revealed.players,
-        });
-        broadcastState(io, roomCode);
-        if (revealed.status === "finished") {
-          broadcastGameOver(io, roomCode);
+      if (everyoneAnswered) {
+        clearRevealTimer(roomCode);
+        const revealed = revealRound(roomCode);
+        if (revealed) {
+          io.to(roomCode).emit("game:round:reveal", {
+            roomCode,
+            round: revealed.currentRound,
+            timing: revealed.timing,
+            players: revealed.players,
+          });
+          broadcastState(io, roomCode);
+          if (revealed.status === "finished") {
+            broadcastGameOver(io, roomCode);
+          }
         }
       }
-    }
-  });
+    });
 
   socket.on("game:ready", async ({ roomCode }: { roomCode: string }) => {
     if (!roomCode) return;
@@ -501,17 +583,16 @@ io.on("connection", socket => {
 
   socket.on("disconnect", () => {
     clearInterval(tick);
-
-    const sockets = userSockets.get(currentUser.id);
-    if (sockets) {
-      sockets.delete(socket.id);
-      if (!sockets.size) {
-        userSockets.delete(currentUser.id);
-        userActivity.set(currentUser.id, { roomCode: null, state: "offline", updatedAt: Date.now() });
-        broadcastFriendActivity(currentUser.id, currentUser.username ?? null).catch(() => {});
-      } else {
-        userSockets.set(currentUser.id, sockets);
-      }
+    const before = getPresence(currentUser.id);
+    const state = unregisterSocket(currentUser.id, socket.id);
+    const contextChanged =
+      before.context?.id !== state.context?.id || before.context?.type !== state.context?.type || before.roomCode !== state.roomCode;
+    const stateChanged =
+      before.status !== state.status ||
+      before.online !== state.online ||
+      before.activity !== state.activity;
+    if (stateChanged || contextChanged) {
+      broadcastFriendPresence(currentUser.id, currentUser.username ?? null).catch(() => {});
     }
   });
 

@@ -199,6 +199,42 @@ CREATE TABLE IF NOT EXISTS room_participants (
     UNIQUE(room_id, user_id)
 );
 
+-- Social graph (friends + room invitations) -------------------------------
+-- NOTE: single table for pending/accepted/blocked to keep uniqueness/idempotence centralized.
+-- Invariants: (LEAST(requester_id, receiver_id), GREATEST(...)) unique, status in ('pending','accepted','blocked'), requester_id <> receiver_id.
+-- TODO(social-v2): split into friend_requests + friendships when audit trail + historical reporting are required and a migration window is approved.
+CREATE TABLE IF NOT EXISTS friends (
+    id SERIAL PRIMARY KEY,
+    requester_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    receiver_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CHECK (requester_id <> receiver_id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_friends_pair
+    ON friends (LEAST(requester_id, receiver_id), GREATEST(requester_id, receiver_id));
+CREATE INDEX IF NOT EXISTS idx_friends_receiver_status ON friends(receiver_id, status);
+CREATE INDEX IF NOT EXISTS idx_friends_requester_status ON friends(requester_id, status);
+
+CREATE TABLE IF NOT EXISTS room_invitations (
+    id SERIAL PRIMARY KEY,
+    room_id INTEGER NOT NULL REFERENCES multiplayer_rooms(id) ON DELETE CASCADE,
+    room_code VARCHAR(12) NOT NULL,
+    from_user INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    to_user INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'pending',
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CHECK (from_user <> to_user)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_room_invitation_unique
+    ON room_invitations (room_id, from_user, to_user, status) WHERE status='pending';
+CREATE INDEX IF NOT EXISTS idx_room_invitation_to_status ON room_invitations(to_user, status);
+CREATE INDEX IF NOT EXISTS idx_room_invitation_expires ON room_invitations(expires_at);
+
 -- Friendships --------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS friendships (
     id SERIAL PRIMARY KEY,
