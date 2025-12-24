@@ -173,7 +173,9 @@ function FriendsView({
         <h3 className="text-lg font-semibold text-white">Comment ça se passe</h3>
         <p className="mt-2 text-sm text-white/80">Une partie simple, rapide, entre personnes que tu connais.</p>
         <ul className="mt-3 space-y-2 text-sm text-white/85 list-disc list-inside">
-          <li>Tu invites tes amis ou tu rejoins leur salle</li>
+        
+          <li>Tu invites tes amis ou tu rejoins leur salle</li>  
+          <li>Les musiques sont choisies à partir des bibliothèques de chacun.</li>
           <li>Une musique démarre, chacun répond de son côté</li>
           <li>Les scores s’affichent, et ça chambre un peu</li>
         </ul>
@@ -198,6 +200,7 @@ function EventView({ accent, router }: { accent: string; router: ReturnType<type
         <p className="mt-2 text-sm text-white/80">Tout le monde regarde le même écran, tu mènes la partie.</p>
         <ul className="mt-3 space-y-2 text-sm text-white/85 list-disc list-inside">
           <li>Tu lances l’événement</li>
+          <li>Les morceaux viennent des bibliothèques des participants.</li>
           <li>La musique démarre pour tous en même temps</li>
           <li>Les joueurs répondent sur leur téléphone</li>
         </ul>
@@ -221,7 +224,8 @@ function ChatView({ accent, router }: { accent: string; router: ReturnType<typeo
         <h3 className="text-lg font-semibold text-white">Comment ça se passe</h3>
         <p className="mt-2 text-sm text-white/80">Le jeu avance, le chat réagit en direct.</p>
         <ul className="mt-3 space-y-2 text-sm text-white/85 list-disc list-inside">
-          <li>Tu démarres la partie</li>
+          <li>Tu démarres la partie</li>*
+          <li>La musique est tirée des bibliothèques des joueurs présents.</li>
           <li>La musique tourne, le chat répond</li>
           <li>Les messages s’affichent au fil du jeu</li>
         </ul>

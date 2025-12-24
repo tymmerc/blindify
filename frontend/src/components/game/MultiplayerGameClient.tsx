@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Check, Loader2, Volume2, VolumeX } from "lucide-react"
 import { audioManager, DEFAULT_AUDIO_VOLUME } from "@/lib/audioManager"
 import { RoundUiState, resolveModeFlags, ROUND_FEEDBACK_MS } from "@/lib/roundFlow"
-import { useMode } from "@/contexts/ModeContext"
+import { GAME_MODES, type GameModeConfig } from "@/lib/gameModes"
 
 const PLAYBACK_VOLUME = DEFAULT_AUDIO_VOLUME;
 
@@ -18,11 +18,24 @@ type Props = {
   onReady: () => void
   disabled?: boolean
   autoAdvance?: boolean
+  modeConfig?: GameModeConfig
+  accentColor?: string
 }
 
-export function MultiplayerGameClient({ user, state, serverNow, onAnswer, onReady, disabled, autoAdvance }: Props) {
-  const { mode: activeMode, accentColor } = useMode()
-  const modeFlags = resolveModeFlags(activeMode, accentColor)
+export function MultiplayerGameClient({
+  user,
+  state,
+  serverNow,
+  onAnswer,
+  onReady,
+  disabled,
+  autoAdvance,
+  modeConfig,
+  accentColor,
+}: Props) {
+  const resolvedConfig = modeConfig ?? GAME_MODES.friends
+  const resolvedAccent = accentColor ?? "#8b5cf6"
+  const modeFlags = resolveModeFlags(resolvedConfig, resolvedAccent)
   const [guessTitle, setGuessTitle] = useState("")
   const [guessArtist, setGuessArtist] = useState("")
   const [sourceGuess, setSourceGuess] = useState<number | null>(null)
@@ -36,14 +49,25 @@ export function MultiplayerGameClient({ user, state, serverNow, onAnswer, onRead
 
   const currentTrack = state?.currentTrack ?? null
   const player = state?.players?.[user.id] ?? null
-  const baseUiState =
-    state?.status === "playing"
-      ? RoundUiState.Playing
-      : state?.status === "reveal"
-        ? RoundUiState.Revealed
-        : state?.status === "finished"
-          ? RoundUiState.Revealed
-          : RoundUiState.Armed
+  const backendStatus = state?.status as string | undefined
+  let baseUiState: RoundUiState
+  switch (backendStatus) {
+    case "playing":
+      baseUiState = RoundUiState.Playing
+      break
+    case "reveal":
+      baseUiState = RoundUiState.Revealed
+      break
+    case "finished":
+      baseUiState = RoundUiState.Revealed
+      break
+    case "starting":
+    case "countdown":
+      baseUiState = RoundUiState.Armed
+      break
+    default:
+      baseUiState = RoundUiState.Idle
+  }
   const hasAnswered = Boolean(player?.hasAnswered)
   const uiState = hasAnswered && baseUiState === RoundUiState.Playing ? RoundUiState.Locked : baseUiState
   const isLocked = uiState === RoundUiState.Locked
@@ -54,8 +78,8 @@ export function MultiplayerGameClient({ user, state, serverNow, onAnswer, onRead
     "data-participation": modeFlags.isParticipationFocused ? "1" : "0",
   }
   const accentTint = (alpha: number) => {
-    const hex = accentColor.startsWith("#") ? accentColor.slice(1) : accentColor
-    if (hex.length !== 6) return accentColor
+    const hex = resolvedAccent.startsWith("#") ? resolvedAccent.slice(1) : resolvedAccent
+    if (hex.length !== 6) return resolvedAccent
     const clamped = Math.min(255, Math.max(0, Math.round(alpha * 255)))
     return `#${hex}${clamped.toString(16).padStart(2, "0")}`
   }
@@ -112,46 +136,77 @@ export function MultiplayerGameClient({ user, state, serverNow, onAnswer, onRead
     return () => clearTimeout(timer)
   }, [autoAdvance, uiState, disabled, player?.isReady, onReady])
 
-  const leaderboard = useMemo(() => {
+  const sortedPlayers = useMemo(() => {
     if (!state?.players) return []
-    return Object.values(state.players).sort((a, b) => {
-      if (b.score !== a.score) return b.score - a.score
-      return b.accuracy - a.accuracy
-    })
+    return Object.values(state.players)
+      .map(p => ({
+        userId: p.userId,
+        username: p.username,
+        score: p.score,
+        accuracy: p.accuracy,
+        avatar: p.avatar,
+        hasAnswered: p.hasAnswered,
+      }))
+      .sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score
+        return b.accuracy - a.accuracy
+      })
   }, [state?.players])
+
+  const leaderboard = useMemo(() => {
+    const shape = resolvedConfig.game.showLeaderboard
+    if (shape === false) return []
+    if (!sortedPlayers.length) return []
+    if (shape === "top3") {
+      return sortedPlayers.slice(0, 3)
+    }
+    if (shape === "rivals") {
+      const selfIndex = sortedPlayers.findIndex(p => p.userId === user.id)
+      if (selfIndex === -1) return sortedPlayers.slice(0, 3)
+      const start = Math.max(0, selfIndex - 1)
+      return sortedPlayers.slice(start, Math.min(sortedPlayers.length, start + 3))
+    }
+    return sortedPlayers
+  }, [resolvedConfig.game.showLeaderboard, sortedPlayers, user.id])
+
+  const answeredCount = useMemo(() => sortedPlayers.filter(p => p.hasAnswered).length, [sortedPlayers])
 
   const verdictBadge = () => {
     if (!player?.lastVerdict || uiState !== RoundUiState.Revealed) return null
     const label =
       player.lastVerdict === "correct" ? "Validé" : player.lastVerdict === "close" ? "Partiel" : "Clos"
     return (
-      <span
-        className="rounded-full border px-2 py-[2px] text-[11px] font-medium"
-        style={{
-          borderColor: accentTint(0.55),
-          backgroundColor: accentTint(0.18),
-          color: accentColor,
-          transition: `border-color ${ROUND_FEEDBACK_MS}ms ease, background-color ${ROUND_FEEDBACK_MS}ms ease`,
-        }}
-      >
-        {label}
-      </span>
+          <span
+            className="rounded-full border px-2 py-[2px] text-[11px] font-medium"
+            style={{
+              borderColor: accentTint(0.55),
+              backgroundColor: accentTint(0.18),
+              color: resolvedAccent,
+              transition: `border-color ${ROUND_FEEDBACK_MS}ms ease, background-color ${ROUND_FEEDBACK_MS}ms ease`,
+            }}
+          >
+            {label}
+          </span>
     )
   }
+
+  const showScores = resolvedConfig.game.scoring !== false
+  const leaderboardShape = resolvedConfig.game.showLeaderboard
+  const isLargeUi = Boolean(resolvedConfig.game.largeUI)
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]" {...containerData}>
       <div
         className="rounded-2xl border bg-black/60 p-6 shadow-lg"
         style={{
-          borderColor: feedbackSignal ? accentColor : "#1b1b1b",
+          borderColor: feedbackSignal ? resolvedAccent : "#1b1b1b",
           boxShadow: feedbackSignal ? `0 0 0 2px ${accentTint(0.45)}` : "0 10px 30px rgba(0,0,0,0.35)",
           transition: `box-shadow ${ROUND_FEEDBACK_MS}ms ease, border-color ${ROUND_FEEDBACK_MS}ms ease`,
         }}
       >
         <div className="flex items-center justify-between text-sm text-[var(--ma-muted,#a0a0a0)]">
           <span>Manche {state?.currentRound ?? 0} / {state?.totalRounds ?? 0}</span>
-          <span style={{ color: accentColor, fontWeight: 600 }}>{remaining.toString().padStart(2, "0")}s restantes</span>
+          <span style={{ color: resolvedAccent, fontWeight: 600 }}>{remaining.toString().padStart(2, "0")}s restantes</span>
         </div>
 
         <div className="mt-4 flex flex-col items-center gap-4">
@@ -170,7 +225,7 @@ export function MultiplayerGameClient({ user, state, serverNow, onAnswer, onRead
 
           <div className="text-center">
             <div className="text-xs uppercase tracking-[0.25em] text-[var(--ma-muted,#a0a0a0)]">Statut</div>
-            <div className="text-xl font-semibold text-white">
+            <div className={`font-semibold text-white ${isLargeUi ? "text-2xl" : "text-xl"}`}>
               {statusLabel}
             </div>
           </div>
@@ -276,7 +331,9 @@ export function MultiplayerGameClient({ user, state, serverNow, onAnswer, onRead
 
       <aside className="rounded-2xl border border-white/10 bg-black/70 p-4">
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-sm font-semibold uppercase tracking-[0.3em] text-[var(--ma-muted,#a0a0a0)]">Classement</h3>
+          <h3 className="text-sm font-semibold uppercase tracking-[0.3em] text-[var(--ma-muted,#a0a0a0)]">
+            {leaderboardShape === false ? "Participation" : "Classement"}
+          </h3>
           <div className="flex items-center gap-2">
             <button
               className="rounded-full border border-white/10 bg-white/5 p-2 text-white"
@@ -297,7 +354,7 @@ export function MultiplayerGameClient({ user, state, serverNow, onAnswer, onRead
                 className="rounded-full px-2 py-[2px] text-[10px] uppercase tracking-[0.2em]"
                 style={{
                   backgroundColor: accentTint(0.18),
-                  color: accentColor,
+                  color: resolvedAccent,
                   border: `1px solid ${accentTint(0.55)}`,
                 }}
               >
@@ -306,27 +363,52 @@ export function MultiplayerGameClient({ user, state, serverNow, onAnswer, onRead
             ) : null}
           </div>
         </div>
-        <div className="space-y-2">
-          {leaderboard.map((entry, idx) => (
-            <div
-              key={entry.userId}
-              className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-[var(--ma-muted,#aaa)]">#{idx + 1}</span>
-                <span>{entry.username || `Joueur ${entry.userId}`}</span>
-              </div>
-              <div className="text-xs text-[var(--ma-muted,#cfcfcf)]">
-                {entry.score} pts · {entry.accuracy}%
-              </div>
+        {leaderboardShape === false ? (
+          <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white">
+            <div className="flex items-center justify-between">
+              <span>Réponses envoyées</span>
+              <span className="text-xs text-[var(--ma-muted,#cfcfcf)]">
+                {answeredCount} / {sortedPlayers.length || 1}
+              </span>
             </div>
-          ))}
-          {leaderboard.length === 0 ? (
-            <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-[var(--ma-muted,#a0a0a0)]">
-              En attente des joueurs…
+            <div className="mt-3 h-2 rounded-full bg-white/10">
+              <div
+                className="h-2 rounded-full transition-all"
+                style={{
+                  width: `${sortedPlayers.length ? Math.min(100, Math.round((answeredCount / sortedPlayers.length) * 100)) : 0}%`,
+                  backgroundColor: accentTint(0.55),
+                }}
+              />
             </div>
-          ) : null}
-        </div>
+            <p className="mt-2 text-xs text-[var(--ma-muted,#b0b0b0)]">Participation en direct, sans classement global.</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {leaderboard.map((entry, idx) => (
+              <div
+                key={entry.userId}
+                className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-[var(--ma-muted,#aaa)]">#{idx + 1}</span>
+                  <span>{entry.username || `Joueur ${entry.userId}`}</span>
+                </div>
+                {showScores ? (
+                  <div className="text-xs text-[var(--ma-muted,#cfcfcf)]">
+                    {entry.score} pts · {entry.accuracy}%
+                  </div>
+                ) : (
+                  <div className="text-xs text-[var(--ma-muted,#cfcfcf)]">Participation</div>
+                )}
+              </div>
+            ))}
+            {leaderboard.length === 0 ? (
+              <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-[var(--ma-muted,#a0a0a0)]">
+                En attente des joueurs…
+              </div>
+            ) : null}
+          </div>
+        )}
       </aside>
     </div>
   )

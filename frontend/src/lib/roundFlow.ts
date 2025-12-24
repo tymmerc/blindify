@@ -1,4 +1,4 @@
-import type { Mode } from "@/contexts/ModeContext"
+import type { GameModeConfig } from "@/lib/gameModes"
 
 export enum RoundUiState {
   Idle = "idle",
@@ -76,7 +76,7 @@ export type ScoreInput = {
   streak: number
 }
 
-export type ScoreBreakdown = { base: number; speed: number; streak: number }
+export type ScoreBreakdown = { base: number; speed: number; streakBonus: number }
 
 export function computeScore({ correct, reactionMs, maxDurationMs, streak }: ScoreInput): {
   gained: number
@@ -92,7 +92,7 @@ export function computeScore({ correct, reactionMs, maxDurationMs, streak }: Sco
   }
   const streakBonus = correct ? nextStreak * 10 : 0
   const gained = base + speed + streakBonus
-  return { gained, nextStreak, breakdown: { base, speed, streak: streakBonus } }
+  return { gained, nextStreak, breakdown: { base, speed, streakBonus } }
 }
 
 export type ModeFlags = {
@@ -102,15 +102,11 @@ export type ModeFlags = {
   accent: string
 }
 
-export function resolveModeFlags(mode: Mode | null, accent: string): ModeFlags {
-  if (mode === "friends") {
-    return { isRivalry: true, isReadableAtDistance: false, isParticipationFocused: false, accent }
+export function resolveModeFlags(config: GameModeConfig | null | undefined, accent: string): ModeFlags {
+  return {
+    isRivalry: config?.game.showLeaderboard === "rivals",
+    isReadableAtDistance: Boolean(config?.game.largeUI || config?.game.showLeaderboard === "top3"),
+    isParticipationFocused: Boolean(config?.game.participationOnly && config?.game.scoring === false),
+    accent,
   }
-  if (mode === "event") {
-    return { isRivalry: false, isReadableAtDistance: true, isParticipationFocused: false, accent }
-  }
-  if (mode === "chat") {
-    return { isRivalry: false, isReadableAtDistance: false, isParticipationFocused: true, accent }
-  }
-  return { isRivalry: false, isReadableAtDistance: false, isParticipationFocused: false, accent }
 }

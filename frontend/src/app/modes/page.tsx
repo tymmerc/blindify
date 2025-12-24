@@ -20,27 +20,27 @@ const MODE_CARDS: ModeCard[] = [
     key: "friends",
     title: "Jouer avec des amis",
     subtitle: "Invite, lance une partie, joue entre potes.",
-    description: "Les musiques sont choisies à partir des bibliothèques de chacun, puis jouées pour tout le monde.",
+    description: "",
     accent: "#ec4899",
-    destination: "/menu",
+    destination: "/friends",
     posture: "Social",
   },
   {
     key: "event",
     title: "Jouer en événement",
     subtitle: "Un écran, un rythme, tout le monde suit.",
-    description: "Les morceaux viennent des bibliothèques des participants et sont diffusés ensemble.",
+    description: "",
     accent: "#8b5cf6",
-    destination: "/menu",
+    destination: "/event",
     posture: "Collectif",
   },
   {
     key: "chat",
     title: "Jouer avec le chat",
     subtitle: "Le chat joue avec toi, au rythme du jeu.",
-    description: "La musique est tirée des bibliothèques des joueurs présents et partagée avec le chat.",
+    description: "",
     accent: "#22d3ee",
-    destination: "/menu",
+    destination: "/chat",
     posture: "Diffusion",
   },
 ]
@@ -120,7 +120,6 @@ function ModeSelectionContent() {
                   <div className="space-y-1">
                     <h2 className="text-xl font-semibold">{card.title}</h2>
                     <p className="text-sm text-white/70">{card.subtitle}</p>
-                    <p className="text-xs text-white/55">{card.description}</p>
                   </div>
                 </div>
                 <div className="mt-4 flex items-center justify-between">

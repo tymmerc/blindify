@@ -14,6 +14,9 @@ import { useServerTime } from "@/hooks/useServerTime"
 import { useFriends } from "@/hooks/useFriends"
 import { useInvitations } from "@/hooks/useInvitations"
 import { ModeGate } from "@/components/system/ModeGate"
+import { useMode } from "@/contexts/ModeContext"
+import { GAME_MODES, resolveGameMode, type GameMode, type GameModeConfig } from "@/lib/gameModes"
+import { modeDataAttrs } from "@/lib/uiTokens"
 
 type View = "landing" | "hosting" | "waiting" | "playing" | "results"
 
@@ -44,6 +47,7 @@ export default function MultiplayerPageWrapper() {
 function MultiplayerPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { mode, setMode, accentColor } = useMode()
   const [userPayload, setUserPayload] = useState<CurrentUserPayload | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -89,11 +93,39 @@ function MultiplayerPage() {
   const [joinCode, setJoinCode] = useState("")
   const [resultsOpen, setResultsOpen] = useState(false)
   const serverNow = useServerTime(socketRef.current)
+  const autoHostTriggered = useRef(false)
+  const autoStartGameRef = useRef(false)
+  const intent = searchParams.get("intent")
+  const autojoin = searchParams.get("autojoin")
+  const modeParam = resolveGameMode(searchParams.get("mode"))
+  const effectiveMode: GameMode | null = modeParam ?? mode ?? null
+  const modeConfig: GameModeConfig | null = effectiveMode ? GAME_MODES[effectiveMode] : null
 
   useEffect(() => {
     const codeParam = searchParams.get("code")
     if (codeParam) setJoinCode(codeParam.toUpperCase())
   }, [searchParams])
+
+  useEffect(() => {
+    if (modeParam && modeParam !== mode) {
+      setMode(modeParam)
+    }
+  }, [modeParam, mode, setMode])
+
+  useEffect(() => {
+    if (!modeConfig) {
+      router.replace("/modes")
+    }
+  }, [modeConfig, router])
+
+  useEffect(() => {
+    const hasCode = searchParams.get("code")
+    if (!modeConfig || !effectiveMode) return
+    if (roomRef.current || room || autojoin) return
+    if (!intent && !hasCode) {
+      router.replace(ENTRY_ROUTE[effectiveMode])
+    }
+  }, [modeConfig, effectiveMode, intent, room, autojoin, searchParams, router])
 
   useEffect(() => {
     let active = true
@@ -334,7 +366,8 @@ function MultiplayerPage() {
   const handleCreateRoom = useCallback(async () => {
     try {
       setError(null)
-    const { room: created } = await api.createRoom({ questionCount: 10 })
+      autoStartGameRef.current = false
+      const { room: created } = await api.createRoom({ questionCount: 10 })
       setRoom(created)
       setGameState(null)
       setView("hosting")
@@ -344,11 +377,28 @@ function MultiplayerPage() {
       syncParticipants(details.participants)
     } catch (err) {
       console.error("create_room_failed", err)
+      autoHostTriggered.current = false
       setError(
         err instanceof Error ? err.message : "Unable to create a room right now. Try again in a moment."
       )
     }
   }, [attachSocketListeners, syncParticipants])
+
+  useEffect(() => {
+    if (intent === "host" && !autoHostTriggered.current && view === "landing" && !room) {
+      autoHostTriggered.current = true
+      handleCreateRoom()
+    }
+  }, [intent, view, room, handleCreateRoom])
+
+  useEffect(() => {
+    if (!modeConfig?.lobby.autoStart) return
+    if (autoHostTriggered.current) return
+    if (view === "landing" && !room) {
+      autoHostTriggered.current = true
+      handleCreateRoom()
+    }
+  }, [modeConfig?.lobby.autoStart, view, room, handleCreateRoom])
 
   const joinRoomCode = useCallback(
     async (code: string) => {
@@ -424,6 +474,18 @@ function MultiplayerPage() {
     }
   }, [room])
 
+  useEffect(() => {
+    if (!modeConfig?.lobby.autoStart) return
+    if (!room) return
+    if (view !== "hosting" && view !== "waiting") return
+    if (starting) return
+    const enoughPlayers = participants.length >= modeConfig.lobby.minPlayers
+    if (enoughPlayers && !autoStartGameRef.current) {
+      autoStartGameRef.current = true
+      handleStartGame()
+    }
+  }, [modeConfig, room, view, participants.length, starting, handleStartGame])
+
   const handleInviteFriendToRoom = useCallback(
     async (userId: number) => {
       if (!room?.room_code) return
@@ -465,6 +527,8 @@ function MultiplayerPage() {
       socketRef.current?.emit("room:leave", { roomCode: room.room_code, userId: userPayload.user.id })
       socketRef.current?.emit("game:leave", { roomCode: room.room_code })
     }
+    autoStartGameRef.current = false
+    autoHostTriggered.current = false
     setRoom(null)
     setParticipants([])
     setTracks([])
@@ -476,6 +540,8 @@ function MultiplayerPage() {
     handleLeaveRoom()
     router.replace("/menu")
   }, [handleLeaveRoom, router])
+
+  const dataAttrs = modeDataAttrs(effectiveMode)
 
   if (loading) {
     return (
@@ -499,9 +565,9 @@ function MultiplayerPage() {
   }
 
   return (
-    <main className="min-h-screen bg-black text-white">
+    <main className="min-h-screen bg-black text-white" {...dataAttrs}>
       <div className="relative mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-8">
-        {view !== "results" && <Header onLeave={handleLeaveRoom} view={view} />}
+        {view !== "results" && <Header onLeave={handleLeaveRoom} mode={effectiveMode} />}
 
         {error ? (
           <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-6 py-4 text-sm text-red-200">
@@ -516,10 +582,12 @@ function MultiplayerPage() {
             joinCode={joinCode}
             setJoinCode={setJoinCode}
             joining={joining}
+            mode={effectiveMode}
+            modeConfig={modeConfig}
           />
         )}
 
-        {view === "hosting" && room && (
+        {view === "hosting" && room && modeConfig && effectiveMode && (
           <HostLobby
             room={room}
             participants={participants}
@@ -532,20 +600,24 @@ function MultiplayerPage() {
             activeFriends={activeFriends}
             onQuickJoin={joinRoomCode}
             onInviteFriend={handleInviteFriendToRoom}
+            modeConfig={modeConfig}
+            mode={effectiveMode as GameMode}
           />
         )}
 
-        {view === "waiting" && room && (
+        {view === "waiting" && room && modeConfig && effectiveMode && (
           <WaitingLobby
             room={room}
             participants={participants}
             scores={scores}
             activeFriends={activeFriends}
             onQuickJoin={joinRoomCode}
+            modeConfig={modeConfig}
+            mode={effectiveMode as GameMode}
           />
         )}
 
-        {view === "playing" && gameState && room && (
+        {view === "playing" && gameState && room && modeConfig && (
           <MultiplayerGameClient
             user={userPayload.user}
             state={gameState}
@@ -560,6 +632,8 @@ function MultiplayerPage() {
               if (!socket) return
               socket.emit("game:ready", { roomCode: room.room_code })
             }}
+            modeConfig={modeConfig}
+            accentColor={accentColor}
           />
         )}
 
@@ -570,6 +644,8 @@ function MultiplayerPage() {
             currentUserId={userPayload.user.id}
             onReturn={() => router.replace("/menu")}
             onReplay={() => {
+              autoStartGameRef.current = false
+              autoHostTriggered.current = false
               setView("landing")
               setRoom(null)
               setParticipants([])
@@ -584,19 +660,55 @@ function MultiplayerPage() {
   )
 }
 
-function Header({ onLeave, view }: { onLeave: () => void; view: View }) {
+const HEADER_COPY: Record<GameMode, { title: string; subtitle: string }> = {
+  friends: {
+    title: "Amis",
+    subtitle: "Invite ou crée ta salle privée. Musique depuis vos bibliothèques.",
+  },
+  event: {
+    title: "Événement",
+    subtitle: "Projection lisible, rythme piloté. Musique depuis les bibliothèques des joueurs.",
+  },
+  chat: {
+    title: "Chat",
+    subtitle: "Le salon tourne, le chat répond. Musique depuis vos bibliothèques.",
+  },
+}
+
+const HOST_ICON: Record<GameMode, JSX.Element> = {
+  friends: <Sparkles className="h-4 w-4" />,
+  event: <ShieldCheck className="h-4 w-4" />,
+  chat: <PartyPopper className="h-4 w-4" />,
+}
+
+const HOST_START_LABEL: Record<GameMode, string> = {
+  friends: "Lancer la partie",
+  event: "Démarrer l’événement",
+  chat: "Lancer le salon",
+}
+
+const WAITING_TITLE: Record<GameMode, { title: string; subtitle: string }> = {
+  friends: { title: "En attente du lancement", subtitle: "Le host démarre dès que tout le monde est prêt." },
+  event: { title: "Projection en place", subtitle: "L’écran principal va lancer la musique." },
+  chat: { title: "Salon en cours", subtitle: "La partie démarre sans code ni lobby." },
+}
+
+const ENTRY_ROUTE: Record<GameMode, string> = {
+  friends: "/friends",
+  event: "/event",
+  chat: "/chat",
+}
+
+function Header({ onLeave, mode }: { onLeave: () => void; mode: GameMode | null }) {
+  const header = mode ? HEADER_COPY[mode] : { title: "Blindify Rooms", subtitle: "Crée une salle ou rejoins tes amis pour des blind tests synchronisés." }
   return (
     <div className="flex flex-col gap-6 rounded-2xl border border-[var(--ma-border)] bg-[var(--ma-surface)] p-8">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-5">
           <div>
             <p className="text-xs uppercase tracking-[0.3em] text-[var(--ma-muted)]">Multijoueur</p>
-            <h1 className="text-3xl font-bold text-white">Blindify Rooms</h1>
-            <p className="text-sm text-[var(--ma-muted)]">
-              {view === "landing"
-                ? "Crée une salle ou rejoins tes amis pour des blind tests synchronisés."
-                : "Reste synchro avec tes amis et suis le score en direct."}
-            </p>
+            <h1 className="text-3xl font-bold text-white">{header.title}</h1>
+            <p className="text-sm text-[var(--ma-muted)]">{header.subtitle}</p>
           </div>
         </div>
         <Button
@@ -612,18 +724,45 @@ function Header({ onLeave, view }: { onLeave: () => void; view: View }) {
   )
 }
 
+const LANDING_COPY: Record<
+  GameMode,
+  { hostTitle: string; hostSubtitle: string; hostCta: string; joinTitle?: string; joinSubtitle?: string }
+> = {
+  friends: {
+    hostTitle: "Créer une salle",
+    hostSubtitle: "Invite tes amis, musique depuis vos bibliothèques.",
+    hostCta: "Créer une salle",
+    joinTitle: "Rejoindre une salle",
+    joinSubtitle: "Un code si besoin, sinon invitation.",
+  },
+  event: {
+    hostTitle: "Préparer l’événement",
+    hostSubtitle: "Un seul écran, musique depuis vos bibliothèques.",
+    hostCta: "Démarrer",
+  },
+  chat: {
+    hostTitle: "Ouvrir le salon",
+    hostSubtitle: "Le chat rejoint dès que la musique tourne.",
+    hostCta: "Ouvrir le salon",
+  },
+}
+
 function LandingView({
   onHost,
   onJoinSubmit,
   joinCode,
   setJoinCode,
   joining,
+  mode,
+  modeConfig,
 }: {
   onHost: () => void
   onJoinSubmit: (event: React.FormEvent<HTMLFormElement>) => void
   joinCode: string
   setJoinCode: (value: string) => void
   joining: boolean
+  mode: GameMode | null
+  modeConfig: GameModeConfig | null
 }) {
   const handlePasteJoinCode = useCallback(async () => {
     try {
@@ -636,47 +775,61 @@ function LandingView({
     }
   }, [setJoinCode])
 
+  if (!mode || !modeConfig) return null
+
+  const copy = LANDING_COPY[mode]
+  const showJoin = modeConfig.lobby.showRoomCode
+  const allowInvites = modeConfig.lobby.allowInvites
+  const gridClass = showJoin ? "grid gap-6 md:grid-cols-2" : "grid gap-6"
+
   return (
-    <section className="grid gap-6 md:grid-cols-2">
+    <section className={gridClass}>
       <div className="flex flex-col gap-5 rounded-2xl border border-[var(--ma-border)] bg-[var(--ma-surface)] p-8">
-        <h2 className="text-2xl font-semibold text-white">Créer une salle</h2>
-        <p className="text-sm text-[var(--ma-muted)]">
-          Génère un code et invite tes amis directement depuis ta liste d&apos;amis Blindify pour lancer les manches.
-        </p>
+        <h2 className="text-2xl font-semibold text-white">{copy.hostTitle}</h2>
+        <p className="text-sm text-[var(--ma-muted)]">{copy.hostSubtitle}</p>
+        {allowInvites ? (
+          <p className="text-xs text-[var(--ma-muted)]">Invitations directes depuis ta liste d&apos;amis.</p>
+        ) : null}
         <Button onClick={onHost} className="ma-btn-primary mt-auto gap-2 self-start rounded-lg px-5 py-3 text-sm">
-          <Sparkles className="h-4 w-4" />
-          Créer une salle
+          {HOST_ICON[mode]}
+          {copy.hostCta}
         </Button>
+        {modeConfig.lobby.autoStart ? (
+          <p className="text-xs text-[var(--ma-muted)]">
+            Démarrage automatique dès {modeConfig.lobby.minPlayers} joueur(s) prêt(s).
+          </p>
+        ) : null}
       </div>
-      <form
-        onSubmit={onJoinSubmit}
-        className="flex flex-col gap-5 rounded-2xl border border-[var(--ma-border)] bg-[var(--ma-surface)] p-8"
-      >
-        <h2 className="text-2xl font-semibold text-white">Rejoindre une salle</h2>
-        <p className="text-sm text-[var(--ma-muted)]">
-          Entre le code à 6 caractères pour rejoindre le lobby en cours.
-        </p>
-        <div className="flex items-center gap-3">
-          <input
-            value={joinCode}
-            onChange={event => setJoinCode(event.target.value.toUpperCase())}
-            placeholder="Room code"
-            className="w-full rounded-lg border border-[var(--ma-border)] bg-black/40 px-4 py-3 text-sm text-white outline-none transition focus:border-[rgba(168,85,247,0.5)]"
-          />
-          <Button
-            type="button"
-            variant="outline"
-            onClick={handlePasteJoinCode}
-            className="shrink-0 rounded-lg border border-[var(--ma-border)] bg-white/5 px-3 py-2 text-xs font-semibold uppercase tracking-[0.15em] text-white transition hover:border-[rgba(168,85,247,0.6)]"
-          >
-            Paste
+
+      {showJoin ? (
+        <form
+          onSubmit={onJoinSubmit}
+          className="flex flex-col gap-5 rounded-2xl border border-[var(--ma-border)] bg-[var(--ma-surface)] p-8"
+        >
+          <h2 className="text-2xl font-semibold text-white">{copy.joinTitle}</h2>
+          <p className="text-sm text-[var(--ma-muted)]">{copy.joinSubtitle}</p>
+          <div className="flex items-center gap-3">
+            <input
+              value={joinCode}
+              onChange={event => setJoinCode(event.target.value.toUpperCase())}
+              placeholder="Room code"
+              className="w-full rounded-lg border border-[var(--ma-border)] bg-black/40 px-4 py-3 text-sm text-white outline-none transition focus:border-[rgba(168,85,247,0.5)]"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handlePasteJoinCode}
+              className="shrink-0 rounded-lg border border-[var(--ma-border)] bg-white/5 px-3 py-2 text-xs font-semibold uppercase tracking-[0.15em] text-white transition hover:border-[rgba(168,85,247,0.6)]"
+            >
+              Paste
+            </Button>
+          </div>
+          <Button type="submit" className="gap-2 self-start rounded-lg px-5 py-3 text-sm" disabled={joining}>
+            {joining ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+            Rejoindre
           </Button>
-        </div>
-        <Button type="submit" className="gap-2 self-start rounded-lg px-5 py-3 text-sm" disabled={joining}>
-          {joining ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
-          Rejoindre
-        </Button>
-      </form>
+        </form>
+      ) : null}
     </section>
   )
 }
@@ -693,6 +846,8 @@ function HostLobby({
   activeFriends,
   onQuickJoin,
   onInviteFriend,
+  modeConfig,
+  mode,
 }: {
   room: MultiplayerRoom
   participants: MultiplayerParticipant[]
@@ -705,6 +860,8 @@ function HostLobby({
   activeFriends: Array<{ userId: number; username: string | null; roomCode: string; state: string; updatedAt: number }>
   onQuickJoin: (code: string) => void
   onInviteFriend: (userId: number) => Promise<void> | void
+  modeConfig: GameModeConfig
+  mode: GameMode
 }) {
   const copyCode = useCallback(() => {
     navigator.clipboard.writeText(room.room_code).catch(() => undefined)
@@ -712,6 +869,12 @@ function HostLobby({
 
   const [inviteBusy, setInviteBusy] = useState<number | null>(null)
   const [inviteNotice, setInviteNotice] = useState<string | null>(null)
+  const { lobby } = modeConfig
+  const showRoomCode = lobby.showRoomCode
+  const showFriendsList = lobby.showFriendsList
+  const allowInvites = lobby.allowInvites
+  const minPlayers = lobby.minPlayers
+  const startLabel = HOST_START_LABEL[mode]
   const handleInvite = useCallback(
     async (userId: number) => {
       setInviteBusy(userId)
@@ -730,80 +893,90 @@ function HostLobby({
   return (
     <section className="grid gap-6 md:grid-cols-[minmax(0,0.7fr)_minmax(0,1fr)]">
       <div className="surface flex flex-col gap-5 rounded-3xl border border-white/10 p-8">
-        <p className="text-xs uppercase tracking-[0.5em] text-slate-400">Room code</p>
-        <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-          <span className="font-mono text-xl tracking-[0.3em] text-white">{room.room_code}</span>
-          <Button variant="outline" onClick={copyCode} className="gap-2">
-            <Copy className="h-4 w-4" />
-            Copy
-          </Button>
-        </div>
-        <p className="text-sm text-slate-300">
-          Invite tes amis déjà ajoutés : un clic envoie une invitation via le système d&apos;amis (pas de lien à copier).
-        </p>
+        {showRoomCode ? (
+          <>
+            <p className="text-xs uppercase tracking-[0.5em] text-slate-400">Room code</p>
+            <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+              <span className="font-mono text-xl tracking-[0.3em] text-white">{room.room_code}</span>
+              <Button variant="outline" onClick={copyCode} className="gap-2">
+                <Copy className="h-4 w-4" />
+                Copy
+              </Button>
+            </div>
+            <p className="text-sm text-slate-300">
+              Invite tes amis déjà ajoutés : un clic envoie une invitation via le système d&apos;amis (pas de lien à copier).
+            </p>
+          </>
+        ) : (
+          <p className="text-sm text-slate-300">Pas de code : démarrage direct, tout le monde suit le rythme.</p>
+        )}
 
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs uppercase tracking-[0.35em] text-slate-400">Amis</span>
-            <span className="text-xs text-slate-400">
-              {friendsLoading ? "Chargement..." : `${friends.filter(f => f.status === "accepted").length} prêts`}
-            </span>
-          </div>
-          {friendsError ? (
-            <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-200">{friendsError}</div>
-          ) : null}
-          <div className="space-y-2">
-            {friends
-              .filter(friend => friend.status === "accepted")
-              .map(friend => (
-                <div
-                  key={friend.userId}
-                  className="flex items-center justify-between rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
-                >
-                  <div className="flex flex-col">
-                    <span className="truncate font-semibold">{friend.username || `Ami ${friend.userId}`}</span>
-                    <span className="text-[11px] text-slate-400">
-                      {friend.presence?.status === "playing"
-                        ? `En room ${friend.presence.roomCode ?? ""}`
-                        : friend.presence?.status === "online"
-                          ? "En ligne"
-                          : "Hors ligne"}
-                    </span>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleInvite(friend.userId)}
-                    className="shrink-0 gap-1"
-                    disabled={inviteBusy === friend.userId}
-                    aria-label={`Inviter ${friend.username || "ami"}`}
+        {showFriendsList || allowInvites ? (
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs uppercase tracking-[0.35em] text-slate-400">Amis</span>
+              <span className="text-xs text-slate-400">
+                {friendsLoading ? "Chargement..." : `${friends.filter(f => f.status === "accepted").length} prêts`}
+              </span>
+            </div>
+            {friendsError ? (
+              <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-200">{friendsError}</div>
+            ) : null}
+            <div className="space-y-2">
+              {friends
+                .filter(friend => friend.status === "accepted")
+                .map(friend => (
+                  <div
+                    key={friend.userId}
+                    className="flex items-center justify-between rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
                   >
-                    {inviteBusy === friend.userId ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />}
-                    Inviter
-                  </Button>
+                    <div className="flex flex-col">
+                      <span className="truncate font-semibold">{friend.username || `Ami ${friend.userId}`}</span>
+                      <span className="text-[11px] text-slate-400">
+                        {friend.presence?.status === "playing"
+                          ? `En room ${friend.presence.roomCode ?? ""}`
+                          : friend.presence?.status === "online"
+                            ? "En ligne"
+                            : "Hors ligne"}
+                      </span>
+                    </div>
+                    {allowInvites ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleInvite(friend.userId)}
+                        className="shrink-0 gap-1"
+                        disabled={inviteBusy === friend.userId}
+                        aria-label={`Inviter ${friend.username || "ami"}`}
+                      >
+                        {inviteBusy === friend.userId ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />}
+                        Inviter
+                      </Button>
+                    ) : null}
+                  </div>
+                ))}
+              {!friendsLoading && friends.filter(f => f.status === "accepted").length === 0 ? (
+                <div className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs text-slate-400">
+                  Aucun ami accepté pour l'instant. Ajoute-les depuis le menu puis reviens lancer la salle.
                 </div>
-              ))}
-            {!friendsLoading && friends.filter(f => f.status === "accepted").length === 0 ? (
-              <div className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs text-slate-400">
-                Aucun ami accepté pour l'instant. Ajoute-les depuis le menu puis reviens lancer la salle.
+              ) : null}
+            </div>
+            {inviteNotice ? (
+              <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100">
+                {inviteNotice}
               </div>
             ) : null}
           </div>
-          {inviteNotice ? (
-            <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100">
-              {inviteNotice}
-            </div>
-          ) : null}
-        </div>
+        ) : null}
 
-        <Button onClick={onStart} disabled={starting || participants.length < 2} className="mt-auto gap-2">
+        <Button onClick={onStart} disabled={starting || participants.length < minPlayers} className="mt-auto gap-2">
           {starting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-          {participants.length < 2 ? "Need at least 2 players" : "Start the game"}
+          {participants.length < minPlayers ? `Minimum ${minPlayers} joueur(s)` : startLabel}
         </Button>
       </div>
-      <ParticipantPanel participants={participants} scores={scores} title="Lobby players" />
+      <ParticipantPanel participants={participants} scores={scores} title="Joueurs" modeConfig={modeConfig} />
 
-      {activeFriends.length > 0 && (
+      {activeFriends.length > 0 && showFriendsList ? (
         <div className="mt-6 rounded-3xl border border-white/10 bg-white/5 p-6 text-left">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold uppercase tracking-[0.35em] text-slate-400">Amis en salle</h3>
@@ -827,7 +1000,7 @@ function HostLobby({
             ))}
           </div>
         </div>
-      )}
+      ) : null}
     </section>
   )
 }
@@ -838,45 +1011,62 @@ function WaitingLobby({
   scores,
   activeFriends,
   onQuickJoin,
+  modeConfig,
+  mode,
 }: {
   room: MultiplayerRoom
   participants: MultiplayerParticipant[]
   scores: Record<number, { username: string | null; score: number; accuracy: number }>
   activeFriends: Array<{ userId: number; username: string | null; roomCode: string; state: string; updatedAt: number }>
   onQuickJoin: (code: string) => void
+  modeConfig: GameModeConfig
+  mode: GameMode
 }) {
   const inviteLink =
     typeof window !== "undefined" ? `${window.location.origin}/blindify/multiplayer/?code=${room.room_code}` : ""
+  const showRoomCode = modeConfig.lobby.showRoomCode
+  const showFriendsList = modeConfig.lobby.showFriendsList
 
   return (
     <section className="surface flex flex-col gap-6 rounded-3xl border border-white/10 p-8 text-center">
-      <p className="text-xs uppercase tracking-[0.5em] text-slate-400">Waiting for host</p>
-      <h2 className="text-2xl font-semibold text-white">Stay tuned</h2>
-      <p className="text-sm text-slate-300">
-        Once the host starts the game, a synchronized blind test will begin automatically. Keep Spotify open and ready.
-      </p>
-      <div className="grid gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 text-left">
-        <div className="text-xs uppercase tracking-[0.3em] text-slate-400">Invite tes amis</div>
-        <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white">
-          <span className="truncate">{inviteLink || "Lien disponible en ligne"}</span>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => navigator.share
-              ? navigator.share({ title: "Blindify", text: "Rejoins ma salle", url: inviteLink }).catch(() => navigator.clipboard.writeText(inviteLink))
-              : navigator.clipboard.writeText(inviteLink)
-            }
-            className="shrink-0 gap-1"
-          >
-            <Share2 className="h-4 w-4" />
-            Envoyer
-          </Button>
-        </div>
-      </div>
-      <ParticipantPanel participants={participants} scores={scores} title="Players in room" compact />
-      <p className="text-xs text-slate-500">Room {room.room_code} · {participants.length} player(s)</p>
+      <p className="text-xs uppercase tracking-[0.5em] text-slate-400">En attente</p>
+      <h2 className="text-2xl font-semibold text-white">{WAITING_TITLE[mode].title}</h2>
+      <p className="text-sm text-slate-300">{WAITING_TITLE[mode].subtitle}</p>
 
-      {activeFriends.length > 0 && (
+      {showRoomCode ? (
+        <div className="grid gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 text-left">
+          <div className="text-xs uppercase tracking-[0.3em] text-slate-400">Invite tes amis</div>
+          <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white">
+            <span className="truncate">{inviteLink || "Lien disponible en ligne"}</span>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => navigator.share
+                ? navigator
+                    .share({ title: "Blindify", text: "Rejoins ma salle", url: inviteLink })
+                    .catch(() => navigator.clipboard.writeText(inviteLink))
+                : navigator.clipboard.writeText(inviteLink)
+              }
+              className="shrink-0 gap-1"
+            >
+              <Share2 className="h-4 w-4" />
+              Envoyer
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-left text-sm text-slate-200">
+          Aucun code requis. La partie démarre dès que tout le monde est prêt.
+        </div>
+      )}
+
+      <ParticipantPanel participants={participants} scores={scores} title="Players in room" compact modeConfig={modeConfig} />
+      <p className="text-xs text-slate-500">
+        {showRoomCode ? `Room ${room.room_code} · ` : null}
+        {participants.length} joueur(s)
+      </p>
+
+      {activeFriends.length > 0 && showFriendsList ? (
         <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-left">
           <div className="text-xs uppercase tracking-[0.3em] text-slate-400 mb-2">Tes amis en partie</div>
           <div className="grid gap-2">
@@ -891,7 +1081,7 @@ function WaitingLobby({
             ))}
           </div>
         </div>
-      )}
+      ) : null}
     </section>
   )
 }
@@ -901,12 +1091,15 @@ function ParticipantPanel({
   scores,
   title,
   compact,
+  modeConfig,
 }: {
   participants: MultiplayerParticipant[]
   scores: Record<number, { username: string | null; score: number; accuracy: number }>
   title: string
   compact?: boolean
+  modeConfig: GameModeConfig
 }) {
+  const showScores = modeConfig.game.scoring !== false
   return (
     <div
       className={`rounded-3xl border border-white/10 bg-black/60 ${compact ? "p-6" : "p-8"} text-left backdrop-blur`}
@@ -919,9 +1112,13 @@ function ParticipantPanel({
             className="flex items-center justify-between rounded-2xl border border-white/5 bg-white/5 px-4 py-3"
           >
             <span>{participant.username || `Player #${participant.user_id}`}</span>
-            <span className="text-xs uppercase tracking-[0.4em] text-slate-400">
-              {scores[participant.user_id]?.score ?? 0} pts · {scores[participant.user_id]?.accuracy ?? 0}%
-            </span>
+            {showScores ? (
+              <span className="text-xs uppercase tracking-[0.4em] text-slate-400">
+                {scores[participant.user_id]?.score ?? 0} pts · {scores[participant.user_id]?.accuracy ?? 0}%
+              </span>
+            ) : (
+              <span className="text-xs uppercase tracking-[0.4em] text-slate-400">Présent</span>
+            )}
           </li>
         ))}
         {participants.length === 0 && (

@@ -117,8 +117,8 @@ export function SoloGameClient({
   sessionId,
   roomCode,
 }: SoloGameClientProps) {
-  const { mode: activeMode, accentColor } = useMode()
-  const modeFlags = resolveModeFlags(activeMode, accentColor)
+  const { accentColor } = useMode()
+  const modeFlags = resolveModeFlags(undefined, accentColor)
   const [trackList, setTrackList] = useState<SoloTrack[]>(tracks)
   const [index, setIndex] = useState(0)
   const [flow, dispatchFlow] = useReducer(roundFlowReducer, {
@@ -152,10 +152,11 @@ export function SoloGameClient({
     breakdown: {
       base: number
       speed: number
-      streak: number
+      streakBonus: number
     }
   } | null>(null)
   const lastDialogRoundRef = useRef<number>(0)
+  const finalizeLockRef = useRef<number | null>(null)
   const [likedTrackIds, setLikedTrackIds] = useState<Record<string, boolean>>({})
   const [likeStatus, setLikeStatus] = useState<{ type: "success" | "error"; message: string } | null>(null)
 
@@ -189,6 +190,7 @@ export function SoloGameClient({
   const verdictRef = useRef<Verdict | null>(verdict)
   const countdownRef = useRef<NodeJS.Timeout | null>(null)
   const listeningRafRef = useRef<number | null>(null)
+  const revealTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const listeningDeadlineRef = useRef<number>(0)
   const listeningStartAtRef = useRef<number>(0)
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -296,6 +298,10 @@ export function SoloGameClient({
       clearInterval(countdownRef.current)
       countdownRef.current = null
     }
+    if (revealTimeoutRef.current) {
+      clearTimeout(revealTimeoutRef.current)
+      revealTimeoutRef.current = null
+    }
     if (listeningRafRef.current !== null) {
       cancelAnimationFrame(listeningRafRef.current)
       listeningRafRef.current = null
@@ -363,6 +369,7 @@ export function SoloGameClient({
       setGuess("")
       setGuessTitle("")
       setGuessArtist("")
+      finalizeLockRef.current = null
       setError(null)
       setManualPlayRequired(false)
       setIsPlaying(false)
@@ -426,13 +433,15 @@ export function SoloGameClient({
     (nextVerdict: Verdict, reason: FinalizeReason, track: SoloTrack, submittedGuess: string) => {
       if (!track) return
       if (uiState === RoundUiState.Revealed) return
+      if (finalizeLockRef.current === index) return
+      finalizeLockRef.current = index
 
       cleanupTimers()
 
       const now = Date.now()
       dispatchFlow({ type: "LOCK", at: now })
 
-      const startedAt = flow.startAt ?? (listeningDeadlineRef.current ? listeningDeadlineRef.current - LISTENING_DURATION * 1000 : null)
+      const startedAt = flow.startAt
       const reactionMs = startedAt ? Math.max(0, now - startedAt) : null
       const detail = evaluateGuessDetail(submittedGuess, track)
       const finalVerdict = detail.verdict ?? nextVerdict
@@ -460,22 +469,28 @@ export function SoloGameClient({
       setStats(updatedStats)
       setVerdict(finalVerdict)
       verdictRef.current = finalVerdict
-      dispatchFlow({ type: "REVEAL", at: Date.now() })
-      // Signal readiness for this round in multiplayer so the host can advance
-      markReady(index + 1)
-
       setFeedback(false)
-      setResultDialog({
-        track,
-        verdict: finalVerdict,
-        round: index + 1,
-        guess: submittedGuess,
-        guessTitle: guessTitleRef.current,
-        guessArtist: guessArtistRef.current,
-        points: gainedPoints,
+
+      if (revealTimeoutRef.current) {
+        clearTimeout(revealTimeoutRef.current)
+        revealTimeoutRef.current = null
+      }
+      revealTimeoutRef.current = setTimeout(() => {
+        dispatchFlow({ type: "REVEAL", at: Date.now() })
+        // Signal readiness for this round in multiplayer so the host can advance
+        markReady(index + 1)
+        setResultDialog({
+          track,
+          verdict: finalVerdict,
+          round: index + 1,
+          guess: submittedGuess,
+          guessTitle: guessTitleRef.current,
+          guessArtist: guessArtistRef.current,
+          points: gainedPoints,
         breakdown: scoreResult.breakdown,
-      })
-      lastDialogRoundRef.current = index + 1
+        })
+        lastDialogRoundRef.current = index + 1
+      }, 120)
 
       onRoundComplete?.({
         track,
@@ -584,18 +599,6 @@ export function SoloGameClient({
     pausedByUserRef.current = false
     playStartedRef.current = null
     previewUrlRef.current = null
-
-    let remaining = COUNTDOWN_DURATION
-    countdownRef.current = setInterval(() => {
-      remaining -= 1
-      if (remaining <= 0) {
-        clearInterval(countdownRef.current!)
-        countdownRef.current = null
-        dispatchFlow({ type: "START" })
-      } else {
-        setCountdown(remaining)
-      }
-    }, 1000)
 
     return () => {
       cleanupTimers()
@@ -821,12 +824,12 @@ export function SoloGameClient({
   const handleGuessSubmit = useCallback(
     (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault()
-      if (!current || isRevealed || isLocked) return
+      if (!current || isRevealed || isLocked || uiState !== RoundUiState.Playing) return
       const currentVerdict = evaluateGuess(guess, current)
       setVerdict(currentVerdict)
       finalizeRound(currentVerdict, "guess", current, guess)
     },
-    [current, guess, isRevealed, isLocked, finalizeRound]
+    [current, guess, isRevealed, isLocked, uiState, finalizeRound]
   )
 
   const handleReveal = useCallback(() => {
@@ -997,7 +1000,7 @@ export function SoloGameClient({
       guessTitle: guessTitleRef.current,
       guessArtist: guessArtistRef.current,
       points: 0,
-      breakdown: { base: 0, speed: 0, streak: 0 },
+      breakdown: { base: 0, speed: 0, streakBonus: 0 },
     })
     lastDialogRoundRef.current = roundNumber
   }, [uiState, current, index, verdict, guess, resultDialog])
@@ -1019,7 +1022,7 @@ export function SoloGameClient({
       guessTitle: guessTitleRef.current,
       guessArtist: guessArtistRef.current,
       points: 0,
-      breakdown: { base: 0, speed: 0, streak: 0 },
+      breakdown: { base: 0, speed: 0, streakBonus: 0 },
     })
     lastDialogRoundRef.current = stats.rounds
   }, [stats.rounds, trackList, current, verdict, guess, resultDialog])
@@ -1477,7 +1480,7 @@ export function SoloGameClient({
           <div className="mt-3 rounded-xl border border-white/10 bg-black/30 p-3 text-sm text-white flex flex-col gap-1">
             <div className="font-semibold text-base">+{resultDialog.points} pts</div>
             <div className="text-[12px] text-[var(--ma-muted,#9b9b9b)]">
-              Base {resultDialog.breakdown.base} · Vitesse {resultDialog.breakdown.speed} · Série {resultDialog.breakdown.streak}
+              Base {resultDialog.breakdown.base} · Vitesse {resultDialog.breakdown.speed} · Série {resultDialog.breakdown.streakBonus}
             </div>
           </div>
 
