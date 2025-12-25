@@ -133,14 +133,14 @@ export default function StatsPage() {
       actions.push({
         title: "Tester la pression multi",
         description: "Crée une room et termine 10 manches pour calibrer ta vitesse en live.",
-        href: "/multiplayer",
+        href: "/modes",
       })
     }
     if (!actions.length) {
       actions.push({
         title: "Continuer sur ta lancée",
         description: "Enchaîne une session multi pour comparer tes réflexes en groupe.",
-        href: "/multiplayer",
+        href: "/modes",
       })
     }
     return actions.slice(0, 3)

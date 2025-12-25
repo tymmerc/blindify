@@ -11,11 +11,11 @@ import type { MultiplayerGameState, MultiplayerParticipant, MultiplayerRoom, Sol
 import { MultiplayerGameClient } from "@/components/game/MultiplayerGameClient"
 import { Button } from "@/components/ui/button"
 import { useServerTime } from "@/hooks/useServerTime"
-import { useFriends } from "@/hooks/useFriends"
-import { useInvitations } from "@/hooks/useInvitations"
 import { useMode } from "@/contexts/ModeContext"
 import type { GameMode, GameModeConfig } from "@/lib/gameModes"
 import { modeDataAttrs } from "@/lib/uiTokens"
+import { getOrCreateGuest } from "@/lib/guest"
+import type { FriendEntry, RoomInvitation } from "@/lib/types"
 import { LobbyShell } from "./LobbyShell"
 import { FriendsLobbyView } from "./FriendsLobbyView"
 import { EventLobbyView } from "./EventLobbyView"
@@ -86,7 +86,7 @@ function friendlyError(mode: GameMode, phase: "create" | "join" | "start" | "inv
 
 export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autojoin }: ModeLobbyViewProps) {
   const router = useRouter()
-  const { accentColor } = useMode()
+  const { accentColor, isGuest, setGuest } = useMode()
   const [userPayload, setUserPayload] = useState<CurrentUserPayload | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -103,22 +103,14 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   const [gameState, setGameState] = useState<MultiplayerGameState | null>(null)
   const [starting, setStarting] = useState(false)
   const [joining, setJoining] = useState(false)
+  const abortFlowRef = useRef(false)
 
-  const { friends, loading: friendsLoading, error: friendsError } = useFriends()
-  const activeFriends: ActiveFriend[] = useMemo(
-    () =>
-      friends
-        .filter(friend => friend.presence?.roomCode)
-        .map(friend => ({
-          userId: friend.userId,
-          username: friend.username,
-          roomCode: friend.presence?.roomCode ?? "",
-          state: friend.presence?.status ?? "online",
-          updatedAt: friend.presence?.updatedAt ?? Date.now(),
-        })),
-    [friends]
-  )
-  const { sendInvitation, pending: invites, acceptInvitation } = useInvitations()
+  // Invitations / amis désactivés : on reste sur le code de room uniquement.
+  const friends: FriendEntry[] = []
+  const friendsLoading = false
+  const friendsError: string | null = null
+  const activeFriends: ActiveFriend[] = []
+  const invites: RoomInvitation[] = []
 
   const socketRef = useRef<Socket | null>(null)
   const handlersRef = useRef<{
@@ -131,6 +123,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   }>({})
   const roomRef = useRef<MultiplayerRoom | null>(null)
   const userRef = useRef<CurrentUserPayload | null>(null)
+  const currentUserId = userPayload?.user.id ?? 0
 
   const [joinCode, setJoinCode] = useState(initialJoinCode?.toUpperCase() ?? "")
   const serverNow = useServerTime(socketRef.current)
@@ -153,7 +146,8 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     let active = true
     async function bootstrap() {
       try {
-        const me = await api.ensureUserSession("Invité")
+        const guestProfile = getOrCreateGuest()
+        const me = await api.ensureUserSession(guestProfile.name)
         if (!active) return
         if (!me) {
           setError("Impossible de créer une session invité.")
@@ -222,8 +216,16 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     [syncParticipants]
   )
 
+  useEffect(() => {
+    if (!room?.room_code) return
+    if (view !== "hosting" && view !== "waiting") return
+    const interval = setInterval(() => refreshParticipants(room.room_code), 3500)
+    return () => clearInterval(interval)
+  }, [room?.room_code, view, refreshParticipants])
+
   const ensureSpotify = useCallback(
     async (next: PendingAction): Promise<boolean> => {
+      if (isGuest) return true
       if (hasSpotify) return true
       try {
         await api.getSpotifyToken()
@@ -235,7 +237,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         return false
       }
     },
-    [hasSpotify]
+    [hasSpotify, isGuest]
   )
 
   const attachSocketListeners = useCallback(
@@ -431,6 +433,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   )
 
   useEffect(() => {
+    if (abortFlowRef.current) return
     if (intent === "host" && !autoHostTriggered.current && view === "landing" && !room && (lobby.status === "idle" || lobby.status === "error")) {
       autoHostTriggered.current = true
       handleCreateRoom()
@@ -438,14 +441,16 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   }, [intent, view, room, handleCreateRoom, lobby.status])
 
   useEffect(() => {
+    if (abortFlowRef.current) return
     if (!modeConfig.lobby.autoStart) return
+    if (!autojoin) return
     if (autoHostTriggered.current) return
     if (!flowStarted) return
     if (view === "landing" && !room && (lobby.status === "idle" || lobby.status === "error")) {
       autoHostTriggered.current = true
       handleCreateRoom()
     }
-  }, [modeConfig.lobby.autoStart, view, room, handleCreateRoom, lobby.status, flowStarted])
+  }, [modeConfig.lobby.autoStart, view, room, handleCreateRoom, lobby.status, flowStarted, autojoin])
 
   const joinRoomCode = useCallback(
     async (code: string, skipSpotify?: boolean) => {
@@ -496,34 +501,13 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   )
 
   const handleAcceptInvite = useCallback(
-    async (invitationId: number, skipSpotify?: boolean) => {
-      if (!skipSpotify) {
-        const ok = await ensureSpotify({ type: "invite", invitationId })
-        if (!ok) return
-      }
-      try {
-        setJoining(true)
-        setError(null)
-        dispatchLobby({ type: "joining" })
-        setFlowStarted(true)
-        const res = await acceptInvitation(invitationId)
-        setRoom(res.room)
-        setGameState(null)
-        setTracks([])
-        setView("waiting")
-        dispatchLobby({ type: "waiting" })
-        attachSocketListeners(res.room.room_code)
-        refreshParticipants(res.room.room_code)
-      } catch (err) {
-        console.error("accept_invite_failed", err)
-        const message = friendlyError(mode, "join")
-        setError(message)
-        dispatchLobby({ type: "error", message })
-      } finally {
-        setJoining(false)
-      }
+    async (_invitationId: number, _skipSpotify?: boolean) => {
+      // Invitations désactivées : tout passe par un code.
+      setError("Les invitations sont désactivées. Rejoins avec un code.")
+      dispatchLobby({ type: "error", message: "Les invitations sont désactivées. Rejoins avec un code." })
+      return
     },
-    [acceptInvitation, attachSocketListeners, refreshParticipants, mode, ensureSpotify]
+    [dispatchLobby, setError]
   )
 
   const handleStartGame = useCallback(
@@ -575,7 +559,9 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   }, [])
 
   useEffect(() => {
+    if (abortFlowRef.current) return
     if (!modeConfig.lobby.autoStart) return
+    if (!autojoin) return
     if (!room) return
     if (!isHost) return
     if (lobby.status !== "hosting" && lobby.status !== "waiting") return
@@ -585,22 +571,12 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       autoStartGameRef.current = true
       handleStartGame()
     }
-  }, [modeConfig.lobby.autoStart, modeConfig.lobby.minPlayers, room, lobby.status, participants.length, starting, handleStartGame, isHost])
+  }, [modeConfig.lobby.autoStart, modeConfig.lobby.minPlayers, room, lobby.status, participants.length, starting, handleStartGame, isHost, autojoin])
 
-  const handleInviteFriendToRoom = useCallback(
-    async (userId: number) => {
-      if (!room?.room_code) return
-      try {
-        await sendInvitation(userId, room.room_code)
-      } catch (err) {
-        console.error("send_room_invite_failed", err)
-        const message = friendlyError(mode, "invite")
-        setError(message)
-        dispatchLobby({ type: "error", message })
-      }
-    },
-    [room, sendInvitation, mode]
-  )
+  const handleInviteFriendToRoom = useCallback(async (_userId?: number) => {
+    // Invitations suspendues : le flux passe uniquement par les codes de room.
+    return Promise.resolve()
+  }, [])
 
   const runPendingAction = useCallback(
     (action: PendingAction) => {
@@ -612,13 +588,13 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
           joinRoomCode(action.code, true)
           break
         case "invite":
-          handleAcceptInvite(action.invitationId, true)
+          // Invitations désactivées : pas d’action.
           break
         default:
           break
       }
     },
-    [handleAcceptInvite, handleCreateRoom, joinRoomCode]
+    [handleCreateRoom, joinRoomCode]
   )
 
   useEffect(() => {
@@ -628,6 +604,25 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     setPendingAction(null)
     setRequireSpotify(false)
   }, [pendingAction, hasSpotify, runPendingAction])
+
+  useEffect(() => {
+    if (!room?.room_code) return
+    if (view === "playing" || view === "results") return
+    const interval = setInterval(async () => {
+      try {
+        const latest = await api.roomState(room.room_code)
+        if (latest.gameState) {
+          setGameState(latest.gameState as MultiplayerGameState)
+          setView(latest.gameState.status === "finished" ? "results" : "playing")
+          dispatchLobby({ type: latest.gameState.status === "finished" ? "results" : "playing" })
+        }
+        if (latest.tracks?.length) setTracks(latest.tracks)
+      } catch (err) {
+        console.error("lobby_state_poll_failed", err)
+      }
+    }, 3000)
+    return () => clearInterval(interval)
+  }, [room?.room_code, view])
 
   const scores = useMemo(() => {
     const next: Record<number, { username: string | null; score: number; accuracy: number }> = {}
@@ -653,6 +648,9 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   }, [gameState?.players])
 
   const handleLeaveRoom = useCallback(() => {
+    abortFlowRef.current = true
+    autoHostTriggered.current = false
+    setGuest(false)
     if (room && userPayload) {
       socketRef.current?.emit("room:leave", { roomCode: room.room_code, userId: userPayload.user.id })
       socketRef.current?.emit("game:leave", { roomCode: room.room_code })
@@ -666,7 +664,14 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     setView("landing")
     setFlowStarted(false)
     dispatchLobby({ type: "reset" })
-  }, [room, userPayload])
+    router.replace(ENTRY_ROUTE[mode])
+  }, [room, userPayload, router, mode])
+
+  const handleChangeMode = useCallback(() => {
+    setGuest(false)
+    handleLeaveRoom()
+    router.push("/modes?from=/multiplayer")
+  }, [handleLeaveRoom, router, setGuest])
 
   useEffect(() => {
     const hasCode = Boolean(initialJoinCode)
@@ -678,6 +683,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   }, [modeConfig, mode, intent, room, autojoin, initialJoinCode, router])
 
   useEffect(() => {
+    if (abortFlowRef.current) return
     if (!initialJoinCode && !autojoin) return
     if (room) return
     const code = initialJoinCode ?? autojoin
@@ -709,6 +715,22 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     )
   }
 
+  const isPendingIntent =
+    (intent === "host" || Boolean(initialJoinCode) || Boolean(autojoin)) &&
+    !room &&
+    (view === "landing" || lobby.status === "creating" || lobby.status === "joining")
+
+  if (isPendingIntent) {
+    return (
+      <div className="grid min-h-screen place-items-center bg-[#050505] px-6 text-white/80">
+        <div className="space-y-3 text-center">
+          <Loader2 className="mx-auto h-8 w-8 animate-spin text-white/70" />
+          <p className="text-sm">Préparation du lobby…</p>
+        </div>
+      </div>
+    )
+  }
+
   const lobbyProps: LobbyRendererProps = {
     mode,
     modeConfig,
@@ -734,6 +756,8 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     onAcceptInvite: handleAcceptInvite,
     canStart: canStartGame,
     isHost,
+    isGuest,
+    currentUserId,
   }
 
   const selectedLobby = (() => {
@@ -748,8 +772,6 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         return null
     }
   })()
-
-  const currentUserId = userPayload.user.id
 
   const stage: "entry" | "lobby" | "game" | "results" =
     view === "playing" ? "game" : view === "results" ? "results" : view === "landing" ? "entry" : "lobby"
@@ -773,6 +795,13 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       </div>
     </div>
   ) : null
+
+  const guestNotice =
+    isGuest && view !== "results" ? (
+      <div className="rounded-2xl border border-white/12 bg-[#0c0c0c] px-5 py-4 text-sm text-white/75">
+        Mode invité : audio non disponible, mais tu peux répondre et observer comme les autres.
+      </div>
+    ) : null
 
   const content =
     view === "playing" && gameState && room ? (
@@ -800,7 +829,8 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         leaderboard={leaderboard}
         tracks={tracks}
         currentUserId={currentUserId}
-        onReturn={() => router.replace("/menu")}
+        accentColor={accentColor}
+        onReturn={() => router.replace("/modes")}
         onReplay={() => {
           autoStartGameRef.current = false
           autoHostTriggered.current = false
@@ -823,13 +853,17 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       title={headerCopy.title}
       subtitle={headerCopy.subtitle}
       onLeave={handleLeaveRoom}
-      hideHeader={view === "results"}
+      onChangeMode={handleChangeMode}
+      hideHeader={view === "results" || view === "playing"}
       error={error || lobby.message}
       dataAttrs={dataAttrs}
       stage={stage}
     >
-      {content}
-      {spotifyPrompt}
+      <div className="flex flex-col gap-4">
+        {guestNotice}
+        {content}
+        {spotifyPrompt}
+      </div>
     </LobbyShell>
   )
 }

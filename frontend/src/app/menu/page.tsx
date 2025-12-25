@@ -164,7 +164,7 @@ function FriendsView({
       <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-[#0c0c0c] p-5">
         <h2 className="text-xl font-semibold text-white">Mode Amis</h2>
         <p className="text-sm text-white/65">Invite et joue entre potes.</p>
-        <AccentButton label="Créer ou rejoindre une salle" accent={accent} onClick={() => router.push("/multiplayer")} />
+        <AccentButton label="Créer ou rejoindre une salle" accent={accent} onClick={() => router.push("/friends")} />
       </div>
       <div
         className="rounded-2xl border p-5"
@@ -190,7 +190,7 @@ function EventView({ accent, router }: { accent: string; router: ReturnType<type
       <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-[#0c0c0c] p-5">
         <h2 className="text-xl font-semibold text-white">Mode Événement</h2>
         <p className="text-sm text-white/65">Un écran, tout le monde suit.</p>
-        <AccentButton label="Démarrer un événement" accent={accent} onClick={() => router.push("/multiplayer")} />
+        <AccentButton label="Démarrer un événement" accent={accent} onClick={() => router.push("/event")} />
       </div>
       <div
         className="rounded-2xl border p-5"
@@ -215,7 +215,7 @@ function ChatView({ accent, router }: { accent: string; router: ReturnType<typeo
       <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-[#0c0c0c] p-5">
         <h2 className="text-xl font-semibold text-white">Mode Chat</h2>
         <p className="text-sm text-white/65">Le chat joue avec toi.</p>
-        <AccentButton label="Ouvrir le salon" accent={accent} onClick={() => router.push("/multiplayer")} />
+        <AccentButton label="Ouvrir le salon" accent={accent} onClick={() => router.push("/chat")} />
       </div>
       <div
         className="rounded-2xl border p-5"
@@ -236,7 +236,7 @@ function ChatView({ accent, router }: { accent: string; router: ReturnType<typeo
 
 export default function MenuPage() {
   const router = useRouter()
-  const { mode, accentColor, label, resetMode } = useMode()
+  const { mode, accentColor, label, resetMode, setGuest } = useMode()
   const [userPayload, setUserPayload] = useState<CurrentUserPayload | null>(null)
   const [loading, setLoading] = useState(true)
   const [sessionError, setSessionError] = useState<string | null>(null)
@@ -311,7 +311,15 @@ export default function MenuPage() {
     <ModeGate allowedModes={["friends", "event", "chat"]}>
       <div className="min-h-screen bg-[#050505] px-6 py-8 text-white">
         <div className="mx-auto flex max-w-5xl flex-col gap-6">
-          <ModeHeader label={label} accent={accentColor} onReset={() => { resetMode(); router.replace("/modes") }} />
+          <ModeHeader
+            label={label}
+            accent={accentColor}
+            onReset={() => {
+              setGuest(false)
+              resetMode()
+              router.replace("/modes")
+            }}
+          />
           {sessionError ? <p className="text-sm text-red-400">{sessionError}</p> : null}
           {renderContent()}
           {friendsLoading ? <p className="text-xs text-white/60">Mise à jour…</p> : null}

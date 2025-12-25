@@ -4,6 +4,7 @@ import { Suspense, useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import type { Mode } from "@/contexts/ModeContext"
 import { useMode } from "@/contexts/ModeContext"
+import { Button } from "@/components/ui/button"
 
 type ModeCard = {
   key: Mode
@@ -57,7 +58,7 @@ function hexToRgba(hex: string, alpha: number): string {
 function ModeSelectionContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { mode, setMode } = useMode()
+  const { mode, setMode, isGuest, setGuest } = useMode()
   const [selection, setSelection] = useState<Mode | null>(mode)
   const [hovered, setHovered] = useState<Mode | null>(null)
 
@@ -66,6 +67,11 @@ function ModeSelectionContent() {
   useEffect(() => {
     if (mode) setSelection(mode)
   }, [mode])
+
+  useEffect(() => {
+    // Sortie du mode invité quand on revient choisir un mode.
+    setGuest(false)
+  }, [setGuest])
 
   const getCard = (key: Mode | null) => MODE_CARDS.find(card => card.key === key) ?? null
   const activeCard = getCard(selection)
@@ -79,9 +85,21 @@ function ModeSelectionContent() {
     router.replace(target)
   }
 
+  const handleGuestQuickStart = () => {
+    setGuest(true)
+    const choice = (window.prompt("Choisis un mode : friends / event / chat", "event") || "").trim().toLowerCase()
+    if (choice !== "friends" && choice !== "event" && choice !== "chat") return
+    setMode(choice as Mode)
+    const target =
+      choice === "friends"
+        ? "/multiplayer?mode=friends"
+        : `/multiplayer?mode=${choice}&autojoin=1`
+    router.replace(target)
+  }
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#050505] px-6 py-14 text-white">
-      <div className="w-full max-w-5xl space-y-10">
+      <div className="w-full max-w-5xl space-y-8">
         <header className="flex flex-col gap-3 text-center">
           <p className="text-xs uppercase tracking-[0.3em] text-white/60">Orientation</p>
           <h1 className="text-4xl font-semibold tracking-[-0.04em] sm:text-5xl">Comment tu veux jouer ?</h1>
@@ -105,8 +123,8 @@ function ModeSelectionContent() {
                 onDoubleClick={() => handleConfirm(card.key)}
                 onMouseEnter={() => setHovered(card.key)}
                 onMouseLeave={() => setHovered(current => (current === card.key ? null : current))}
-                className="flex h-full flex-col justify-between rounded-2xl border bg-[#0b0b0b] p-5 text-left transition-colors"
-                style={{ borderColor, boxShadow: isActive ? `0 0 0 1px ${card.accent}` : "none" }}
+                className="flex h-full flex-col justify-between rounded-2xl border bg-[#0c0c0c] p-5 text-left transition-colors"
+                style={{ borderColor }}
               >
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
@@ -151,6 +169,24 @@ function ModeSelectionContent() {
             Valider ce mode
           </button>
         </div>
+
+        <button
+          type="button"
+          onClick={handleGuestQuickStart}
+          className="fixed bottom-6 right-6 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-semibold text-white hover:bg-white/15"
+          aria-label="Jouer sans connexion"
+        >
+          Jouer sans connexion
+        </button>
+        {isGuest ? (
+          <button
+            type="button"
+            onClick={() => setGuest(false)}
+            className="fixed bottom-6 left-6 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-xs font-semibold text-white hover:bg-white/10"
+          >
+            Revenir en mode connecté
+          </button>
+        ) : null}
       </div>
     </div>
   )

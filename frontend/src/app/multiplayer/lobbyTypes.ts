@@ -15,7 +15,6 @@ export type LobbyRendererProps = {
   joining: boolean
   onHost: () => void
   onJoinSubmit: (event: React.FormEvent<HTMLFormElement>) => void
-  room: MultiplayerRoom | null
   participants: MultiplayerParticipant[]
   scores: Record<number, { username: string | null; score: number; accuracy: number }>
   friends: FriendEntry[]
@@ -30,4 +29,7 @@ export type LobbyRendererProps = {
   onAcceptInvite: (invitationId: number) => void
   canStart: boolean
   isHost: boolean
+  isGuest: boolean
+  currentUserId: number
+  room: MultiplayerRoom | null
 }

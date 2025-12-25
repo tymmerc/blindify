@@ -10,11 +10,14 @@ type ModeContextValue = {
   resetMode: () => void
   accentColor: string
   label: string
+  isGuest: boolean
+  setGuest: (value: boolean) => void
 }
 
 const ModeContext = createContext<ModeContextValue | undefined>(undefined)
 
 const STORAGE_KEY = "blindify:mode"
+const GUEST_KEY = "blindify:guest"
 const MODE_ACCENTS: Record<Mode, string> = {
   friends: "#ec4899", // rose
   event: "#8b5cf6", // violet froid
@@ -29,12 +32,17 @@ const MODE_LABELS: Record<Mode, string> = {
 
 export function ModeProvider({ children }: { children: React.ReactNode }) {
   const [mode, setModeState] = useState<Mode | null>(null)
+  const [isGuest, setIsGuest] = useState(false)
 
   useEffect(() => {
     if (typeof window === "undefined") return
     const stored = window.localStorage.getItem(STORAGE_KEY) as Mode | null
     if (stored === "friends" || stored === "event" || stored === "chat") {
       setModeState(stored)
+    }
+    const storedGuest = window.localStorage.getItem(GUEST_KEY)
+    if (storedGuest === "1") {
+      setIsGuest(true)
     }
   }, [])
 
@@ -64,11 +72,22 @@ export function ModeProvider({ children }: { children: React.ReactNode }) {
     applyTheme(null)
   }, [applyTheme])
 
+  const setGuest = useCallback((value: boolean) => {
+    setIsGuest(value)
+    if (typeof window !== "undefined") {
+      if (value) {
+        window.localStorage.setItem(GUEST_KEY, "1")
+      } else {
+        window.localStorage.removeItem(GUEST_KEY)
+      }
+    }
+  }, [])
+
   const value = useMemo<ModeContextValue>(() => {
     const accent = mode ? MODE_ACCENTS[mode] : "#a855f7"
     const label = mode ? MODE_LABELS[mode] : "Mode non défini"
-    return { mode, setMode, resetMode, accentColor: accent, label }
-  }, [mode, setMode, resetMode])
+    return { mode, setMode, resetMode, accentColor: accent, label, isGuest, setGuest }
+  }, [mode, setMode, resetMode, isGuest, setGuest])
 
   return <ModeContext.Provider value={value}>{children}</ModeContext.Provider>
 }

@@ -11,11 +11,9 @@ type GameShellProps = {
   side?: ReactNode
   participationStrip?: ReactNode
   variant?: "balanced" | "wide"
-  phase?: string
-  actions?: ReactNode
 }
 
-export function GameShell({ mode, header, main, side, participationStrip, variant = "balanced", phase, actions }: GameShellProps) {
+export function GameShell({ mode, header, main, side, participationStrip, variant = "balanced" }: GameShellProps) {
   const padding = mode === "event" ? "24px" : mode === "friends" ? "16px" : "18px"
   const gapSize = mode === "event" ? "20px" : mode === "friends" ? "12px" : spacing.gap
   const gridClass = side
@@ -26,31 +24,20 @@ export function GameShell({ mode, header, main, side, participationStrip, varian
 
   return (
     <div className="flex flex-col gap-4" data-mode={mode}>
-      <div className="rounded-2xl border border-white/10 bg-black/60" style={{ borderRadius: radii.card, padding: padding }}>
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-3 text-xs uppercase tracking-[0.3em] text-[var(--ma-muted,#b0b0b0)]">
-          <span>{mode}</span>
-          <div className="flex items-center gap-2">
-            {phase ? (
-              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] tracking-[0.25em] text-white">
-                {phase}
-              </span>
-            ) : null}
-            {actions}
-          </div>
-        </div>
+      <div className="sticky top-0 z-10 flex items-center justify-end gap-3 bg-[#050505] px-4 py-2 text-sm text-white/60">
         {header}
       </div>
 
       <div className={gridClass} style={{ gap: gapSize }}>
         <div
-          className="rounded-2xl border border-white/10 bg-black/70"
+          className="rounded-2xl border border-white/10 bg-[#0c0c0c]"
           style={{ borderRadius: radii.card, padding: padding }}
         >
           {main}
         </div>
         {side ? (
           <aside
-            className="rounded-2xl border border-white/10 bg-black/70"
+            className="rounded-2xl border border-white/10 bg-[#0c0c0c]"
             style={{ borderRadius: radii.card, padding: padding }}
           >
             {side}
@@ -60,7 +47,7 @@ export function GameShell({ mode, header, main, side, participationStrip, varian
 
       {participationStrip ? (
         <div
-          className="rounded-2xl border border-white/10 bg-black/70"
+          className="rounded-2xl border border-white/10 bg-[#0c0c0c]"
           style={{ borderRadius: radii.card, padding: mode === "chat" ? "12px" : "14px" }}
         >
           {participationStrip}
