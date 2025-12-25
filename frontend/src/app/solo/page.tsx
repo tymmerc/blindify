@@ -52,7 +52,7 @@ function SoloSelector() {
       {
         id: `${nextId}-ia`,
         author: "ia",
-        text: "Je prépare ta config… (UI uniquement pour l'instant)",
+        text: "Je prépare ta config… (UI uniquement pour l’instant)",
       },
     ])
     setChatInput("")
@@ -65,7 +65,7 @@ function SoloSelector() {
           <div className="space-y-2">
             <p className="text-xs uppercase tracking-[0.3em] text-[var(--ma-muted)]">Solo</p>
             <h1 className="text-3xl font-bold tracking-[-0.03em]">Lancer un blindtest</h1>
-            <p className="text-sm text-[var(--ma-muted)]">Choisissez une source ou décris ton mood à l'IA pour générer un set sur-mesure.</p>
+            <p className="text-sm text-[var(--ma-muted)]">Choisissez une source ou décris ton mood à l’IA pour générer un set sur-mesure.</p>
           </div>
           <Link
             href="/menu"
@@ -111,7 +111,7 @@ function SoloSelector() {
               <div>
                 <p className="text-xs uppercase tracking-[0.3em] text-[var(--ma-muted)]">Assistant IA</p>
                 <h3 className="text-xl font-semibold">Brief ton blindtest</h3>
-                <p className="text-sm text-[var(--ma-muted)]">Décris les genres, l'époque, le tempo, la durée… je prépare un set solo.</p>
+                <p className="text-sm text-[var(--ma-muted)]">Décris les genres, l’époque, le tempo, la durée… je prépare un set solo.</p>
               </div>
               <span className="rounded-full bg-white/5 px-3 py-1 text-xs text-[var(--ma-muted)]">UI only</span>
             </div>

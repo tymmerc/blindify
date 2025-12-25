@@ -31,6 +31,27 @@ type ApiEnvelope<T> = {
   error: { code: string; message: string; details?: unknown } | null
 }
 
+type RawInvitation = {
+  id: number
+  room_id?: number | null
+  roomId?: number | null
+  room_code?: string
+  roomCode?: string
+  from_user?: number
+  fromUser?: number
+  to_user?: number
+  toUser?: number
+  status: RoomInvitation["status"]
+  expires_at?: string
+  expiresAt?: string
+  created_at?: string
+  createdAt?: string
+  from_username?: string | null
+  fromUsername?: string | null
+  from_avatar?: string | null
+  fromAvatar?: string | null
+}
+
 async function parseJson<T>(response: Response): Promise<T> {
   const text = await response.text()
   if (!text) {
@@ -49,16 +70,16 @@ function getCookie(name: string): string | null {
   return match ? decodeURIComponent(match[1]) : null
 }
 
-function normalizeInvitation(raw: any): RoomInvitation {
+function normalizeInvitation(raw: RawInvitation): RoomInvitation {
   return {
     id: raw.id,
     roomId: raw.room_id ?? raw.roomId ?? null,
-    roomCode: raw.room_code ?? raw.roomCode,
-    fromUser: raw.from_user ?? raw.fromUser,
-    toUser: raw.to_user ?? raw.toUser,
+    roomCode: raw.room_code ?? raw.roomCode ?? "",
+    fromUser: raw.from_user ?? raw.fromUser ?? 0,
+    toUser: raw.to_user ?? raw.toUser ?? 0,
     status: raw.status,
-    expiresAt: raw.expires_at ?? raw.expiresAt,
-    createdAt: raw.created_at ?? raw.createdAt,
+    expiresAt: raw.expires_at ?? raw.expiresAt ?? new Date().toISOString(),
+    createdAt: raw.created_at ?? raw.createdAt ?? new Date().toISOString(),
     fromUsername: raw.from_username ?? raw.fromUsername ?? null,
     fromAvatar: raw.from_avatar ?? raw.fromAvatar ?? null,
   }
@@ -305,11 +326,14 @@ export const clientApi = {
     return request("/api/friends/activity", { cache: "no-store" })
   },
   async pendingInvitations(): Promise<{ invitations: RoomInvitation[] }> {
-    const res = await request<{ invitations: any[] }>("/api/invitations/pending", { method: "GET", cache: "no-store" })
+    const res = await request<{ invitations: RawInvitation[] }>("/api/invitations/pending", {
+      method: "GET",
+      cache: "no-store",
+    })
     return { invitations: (res.invitations ?? []).map(normalizeInvitation) }
   },
   async sendInvitation(toUserId: number, roomCode: string): Promise<{ invitation: RoomInvitation }> {
-    const res = await request<{ invitation: any }>("/api/invitations/send", {
+    const res = await request<{ invitation: RawInvitation }>("/api/invitations/send", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ toUserId, roomCode }),
@@ -319,11 +343,14 @@ export const clientApi = {
   async acceptInvitation(
     invitationId: number
   ): Promise<{ invitation: RoomInvitation; room: MultiplayerRoom; joined: boolean }> {
-    const res = await request<{ invitation: any; room: MultiplayerRoom; joined: boolean }>("/api/invitations/accept", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ invitationId }),
-    })
+    const res = await request<{ invitation: RawInvitation; room: MultiplayerRoom; joined: boolean }>(
+      "/api/invitations/accept",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ invitationId }),
+      }
+    )
     return {
       invitation: normalizeInvitation(res.invitation),
       room: res.room,

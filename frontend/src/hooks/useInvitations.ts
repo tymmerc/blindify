@@ -13,6 +13,15 @@ type InvitationToast = {
   message?: string
 }
 
+type InviteEventPayload = {
+  invitationId?: number
+  roomId?: number | null
+  roomCode?: string
+  fromUser?: { id?: number; username?: string | null; avatar?: string | null }
+  fromUserId?: number
+  expiresAt?: string
+}
+
 function upsertInvitation(list: RoomInvitation[], next: RoomInvitation): RoomInvitation[] {
   const copy = [...list]
   const idx = copy.findIndex(inv => inv.id === next.id)
@@ -54,12 +63,12 @@ export function useInvitations() {
   useEffect(() => {
     const s = getSocket()
     setSocket(s)
-    const handleInvite = (payload: any) => {
+    const handleInvite = (payload: InviteEventPayload) => {
       if (!payload?.invitationId) return
       const invitation: RoomInvitation = {
         id: payload.invitationId,
         roomId: payload.roomId ?? null,
-        roomCode: payload.roomCode,
+        roomCode: payload.roomCode ?? "",
         fromUser: payload.fromUser?.id ?? payload.fromUserId ?? 0,
         toUser: 0,
         status: "pending",

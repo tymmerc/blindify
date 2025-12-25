@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from "react"
 import { useInterval } from "./useInterval"
 
-export function useServerTime(socket: { on: Function; off: Function } | null) {
+type ServerTickSocket = {
+  on: (event: string, handler: (payload: { serverTimestamp: number }) => void) => void
+  off: (event: string, handler: (payload: { serverTimestamp: number }) => void) => void
+}
+
+export function useServerTime(socket: ServerTickSocket | null) {
   const [serverTime, setServerTime] = useState<number>(Date.now())
   const driftRef = useRef<number>(0)
 

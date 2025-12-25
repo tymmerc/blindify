@@ -1,4 +1,4 @@
-import type { GameModeConfig } from "@/lib/gameModes"
+import type { GameModeConfig, GameMode } from "@/lib/gameModes"
 
 export enum RoundUiState {
   Idle = "idle",
@@ -103,10 +103,30 @@ export type ModeFlags = {
 }
 
 export function resolveModeFlags(config: GameModeConfig | null | undefined, accent: string): ModeFlags {
+  const game = config?.game as { largeUI?: boolean; showLeaderboard?: string; participationOnly?: boolean; scoring?: boolean } | undefined
   return {
-    isRivalry: config?.game.showLeaderboard === "rivals",
-    isReadableAtDistance: Boolean(config?.game.largeUI || config?.game.showLeaderboard === "top3"),
-    isParticipationFocused: Boolean(config?.game.participationOnly && config?.game.scoring === false),
+    isRivalry: game?.showLeaderboard === "rivals",
+    isReadableAtDistance: Boolean(game?.largeUI || game?.showLeaderboard === "top3"),
+    isParticipationFocused: Boolean(game?.participationOnly && game?.scoring === false),
     accent,
+  }
+}
+
+export type RoundTempo = {
+  feedbackMs: number
+  revealHoldMs: number
+  cadence: "snappy" | "steady" | "relaxed"
+}
+
+export function resolveRoundTempo(mode: GameMode): RoundTempo {
+  switch (mode) {
+    case "friends":
+      return { feedbackMs: 220, revealHoldMs: 380, cadence: "snappy" }
+    case "event":
+      return { feedbackMs: 420, revealHoldMs: 650, cadence: "steady" }
+    case "chat":
+      return { feedbackMs: 320, revealHoldMs: 520, cadence: "relaxed" }
+    default:
+      return { feedbackMs: ROUND_FEEDBACK_MS, revealHoldMs: 450, cadence: "steady" }
   }
 }

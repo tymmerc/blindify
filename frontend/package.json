@@ -11,7 +11,7 @@
     "dev": "PATH=\"./.node/bin:$PATH\" NEXT_IGNORE_NODE_VERSION_CHECK=1 next dev --webpack",
     "build": "PATH=\"./.node/bin:$PATH\" NEXT_IGNORE_NODE_VERSION_CHECK=1 next build --webpack",
     "start": "PATH=\"./.node/bin:$PATH\" NEXT_IGNORE_NODE_VERSION_CHECK=1 next start",
-    "lint": "PATH=\"./.node/bin:$PATH\" next lint",
+    "lint": "PATH=\"./.node/bin:$PATH\" eslint .",
     "export": "PATH=\"./.node/bin:$PATH\" NEXT_IGNORE_NODE_VERSION_CHECK=1 next build --webpack",
     "test": "PATH=\"./.node/bin:$PATH\" vitest run",
     "test:watch": "PATH=\"./.node/bin:$PATH\" vitest watch"
