@@ -1041,9 +1041,27 @@ export const roomsController = {
     }));
 
     if (room.mode === GameMode.STREAMER) {
-      const subModeRaw = typeof req.body?.subMode === "string" ? req.body.subMode.toLowerCase() : "streamer_only";
-      const subMode = subModeRaw === "mixed" ? "mixed" : subModeRaw === "community" ? "community" : "streamer_only";
-      const streamerRounds = normalizedTracks.map(t => ({
+      const subModeRaw = typeof req.body?.subMode === "string" ? req.body.subMode.toLowerCase() : "duo";
+      const soloSourceRaw = typeof req.body?.soloSource === "string" ? req.body.soloSource.toLowerCase() : "streamer";
+      const subMode =
+        subModeRaw === "viewers_only" || subModeRaw === "chat_only" || subModeRaw === "streamer_only"
+          ? ("viewers_only" as const)
+          : subModeRaw === "solo" || subModeRaw === "just_stream"
+            ? ("solo" as const)
+            : ("duo" as const);
+      const soloTrackSource = soloSourceRaw === "chat" || soloSourceRaw === "audience" ? ("chat" as const) : ("streamer" as const);
+
+      const streamerRounds = normalizedTracks.map((t, index) => {
+        let trackSource: "streamer" | "chat" = "streamer";
+        if (subMode === "viewers_only") {
+          trackSource = "chat";
+        } else if (subMode === "solo") {
+          trackSource = soloTrackSource;
+        } else {
+          // duo: alternate between streamer and chat for variety
+          trackSource = index % 2 === 0 ? "streamer" : "chat";
+        }
+        return {
         round: t.round,
         trackId: String(t.track_id),
         audioSourceId: t.audioSourceId,
@@ -1053,9 +1071,9 @@ export const roomsController = {
         previewUrl: t.audio_url,
         albumCover: t.album_cover,
         metadata: t.metadata ?? {},
-        trackSource:
-          subMode === "streamer_only" ? ("streamer" as const) : subMode === "community" ? ("chat" as const) : Math.random() < 0.5 ? "streamer" : "chat",
-      }));
+        trackSource,
+      };
+      });
       const state = initStreamerGame(io, {
         roomCode: room.room_code,
         hostUserId: room.host_user_id,

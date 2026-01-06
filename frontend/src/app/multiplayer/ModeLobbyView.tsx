@@ -8,7 +8,7 @@ import { getSocket, disconnectSocket } from "@/lib/socket"
 import { api } from "@/lib/api"
 import { ApiError } from "@/lib/apiClient"
 import type { CurrentUserPayload } from "@/lib/api"
-import type { MultiplayerGameState, MultiplayerParticipant, MultiplayerRoom, SoloTrack, StreamerState } from "@/lib/types"
+import type { MultiplayerGameState, MultiplayerParticipant, MultiplayerRoom, SoloTrack, StreamerState, StreamerSubMode } from "@/lib/types"
 import { StreamerGameClient } from "@/components/game/StreamerGameClient"
 import { MultiplayerGameClient } from "@/components/game/MultiplayerGameClient"
 import { Button } from "@/components/ui/button"
@@ -105,6 +105,8 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   const [gameState, setGameState] = useState<MultiplayerGameState | StreamerState | null>(null)
   const [starting, setStarting] = useState(false)
   const [joining, setJoining] = useState(false)
+  const [streamerMode, setStreamerMode] = useState<StreamerSubMode>("duo")
+  const [soloSource, setSoloSource] = useState<"streamer" | "chat">("streamer")
   const abortFlowRef = useRef(false)
 
   // Invitations / amis désactivés : on reste sur le code de room uniquement.
@@ -609,11 +611,14 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         setStarting(true)
         setError(null)
         dispatchLobby({ type: "starting" })
-        const payload: { source?: string; playlistId?: string; subMode?: string } = {
+        const payload: { source?: string; playlistId?: string; subMode?: string; soloSource?: string } = {
           source: "library",
         }
         if (mode === "streamer") {
-          payload.subMode = "streamer_only"
+          payload.subMode = streamerMode
+          if (streamerMode === "solo") {
+            payload.soloSource = soloSource
+          }
         }
         const { tracks: generatedTracks, gameState: initialState } = await api.startMultiplayerGame(room.room_code, payload)
         setTracks(generatedTracks)
@@ -658,7 +663,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         setStarting(false)
       }
     },
-    [room, canStartGame, mode, ensureSpotify, resolveViewFromState, viewToLobbyAction]
+    [room, canStartGame, mode, ensureSpotify, resolveViewFromState, viewToLobbyAction, streamerMode, soloSource]
   )
 
   const handleSpotifyConnect = useCallback(() => {
@@ -924,6 +929,52 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     currentUserId,
   }
 
+  const streamerModeSelector =
+    mode === "streamer" && view !== "playing" && view !== "results" ? (
+      <div className="rounded-2xl border border-white/10 bg-[#0b0b0b] p-4 text-white">
+        <p className="text-xs uppercase tracking-[0.32em] text-white/60">Gameplay</p>
+        <h3 className="text-lg font-semibold">Choisis le format</h3>
+        <div className="mt-3 grid gap-2 md:grid-cols-3">
+          {[
+            { key: "viewers_only", title: "Viewers only", desc: "Seul le chat répond", value: "viewers_only" as StreamerSubMode },
+            { key: "duo", title: "Streamer + chat", desc: "Le chat puis toi", value: "duo" as StreamerSubMode },
+            { key: "solo", title: "Solo streamer", desc: "Tu joues seul", value: "solo" as StreamerSubMode },
+          ].map(opt => (
+            <button
+              key={opt.key}
+              type="button"
+              onClick={() => setStreamerMode(opt.value)}
+              className={`rounded-xl border px-3 py-3 text-left transition ${streamerMode === opt.value ? "border-white/60 bg-white/10" : "border-white/15 bg-[#0f0f0f]"}`}
+            >
+              <p className="text-sm font-semibold">{opt.title}</p>
+              <p className="text-xs text-white/60">{opt.desc}</p>
+            </button>
+          ))}
+        </div>
+        {streamerMode === "solo" ? (
+          <div className="mt-3 rounded-xl border border-white/15 bg-[#0f0f0f] p-3 text-sm">
+            <p className="text-xs uppercase tracking-[0.3em] text-white/60">Source des titres</p>
+            <div className="mt-2 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setSoloSource("streamer")}
+                className={`flex-1 rounded-lg border px-3 py-2 text-sm ${soloSource === "streamer" ? "border-white/60 bg-white/10" : "border-white/15 bg-[#0a0a0a]"}`}
+              >
+                Ta musique
+              </button>
+              <button
+                type="button"
+                onClick={() => setSoloSource("chat")}
+                className={`flex-1 rounded-lg border px-3 py-2 text-sm ${soloSource === "chat" ? "border-white/60 bg-white/10" : "border-white/15 bg-[#0a0a0a]"}`}
+              >
+                Musique du chat
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    ) : null
+
   const selectedLobby = (() => {
     switch (mode) {
       case "friends":
@@ -1045,7 +1096,10 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     ) : loadingGame ? (
       loadingGame
     ) : (
-      selectedLobby
+      <>
+        {streamerModeSelector}
+        {selectedLobby}
+      </>
     )
 
   return (

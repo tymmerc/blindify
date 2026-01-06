@@ -93,22 +93,23 @@ export type MultiplayerPlayerState = {
   username: string | null
   avatar?: string | null
   score: number
-  accuracy: number
-  rounds: number
-  correct: number
-  streak: number
-  bestStreak: number
   hasAnswered: boolean
   isReady: boolean
   lastGuess?: string
-  lastSourceGuess?: number | null
   lastVerdict?: "correct" | "close" | "wrong"
+  answerAt?: number | null
+  accuracy?: number
+  rounds?: number
+  correct?: number
+  streak?: number
+  bestStreak?: number
 }
 
 export type MultiplayerGameState = {
   roomCode: string
   hostUserId: number | null
-  status: "lobby" | "playing" | "reveal" | "finished"
+  mode: "friends" | "event" | "streamer"
+  phase: "LOBBY" | "GUESSING" | "REVEAL" | "FINISHED"
   currentRound: number
   totalRounds: number
   currentTrack: {
@@ -117,15 +118,63 @@ export type MultiplayerGameState = {
     audioSourceId?: string | number
     title: string
     artist: string
+    album?: string | null
     previewUrl: string | null
     albumCover?: string | null
     metadata?: Record<string, unknown> | null
   } | null
+  players: Record<number, MultiplayerPlayerState>
   timing: {
     startAt: number | null
     revealAt: number | null
   }
-  players: Record<number, MultiplayerPlayerState>
+  config: {
+    autoAdvance: boolean
+    roundDurationMs: number
+  }
+}
+
+export type StreamerPhase =
+  | "LOBBY"
+  | "STARTING_ROUND"
+  | "GUESSING_CHAT"
+  | "REVEAL_PARTIAL"
+  | "GUESSING_STREAMER"
+  | "REVEAL_FINAL"
+  | "ROUND_ENDED"
+  | "GAME_OVER"
+
+export type StreamerSubMode = "viewers_only" | "duo" | "solo"
+export type TrackSource = "streamer" | "chat"
+
+export type StreamerRound = {
+  round: number
+  trackId: string
+  audioSourceId?: string | number
+  title: string
+  artist: string
+  album?: string | null
+  previewUrl: string | null
+  albumCover?: string | null
+  metadata?: Record<string, unknown> | null
+  trackSource: TrackSource
+}
+
+export type StreamerState = {
+  roomCode: string
+  hostUserId: number
+  subMode: StreamerSubMode
+  phase: StreamerPhase
+  currentRound: number
+  totalRounds: number
+  currentTrack: StreamerRound | null
+  timing: { startAt: number | null; endAt: number | null }
+  chatScore: number
+  chatStreak: number
+  streamerScore: number
+  streamerWins: number
+  chatWins: number
+  chatSnapshot?: { total: number; correct: number; percentCorrect: number } | null
 }
 
 export type RoomSelfPreference = {
