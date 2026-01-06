@@ -236,22 +236,11 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   }, [room?.room_code, view, refreshParticipants])
 
   const ensureSpotify = useCallback(
-    async (next: PendingAction): Promise<boolean> => {
-      // In friends/event modes, Spotify is optional; at least one player will be enforced server-side.
-      if (mode !== "streamer") return true
-      if (isGuest) return true
-      if (hasSpotify) return true
-      try {
-        await api.getSpotifyToken()
-        return true
-      } catch (err) {
-        console.error("spotify_required", err)
-        setPendingAction(next)
-        setRequireSpotify(true)
-        return false
-      }
+    async (_next: PendingAction): Promise<boolean> => {
+      // Host display-only: no enforced Spotify; server will gate start if no connected players.
+      return true
     },
-    [hasSpotify, isGuest, mode]
+    []
   )
 
   const resolveViewFromState = useCallback(

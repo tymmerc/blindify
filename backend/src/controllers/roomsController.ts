@@ -682,7 +682,7 @@ export const roomsController = {
 
     let provider: MusicProvider =
       preferredProvider ?? context.connection?.provider ?? context.user.provider ?? "guest";
-    if (room.mode === GameMode.EVENT && provider !== "guest" && !context.connection) {
+    if ((room.mode === GameMode.EVENT || room.mode === GameMode.STREAMER) && provider !== "guest" && !context.connection) {
       // Host may be guest; fall back to pooled provider
       provider = "any" as MusicProvider;
     }
@@ -731,7 +731,7 @@ export const roomsController = {
     );
     const participantIds = participantRows
       .map(p => p.user_id)
-      .filter(id => !(room.mode === GameMode.EVENT && id === room.host_user_id));
+      .filter(id => !((room.mode === GameMode.EVENT || room.mode === GameMode.STREAMER) && id === room.host_user_id));
 
     if (!participantIds.length) {
       fail(res, "no_participants", "Aucun joueur connecté pour lancer en mode événement", 400);
@@ -765,8 +765,8 @@ export const roomsController = {
       return sourceParam;
     };
 
-    // Charger les connexions Spotify de tous les participants pour synchroniser au besoin
-    const connectionUserIds = Array.from(new Set([...participantIds, room.host_user_id].filter(Boolean))) as number[];
+    // Charger les connexions Spotify des joueurs (hors hôte streamer/événement) pour synchroniser au besoin
+    const connectionUserIds = Array.from(new Set(participantIds)) as number[];
     const { rows: connRows } = await pool.query<{
       id: number;
       user_id: number;
@@ -811,7 +811,7 @@ export const roomsController = {
     const connectedCount = Array.from(connectionMap.values()).filter(
       conn => conn.provider === "spotify" && Boolean(conn.access_token)
     ).length;
-    if ((room.mode === GameMode.FRIENDS || room.mode === GameMode.EVENT) && connectedCount === 0) {
+    if (connectedCount === 0) {
       fail(res, "connections_required", "Au moins un joueur doit être connecté à Spotify pour lancer la partie.", 400);
       return;
     }
