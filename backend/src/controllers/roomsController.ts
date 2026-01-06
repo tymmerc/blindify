@@ -8,8 +8,10 @@ import { ok, fail } from "../utils/response";
 import type { MusicProvider } from "../types/user";
 import type { AudioSourceRow } from "../types/audio";
 import { syncSpotifyLibrary } from "../services/providers/spotifySync";
-import { bootstrapGameState, gameStateSnapshot, type RoundTrack } from "../services/realtimeGame";
-import { broadcastState, startRoundAndBroadcast } from "../services/realtimeOrchestrator";
+import { bootstrapGameState, getGameState } from "../services/realtimeGame";
+import { broadcastState, startNextRound } from "../services/gameOrchestrator";
+import { GameMode, type RoundTrack } from "../types/game";
+import { initStreamerGame } from "../services/streamerOrchestrator";
 
 async function fetchGlobalRandomSources(count: number): Promise<AudioSourceRow[]> {
   if (count <= 0) return [];
@@ -47,7 +49,10 @@ async function ensureRoomParticipantPrefs(): Promise<void> {
 
 async function ensureRoomFlags(): Promise<void> {
   await pool.query(`ALTER TABLE multiplayer_rooms ADD COLUMN IF NOT EXISTS auto_advance BOOLEAN DEFAULT FALSE`);
+  await pool.query(`ALTER TABLE multiplayer_rooms ADD COLUMN IF NOT EXISTS mode TEXT DEFAULT 'friends'`);
 }
+
+const EVENT_ROUND_DURATION_MS = 25_000;
 
 async function fetchAudioSources(
   userIds: number | number[],
@@ -319,6 +324,9 @@ export const roomsController = {
     const { user } = context;
     const name = typeof req.body?.name === "string" ? req.body.name : null;
     const difficulty = typeof req.body?.difficulty === "string" ? req.body.difficulty : "normal";
+    const modeInput = typeof req.body?.mode === "string" ? req.body.mode.toLowerCase() : null;
+    const mode: GameMode =
+      modeInput === GameMode.EVENT ? GameMode.EVENT : modeInput === GameMode.STREAMER ? GameMode.STREAMER : GameMode.FRIENDS;
     const autoAdvance = Boolean(req.body?.autoAdvance);
     const maxPlayers = Number.isFinite(Number(req.body?.maxPlayers))
       ? Math.min(Math.max(Number(req.body.maxPlayers), 2), 16)
@@ -329,10 +337,10 @@ export const roomsController = {
 
     const code = generateRoomCode();
     const { rows } = await pool.query(
-      `INSERT INTO multiplayer_rooms (room_code, host_user_id, name, status, max_players, question_count, difficulty)
-       VALUES ($1,$2,$3,'waiting',$4,$5,$6)
-      RETURNING id, room_code, host_user_id, name, status, max_players, question_count, difficulty`,
-      [code, user.id, name, maxPlayers, questionCount, difficulty]
+      `INSERT INTO multiplayer_rooms (room_code, host_user_id, name, status, max_players, question_count, difficulty, mode)
+       VALUES ($1,$2,$3,'waiting',$4,$5,$6,$7)
+      RETURNING id, room_code, host_user_id, name, status, max_players, question_count, difficulty, mode`,
+      [code, user.id, name, maxPlayers, questionCount, difficulty, mode]
     );
 
     const room = rows[0];
@@ -416,7 +424,7 @@ export const roomsController = {
     }
 
     const { rows: roomRows } = await pool.query(
-      `SELECT id, room_code, host_user_id, status, max_players, question_count, difficulty, session_id, auto_advance
+      `SELECT id, room_code, host_user_id, status, max_players, question_count, difficulty, session_id, auto_advance, mode
        FROM multiplayer_rooms WHERE room_code=$1 LIMIT 1`,
       [code]
     );
@@ -501,7 +509,7 @@ export const roomsController = {
     }
 
     const { rows: roomRows } = await pool.query(
-      `SELECT id, room_code, host_user_id, status, max_players, question_count, difficulty, session_id, auto_advance
+      `SELECT id, room_code, host_user_id, status, max_players, question_count, difficulty, session_id, auto_advance, mode
        FROM multiplayer_rooms WHERE room_code=$1 LIMIT 1`,
       [code]
     );
@@ -553,7 +561,7 @@ export const roomsController = {
       [session.id]
     );
 
-    const gameState = gameStateSnapshot(room.room_code) ?? null;
+    const gameState = getGameState(room.room_code) ?? null;
 
     ok(res, {
       room,
@@ -593,14 +601,8 @@ export const roomsController = {
             ? "long_term"
             : null;
 
-    const context = await getSessionContext(req, res, {
-      provider: preferredProvider,
-      requireConnection: preferredProvider !== "guest",
-    });
-    if (!context) return;
-
     const { rows: roomRows } = await pool.query(
-      `SELECT id, room_code, host_user_id, status, max_players, question_count, difficulty
+      `SELECT id, room_code, host_user_id, status, max_players, question_count, difficulty, mode, auto_advance, session_id
        FROM multiplayer_rooms
        WHERE room_code=$1 LIMIT 1`,
       [code]
@@ -611,18 +613,79 @@ export const roomsController = {
       return;
     }
 
+    const context = await getSessionContext(req, res, {
+      provider: preferredProvider,
+      // Do not force a connection for friends/event: only enforce a minimum connection later.
+      requireConnection: false,
+    });
+    if (!context) return;
+
     if (room.host_user_id !== context.user.id) {
       fail(res, "room_forbidden", "Seul l'hôte peut démarrer la partie", 403);
       return;
     }
 
     if (room.status !== "waiting") {
-      fail(res, "room_locked", "La partie a déjà démarré", 409);
+      // If a game is already running, return its state so the client can sync instead of failing hard
+      const sessionId = room.session_id ?? null;
+      if (!sessionId) {
+        fail(res, "room_locked", "La partie a déjà démarré", 409);
+        return;
+      }
+
+      const { rows: sessions } = await pool.query(
+        `SELECT id, mode, difficulty, source_provider, total_rounds, started_at
+         FROM game_sessions WHERE id=$1 LIMIT 1`,
+        [sessionId]
+      );
+      const session = sessions[0];
+      if (!session) {
+        fail(res, "room_locked", "La partie a déjà démarré", 409);
+        return;
+      }
+
+      const { rows: trackRows } = await pool.query(
+        `SELECT gr.round_index AS round,
+                s.id AS "audioSourceId",
+                s.provider AS type,
+                COALESCE(s.external_id, s.id::text) AS track_id,
+                s.title,
+                s.artist,
+                s.album_cover,
+                s.audio_url,
+                s.metadata
+         FROM game_rounds gr
+         LEFT JOIN audio_sources s ON s.id = gr.audio_source_id
+         WHERE gr.session_id=$1
+         ORDER BY gr.round_index ASC`,
+        [session.id]
+      );
+
+      const gameState = getGameState(room.room_code) ?? null;
+
+      ok(res, {
+        session: {
+          id: session.id,
+          mode: session.mode,
+          difficulty: session.difficulty,
+          provider: session.source_provider,
+          totalRounds: session.total_rounds,
+          startedAt: session.started_at,
+          roomCode: room.room_code,
+          autoAdvance: room.auto_advance ?? false,
+        },
+        tracks: trackRows,
+        gameState,
+      });
       return;
     }
 
-    const provider: MusicProvider =
+    let provider: MusicProvider =
       preferredProvider ?? context.connection?.provider ?? context.user.provider ?? "guest";
+    if (room.mode === GameMode.EVENT && provider !== "guest" && !context.connection) {
+      // Host may be guest; fall back to pooled provider
+      provider = "any" as MusicProvider;
+    }
     const autoAdvanceFlag =
       typeof req.body?.autoAdvance === "boolean" ? req.body.autoAdvance : room.auto_advance ?? false;
 
@@ -635,11 +698,6 @@ export const roomsController = {
     const poolProvider: ProviderFilter = "any";
 
     await ensureRoomParticipantPrefs();
-
-    if (provider !== "guest" && !context.connection) {
-      fail(res, "provider_connection_missing", "Aucune connexion active pour ce mode", 400);
-      return;
-    }
 
     if ((playlistId || topRange) && provider !== "spotify") {
       fail(res, "playlist_provider_invalid", "Les playlists ou tops nécessitent Spotify.", 400);
@@ -671,7 +729,14 @@ export const roomsController = {
       `SELECT user_id, source_pref, playlist_pref FROM room_participants WHERE room_id=$1`,
       [room.id]
     );
-    const participantIds = participantRows.map(p => p.user_id);
+    const participantIds = participantRows
+      .map(p => p.user_id)
+      .filter(id => !(room.mode === GameMode.EVENT && id === room.host_user_id));
+
+    if (!participantIds.length) {
+      fail(res, "no_participants", "Aucun joueur connecté pour lancer en mode événement", 400);
+      return;
+    }
 
     const collected: AudioSourceRow[] = [];
     const seen = new Set<string>();
@@ -701,6 +766,7 @@ export const roomsController = {
     };
 
     // Charger les connexions Spotify de tous les participants pour synchroniser au besoin
+    const connectionUserIds = Array.from(new Set([...participantIds, room.host_user_id].filter(Boolean))) as number[];
     const { rows: connRows } = await pool.query<{
       id: number;
       user_id: number;
@@ -715,7 +781,7 @@ export const roomsController = {
       `SELECT id, user_id, provider, access_token, refresh_token, expires_at, scope, created_at, updated_at
        FROM user_connections
        WHERE user_id = ANY($1::int[])`,
-      [participantIds]
+      [connectionUserIds]
     );
     const connectionMap = new Map<number, {
       id: number;
@@ -740,6 +806,14 @@ export const roomsController = {
         created_at: row.created_at ?? new Date().toISOString(),
         updated_at: row.updated_at ?? new Date().toISOString(),
       });
+    }
+
+    const connectedCount = Array.from(connectionMap.values()).filter(
+      conn => conn.provider === "spotify" && Boolean(conn.access_token)
+    ).length;
+    if ((room.mode === GameMode.FRIENDS || room.mode === GameMode.EVENT) && connectedCount === 0) {
+      fail(res, "connections_required", "Au moins un joueur doit être connecté à Spotify pour lancer la partie.", 400);
+      return;
     }
 
     // Prélever un quota par joueur pour garantir la diversité
@@ -888,9 +962,9 @@ export const roomsController = {
 
     const { rows: sessionRows } = await pool.query(
       `INSERT INTO game_sessions (host_user_id, mode, difficulty, source_provider, total_rounds, state, room_code)
-       VALUES ($1,'multiplayer',$2,$3,$4,'in_progress',$5)
+       VALUES ($1,$2,$3,$4,$5,'in_progress',$6)
        RETURNING id, mode, difficulty, source_provider, total_rounds, started_at`,
-      [context.user.id, room.difficulty, provider, effectiveRounds, room.room_code]
+      [context.user.id, room.mode, room.difficulty, provider, effectiveRounds, room.room_code]
     );
     const session = sessionRows[0];
 
@@ -928,6 +1002,7 @@ export const roomsController = {
       track_id: source.external_id ?? source.id,
       title: source.title,
       artist: source.artist,
+      album: (source.metadata as any)?.album ?? (source.metadata as any)?.album_name ?? null,
       album_cover: source.album_cover,
       audio_url: source.audio_url,
       metadata: {
@@ -951,30 +1026,76 @@ export const roomsController = {
       );
     }
 
+    const roundDurationMs = room.mode === GameMode.EVENT ? EVENT_ROUND_DURATION_MS : 45_000;
+
     const roundTracks: RoundTrack[] = normalizedTracks.map(t => ({
       round: t.round,
       trackId: String(t.track_id),
       audioSourceId: t.audioSourceId,
       title: t.title,
       artist: t.artist,
+      album: t.album ?? null,
       previewUrl: t.audio_url,
       albumCover: t.album_cover,
       metadata: t.metadata ?? {},
     }));
 
+    if (room.mode === GameMode.STREAMER) {
+      const subModeRaw = typeof req.body?.subMode === "string" ? req.body.subMode.toLowerCase() : "streamer_only";
+      const subMode = subModeRaw === "mixed" ? "mixed" : subModeRaw === "community" ? "community" : "streamer_only";
+      const streamerRounds = normalizedTracks.map(t => ({
+        round: t.round,
+        trackId: String(t.track_id),
+        audioSourceId: t.audioSourceId,
+        title: t.title,
+        artist: t.artist,
+        album: t.album ?? null,
+        previewUrl: t.audio_url,
+        albumCover: t.album_cover,
+        metadata: t.metadata ?? {},
+        trackSource:
+          subMode === "streamer_only" ? ("streamer" as const) : subMode === "community" ? ("chat" as const) : Math.random() < 0.5 ? "streamer" : "chat",
+      }));
+      const state = initStreamerGame(io, {
+        roomCode: room.room_code,
+        hostUserId: room.host_user_id,
+        rounds: streamerRounds,
+        subMode,
+      });
+      ok(res, {
+        session: {
+          id: session.id,
+          mode: session.mode,
+          difficulty: session.difficulty,
+          provider: session.source_provider,
+          totalRounds: session.total_rounds,
+          startedAt: session.started_at,
+          roomCode: room.room_code,
+        },
+        tracks: normalizedTracks,
+        gameState: state,
+      });
+      return;
+    }
+
     bootstrapGameState({
       roomCode: room.room_code,
       hostUserId: room.host_user_id,
+      mode: session.mode as GameMode,
       tracks: roundTracks,
-      participantIds: participantIds.map(id => ({
+      participants: participantIds.map(id => ({
         userId: id,
         username: usernameMap.get(id) ?? null,
         avatar: avatarMap.get(id) ?? null,
       })),
+      config: {
+        autoAdvance: room.auto_advance ?? false,
+        roundDurationMs,
+      },
     });
 
     // Start round 1 immediately in a server-authoritative way
-    startRoundAndBroadcast(io, room.room_code, { forceRound: 1, startAt: Date.now() + 1000 });
+    startNextRound(io, room.room_code);
 
     const snapshot = broadcastState(io, room.room_code);
 
