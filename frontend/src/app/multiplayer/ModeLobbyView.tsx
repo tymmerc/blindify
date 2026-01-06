@@ -138,10 +138,20 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   const autoStartGameRef = useRef(false)
   const canHostNow = lobby.status === "idle" || lobby.status === "error"
   const isHost = useMemo(() => (room && userPayload ? room.host_user_id === userPayload.user.id : false), [room, userPayload])
+  const activeParticipants = useMemo(
+    () => {
+      const hostId = room?.host_user_id ?? null
+      if (mode === "event" || mode === "streamer") {
+        return participants.filter(p => p.user_id !== hostId)
+      }
+      return participants
+    },
+    [participants, mode, room?.host_user_id]
+  )
   const canStartGame =
     isHost &&
     (lobby.status === "hosting" || lobby.status === "waiting") &&
-    participants.length >= modeConfig.lobby.minPlayers &&
+    activeParticipants.length >= modeConfig.lobby.minPlayers &&
     !starting
   const hasSpotify = Boolean(userPayload?.providerConnection?.provider === "spotify")
 
@@ -767,7 +777,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   const scores = useMemo(() => {
     if (mode === "streamer") return {}
     const next: Record<number, { username: string | null; score: number; accuracy: number }> = {}
-    for (const participant of participants) {
+    for (const participant of activeParticipants) {
       const snapshot = (gameState as MultiplayerGameState | null | undefined)?.players?.[participant.user_id]
       next[participant.user_id] = {
         username: participant.username,
@@ -776,7 +786,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       }
     }
     return next
-  }, [participants, gameState, mode])
+  }, [activeParticipants, gameState, mode])
 
   const leaderboard = useMemo(() => {
     if (mode === "streamer") return []
@@ -900,7 +910,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     onHost: handleCreateRoom,
     onJoinSubmit: handleJoinRoom,
     room,
-    participants,
+    participants: activeParticipants,
     scores,
     friends,
     friendsLoading,
