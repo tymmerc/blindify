@@ -32,4 +32,5 @@ export type LobbyRendererProps = {
   isGuest: boolean
   currentUserId: number
   room: MultiplayerRoom | null
+  hostUser?: { user_id: number; username: string | null } | null
 }

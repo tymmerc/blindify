@@ -21,6 +21,7 @@ function EventEntry({
   joining: LobbyRendererProps["joining"]
 }) {
   const accent = modeAccent("event")
+  const points = ["Affichage lisible", "Un seul hôte", "Rythme constant"]
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
       <SurfaceCard className="flex flex-col gap-4">
@@ -37,7 +38,7 @@ function EventEntry({
           </span>
         </div>
         <div className="flex flex-wrap gap-2">
-          {["Affichage lisible", "Un seul hôte", "Rythme constant"].map(point => (
+          {points.map(point => (
             <span
               key={point}
               className="rounded-full border border-white/10 bg-[#0f0f0f] px-3 py-[6px] text-xs font-semibold text-white/80"
@@ -85,6 +86,13 @@ function EventEntry({
         <SurfaceCard className="space-y-3">
           <h3 className="text-lg font-semibold text-white">Brief rapide</h3>
           <p className="text-sm text-white/70">Un seul hôte contrôle le tempo, les autres rejoignent via l’écran principal.</p>
+          <div className="rounded-xl border border-white/10 bg-[#0f0f0f] p-4 text-sm text-white/70">
+            <p className="text-xs uppercase tracking-[0.3em] text-white/50">Code de salle</p>
+            <p className="mt-1 text-2xl font-semibold tracking-[0.18em] text-white">
+              {joinCode ? joinCode : "-----"}
+            </p>
+            <p className="mt-2 text-xs text-white/55">Projette ce code pour que les joueurs rejoignent depuis leur téléphone.</p>
+          </div>
         </SurfaceCard>
       </div>
     </div>
@@ -93,6 +101,10 @@ function EventEntry({
 
 function EventLobby(props: LobbyRendererProps) {
   const accent = modeAccent("event")
+  const filteredParticipants = props.participants
+  const filteredScores = props.scores
+  const roomCode = (props.room?.room_code ?? props.joinCode ?? "").toUpperCase() || "-----"
+  const host = props.hostUser
   return (
     <section className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
       <SurfaceCard className="space-y-4">
@@ -103,6 +115,12 @@ function EventLobby(props: LobbyRendererProps) {
             <p className="text-sm text-white/70">Lisible de loin. Le host contrôle le rythme.</p>
             {props.isGuest ? <p className="text-xs text-white/60">Invité : visionnage sans audio, participation autorisée.</p> : null}
           </div>
+          {host ? (
+            <div className="rounded-xl border border-white/15 bg-[#0f0f0f] px-3 py-2 text-right text-xs text-white/70">
+              <p className="uppercase tracking-[0.3em] text-white/50">Hôte</p>
+              <p className="text-sm font-semibold text-white">{host.username || `#${host.user_id}`}</p>
+            </div>
+          ) : null}
           <Button
             variant="outline"
             onClick={props.onStart}
@@ -120,11 +138,11 @@ function EventLobby(props: LobbyRendererProps) {
               <Users className="h-4 w-4" />
               <span>Participants</span>
             </div>
-            <span className="text-xs uppercase tracking-[0.3em] text-white/60">{props.participants.length} présent(s)</span>
+            <span className="text-xs uppercase tracking-[0.3em] text-white/60">{filteredParticipants.length} présent(s)</span>
           </div>
           <ParticipantPanel
-            participants={props.participants}
-            scores={props.scores}
+            participants={filteredParticipants}
+            scores={filteredScores}
             title="Public connecté"
             compact
             modeConfig={props.modeConfig}
@@ -135,8 +153,13 @@ function EventLobby(props: LobbyRendererProps) {
 
       <SurfaceCard className="space-y-3">
         <p className="text-xs uppercase tracking-[0.35em] text-white/60">Rappel</p>
-        <h4 className="text-xl font-semibold text-white">Aucun code, juste l’écran principal</h4>
-        <p className="text-sm text-white/70">Les invités rejoignent via l’écran principal. Tu contrôles le démarrage.</p>
+        <h4 className="text-xl font-semibold text-white">Projette le code</h4>
+        <p className="text-sm text-white/70">Les invités rejoignent via ce code. Tu contrôles le démarrage.</p>
+        <div className="rounded-xl border border-white/10 bg-[#0f0f0f] px-4 py-3">
+          <p className="text-xs uppercase tracking-[0.35em] text-white/50">Code salle</p>
+          <p className="mt-1 text-3xl font-semibold tracking-[0.24em] text-white">{roomCode}</p>
+          <p className="mt-2 text-xs text-white/55">Partage ce code sur l’écran principal pour que les joueurs rejoignent avec Spotify.</p>
+        </div>
       </SurfaceCard>
     </section>
   )
