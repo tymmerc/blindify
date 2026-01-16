@@ -1,5 +1,7 @@
 # 🎧 Blindify
 
+[![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
+
 Blindify is a **full-stack web application** that transforms your Spotify library into a **musical blind test**.  
 Play solo or challenge friends by guessing songs from short previews — powered by **Spotify’s API** and **AI-generated hints**.
 
