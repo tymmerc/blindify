@@ -19,8 +19,18 @@ rsync -a .next/server/app/ out/ \
   --exclude='*.txt' \
   --exclude='*.rsc'
 
-# Copy static assets
-cp -r .next/static out/_next/ 2>/dev/null || true
+# Copy static assets to proper structure
+mkdir -p out/_next/static
+cp -r .next/static/chunks out/_next/static/ 2>/dev/null || true
+cp -r .next/static/css out/_next/static/ 2>/dev/null || true
+cp -r .next/static/media out/_next/static/ 2>/dev/null || true
+
+# Also copy to root _next for compatibility
+cp -r .next/static/chunks out/_next/ 2>/dev/null || true
+cp -r .next/static/css out/_next/ 2>/dev/null || true
+cp -r .next/static/media out/_next/ 2>/dev/null || true
+
+# Copy public files
 cp -r public/* out/ 2>/dev/null || true
 
 # Fix basePath in HTML files
