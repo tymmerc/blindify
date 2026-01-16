@@ -41,4 +41,9 @@ find out -name "*.html" -type f | while read file; do
   sed -i "s|=\"/blindify/blindify|=\"/blindify|g" "$file"
 done
 
-echo "✓ Export complete! Files are in ./out with basePath applied"
+# Fix permissions for nginx (www-data)
+echo "Setting permissions for nginx..."
+sudo chown -R www-data:www-data out/
+sudo chmod -R 755 out/
+
+echo "✓ Export complete! Files are in ./out with basePath applied and correct permissions"
