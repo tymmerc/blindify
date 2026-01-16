@@ -22,7 +22,7 @@ export function ParticipantPanel({
   modeConfig: GameModeConfig
   variant?: "default" | "large"
 }) {
-  const showScores = modeConfig.game.scoring !== false
+  const showScores = modeConfig.game.scoring
   return (
     <div className={`rounded-2xl border border-white/10 bg-[#0c0c0c] ${compact ? "p-5" : "p-7"} text-left`}>
       <h3 className={`font-semibold uppercase tracking-[0.3em] text-white/60 ${variant === "large" ? "text-base" : "text-sm"}`}>

@@ -9,9 +9,9 @@ export const HEADER_COPY: Record<GameMode, { title: string; subtitle: string }> 
     title: "Projection en direct",
     subtitle: "Un seul écran, un rythme clair, tout le monde suit.",
   },
-  chat: {
-    title: "Salon en direct",
-    subtitle: "La musique tourne, le chat répond en continu.",
+  streamer: {
+    title: "Mode Streamer",
+    subtitle: "Joue en live avec ton chat - 3 modes de jeu disponibles.",
   },
 }
 
@@ -31,39 +31,39 @@ export const LANDING_COPY: Record<
     hostSubtitle: "Rythme piloté, affichage lisible, tout le monde suit.",
     hostCta: "Démarrer la projection",
   },
-  chat: {
-    hostTitle: "Met le salon en marche",
-    hostSubtitle: "La musique défile, les réponses fusent en live.",
-    hostCta: "Entrer dans le flux",
+  streamer: {
+    hostTitle: "Lance le mode streamer",
+    hostSubtitle: "Choisis ton format : chat, streamer, ou les deux.",
+    hostCta: "Démarrer le stream",
   },
 }
 
 export const HOST_START_LABEL: Record<GameMode, string> = {
   friends: "Lancer le duel",
   event: "Lancer la projection",
-  chat: "Lancer le flux",
+  streamer: "Lancer le stream",
 }
 
 export const WAITING_TITLE: Record<GameMode, { title: string; subtitle: string }> = {
   friends: { title: "Prêts à se départager", subtitle: "Ça démarre dès que tout le monde est chaud." },
-  event: { title: "Salle en rythme", subtitle: "L’écran principal gère le tempo, restez prêts." },
-  chat: { title: "Flux en direct", subtitle: "La musique arrive, répondez sans attendre." },
+  event: { title: "Salle en rythme", subtitle: "L'écran principal gère le tempo, restez prêts." },
+  streamer: { title: "Stream en préparation", subtitle: "Le chat peut rejoindre avec le code." },
 }
 
 export const ENTRY_ROUTE: Record<GameMode, string> = {
   friends: "/friends",
   event: "/event",
-  chat: "/chat",
+  streamer: "/streamer",
 }
 
 export const PARTICIPANT_TITLES: Record<GameMode, string> = {
   friends: "Rivaux connectés",
   event: "Public connecté",
-  chat: "Voix en direct",
+  streamer: "Viewers connectés",
 }
 
 export const HERO_POINTS: Record<GameMode, string[]> = {
   friends: ["Scores visibles", "Invitations éclair", "Playlists partagées"],
   event: ["Un écran pilote", "Tempo régulier", "Lisible pour le public"],
-  chat: ["Musique en continu", "Réponses instantanées", "Ambiance salon"],
+  streamer: ["3 modes de jeu", "Chat + Streamer", "Scores en direct"],
 }

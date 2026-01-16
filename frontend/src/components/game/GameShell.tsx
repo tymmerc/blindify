@@ -48,7 +48,7 @@ export function GameShell({ mode, header, main, side, participationStrip, varian
       {participationStrip ? (
         <div
           className="rounded-2xl border border-white/10 bg-[#0c0c0c]"
-          style={{ borderRadius: radii.card, padding: mode === "chat" ? "12px" : "14px" }}
+          style={{ borderRadius: radii.card, padding: mode === "streamer" ? "12px" : "14px" }}
         >
           {participationStrip}
         </div>

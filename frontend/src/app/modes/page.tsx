@@ -36,13 +36,13 @@ const MODE_CARDS: ModeCard[] = [
     posture: "Collectif",
   },
   {
-    key: "chat",
-    title: "Jouer avec le chat",
-    subtitle: "Le chat joue avec toi, au rythme du jeu.",
+    key: "streamer",
+    title: "Mode Streamer",
+    subtitle: "Joue en live avec ton chat - 3 modes disponibles.",
     description: "",
-    accent: "#22d3ee",
-    destination: "/chat",
-    posture: "Diffusion",
+    accent: "#f97316",
+    destination: "/streamer",
+    posture: "Live",
   },
 ]
 

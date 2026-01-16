@@ -77,13 +77,13 @@ function friendlyError(mode: GameMode, phase: "create" | "join" | "start" | "inv
       invite: "Inviter n’est pas disponible pour ce mode.",
     },
     streamer: {
-      create: "Le flux streamer ne peut pas s’ouvrir. Patiente un instant.",
+      create: "Le flux streamer ne peut pas s'ouvrir. Patiente un instant.",
       join: "Rejoindre le flux a échoué. Relance et reste dans le chat.",
       start: "Le flux ne démarre pas. Réessaie.",
-      invite: "Inviter n’est pas disponible pour ce mode.",
+      invite: "Inviter n'est pas disponible pour ce mode.",
     },
   } as const
-  return base[mode][phase]
+  return base[mode as keyof typeof base][phase]
 }
 
 export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autojoin }: ModeLobbyViewProps) {
@@ -97,6 +97,17 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   const [flowStarted, setFlowStarted] = useState<boolean>(Boolean(initialJoinCode || autojoin))
   const [requireSpotify, setRequireSpotify] = useState(false)
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null)
+  const [hasPendingAuthRestore, setHasPendingAuthRestore] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false
+    try {
+      return Boolean(
+        window.localStorage.getItem("blindify:post_auth_redirect") ||
+        window.localStorage.getItem("blindify:pending_event_code")
+      )
+    } catch {
+      return false
+    }
+  })
 
   const [room, setRoom] = useState<MultiplayerRoom | null>(null)
   const [participants, setParticipants] = useState<MultiplayerParticipant[]>([])
@@ -163,15 +174,31 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     let active = true
     async function bootstrap() {
       try {
-        const guestProfile = getOrCreateGuest()
-        const me = await api.ensureUserSession(guestProfile.name)
+        // First check if user is already authenticated
+        const existing = await api.checkAuth()
         if (!active) return
-        if (!me) {
-          setError("Impossible de créer une session invité.")
+
+        if (existing) {
+          // User is authenticated (has Spotify or existing session)
+          setUserPayload(existing)
+          setGuest(false)
+        } else if (isGuest) {
+          // Only create guest session if user explicitly chose guest mode
+          const guestProfile = getOrCreateGuest()
+          const me = await api.ensureUserSession(guestProfile.name)
+          if (!active) return
+          if (!me) {
+            setError("Impossible de créer une session invité.")
+            return
+          }
+          setUserPayload(me)
+          setGuest(true)
+        } else {
+          // No auth and not in guest mode - redirect to login or mode selection
+          setError("Connecte-toi ou choisis le mode invité pour continuer.")
+          setLoading(false)
           return
         }
-        setUserPayload(me)
-        setGuest(me.user.provider === "guest")
       } finally {
         if (active) setLoading(false)
       }
@@ -201,7 +228,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       }
       disconnectSocket()
     }
-  }, [router])
+  }, [router, isGuest])
 
   useEffect(() => {
     roomRef.current = room
@@ -209,10 +236,9 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
 
   useEffect(() => {
     userRef.current = userPayload
-    if (userPayload?.user) {
-      setGuest(userPayload.user.provider === "guest")
-    }
-  }, [userPayload])
+    // Don't automatically set guest mode based on provider
+    // Guest mode is now explicitly controlled by user choice
+  }, [userPayload, setGuest])
 
   const ensureSocket = useCallback((): Socket => {
     if (!socketRef.current) {
@@ -728,20 +754,59 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     setRequireSpotify(false)
   }, [pendingAction, hasSpotify, runPendingAction])
 
+  // Effect to resume flow after Spotify auth return
   useEffect(() => {
-    if (room) return
-    if (!hasSpotify) return
-    try {
-      const stored = window.localStorage.getItem(PENDING_EVENT_CODE_KEY)
-      if (stored) {
-        setJoinCode(stored.toUpperCase())
-        joinRoomCode(stored, true)
-        window.localStorage.removeItem(PENDING_EVENT_CODE_KEY)
-      }
-    } catch {
-      // ignore
+    if (room) {
+      setHasPendingAuthRestore(false)
+      return
     }
-  }, [room, hasSpotify, joinRoomCode])
+    if (loading) return
+    if (!userPayload) return
+
+    try {
+      // Check for pending auth redirect first
+      const pendingRedirect = window.localStorage.getItem(PENDING_AUTH_REDIRECT_KEY)
+      const pendingCode = window.localStorage.getItem(PENDING_EVENT_CODE_KEY)
+
+      if (pendingRedirect || pendingCode) {
+        // Clear storage immediately to prevent re-triggers
+        window.localStorage.removeItem(PENDING_AUTH_REDIRECT_KEY)
+        window.localStorage.removeItem(PENDING_EVENT_CODE_KEY)
+
+        // Parse the pending redirect URL to determine intent
+        if (pendingRedirect) {
+          const url = new URL(pendingRedirect, window.location.origin)
+          const pendingIntent = url.searchParams.get("intent")
+          const pendingJoinCode = url.searchParams.get("code")
+
+          if (pendingIntent === "host") {
+            // User was trying to host before auth
+            setFlowStarted(true)
+            handleCreateRoom(true)
+            return
+          } else if (pendingJoinCode) {
+            // User was trying to join with a code
+            setJoinCode(pendingJoinCode.toUpperCase())
+            setFlowStarted(true)
+            joinRoomCode(pendingJoinCode, true)
+            return
+          }
+        }
+
+        // Fallback to legacy code-only storage
+        if (pendingCode) {
+          setJoinCode(pendingCode.toUpperCase())
+          setFlowStarted(true)
+          joinRoomCode(pendingCode, true)
+          return
+        }
+      }
+      // No pending data found, clear the flag
+      setHasPendingAuthRestore(false)
+    } catch {
+      setHasPendingAuthRestore(false)
+    }
+  }, [room, loading, userPayload, handleCreateRoom, joinRoomCode])
 
   useEffect(() => {
     if (!room?.room_code) return
@@ -836,10 +901,19 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     const hasCode = Boolean(initialJoinCode)
     if (!modeConfig || !mode) return
     if (roomRef.current || room || autojoin) return
+    if (loading) return
+    // Check if there's pending auth data before redirecting
+    try {
+      const hasPendingAuth = window.localStorage.getItem(PENDING_AUTH_REDIRECT_KEY) ||
+                             window.localStorage.getItem(PENDING_EVENT_CODE_KEY)
+      if (hasPendingAuth) return // Don't redirect, let the auth restoration effect handle it
+    } catch {
+      // ignore
+    }
     if (!intent && !hasCode) {
       router.replace(ENTRY_ROUTE[mode])
     }
-  }, [modeConfig, mode, intent, room, autojoin, initialJoinCode, router])
+  }, [modeConfig, mode, intent, room, autojoin, initialJoinCode, router, loading])
 
   useEffect(() => {
     if (abortFlowRef.current) return
@@ -881,11 +955,11 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   }
 
   const isPendingIntent =
-    (intent === "host" || Boolean(initialJoinCode) || Boolean(autojoin)) &&
+    ((intent === "host" || Boolean(initialJoinCode) || Boolean(autojoin) || hasPendingAuthRestore) &&
     !room &&
     !requireSpotify &&
     lobby.status !== "error" &&
-    (lobby.status === "creating" || lobby.status === "joining" || flowStarted)
+    (lobby.status === "creating" || lobby.status === "joining" || flowStarted || hasPendingAuthRestore))
 
   if (isPendingIntent) {
     return (
@@ -935,9 +1009,9 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         <h3 className="text-lg font-semibold">Choisis le format</h3>
         <div className="mt-3 grid gap-2 md:grid-cols-3">
           {[
-            { key: "viewers_only", title: "Viewers only", desc: "Seul le chat répond", value: "viewers_only" as StreamerSubMode },
-            { key: "duo", title: "Streamer + chat", desc: "Le chat puis toi", value: "duo" as StreamerSubMode },
-            { key: "solo", title: "Solo streamer", desc: "Tu joues seul", value: "solo" as StreamerSubMode },
+            { key: "viewers_only", title: "Chat avec ta musique", desc: "Le chat joue avec tes musiques", value: "viewers_only" as StreamerSubMode },
+            { key: "duo", title: "Toi avec leur musique", desc: "Tu joues avec les musiques du chat", value: "duo" as StreamerSubMode },
+            { key: "solo", title: "Vous deux ensemble", desc: "Les deux jouent avec les deux musiques", value: "solo" as StreamerSubMode },
           ].map(opt => (
             <button
               key={opt.key}
@@ -950,27 +1024,6 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
             </button>
           ))}
         </div>
-        {streamerMode === "solo" ? (
-          <div className="mt-3 rounded-xl border border-white/15 bg-[#0f0f0f] p-3 text-sm">
-            <p className="text-xs uppercase tracking-[0.3em] text-white/60">Source des titres</p>
-            <div className="mt-2 flex gap-2">
-              <button
-                type="button"
-                onClick={() => setSoloSource("streamer")}
-                className={`flex-1 rounded-lg border px-3 py-2 text-sm ${soloSource === "streamer" ? "border-white/60 bg-white/10" : "border-white/15 bg-[#0a0a0a]"}`}
-              >
-                Ta musique
-              </button>
-              <button
-                type="button"
-                onClick={() => setSoloSource("chat")}
-                className={`flex-1 rounded-lg border px-3 py-2 text-sm ${soloSource === "chat" ? "border-white/60 bg-white/10" : "border-white/15 bg-[#0a0a0a]"}`}
-              >
-                Musique du chat
-              </button>
-            </div>
-          </div>
-        ) : null}
       </div>
     ) : null
 

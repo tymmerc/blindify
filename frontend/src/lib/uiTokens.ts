@@ -11,7 +11,7 @@ export const surfaces = {
 export const accents: Record<GameMode, string> = {
   friends: "#ec4899",
   event: "#8b5cf6",
-  chat: "#22d3ee",
+  streamer: "#f97316",
 }
 
 export const glow = {

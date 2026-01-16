@@ -31,7 +31,6 @@ function resetPlayers(players: Record<number, MultiplayerPlayerState>): Record<n
       hasAnswered: false,
       isReady: false,
       lastGuess: undefined,
-      lastSourceGuess: null,
       lastVerdict: undefined,
     }
   })
@@ -45,7 +44,8 @@ function createRoundState(index: number, players: Record<number, MultiplayerPlay
   return {
     roomCode: "DEMO",
     hostUserId: DEMO_USER.id,
-    status: "playing",
+    mode: "friends",
+    phase: "GUESSING",
     currentRound: index + 1,
     totalRounds: MOCK_TRACKS.length,
     currentTrack: track
@@ -62,6 +62,10 @@ function createRoundState(index: number, players: Record<number, MultiplayerPlay
       : null,
     timing: { startAt, revealAt },
     players: resetPlayers(players),
+    config: {
+      autoAdvance: true,
+      roundDurationMs: 12000,
+    },
   }
 }
 
@@ -72,7 +76,7 @@ function simulateReveal(state: MultiplayerGameState): MultiplayerGameState {
   Object.values(state.players).forEach(player => {
     const correct = player.userId === DEMO_USER.id ? Boolean(player.lastGuess) : player.userId % 2 === 0
     const gain = correct ? 120 : 70
-    const streak = correct ? player.streak + 1 : 0
+    const streak = correct ? (player.streak ?? 0) + 1 : 0
     updatedPlayers[player.userId] = {
       ...player,
       hasAnswered: true,
@@ -80,23 +84,23 @@ function simulateReveal(state: MultiplayerGameState): MultiplayerGameState {
       lastGuess: player.lastGuess || track?.title || "Réponse démo",
       lastVerdict: correct ? "correct" : "close",
       score: (player.score ?? 0) + gain,
-      accuracy: Math.min(100, player.accuracy + (correct ? 8 : 3)),
-      rounds: player.rounds + 1,
-      correct: player.correct + (correct ? 1 : 0),
+      accuracy: Math.min(100, (player.accuracy ?? 0) + (correct ? 8 : 3)),
+      rounds: (player.rounds ?? 0) + 1,
+      correct: (player.correct ?? 0) + (correct ? 1 : 0),
       streak,
-      bestStreak: Math.max(player.bestStreak, streak),
+      bestStreak: Math.max(player.bestStreak ?? 0, streak),
     }
   })
   return {
     ...state,
-    status: "reveal",
+    phase: "REVEAL",
     players: updatedPlayers,
   }
 }
 
 function advanceFromReveal(state: MultiplayerGameState): MultiplayerGameState {
   if (state.currentRound >= state.totalRounds) {
-    return { ...state, status: "finished" }
+    return { ...state, phase: "FINISHED" }
   }
   return createRoundState(state.currentRound, state.players)
 }
@@ -160,7 +164,7 @@ export default function DemoPage() {
 
   useEffect(() => {
     setState(prev => {
-      if (prev.status !== "playing") return prev
+      if (prev.phase !== "GUESSING") return prev
       if (!prev.timing.revealAt || serverNow < prev.timing.revealAt) return prev
       return simulateReveal(prev)
     })
@@ -168,7 +172,7 @@ export default function DemoPage() {
 
   const handleAnswer = useCallback((guess: string) => {
     setState(prev => {
-      if (prev.status !== "playing") return prev
+      if (prev.phase !== "GUESSING") return prev
       const self = prev.players[DEMO_USER.id]
       if (!self) return prev
       return {
@@ -183,7 +187,7 @@ export default function DemoPage() {
 
   const handleReady = useCallback(() => {
     setState(prev => {
-      if (prev.status !== "reveal") return prev
+      if (prev.phase !== "REVEAL") return prev
       const self = prev.players[DEMO_USER.id]
       if (!self) return prev
       const updatedPlayers = {
@@ -230,7 +234,7 @@ export default function DemoPage() {
           onAnswer={guess => handleAnswer(guess)}
           onReady={handleReady}
           onExit={() => router.push("/modes?from=/demo")}
-          disabled={state.status === "finished"}
+          disabled={state.phase === "FINISHED"}
           autoAdvance
           accentColor={accent}
           mode="event"

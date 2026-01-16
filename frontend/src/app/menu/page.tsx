@@ -209,25 +209,24 @@ function EventView({ accent, router }: { accent: string; router: ReturnType<type
   )
 }
 
-function ChatView({ accent, router }: { accent: string; router: ReturnType<typeof useRouter> }) {
+function StreamerView({ accent, router }: { accent: string; router: ReturnType<typeof useRouter> }) {
   return (
     <div className="space-y-8">
       <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-[#0c0c0c] p-5">
-        <h2 className="text-xl font-semibold text-white">Mode Chat</h2>
-        <p className="text-sm text-white/65">Le chat joue avec toi.</p>
-        <AccentButton label="Ouvrir le salon" accent={accent} onClick={() => router.push("/chat")} />
+        <h2 className="text-xl font-semibold text-white">Mode Streamer</h2>
+        <p className="text-sm text-white/65">Joue en live avec ton chat - 3 modes disponibles.</p>
+        <AccentButton label="Lancer le stream" accent={accent} onClick={() => router.push("/streamer")} />
       </div>
       <div
         className="rounded-2xl border p-5"
         style={{ borderColor: accent, backgroundColor: accentLayer(accent, 0.22) }}
       >
-        <h3 className="text-lg font-semibold text-white">Comment ça se passe</h3>
-        <p className="mt-2 text-sm text-white/80">Le jeu avance, le chat réagit en direct.</p>
+        <h3 className="text-lg font-semibold text-white">3 modes de jeu</h3>
+        <p className="mt-2 text-sm text-white/80">Choisis ton format avant de démarrer le stream.</p>
         <ul className="mt-3 space-y-2 text-sm text-white/85 list-disc list-inside">
-          <li>Tu démarres la partie</li>*
-          <li>La musique est tirée des bibliothèques des joueurs présents.</li>
-          <li>La musique tourne, le chat répond</li>
-          <li>Les messages s’affichent au fil du jeu</li>
+          <li>Chat avec ta musique : le chat joue avec tes musiques</li>
+          <li>Toi avec leur musique : tu joues avec les musiques du chat</li>
+          <li>Vous deux ensemble : les deux jouent avec les deux playlists</li>
         </ul>
       </div>
     </div>
@@ -250,9 +249,15 @@ export default function MenuPage() {
     let active = true
     async function loadSession() {
       try {
-        const me = await api.ensureUserSession("Invité")
+        // Check for existing auth instead of auto-creating guest session
+        const me = await api.checkAuth()
         if (!active) return
-        setUserPayload(me)
+        if (me) {
+          setUserPayload(me)
+        } else {
+          // User not authenticated - they should go through mode selection first
+          setSessionError("Sélectionne un mode pour continuer.")
+        }
       } catch (err) {
         console.error("menu_session_failed", err)
         setSessionError("Impossible de récupérer la session.")
@@ -304,11 +309,11 @@ export default function MenuPage() {
     if (mode === "event") {
       return <EventView accent={accentColor} router={router} />
     }
-    return <ChatView accent={accentColor} router={router} />
+    return <StreamerView accent={accentColor} router={router} />
   }
 
   return (
-    <ModeGate allowedModes={["friends", "event", "chat"]}>
+    <ModeGate allowedModes={["friends", "event", "streamer"]}>
       <div className="min-h-screen bg-[#050505] px-6 py-8 text-white">
         <div className="mx-auto flex max-w-5xl flex-col gap-6">
           <ModeHeader

@@ -6,7 +6,7 @@ import { MultiplayerRouter } from "./MultiplayerRouter"
 
 export default function MultiplayerPage() {
   return (
-    <ModeGate allowedModes={["friends", "event", "chat"]}>
+    <ModeGate allowedModes={["friends", "event", "streamer"]}>
       <Suspense fallback={<div className="grid min-h-screen place-items-center text-sm text-[var(--ma-muted)]">Chargement…</div>}>
         <MultiplayerRouter />
       </Suspense>

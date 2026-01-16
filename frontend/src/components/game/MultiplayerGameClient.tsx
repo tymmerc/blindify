@@ -69,19 +69,18 @@ export function MultiplayerGameClient({
       : null
 
   const player = state?.players?.[user.id] ?? null
-  const backendStatus = state?.status as string | undefined
+  const backendPhase = state?.phase
 
   let baseUiState: RoundUiState
-  switch (backendStatus) {
-    case "playing":
+  switch (backendPhase) {
+    case "GUESSING":
       baseUiState = RoundUiState.Playing
       break
-    case "reveal":
-    case "finished":
+    case "REVEAL":
+    case "FINISHED":
       baseUiState = RoundUiState.Revealed
       break
-    case "starting":
-    case "countdown":
+    case "LOBBY":
       baseUiState = RoundUiState.Armed
       break
     default:
@@ -106,7 +105,7 @@ export function MultiplayerGameClient({
       ? "Écoute en cours"
       : uiState === RoundUiState.Revealed
         ? "Réponse révélée"
-        : state?.status === "finished"
+        : state?.phase === "FINISHED"
           ? "Partie terminée"
           : "En attente"
 
@@ -123,6 +122,7 @@ export function MultiplayerGameClient({
       friends: { playing: 0.55, reveal: 0.38 },
       event: { playing: 0.48, reveal: 0.34 },
       chat: { playing: 0.35, reveal: 0.28 },
+      streamer: { playing: 0.50, reveal: 0.35 },
     } as const
     if (uiState === RoundUiState.Playing) {
       audioManager.setVolume(cues[mode].playing, "multiplayer")
@@ -233,7 +233,7 @@ export function MultiplayerGameClient({
       }))
       .sort((a, b) => {
         if (b.score !== a.score) return b.score - a.score
-        return b.accuracy - a.accuracy
+        return (b.accuracy ?? 0) - (a.accuracy ?? 0)
       })
   }, [state?.players])
 
@@ -609,7 +609,7 @@ export function MultiplayerGameClient({
       {competitionSection}
       <div className="h-px bg-white/10" />
       {answerSection}
-      {state?.status === "finished" ? (
+      {state?.phase === "FINISHED" ? (
         <div className="rounded-2xl border border-white/10 bg-[#0c0c0c] p-4 text-center text-sm text-[var(--ma-muted,#c2c2c2)]">
           Partie terminée. Merci d’avoir joué !
         </div>

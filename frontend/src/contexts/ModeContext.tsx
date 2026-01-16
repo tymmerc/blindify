@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
 
-export type Mode = "friends" | "event" | "chat"
+export type Mode = "friends" | "event" | "streamer"
 
 type ModeContextValue = {
   mode: Mode | null
@@ -21,13 +21,13 @@ const GUEST_KEY = "blindify:guest"
 const MODE_ACCENTS: Record<Mode, string> = {
   friends: "#ec4899", // rose
   event: "#8b5cf6", // violet froid
-  chat: "#22d3ee", // cyan/bleu glacier
+  streamer: "#f97316", // orange
 }
 
 const MODE_LABELS: Record<Mode, string> = {
   friends: "Mode Amis",
   event: "Mode Événement",
-  chat: "Mode Chat",
+  streamer: "Mode Streamer",
 }
 
 export function ModeProvider({ children }: { children: React.ReactNode }) {
@@ -36,9 +36,13 @@ export function ModeProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (typeof window === "undefined") return
-    const stored = window.localStorage.getItem(STORAGE_KEY) as Mode | null
-    if (stored === "friends" || stored === "event" || stored === "chat") {
-      setModeState(stored)
+    const stored = window.localStorage.getItem(STORAGE_KEY)
+    // Migrate old "chat" mode to "streamer"
+    if (stored === "chat") {
+      setModeState("streamer")
+      window.localStorage.setItem(STORAGE_KEY, "streamer")
+    } else if (stored === "friends" || stored === "event" || stored === "streamer") {
+      setModeState(stored as Mode)
     }
     const storedGuest = window.localStorage.getItem(GUEST_KEY)
     if (storedGuest === "1") {

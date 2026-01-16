@@ -1,0 +1,13 @@
+# Environment
+.env
+.env.*
+!.env.example
+
+# Dependencies & builds
+node_modules/
+dist/
+.next/
+out/
+tmp/
+*.log
+.DS_Store

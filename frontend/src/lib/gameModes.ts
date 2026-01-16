@@ -1,4 +1,4 @@
-export type GameMode = "friends" | "event" | "chat"
+export type GameMode = "friends" | "event" | "streamer"
 
 export type GameModeConfig = (typeof GAME_MODES)[GameMode]
 
@@ -35,24 +35,26 @@ export const GAME_MODES = {
     },
   },
 
-  chat: {
+  streamer: {
     lobby: {
-      showRoomCode: false,
+      showRoomCode: true,
       showFriendsList: false,
       allowInvites: false,
       minPlayers: 1,
-      autoStart: true,
+      autoStart: false,
     },
     game: {
-      scoring: false,
-      showLeaderboard: false,
-      pace: "relaxed" as const,
-      participationOnly: true,
+      scoring: true,
+      showLeaderboard: "top3" as const,
+      pace: "normal" as const,
+      showStreaks: true,
     },
   },
 } as const
 
 export function resolveGameMode(value: string | null): GameMode | null {
-  if (value === "friends" || value === "event" || value === "chat") return value
+  // Redirect old "chat" mode to "streamer"
+  if (value === "chat") return "streamer"
+  if (value === "friends" || value === "event" || value === "streamer") return value
   return null
 }

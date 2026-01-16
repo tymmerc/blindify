@@ -124,7 +124,7 @@ export function resolveRoundTempo(mode: GameMode): RoundTempo {
       return { feedbackMs: 220, revealHoldMs: 380, cadence: "snappy" }
     case "event":
       return { feedbackMs: 420, revealHoldMs: 650, cadence: "steady" }
-    case "chat":
+    case "streamer":
       return { feedbackMs: 320, revealHoldMs: 520, cadence: "relaxed" }
     default:
       return { feedbackMs: ROUND_FEEDBACK_MS, revealHoldMs: 450, cadence: "steady" }
