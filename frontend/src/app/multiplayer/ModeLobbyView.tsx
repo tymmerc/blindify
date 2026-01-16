@@ -174,28 +174,27 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     let active = true
     async function bootstrap() {
       try {
-        // First check if user is already authenticated
+        // Check for existing session
         const existing = await api.checkAuth()
         if (!active) return
 
         if (existing) {
-          // User is authenticated (has Spotify or existing session)
-          setUserPayload(existing)
-          setGuest(false)
-        } else if (isGuest) {
-          // Only create guest session if user explicitly chose guest mode
-          const guestProfile = getOrCreateGuest()
-          const me = await api.ensureUserSession(guestProfile.name)
-          if (!active) return
-          if (!me) {
-            setError("Impossible de créer une session invité.")
+          // If user has guest session but isGuest is false, it means they have old guest session
+          // We should force them to re-auth with Spotify
+          if (existing.user.provider === "guest") {
+            // Old guest session - clear it and require Spotify
+            setError("Session invité expirée. Connecte-toi avec Spotify pour jouer.")
+            setGuest(false)
+            setLoading(false)
             return
           }
-          setUserPayload(me)
-          setGuest(true)
+
+          // User has Spotify session
+          setUserPayload(existing)
+          setGuest(false)
         } else {
-          // No auth and not in guest mode - redirect to login or mode selection
-          setError("Connecte-toi ou choisis le mode invité pour continuer.")
+          // No session - require Spotify authentication
+          setError("Connecte-toi avec Spotify pour jouer.")
           setLoading(false)
           return
         }
@@ -943,12 +942,29 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
 
   if (!userPayload) {
     return (
-      <div className="grid min-h-screen place-items-center px-6">
-        <div className="surface max-w-md rounded-3xl border border-white/10 p-8 text-center text-sm text-slate-200">
-          <p>{error || "Impossible de préparer une session invité."}</p>
-          <Button variant="outline" onClick={() => router.replace("/auth/login")} className="mt-4">
-            Retour
-          </Button>
+      <div className="grid min-h-screen place-items-center px-6 bg-[#050505]">
+        <div className="surface max-w-md rounded-3xl border border-white/10 bg-[#0b0b0b] p-8 text-center">
+          <p className="text-sm text-white/70">{error || "Connecte-toi avec Spotify pour jouer."}</p>
+          <div className="mt-6 flex flex-col gap-3">
+            <Button
+              onClick={() => {
+                const url = api.getProviderLoginUrl("spotify")
+                if (typeof window !== "undefined") {
+                  window.location.href = url
+                }
+              }}
+              className="w-full rounded-xl border border-white/20 bg-white/10 px-5 py-3 text-sm font-semibold text-white hover:bg-white/15"
+            >
+              Se connecter avec Spotify
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => router.replace("/modes")}
+              className="w-full rounded-xl border border-white/15 bg-transparent px-5 py-3 text-sm text-white/70 hover:bg-white/5"
+            >
+              Retour aux modes
+            </Button>
+          </div>
         </div>
       </div>
     )
@@ -998,7 +1014,6 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     onAcceptInvite: handleAcceptInvite,
     canStart: canStartGame,
     isHost,
-    isGuest,
     currentUserId,
   }
 
@@ -1062,12 +1077,8 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     </div>
   ) : null
 
-  const guestNotice =
-    isGuest && view !== "results" ? (
-      <div className="rounded-2xl border border-white/12 bg-[#0c0c0c] px-5 py-4 text-sm text-white/75">
-        Mode invité : audio non disponible, mais tu peux répondre et observer comme les autres.
-      </div>
-    ) : null
+  // Guest mode no longer supported - all users must use Spotify
+  const guestNotice = null
 
   const loadingGame =
     view === "playing" && room && !gameState ? (

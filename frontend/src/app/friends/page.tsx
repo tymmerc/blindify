@@ -9,7 +9,7 @@ import { FriendsGameModal } from "@/components/modals/FriendsGameModal"
 
 export default function FriendsEntryPage() {
   const router = useRouter()
-  const { accentColor, setMode, isGuest, mode } = useMode()
+  const { accentColor, setMode, mode } = useMode()
   const [joinCode, setJoinCode] = useState("")
   const [chooserOpen, setChooserOpen] = useState(false)
   const [creating, setCreating] = useState(false)
@@ -82,7 +82,6 @@ export default function FriendsEntryPage() {
               >
                 Créer ou rejoindre une partie
               </Button>
-              {isGuest ? <p className="text-xs text-white/60">Mode invité activé : tu peux joeur avec les musiques des autres</p> : null}
             </div>
           </SurfaceCard>
 
@@ -147,11 +146,6 @@ export default function FriendsEntryPage() {
                 </div>
                 {joinError ? <p className="text-xs text-red-300">{joinError}</p> : null}
               </div>
-              {isGuest ? (
-                <p className="text-xs text-white/60">
-                  Mode invité activé : tu peux répondre sans audio. Clique “Créer une salle” ou colle un code.
-                </p>
-              ) : null}
             </div>
           </div>
         </div>

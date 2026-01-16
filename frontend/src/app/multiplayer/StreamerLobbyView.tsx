@@ -100,7 +100,6 @@ function StreamerLobby(props: LobbyRendererProps) {
             <p className="text-xs uppercase tracking-[0.35em] text-white/60">Flux streamer</p>
             <h3 className="text-2xl font-semibold text-white">Attente des joueurs</h3>
             <p className="text-sm text-white/70">Projette le code, le chat rejoint et fournit la musique.</p>
-            {props.isGuest ? <p className="text-xs text-white/60">Invité : audio désactivé, réponses possibles.</p> : null}
           </div>
         </div>
         <div className="flex flex-col items-end gap-2 text-right text-xs uppercase tracking-[0.3em] text-white/60">

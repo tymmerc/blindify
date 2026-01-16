@@ -58,7 +58,7 @@ function hexToRgba(hex: string, alpha: number): string {
 function ModeSelectionContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { mode, setMode, isGuest, setGuest } = useMode()
+  const { mode, setMode } = useMode()
   const [selection, setSelection] = useState<Mode | null>(mode)
   const [hovered, setHovered] = useState<Mode | null>(null)
 
@@ -67,11 +67,6 @@ function ModeSelectionContent() {
   useEffect(() => {
     if (mode) setSelection(mode)
   }, [mode])
-
-  useEffect(() => {
-    // Sortie du mode invité quand on revient choisir un mode.
-    setGuest(false)
-  }, [setGuest])
 
   const getCard = (key: Mode | null) => MODE_CARDS.find(card => card.key === key) ?? null
   const activeCard = getCard(selection)
@@ -82,18 +77,6 @@ function ModeSelectionContent() {
     if (!selected || !card) return
     setMode(selected)
     const target = card.destination || fallbackRoute
-    router.replace(target)
-  }
-
-  const handleGuestQuickStart = () => {
-    setGuest(true)
-    const choice = (window.prompt("Choisis un mode : friends / event / chat", "event") || "").trim().toLowerCase()
-    if (choice !== "friends" && choice !== "event" && choice !== "chat") return
-    setMode(choice as Mode)
-    const target =
-      choice === "friends"
-        ? "/multiplayer?mode=friends"
-        : `/multiplayer?mode=${choice}&autojoin=1`
     router.replace(target)
   }
 
@@ -169,24 +152,6 @@ function ModeSelectionContent() {
             Valider ce mode
           </button>
         </div>
-
-        <button
-          type="button"
-          onClick={handleGuestQuickStart}
-          className="fixed bottom-6 right-6 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-semibold text-white hover:bg-white/15"
-          aria-label="Jouer sans connexion"
-        >
-          Jouer sans connexion
-        </button>
-        {isGuest ? (
-          <button
-            type="button"
-            onClick={() => setGuest(false)}
-            className="fixed bottom-6 left-6 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-xs font-semibold text-white hover:bg-white/10"
-          >
-            Revenir en mode connecté
-          </button>
-        ) : null}
       </div>
     </div>
   )

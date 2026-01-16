@@ -113,7 +113,6 @@ function EventLobby(props: LobbyRendererProps) {
             <p className="text-xs uppercase tracking-[0.3em] text-white/60">Projection</p>
             <h3 className="text-2xl font-semibold text-white">En scène</h3>
             <p className="text-sm text-white/70">Lisible de loin. Le host contrôle le rythme.</p>
-            {props.isGuest ? <p className="text-xs text-white/60">Invité : visionnage sans audio, participation autorisée.</p> : null}
           </div>
           {host ? (
             <div className="rounded-xl border border-white/15 bg-[#0f0f0f] px-3 py-2 text-right text-xs text-white/70">

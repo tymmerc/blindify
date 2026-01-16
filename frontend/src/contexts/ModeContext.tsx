@@ -44,9 +44,11 @@ export function ModeProvider({ children }: { children: React.ReactNode }) {
     } else if (stored === "friends" || stored === "event" || stored === "streamer") {
       setModeState(stored as Mode)
     }
-    const storedGuest = window.localStorage.getItem(GUEST_KEY)
-    if (storedGuest === "1") {
-      setIsGuest(true)
+    // Clean up old guest mode from localStorage (no longer used)
+    try {
+      window.localStorage.removeItem(GUEST_KEY)
+    } catch {
+      // ignore
     }
   }, [])
 
@@ -78,13 +80,8 @@ export function ModeProvider({ children }: { children: React.ReactNode }) {
 
   const setGuest = useCallback((value: boolean) => {
     setIsGuest(value)
-    if (typeof window !== "undefined") {
-      if (value) {
-        window.localStorage.setItem(GUEST_KEY, "1")
-      } else {
-        window.localStorage.removeItem(GUEST_KEY)
-      }
-    }
+    // NEVER persist guest mode to localStorage
+    // It should be temporary for each session only
   }, [])
 
   const value = useMemo<ModeContextValue>(() => {

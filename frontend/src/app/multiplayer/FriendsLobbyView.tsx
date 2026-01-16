@@ -105,7 +105,6 @@ function FriendsLobby({
   starting,
   canStart,
   isHost,
-  isGuest,
   room,
 }: LobbyRendererProps) {
   const accent = modeAccent("friends")
@@ -123,7 +122,6 @@ function FriendsLobby({
             <p className="text-xs uppercase tracking-[0.3em] text-white/60">Rivalité active</p>
             <h3 className="text-2xl font-semibold text-white">Prêts / pas prêts</h3>
             <p className="text-sm text-white/70">On lance dès que vos rivaux sont alignés.</p>
-            {isGuest ? <p className="text-xs text-white/60">Invité : pas d’audio, mais réponses comptées.</p> : null}
           </div>
           <Button
             variant="outline"
