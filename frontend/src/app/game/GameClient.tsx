@@ -16,7 +16,7 @@ function normalizeDifficulty(value: string | null): "easy" | "normal" | "hard" {
 
 function normalizeSource(
   value: string | null
-): "library" | "top" | "recent" | "liked" | "playlist" | "top_week" | "top_month" | "top_all" {
+): "library" | "top" | "recent" | "liked" | "playlist" | "top_week" | "top_month" | "top_all" | "quickplay" {
   if (
     value === "top" ||
     value === "recent" ||
@@ -24,7 +24,8 @@ function normalizeSource(
     value === "playlist" ||
     value === "top_week" ||
     value === "top_month" ||
-    value === "top_all"
+    value === "top_all" ||
+    value === "quickplay"
   )
     return value
   return "library"
@@ -42,6 +43,8 @@ export default function GameClient() {
   const difficulty = normalizeDifficulty(searchParams.get("difficulty"))
   const source = normalizeSource(searchParams.get("source"))
   const playlistId = searchParams.get("playlistId")
+  const quickUrl = searchParams.get("quickUrl")
+  const isQuickPlay = source === "quickplay" && Boolean(quickUrl)
   const roundsCount = (() => {
     const raw = searchParams.get("count")
     const parsed = raw ? Number(raw) : NaN
@@ -56,6 +59,20 @@ export default function GameClient() {
       try {
         setLoading(true)
         setError(null)
+
+        if (isQuickPlay && quickUrl) {
+          // Quick play: no auth required, use public playlists
+          const decoded = decodeURIComponent(quickUrl)
+          const result = await api.quickPlay(decoded, roundsCount)
+          if (!active) return
+          setUserPayload({
+            user: { id: 0, provider: "guest", provider_id: "quick", username: "Joueur", email: null, avatar: null },
+            providerConnection: null,
+          })
+          setSessionInfo(result.session as SoloGameResponse["session"])
+          setTracks(result.tracks as SoloTrack[])
+          return
+        }
 
         const me = await api.ensureUserSession("Invité")
         if (!active) return
@@ -93,13 +110,15 @@ export default function GameClient() {
     return () => {
       active = false
     }
-  }, [router, difficulty, source, playlistId, roundsCount])
+  }, [router, difficulty, source, playlistId, quickUrl, isQuickPlay, roundsCount])
 
   const hasTracks = useMemo(() => tracks.length > 0, [tracks])
 
   const handleGameComplete = useCallback(
     async (summary: { rounds: number; correct: number; bestStreak: number; points?: number }) => {
       if (!sessionInfo?.id) return
+      // Quick play has session.id === 0 — don't persist stats
+      if (sessionInfo.id === 0) return
       try {
         await api.recordSoloResult({
           sessionId: sessionInfo.id,

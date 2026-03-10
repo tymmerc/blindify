@@ -2,8 +2,9 @@
 
 import Link from "next/link"
 import { Suspense, useMemo, useState, type FormEvent } from "react"
-import { useSearchParams } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
 import GameClient from "../game/GameClient"
 
 export const dynamic = "force-dynamic"
@@ -21,6 +22,9 @@ const soloOptions: SoloOption[] = [
 ]
 
 function SoloSelector() {
+  const router = useRouter()
+  const [quickUrl, setQuickUrl] = useState("")
+  const [quickError, setQuickError] = useState<string | null>(null)
   const [chatInput, setChatInput] = useState("")
   const [chatMessages, setChatMessages] = useState<
     Array<{ id: string; author: "ia" | "user"; text: string; hint?: string }>
@@ -40,6 +44,15 @@ function SoloSelector() {
     }
     return groups
   }, [])
+
+  const handleQuickPlay = (e: FormEvent) => {
+    e.preventDefault()
+    const trimmed = quickUrl.trim()
+    if (!trimmed) return
+    setQuickError(null)
+    const encoded = encodeURIComponent(trimmed)
+    router.push(`/solo?source=quickplay&quickUrl=${encoded}&count=10`)
+  }
 
   const handleSend = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -65,14 +78,57 @@ function SoloSelector() {
           <div className="space-y-2">
             <p className="text-xs uppercase tracking-[0.3em] text-[var(--ma-muted)]">Solo</p>
             <h1 className="text-3xl font-bold tracking-[-0.03em]">Lancer un blindtest</h1>
-            <p className="text-sm text-[var(--ma-muted)]">Choisissez une source ou décris ton mood à l’IA pour générer un set sur-mesure.</p>
+            <p className="text-sm text-[var(--ma-muted)]">Choisissez une source ou collez un lien de playlist publique.</p>
           </div>
           <Link
-            href="/menu"
+            href="/modes"
             className="inline-flex items-center gap-2 rounded-full border border-[var(--ma-border-strong)] bg-white/5 px-4 py-2 text-sm font-medium text-white/90 transition hover:bg-white/10"
           >
             ← Retour
           </Link>
+        </div>
+
+        {/* Quick Play — paste URL */}
+        <div className="relative overflow-hidden rounded-2xl border border-purple-500/20 bg-gradient-to-br from-purple-500/5 to-pink-500/5 p-6">
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <h2 className="text-xl font-semibold">Playlist publique</h2>
+              <span className="rounded-full bg-purple-500/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-purple-400">
+                Sans compte
+              </span>
+            </div>
+            <p className="text-sm text-white/60">
+              Colle un lien de profil ou playlist Spotify / Deezer. On pioche 10 titres au hasard dans tes playlists publiques.
+            </p>
+            <form onSubmit={handleQuickPlay} className="flex flex-col gap-3 sm:flex-row">
+              <input
+                type="url"
+                value={quickUrl}
+                onChange={e => setQuickUrl(e.target.value)}
+                placeholder="https://open.spotify.com/user/... ou deezer.com/profile/..."
+                className="flex-1 rounded-xl border border-white/15 bg-black/30 px-4 py-3 text-sm text-white placeholder:text-white/30 outline-none transition focus:border-purple-500/50"
+              />
+              <Button
+                type="submit"
+                disabled={!quickUrl.trim()}
+                className="rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 px-6 py-3 text-sm font-bold text-white shadow-[0_8px_24px_rgba(168,85,247,0.25)] hover:brightness-110 disabled:opacity-50"
+              >
+                Jouer
+              </Button>
+            </form>
+            {quickError && <p className="text-xs text-red-400">{quickError}</p>}
+            <div className="flex flex-wrap gap-2 text-[11px] text-white/30">
+              <span className="rounded-full border border-white/10 px-2.5 py-0.5">open.spotify.com/user/...</span>
+              <span className="rounded-full border border-white/10 px-2.5 py-0.5">deezer.com/profile/...</span>
+              <span className="rounded-full border border-white/10 px-2.5 py-0.5">...playlist/...</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <div className="h-px flex-1 bg-white/10" />
+          <span className="text-xs uppercase tracking-[0.3em] text-white/30">ou avec ton compte</span>
+          <div className="h-px flex-1 bg-white/10" />
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
