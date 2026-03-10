@@ -36,6 +36,7 @@ import audioSourcesRoutes from "./routes/audioSources";
 import friendsRoutes from "./routes/friends";
 import invitationsRoutes from "./routes/invitations";
 import importRoutes from "./routes/import";
+import quickPlayRoutes from "./routes/quickPlay";
 import { fail, ok } from "./utils/response";
 import {
   gameStateSnapshot,
@@ -368,6 +369,7 @@ app.use("/api/audio-sources", audioSourcesRoutes);
 app.use("/api/friends", friendsRoutes);
 app.use("/api/invitations", invitationsRoutes);
 app.use("/api/import", importRoutes);
+app.use("/api/quick-play", quickPlayRoutes);
 
 async function broadcastFriendPresence(userId: number, username: string | null) {
   const friendIds = await getAcceptedFriendIds(userId);

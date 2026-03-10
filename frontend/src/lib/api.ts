@@ -213,4 +213,7 @@ export const api = {
   async importSyncAll(provider: string, playlistIds: string[]) {
     return clientApi.importSyncAll(provider, playlistIds)
   },
+  async quickPlay(url: string, count?: number) {
+    return clientApi.quickPlay(url, count)
+  },
 }

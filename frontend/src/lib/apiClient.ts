@@ -411,6 +411,17 @@ export const clientApi = {
       body: JSON.stringify({ provider, playlistIds }),
     })
   },
+  async quickPlay(url: string, count?: number): Promise<{
+    session: { id: number; mode: string; difficulty: string; provider: string; totalRounds: number; startedAt: string }
+    tracks: Array<{ round: number; audioSourceId: string; type: string; track_id: string; title: string; artist: string; album_cover: string | null; audio_url: string; metadata: Record<string, unknown> }>
+    profileInfo: { provider: string; playlistCount: number; totalTracks: number }
+  }> {
+    return request("/api/quick-play", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url, count }),
+    })
+  },
 }
 
 export type ClientApi = typeof clientApi
