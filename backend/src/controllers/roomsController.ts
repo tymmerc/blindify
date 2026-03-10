@@ -1,6 +1,5 @@
 import type { Request, Response } from "express";
 import axios from "axios";
-import previewFinder from "spotify-preview-finder";
 import { pool } from "../config/db";
 import { io } from "../socket";
 import { getSessionContext } from "../utils/session";
@@ -8,38 +7,24 @@ import { ok, fail } from "../utils/response";
 import type { MusicProvider } from "../types/user";
 import type { AudioSourceRow } from "../types/audio";
 import { syncSpotifyLibrary } from "../services/providers/spotifySync";
-import { bootstrapGameState, getGameState } from "../services/realtimeGame";
-import { broadcastState, startNextRound } from "../services/gameOrchestrator";
+import { bootstrapGameState, getGameState, clearGame } from "../services/realtimeGame";
+import { startRoundAndBroadcast } from "../services/realtimeOrchestrator";
 import { GameMode, type RoundTrack } from "../types/game";
 import { initStreamerGame } from "../services/streamerOrchestrator";
-
-async function fetchGlobalRandomSources(count: number): Promise<AudioSourceRow[]> {
-  if (count <= 0) return [];
-  const { rows } = await pool.query<AudioSourceRow>(
-    `SELECT s.id,
-            s.user_id AS user_id,
-            s.provider,
-            s.external_id,
-            s.title,
-            s.artist,
-            s.album_cover,
-            s.audio_url,
-            s.duration_ms,
-            s.metadata
-     FROM audio_sources s
-     ORDER BY RANDOM()
-     LIMIT $1`,
-    [count * 2]
-  );
-  return rows;
-}
+import {
+  hydratePreviewUrl,
+  fetchAudioSources,
+  collectPlayableSources,
+  fetchGlobalRandomSources,
+  shuffle,
+  type ProviderFilter,
+} from "../services/trackResolution";
 
 function generateRoomCode(): string {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   return Array.from({ length: 6 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join("");
 }
 
-type ProviderFilter = MusicProvider | "any";
 type SourceChoice = "library" | "liked" | "playlist" | "top_week" | "top_month" | "top_all";
 
 async function ensureRoomParticipantPrefs(): Promise<void> {
@@ -52,177 +37,7 @@ async function ensureRoomFlags(): Promise<void> {
   await pool.query(`ALTER TABLE multiplayer_rooms ADD COLUMN IF NOT EXISTS mode TEXT DEFAULT 'friends'`);
 }
 
-const EVENT_ROUND_DURATION_MS = 25_000;
-
-async function fetchAudioSources(
-  userIds: number | number[],
-  provider: ProviderFilter,
-  count: number,
-  opts: { likedOnly?: boolean; playlistId?: string; timeRange?: string } = {}
-): Promise<AudioSourceRow[]> {
-  const extraConds: string[] = [];
-  const params: unknown[] = [];
-  const userList = Array.isArray(userIds) ? userIds : [userIds];
-
-  // Base conditions
-  params.push(userList);
-  const userCond = opts.likedOnly ? `l.user_id = ANY($1)` : `(s.user_id = ANY($1) OR s.user_id IS NULL)`;
-  let providerCond = "";
-  if (provider !== "any") {
-    params.push(provider);
-    providerCond = opts.likedOnly ? `AND s.provider = $2` : `AND provider = $2`;
-  }
-
-  if (opts.playlistId) {
-    params.push(opts.playlistId);
-    extraConds.push(`metadata->>'playlist_id' = $${params.length}`);
-  }
-  if (opts.timeRange) {
-    params.push(opts.timeRange);
-    extraConds.push(`metadata->>'time_range' = $${params.length}`);
-  }
-
-  const extraClause = extraConds.length ? `AND ${extraConds.join(" AND ")}` : "";
-
-  if (opts.likedOnly) {
-    params.push(count);
-    const limitIndex = params.length;
-    const { rows } = await pool.query<AudioSourceRow>(
-      `SELECT s.id, s.user_id AS user_id, s.provider, s.external_id, s.title, s.artist, s.album_cover, s.audio_url, s.duration_ms, s.metadata
-       FROM audio_sources s
-       INNER JOIN likes l ON l.audio_source_id = s.id
-       WHERE ${userCond} ${providerCond} ${extraClause}
-       ORDER BY RANDOM()
-       LIMIT $${limitIndex}`,
-      params
-    );
-    return rows;
-  }
-
-  params.push(count);
-  const limitIndex = params.length;
-  const { rows } = await pool.query<AudioSourceRow>(
-    `SELECT s.id, s.user_id AS user_id, s.provider, s.external_id, s.title, s.artist, s.album_cover, s.audio_url, s.duration_ms, s.metadata
-     FROM audio_sources s
-     WHERE ${userCond} ${providerCond} ${extraClause}
-     ORDER BY RANDOM()
-     LIMIT $${limitIndex}`,
-    params
-  );
-  return rows;
-}
-
-async function hydratePreviewUrl(
-  source: AudioSourceRow,
-  opts: { accessToken?: string; allowScrape?: boolean } = {}
-): Promise<string | null> {
-  if (source.provider !== "spotify") return source.audio_url ?? null;
-  const title = source.title?.trim();
-  const artist = source.artist?.trim();
-  if (!title) return null;
-
-  try {
-    const searchUrl = "https://api.spotify.com/v1/search";
-    const queries = [
-      [`track:${title}`, artist ? `artist:${artist}` : ""].filter(Boolean).join(" "),
-      title,
-    ];
-
-    let preview: string | null = null;
-    if (opts.accessToken) {
-      for (const q of queries) {
-        if (preview) break;
-        if (!q) continue;
-        const { data } = await axios.get(searchUrl, {
-          params: { q, type: "track", limit: 1, market: "from_token" },
-          headers: { Authorization: `Bearer ${opts.accessToken}` },
-        });
-        preview = data?.tracks?.items?.[0]?.preview_url ?? null;
-      }
-    }
-
-    if (!preview && opts.allowScrape) {
-      try {
-        const finderResult = await previewFinder(title, artist ?? undefined, 1);
-        if (finderResult?.success && finderResult.results?.length) {
-          preview = finderResult.results[0]?.previewUrls?.[0] ?? null;
-        }
-      } catch (err) {
-        console.error("preview_scrape_failed", { id: source.id, err });
-      }
-    }
-
-    if (preview) {
-      await pool.query("UPDATE audio_sources SET audio_url=$1 WHERE id=$2", [preview, source.id]);
-      return preview;
-    }
-    return null;
-  } catch (err) {
-    console.error("preview_lookup_failed", { id: source.id, err });
-    return null;
-  }
-}
-
-function shuffle<T>(arr: T[]): T[] {
-  const copy = [...arr];
-  for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]];
-  }
-  return copy;
-}
-
-async function collectPlayableSources(
-  userIds: number | number[],
-  provider: ProviderFilter,
-  desiredCount: number,
-  opts: { likedOnly?: boolean; playlistId?: string; timeRange?: string; accessToken?: string; allowScrape?: boolean }
-): Promise<AudioSourceRow[]> {
-  const candidateLimit = Math.min(desiredCount * 8, 400);
-  let candidates = await fetchAudioSources(userIds, provider, candidateLimit, {
-    likedOnly: opts.likedOnly,
-    playlistId: opts.playlistId,
-    timeRange: opts.timeRange,
-  });
-
-  // Hydrate Spotify previews even when provider="any"
-  if (opts.accessToken) {
-    await Promise.all(
-      candidates.map(async source => {
-        if (source.provider !== "spotify" || source.audio_url) return;
-        const preview = await hydratePreviewUrl(source, {
-          accessToken: opts.accessToken!,
-          allowScrape: opts.allowScrape !== false,
-        });
-        if (preview) {
-          source.audio_url = preview;
-          console.log("preview_found", { sourceId: source.id, title: source.title });
-        }
-      })
-    );
-  } else if (opts.allowScrape !== false) {
-    await Promise.all(
-      candidates.map(async source => {
-        if (source.provider !== "spotify" || source.audio_url) return;
-        const preview = await hydratePreviewUrl(source, { allowScrape: true });
-        if (preview) {
-          source.audio_url = preview;
-          console.log("preview_found_scrape_only", { sourceId: source.id, title: source.title });
-        }
-      })
-    );
-  }
-
-  const playable = shuffle(candidates.filter(source => Boolean(source.audio_url)));
-  const unique = new Map<string, AudioSourceRow>();
-  for (const source of playable) {
-    const key = source.external_id ?? String(source.id);
-    if (unique.has(key)) continue;
-    unique.set(key, source);
-    if (unique.size >= desiredCount) break;
-  }
-  return Array.from(unique.values());
-}
+const EVENT_ROUND_DURATION_MS = 15_000;
 
 async function syncPlaylistTracks(userId: number, playlistId: string, accessToken: string): Promise<void> {
   const url = `https://api.spotify.com/v1/playlists/${playlistId}/tracks`;
@@ -626,6 +441,19 @@ export const roomsController = {
     }
 
     if (room.status !== "waiting") {
+      // Allow restart if the game is finished
+      const existingState = getGameState(room.room_code);
+      if (!existingState || existingState.phase === "FINISHED") {
+        // Reset room to allow a new game
+        clearGame(room.room_code);
+        await pool.query(
+          `UPDATE multiplayer_rooms SET status='waiting', session_id=NULL, started_at=NULL WHERE id=$1`,
+          [room.id]
+        );
+        // Re-read the room so the rest of the handler sees status='waiting'
+        room.status = "waiting";
+        room.session_id = null;
+      } else {
       // If a game is already running, return its state so the client can sync instead of failing hard
       const sessionId = room.session_id ?? null;
       if (!sessionId) {
@@ -678,6 +506,7 @@ export const roomsController = {
         gameState,
       });
       return;
+      } // end else (game in progress)
     }
 
     let provider: MusicProvider =
@@ -808,14 +637,6 @@ export const roomsController = {
       });
     }
 
-    const connectedCount = Array.from(connectionMap.values()).filter(
-      conn => conn.provider === "spotify" && Boolean(conn.access_token)
-    ).length;
-    if (connectedCount === 0) {
-      fail(res, "connections_required", "Au moins un joueur doit être connecté à Spotify pour lancer la partie.", 400);
-      return;
-    }
-
     // Prélever un quota par joueur pour garantir la diversité
     const perUserCount = Math.max(1, Math.ceil(room.question_count / Math.max(1, participantIds.length)));
     const contribution = new Map<number, number>();
@@ -859,11 +680,9 @@ export const roomsController = {
 
     // Compléter avec le pool commun si besoin
     if (collected.length < room.question_count) {
-      const fill = await collectPlayableSources(participantIds, poolProvider, room.question_count, {
+      const fill = await collectPlayableSources(participantIds, room.question_count, {
         likedOnly: false,
-        playlistId: undefined,
-        timeRange: undefined,
-        accessToken: context.connection?.access_token ?? undefined,
+        provider: poolProvider,
       });
       pushUnique(fill);
     }
@@ -875,22 +694,20 @@ export const roomsController = {
       if (connection) {
         context.connection = connection;
       }
-      sources = await collectPlayableSources(participantIds, poolProvider, room.question_count, {
+      sources = await collectPlayableSources(participantIds, room.question_count, {
         likedOnly,
         playlistId: playlistId ?? undefined,
         timeRange: topRange ?? undefined,
-        accessToken: connection?.access_token ?? undefined,
+        provider: poolProvider,
       });
     }
 
     // Si toujours insuffisant, compléter avec le pool global (provider "any")
     if (sources.length < room.question_count) {
       const remaining = room.question_count - sources.length;
-      const fallback = await collectPlayableSources(participantIds, "any", remaining, {
+      const fallback = await collectPlayableSources(participantIds, remaining, {
         likedOnly: false,
-        playlistId: undefined,
-        timeRange: undefined,
-        allowScrape: false,
+        provider: "any",
       });
       const existingKeys = new Set(sources.map(src => src.external_id ?? String(src.id)));
       for (const candidate of fallback) {
@@ -954,8 +771,22 @@ export const roomsController = {
     }
 
     // Mélange final pour intercaler les sources entre joueurs (et accepter un nombre réduit si besoin)
+    sources = shuffle(sources);
+
+    // Hydrate missing preview URLs via Deezer
+    await Promise.all(
+      sources.map(async source => {
+        if (source.audio_url) return;
+        const preview = await hydratePreviewUrl(source);
+        if (preview) source.audio_url = preview;
+      })
+    );
+
+    // Keep only tracks with a playable audio URL
+    sources = sources.filter(s => Boolean(s.audio_url));
+
     const cappedCount = Math.max(1, Math.min(sources.length, room.question_count));
-    sources = shuffle(sources).slice(0, cappedCount);
+    sources = sources.slice(0, cappedCount);
 
     // Ajuster le nombre de rounds à ce qui est réellement disponible (borné par la demande)
     const effectiveRounds = Math.max(1, sources.length);
@@ -1026,7 +857,7 @@ export const roomsController = {
       );
     }
 
-    const roundDurationMs = room.mode === GameMode.EVENT ? EVENT_ROUND_DURATION_MS : 45_000;
+    const roundDurationMs = room.mode === GameMode.EVENT ? EVENT_ROUND_DURATION_MS : 20_000;
 
     const roundTracks: RoundTrack[] = normalizedTracks.map(t => ({
       round: t.round,
@@ -1113,9 +944,7 @@ export const roomsController = {
     });
 
     // Start round 1 immediately in a server-authoritative way
-    startNextRound(io, room.room_code);
-
-    const snapshot = broadcastState(io, room.room_code);
+    const snapshot = startRoundAndBroadcast(io, room.room_code);
 
     ok(res, {
       session: {

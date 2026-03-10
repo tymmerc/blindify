@@ -35,15 +35,19 @@ import statsRoutes from "./routes/stats";
 import audioSourcesRoutes from "./routes/audioSources";
 import friendsRoutes from "./routes/friends";
 import invitationsRoutes from "./routes/invitations";
+import importRoutes from "./routes/import";
 import { fail, ok } from "./utils/response";
 import {
   gameStateSnapshot,
   getGameState as getRealtimeState,
+  allAnswerablePlayers,
   markReady as markReadyState,
   recordAnswer,
   revealRound,
   removePlayer,
   upsertPlayer,
+  markDisconnected,
+  getGameMode,
 } from "./services/realtimeGame";
 import {
   broadcastGameOver,
@@ -65,6 +69,13 @@ import {
   unregisterSocket,
 } from "./services/presence";
 import { expireOldInvitations, getAcceptedFriendIds, type ExpiredInvitation } from "./services/social";
+import {
+  handleStreamerGuess,
+  advanceStreamerRound,
+  getStreamerSnapshot,
+  cleanupStreamer,
+} from "./services/streamerOrchestrator";
+import { GameMode } from "./types/game";
 
 dotenv.config();
 
@@ -229,7 +240,8 @@ app.use(
         "style-src": ["'self'", "'unsafe-inline'"],
         "img-src": ["'self'", "data:", "blob:", "*"],
         "font-src": ["'self'", "data:"],
-        "connect-src": ["'self'", "https://api.spotify.com", ...allowedOrigins],
+        "connect-src": ["'self'", "https://api.spotify.com", "https://api.deezer.com", "https://*.dzcdn.net", ...allowedOrigins],
+        "media-src": ["'self'", "https://*.scdn.co", "https://*.dzcdn.net", "blob:", "data:"],
         "frame-ancestors": ["'none'"],
         "base-uri": ["'self'"],
         "form-action": allowedOrigins.length ? allowedOrigins : ["'self'"],
@@ -256,9 +268,17 @@ const apiLimiter = rateLimit({
   legacyHeaders: false,
   skip: req =>
     req.path?.startsWith("/api/rooms") ||
-    req.path?.startsWith("/api/auth") ||
     req.path?.startsWith("/socket.io"),
 });
+
+const authLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 15,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: { code: "rate_limited", message: "Trop de requêtes. Réessaye dans 1 minute." } },
+});
+app.use("/api/auth", authLimiter);
 
 app.use(apiLimiter);
 
@@ -269,7 +289,6 @@ app.use(
     delayMs: () => 50,
     skip: req =>
       req.path?.startsWith("/api/rooms") ||
-      req.path?.startsWith("/api/auth") ||
       req.path?.startsWith("/socket.io"),
   })
 );
@@ -348,6 +367,7 @@ app.use("/api/stats", statsRoutes);
 app.use("/api/audio-sources", audioSourcesRoutes);
 app.use("/api/friends", friendsRoutes);
 app.use("/api/invitations", invitationsRoutes);
+app.use("/api/import", importRoutes);
 
 async function broadcastFriendPresence(userId: number, username: string | null) {
   const friendIds = await getAcceptedFriendIds(userId);
@@ -443,18 +463,27 @@ io.on("connection", socket => {
   };
 
   socket.on("room:join", async ({ roomCode }: { roomCode: string }) => {
+    console.log(`[socket] room:join request from user ${currentUser.id} (${currentUser.username}) for room ${roomCode}, socketId=${socket.id}`);
     if (!roomCode) return;
     const access = await requireRoomAccess(roomCode, currentUser.id);
     if (!access) {
+      console.log(`[socket] room:join DENIED for user ${currentUser.id} - no access`);
       emitRoomError(socket, roomCode, "Accès refusé à cette salle.");
       return;
     }
     socket.join(roomCode);
-    upsertPlayer(roomCode, {
-      userId: currentUser.id,
-      username: currentUser.username ?? null,
-      avatar: (currentUser as any).avatar ?? null,
-    });
+    console.log(`[socket] user ${currentUser.id} joined socket room ${roomCode}, rooms now: ${Array.from(socket.rooms).join(", ")}`);
+    // In event mode, the host is a spectator/presenter — don't add them as a player
+    const roomGameMode = getGameMode(roomCode);
+    const roomGameState = getRealtimeState(roomCode);
+    const isEventHost = roomGameMode === "event" && roomGameState?.hostUserId === currentUser.id;
+    if (!isEventHost) {
+      upsertPlayer(roomCode, {
+        userId: currentUser.id,
+        username: currentUser.username ?? null,
+        avatar: (currentUser as any).avatar ?? null,
+      });
+    }
     io.to(roomCode).emit("room:presence", {
       type: "joined",
       roomCode,
@@ -487,32 +516,53 @@ io.on("connection", socket => {
 
   socket.on(
     "game:answer",
-    async ({ roomCode, guess, sourceUserId }: { roomCode: string; guess: string; sourceUserId?: number | null }) => {
+    async ({ roomCode, guess, guessTitle, guessArtist, sourceUserId }: {
+      roomCode: string;
+      guess?: string;
+      guessTitle?: string;
+      guessArtist?: string;
+      sourceUserId?: number | null;
+    }) => {
+      console.log(`[answer] received from user ${currentUser.id} for room ${roomCode}`, { guess, guessTitle, guessArtist });
       if (!roomCode) return;
       const access = await requireRoomAccess(roomCode, currentUser.id);
       if (!access) {
+        console.log(`[answer] DENIED - no access for user ${currentUser.id}`);
         emitRoomError(socket, roomCode, "Accès refusé à cette salle.");
         return;
       }
+      // Ensure this socket is still in the room (may have lost membership on reconnect)
+      if (!socket.rooms.has(roomCode)) {
+        console.log(`[answer] socket ${socket.id} not in room ${roomCode}, re-joining`);
+        socket.join(roomCode);
+      }
       const state = getRealtimeState(roomCode);
       if (!state) {
+        console.log(`[answer] DENIED - no game state for room ${roomCode}`);
         emitRoomError(socket, roomCode, "Partie introuvable pour cette salle.");
         return;
       }
-      recordAnswer(roomCode, currentUser.id, guess ?? "", sourceUserId);
-      const updated = getRealtimeState(roomCode);
-      broadcastState(io, roomCode);
+      // Build combined guess for legacy compatibility
+      const combinedGuess = guess ?? `${guessTitle ?? ""} ${guessArtist ?? ""}`.trim();
+      console.log(`[answer] recording answer for user ${currentUser.id}: "${combinedGuess}"`);
+      recordAnswer(roomCode, currentUser.id, combinedGuess, sourceUserId, guessTitle, guessArtist);
 
-      // Si tous les joueurs ont répondu, révéler immédiatement
+      // Check if all answerable players have answered BEFORE broadcasting state,
+      // so clients receive a single consistent state update instead of a GUESSING→REVEAL flicker.
+      const currentPhase = getRealtimeState(roomCode)?.phase;
+      const answerable = allAnswerablePlayers(roomCode);
       const everyoneAnswered =
-        updated?.status === "playing" &&
-        updated.currentTrack &&
-        Object.values(updated.players).length > 0 &&
-        Object.values(updated.players).every(p => p.hasAnswered);
+        currentPhase === "GUESSING" &&
+        answerable.length > 0 &&
+        answerable.every(p => p.hasAnswered);
+
+      console.log(`[answer] check: phase=${currentPhase}, answerable=${answerable.length}, answered=[${answerable.map(p => `${p.userId}:${p.hasAnswered}`).join(",")}], everyoneAnswered=${everyoneAnswered}`);
 
       if (everyoneAnswered) {
+        console.log(`[answer] triggering early reveal for ${roomCode}`);
         clearRevealTimer(roomCode);
         const revealed = revealRound(roomCode);
+        console.log(`[answer] revealRound result: phase=${revealed?.phase}`);
         if (revealed) {
           io.to(roomCode).emit("game:round:reveal", {
             roomCode,
@@ -520,11 +570,18 @@ io.on("connection", socket => {
             timing: revealed.timing,
             players: revealed.players,
           });
-          broadcastState(io, roomCode);
-          if (revealed.status === "finished") {
+          if (revealed.phase === "FINISHED") {
             broadcastGameOver(io, roomCode);
           }
         }
+      }
+      // Broadcast state AFTER the reveal decision so clients see the final phase.
+      broadcastState(io, roomCode);
+      // Also send directly to the answering socket as a fallback, in case
+      // the socket temporarily lost room membership (brief reconnect).
+      const snapshot = gameStateSnapshot(roomCode);
+      if (snapshot) {
+        socket.emit("game:state", snapshot);
       }
     });
 
@@ -535,6 +592,10 @@ io.on("connection", socket => {
       emitRoomError(socket, roomCode, "Accès refusé à cette salle.");
       return;
     }
+    // Ensure this socket is still in the room
+    if (!socket.rooms.has(roomCode)) {
+      socket.join(roomCode);
+    }
     const existing = getRealtimeState(roomCode);
     if (!existing) {
       emitRoomError(socket, roomCode, "Aucune partie en cours.");
@@ -543,7 +604,7 @@ io.on("connection", socket => {
     const before = getRealtimeState(roomCode);
     const state = markReadyState(roomCode, currentUser.id);
     if (!state) return;
-    if (state.status === "playing" && state.currentTrack && state.timing.revealAt && state.currentRound !== before?.currentRound) {
+    if (state.phase === "GUESSING" && state.currentTrack && state.timing.revealAt && state.currentRound !== before?.currentRound) {
       io.to(roomCode).emit("game:round:start", {
         roomCode,
         round: state.currentRound,
@@ -551,11 +612,60 @@ io.on("connection", socket => {
         timing: state.timing,
       });
       scheduleReveal(io, roomCode, state.timing.revealAt);
-    } else if (state.status === "finished") {
+    } else if (state.phase === "FINISHED") {
       broadcastGameOver(io, roomCode);
       clearRevealTimer(roomCode);
     }
     broadcastState(io, roomCode);
+  });
+
+  socket.on("game:sync", async ({ roomCode }: { roomCode: string }) => {
+    if (!roomCode) return;
+    const state = getRealtimeState(roomCode);
+    if (!state) return;
+    // Ensure this socket is still in the room (may have lost membership on reconnect)
+    if (!socket.rooms.has(roomCode)) {
+      console.log(`[game:sync] socket ${socket.id} not in room ${roomCode}, re-joining`);
+      socket.join(roomCode);
+    }
+    // If the game is stuck in GUESSING with an expired revealAt, trigger reveal now
+    if (state.phase === "GUESSING" && state.timing.revealAt && state.timing.revealAt <= Date.now()) {
+      console.log(`[game:sync] forcing reveal for ${roomCode} (revealAt was ${state.timing.revealAt}, now=${Date.now()})`);
+      const updated = revealRound(roomCode);
+      if (updated) {
+        io.to(roomCode).emit("game:round:reveal", {
+          roomCode,
+          round: updated.currentRound,
+          timing: updated.timing,
+          players: updated.players,
+        });
+        broadcastState(io, roomCode);
+        if (updated.phase === "FINISHED") {
+          broadcastGameOver(io, roomCode);
+          clearRevealTimer(roomCode);
+        }
+      }
+    } else {
+      broadcastState(io, roomCode);
+    }
+    // Also send directly to the requesting socket as a fallback
+    const snapshot = gameStateSnapshot(roomCode);
+    if (snapshot) {
+      socket.emit("game:state", snapshot);
+    }
+  });
+
+  // Chat messages
+  socket.on("room:chat", ({ roomCode, message }: { roomCode: string; message: string }) => {
+    if (!roomCode || typeof message !== "string") return;
+    const text = message.trim().slice(0, 200);
+    if (!text) return;
+    io.to(roomCode).emit("room:chat", {
+      userId: currentUser.id,
+      username: currentUser.username ?? `Joueur ${currentUser.id}`,
+      message: text,
+      timestamp: Date.now(),
+    });
   });
 
   socket.on("game:leave", async ({ roomCode }: { roomCode: string }) => {
@@ -565,10 +675,74 @@ io.on("connection", socket => {
     broadcastState(io, roomCode);
   });
 
+  // Streamer mode: game:guess (chat or host submits a guess)
+  socket.on("game:guess", async ({ roomCode, guess }: { roomCode: string; guess: string }) => {
+    if (!roomCode || typeof guess !== "string") return;
+    const access = await requireRoomAccess(roomCode, currentUser.id);
+    if (!access) {
+      emitRoomError(socket, roomCode, "Accès refusé à cette salle.");
+      return;
+    }
+    const streamerState = getStreamerSnapshot(roomCode);
+    if (!streamerState) {
+      emitRoomError(socket, roomCode, "Partie streamer introuvable.");
+      return;
+    }
+    handleStreamerGuess(io, roomCode, currentUser.id, guess, GameMode.STREAMER);
+  });
+
+  // Streamer mode: host:start (host advances to next round)
+  socket.on("host:start", async ({ roomCode }: { roomCode: string }) => {
+    if (!roomCode) return;
+    const access = await requireRoomAccess(roomCode, currentUser.id);
+    if (!access || !access.isHost) {
+      emitRoomError(socket, roomCode, "Seul l'hôte peut lancer la manche.");
+      return;
+    }
+    const streamerState = getStreamerSnapshot(roomCode);
+    if (!streamerState) {
+      emitRoomError(socket, roomCode, "Partie streamer introuvable.");
+      return;
+    }
+    advanceStreamerRound(io, roomCode);
+  });
+
   socket.on("disconnecting", () => {
     const rooms = Array.from(socket.rooms).filter(room => room !== socket.id);
     for (const roomCode of rooms) {
-      removePlayer(roomCode, currentUser.id);
+      const state = getRealtimeState(roomCode);
+      if (state && state.phase === "GUESSING") {
+        // Mark the player as disconnected instead of recording an empty answer.
+        // This way they are excluded from allAnswerablePlayers() and won't
+        // trigger a premature reveal that steals time from other players.
+        markDisconnected(roomCode, currentUser.id);
+        // Re-check if remaining answerable players have all answered
+        const answerable = allAnswerablePlayers(roomCode);
+        const everyoneAnswered = answerable.length > 0 && answerable.every(p => p.hasAnswered);
+        if (everyoneAnswered) {
+          clearRevealTimer(roomCode);
+          const revealed = revealRound(roomCode);
+          if (revealed) {
+            io.to(roomCode).emit("game:round:reveal", {
+              roomCode,
+              round: revealed.currentRound,
+              timing: revealed.timing,
+              players: revealed.players,
+            });
+            if (revealed.phase === "FINISHED") {
+              broadcastGameOver(io, roomCode);
+            }
+          }
+        }
+        broadcastState(io, roomCode);
+      } else if (state && state.phase === "REVEAL") {
+        // During REVEAL, mark disconnected so they don't block ready-check
+        markDisconnected(roomCode, currentUser.id);
+        broadcastState(io, roomCode);
+      } else {
+        // Not in active game: remove player entirely
+        removePlayer(roomCode, currentUser.id);
+      }
       io.to(roomCode).emit("room:presence", {
         type: "disconnected",
         roomCode,
@@ -576,6 +750,13 @@ io.on("connection", socket => {
         userId: currentUser.id,
         serverTimestamp: Date.now(),
       });
+
+      // Cleanup streamer game if the host disconnects
+      const streamerState = getStreamerSnapshot(roomCode);
+      if (streamerState && streamerState.hostUserId === currentUser.id) {
+        cleanupStreamer(roomCode);
+        io.to(roomCode).emit("state:sync", { ...streamerState, phase: "GAME_OVER" });
+      }
     }
   });
 

@@ -1,29 +1,40 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import type { MultiplayerGameState, UserSummary } from "@/lib/types"
 import { Button } from "@/components/ui/button"
-import { Check, Loader2, Volume2, VolumeX } from "lucide-react"
-import { audioManager, DEFAULT_AUDIO_VOLUME } from "@/lib/audioManager"
-import { RoundUiState, resolveRoundTempo } from "@/lib/roundFlow"
+import { Check, Clock, Crown, Lock, Play, Trophy, Users, Volume2, VolumeX } from "lucide-react"
+import { motion, AnimatePresence } from "framer-motion"
+import { audioManager } from "@/lib/audioManager"
 import { GAME_MODES, type GameModeConfig, type GameMode } from "@/lib/gameModes"
-import { GameShell } from "./GameShell"
+import { VinylDisc } from "./VinylDisc"
 
-const PLAYBACK_VOLUME = DEFAULT_AUDIO_VOLUME
+
+export type ChatMessage = {
+  userId: number
+  username: string
+  message: string
+  timestamp: number
+}
 
 type Props = {
   user: UserSummary
   state: MultiplayerGameState | null
   serverNow: number
-  onAnswer: (guess: string, sourceUserId?: number | null) => void
+  onAnswer: (guessTitle: string, guessArtist: string, sourceUserId?: number | null) => void
   onReady: () => void
+  onRematch?: () => void
   onExit?: () => void
   disabled?: boolean
   autoAdvance?: boolean
   modeConfig?: GameModeConfig
   accentColor?: string
   mode: GameMode
+  chatMessages?: ChatMessage[]
+  onSendChat?: (message: string) => void
 }
+
+type Phase = "guessing" | "locked" | "reveal"
 
 export function MultiplayerGameClient({
   user,
@@ -31,24 +42,38 @@ export function MultiplayerGameClient({
   serverNow,
   onAnswer,
   onReady,
+  onRematch,
   onExit,
   disabled,
-  autoAdvance,
   modeConfig,
   accentColor,
   mode,
+  chatMessages = [],
+  onSendChat,
 }: Props) {
   const resolvedConfig = modeConfig ?? GAME_MODES[mode] ?? GAME_MODES.friends
-  const accent = accentColor ?? (resolvedConfig as { theme?: { accent?: string } }).theme?.accent ?? "#8b5cf6"
-  const tempo = resolveRoundTempo(mode)
-  const feedbackMs = tempo.feedbackMs
+  const accent = accentColor ?? (resolvedConfig as { theme?: { accent?: string } }).theme?.accent ?? "#ff4fa5"
+  const gameConfig = resolvedConfig.game
+  const leaderboardMode = gameConfig.showLeaderboard
+  const isFastPace = gameConfig.pace === "fast"
+  const REVEAL_COUNTDOWN = isFastPace ? 4 : 7
+  const isHost = user.id === state?.hostUserId
+  const isEventPresenter = mode === "event" && isHost
+  const isEventParticipant = mode === "event" && !isHost
+  // largeUI only applies to the presenter projection — participants get normal sizing
+  const isLargeUI = "largeUI" in gameConfig && gameConfig.largeUI === true && !isEventParticipant
   const [guessTitle, setGuessTitle] = useState("")
   const [guessArtist, setGuessArtist] = useState("")
   const [sourceGuess, setSourceGuess] = useState<number | null>(null)
   const [muted, setMuted] = useState(audioManager.getState().muted)
+  const [volume, setVolume] = useState(audioManager.getState().volume)
+  const [manualPlayRequired, setManualPlayRequired] = useState(false)
   const [justSubmitted, setJustSubmitted] = useState(false)
-  const [bassLevel, setBassLevel] = useState(0.6)
-  const [showRevealModal, setShowRevealModal] = useState(false)
+  const [revealCountdown, setRevealCountdown] = useState(isFastPace ? 4 : 7)
+  const [chatInput, setChatInput] = useState("")
+  const chatScrollRef = useRef<HTMLDivElement>(null)
+  const onReadyRef = useRef(onReady)
+  onReadyRef.current = onReady
 
   const remaining = useMemo(() => {
     if (!state?.timing?.revealAt) return 0
@@ -56,8 +81,8 @@ export function MultiplayerGameClient({
   }, [state?.timing?.revealAt, serverNow])
 
   const totalSeconds = useMemo(() => {
-    if (!state?.timing?.startAt || !state?.timing?.revealAt) return null
-    return Math.max(0, Math.floor((state.timing.revealAt - state.timing.startAt) / 1000))
+    if (!state?.timing?.startAt || !state?.timing?.revealAt) return 30
+    return Math.max(1, Math.floor((state.timing.revealAt - state.timing.startAt) / 1000))
   }, [state?.timing?.startAt, state?.timing?.revealAt])
 
   const currentTrack = state?.currentTrack ?? null
@@ -71,80 +96,86 @@ export function MultiplayerGameClient({
   const player = state?.players?.[user.id] ?? null
   const backendPhase = state?.phase
 
-  let baseUiState: RoundUiState
+  let uiPhase: Phase
   switch (backendPhase) {
     case "GUESSING":
-      baseUiState = RoundUiState.Playing
+      uiPhase = player?.hasAnswered || justSubmitted ? "locked" : "guessing"
       break
     case "REVEAL":
     case "FINISHED":
-      baseUiState = RoundUiState.Revealed
-      break
-    case "LOBBY":
-      baseUiState = RoundUiState.Armed
+      uiPhase = "reveal"
       break
     default:
-      baseUiState = RoundUiState.Idle
+      uiPhase = "guessing"
   }
 
   const hasAnswered = Boolean(player?.hasAnswered)
   const localHasAnswered = hasAnswered || justSubmitted
-  const uiState = hasAnswered && baseUiState === RoundUiState.Playing ? RoundUiState.Locked : baseUiState
-  const isLocked = uiState === RoundUiState.Locked
-  const feedbackSignal = uiState === RoundUiState.Locked || uiState === RoundUiState.Revealed
+  const isPlaying = uiPhase === "guessing"
+  const isLocked = uiPhase === "locked"
+  const isRevealed = uiPhase === "reveal"
 
-  const accentTint = (alpha: number) => {
-    const hex = accent.startsWith("#") ? accent.slice(1) : accent
-    if (hex.length !== 6) return accent
-    const clamped = Math.min(255, Math.max(0, Math.round(alpha * 255)))
-    return `#${hex}${clamped.toString(16).padStart(2, "0")}`
-  }
+  const timerProgress = isPlaying ? Math.max(0, Math.min(100, (remaining / totalSeconds) * 100)) : 100
+  const timerColor = isPlaying
+    ? remaining > 10
+      ? "#fff"
+      : remaining > 5
+        ? "#f6c768"
+        : "#ff4d7a"
+    : accent
 
-  const statusLabel =
-    uiState === RoundUiState.Playing
-      ? "Écoute en cours"
-      : uiState === RoundUiState.Revealed
-        ? "Réponse révélée"
-        : state?.phase === "FINISHED"
-          ? "Partie terminée"
-          : "En attente"
+  const hasInput = guessTitle.trim().length > 0 || guessArtist.trim().length > 0
 
-  const previousUiState = useRef<RoundUiState>(uiState)
+  const theme = {
+    "--bg": "#0b0710",
+    "--surface": "#100d17",
+    "--surface-strong": "#171225",
+    "--border": `${accent}33`,
+    "--ink": "#fff8fd",
+    "--muted": "#d9cde1",
+    "--accent": accent,
+    "--success": "#8df0be",
+    "--warn": "#f6c768",
+    "--error": "#ff4d7a",
+  } as CSSProperties
 
   useEffect(() => {
     return audioManager.subscribe(snapshot => {
       setMuted(snapshot.muted)
+      setVolume(snapshot.volume)
     })
   }, [])
 
-  useEffect(() => {
-    const cues = {
-      friends: { playing: 0.55, reveal: 0.38 },
-      event: { playing: 0.48, reveal: 0.34 },
-      chat: { playing: 0.35, reveal: 0.28 },
-      streamer: { playing: 0.50, reveal: 0.35 },
-    } as const
-    if (uiState === RoundUiState.Playing) {
-      audioManager.setVolume(cues[mode].playing, "multiplayer")
-    }
-    if (uiState === RoundUiState.Revealed) {
-      audioManager.setVolume(cues[mode].reveal, "multiplayer")
-    }
-    previousUiState.current = uiState
-  }, [uiState, mode])
+  // Audio should play during both guessing and locked phases (music keeps playing
+  // after submit while waiting for other players). Use a stable boolean so the effect
+  // doesn't re-trigger on guessing↔locked transitions.
+  // In event mode, only the presenter plays audio — participants hear it from the projector.
+  const isAudioPhase = (uiPhase === "guessing" || uiPhase === "locked") && !isEventParticipant
 
   useEffect(() => {
-    if (uiState !== RoundUiState.Playing || !currentTrack?.previewUrl) {
+    if (!isAudioPhase || !currentTrack?.previewUrl) {
       audioManager.stop("multiplayer_phase_end", "multiplayer")
       return
     }
-    audioManager.setVolume(PLAYBACK_VOLUME, "multiplayer")
+    audioManager.setVolume(volume, "multiplayer")
     audioManager.setMuted(muted, "multiplayer")
-    audioManager.play({ src: currentTrack.previewUrl, loop: true, volume: PLAYBACK_VOLUME, owner: "multiplayer" }).catch(() => {})
+    audioManager.play({ src: currentTrack.previewUrl, loop: true, volume, owner: "multiplayer" })
+      .then(() => {
+        setManualPlayRequired(false)
+      })
+      .catch((err) => {
+        if ((err as DOMException)?.name === "NotAllowedError") {
+          setManualPlayRequired(true)
+        } else {
+          console.error("multiplayer_audio_play_failed", err)
+          setManualPlayRequired(true)
+        }
+      })
     return () => {
       audioManager.stop("multiplayer_track_cleanup", "multiplayer")
     }
-  }, [uiState, currentTrack?.previewUrl, muted])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- volume changes are applied via setVolume, not by re-triggering play
+  }, [isAudioPhase, currentTrack?.previewUrl, muted])
 
   useEffect(() => {
     return () => {
@@ -152,76 +183,77 @@ export function MultiplayerGameClient({
     }
   }, [])
 
+
+  // Reset justSubmitted as soon as reveal happens, so it's clean for the next round.
+  // Without this, justSubmitted stays true through REVEAL→GUESSING transition,
+  // causing an immediate LOCK on the new round (deadlock: reset only fires on "guessing"
+  // but uiPhase can't become "guessing" while justSubmitted is true).
   useEffect(() => {
-    if (uiState === RoundUiState.Playing) {
+    if (uiPhase === "reveal") {
+      setJustSubmitted(false)
+    }
+  }, [uiPhase])
+
+  useEffect(() => {
+    if (uiPhase === "guessing") {
       setGuessArtist("")
       setGuessTitle("")
       setSourceGuess(null)
       setJustSubmitted(false)
-      setShowRevealModal(false)
+      setManualPlayRequired(false)
     }
-  }, [uiState, state?.currentRound])
+  }, [uiPhase, state?.currentRound])
 
+  // Safety: if stuck in LOCK (justSubmitted but backend says not answered) and timer expired,
+  // re-emit the answer to recover from a lost socket event.
+  const onAnswerRef = useRef(onAnswer)
+  onAnswerRef.current = onAnswer
+  const lastResubmitRef = useRef<number>(0)
   useEffect(() => {
-    if (!autoAdvance || uiState !== RoundUiState.Revealed || disabled || player?.isReady) return
+    if (!justSubmitted || hasAnswered) return
+    if (remaining > 0) return
+    if (backendPhase !== "GUESSING") return
+    // Timer expired, we submitted but backend doesn't know — re-emit after 2s
     const timer = setTimeout(() => {
-      onReady()
-    }, mode === "event" ? tempo.revealHoldMs + 400 : tempo.revealHoldMs + 200)
+      if (Date.now() - lastResubmitRef.current < 5000) return
+      lastResubmitRef.current = Date.now()
+      console.log("[stuck] re-emitting answer: timer expired but backend has hasAnswered=false")
+      onAnswerRef.current(guessTitle.trim(), guessArtist.trim(), sourceGuess)
+    }, 2000)
     return () => clearTimeout(timer)
-  }, [autoAdvance, uiState, disabled, player?.isReady, onReady, tempo.revealHoldMs, mode])
+  }, [justSubmitted, hasAnswered, remaining, backendPhase, guessTitle, guessArtist, sourceGuess])
 
+  // Auto-advance countdown during reveal phase
   useEffect(() => {
-    if (uiState === RoundUiState.Revealed) {
-      setShowRevealModal(true)
+    if (uiPhase !== "reveal" || disabled || player?.isReady) {
+      setRevealCountdown(REVEAL_COUNTDOWN)
+      return
     }
-  }, [uiState])
-
-  useEffect(() => {
-    if (uiState !== RoundUiState.Playing) return
-    const element = audioManager.getCurrent("multiplayer")
-    if (!element) return
-    let raf: number | null = null
-    let ctx: AudioContext | null = null
-    let analyser: AnalyserNode | null = null
-    let gain: GainNode | null = null
-    try {
-      ctx = new AudioContext()
-      analyser = ctx.createAnalyser()
-      analyser.fftSize = 256
-      const source = ctx.createMediaElementSource(element)
-      gain = ctx.createGain()
-      gain.gain.value = 0
-      source.connect(analyser)
-      analyser.connect(gain)
-      gain.connect(ctx.destination)
-      const data = new Uint8Array(analyser.frequencyBinCount)
-      const sample = () => {
-        analyser?.getByteFrequencyData(data)
-        const bins = analyser ? analyser.frequencyBinCount : data.length
-        const take = Math.max(8, Math.floor(bins * 0.2))
-        let sum = 0
-        for (let i = 0; i < take; i += 1) {
-          sum += data[i]
+    const interval = setInterval(() => {
+      setRevealCountdown(prev => {
+        if (prev <= 0) return 0
+        if (prev === 1) {
+          onReadyRef.current()
+          return 0
         }
-        const avg = sum / take / 255
-        setBassLevel(prev => prev * 0.7 + avg * 0.3)
-        raf = requestAnimationFrame(sample)
-      }
-      raf = requestAnimationFrame(sample)
-    } catch {
-      setBassLevel(0.6)
-    }
-    return () => {
-      if (raf) cancelAnimationFrame(raf)
-      analyser?.disconnect()
-      gain?.disconnect()
-      if (ctx) ctx.close().catch(() => {})
-    }
-  }, [uiState])
+        return prev - 1
+      })
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [uiPhase, disabled, player?.isReady, REVEAL_COUNTDOWN])
 
-  const sortedPlayers = useMemo(() => {
+  // Auto-scroll chat
+  useEffect(() => {
+    const container = chatScrollRef.current
+    if (!container) return
+    container.scrollTop = container.scrollHeight
+  }, [chatMessages])
+
+  const sortedPlayersFixed = useMemo(() => {
     if (!state?.players) return []
     return Object.values(state.players)
+      // In event mode, the host is a spectator — exclude from all player lists
+      .filter(p => !(mode === "event" && state.hostUserId && p.userId === state.hostUserId))
       .map(p => ({
         userId: p.userId,
         username: p.username,
@@ -230,455 +262,1009 @@ export function MultiplayerGameClient({
         avatar: p.avatar,
         hasAnswered: p.hasAnswered,
         lastGuess: p.lastGuess,
+        lastVerdict: p.lastVerdict,
+        isReady: p.isReady,
+        streak: p.streak ?? 0,
+        bestStreak: p.bestStreak ?? 0,
       }))
       .sort((a, b) => {
         if (b.score !== a.score) return b.score - a.score
         return (b.accuracy ?? 0) - (a.accuracy ?? 0)
       })
-  }, [state?.players])
+  }, [state?.players, mode, state?.hostUserId])
 
-  const answeredCount = useMemo(() => sortedPlayers.filter(p => p.hasAnswered).length, [sortedPlayers])
+  const answeredCount = useMemo(() => sortedPlayersFixed.filter(p => p.hasAnswered).length, [sortedPlayersFixed])
   const displayAnsweredCount = Math.max(answeredCount, localHasAnswered ? 1 : 0)
+  const playerCount = sortedPlayersFixed.length
+  const readyCount = sortedPlayersFixed.filter(p => p.isReady).length
 
-  const verdictBadge = () => {
-    if (!player?.lastVerdict || uiState !== RoundUiState.Revealed) return null
-    const label =
-      player.lastVerdict === "correct" ? "Validé" : player.lastVerdict === "close" ? "Partiel" : "Clos"
-    return (
-      <span
-        className="rounded-full border px-2 py-[2px] text-[11px] font-medium"
-        style={{
-          borderColor: accentTint(0.55),
-          backgroundColor: accentTint(0.18),
-          color: accent,
-          transition: `border-color ${feedbackMs}ms ease, background-color ${feedbackMs}ms ease`,
-        }}
-      >
-        {label}
-      </span>
-    )
+  const handleSubmit = () => {
+    if (uiPhase !== "guessing" || disabled || localHasAnswered || justSubmitted) return
+    setJustSubmitted(true)
+    onAnswer(guessTitle.trim(), guessArtist.trim(), sourceGuess)
   }
 
-  const playerCount = sortedPlayers.length
-  const selfEntry = sortedPlayers.find(p => p.userId === user.id) ?? null
-  const selfRank = selfEntry ? sortedPlayers.findIndex(p => p.userId === selfEntry.userId) + 1 : null
-  const leader = sortedPlayers[0] ?? null
-  const streakText =
-    mode === "friends" && (player?.streak ?? 0) > 1 ? `Série en cours : ${player?.streak ?? 0}` : null
-  const revealResponses = useMemo(
-    () =>
-      Object.values(state?.players ?? {})
-        .map(p => ({
-          username: p.username || `Joueur ${p.userId}`,
-          guess: p.lastGuess,
-          verdict: p.lastVerdict ?? null,
-          hasAnswered: p.hasAnswered,
-        }))
-        .filter(entry => entry.guess || entry.hasAnswered),
-    [state?.players]
-  )
+  const handleManualPlay = async () => {
+    if (!currentTrack?.previewUrl) return
+    try {
+      await audioManager.play({
+        src: currentTrack.previewUrl,
+        loop: true,
+        volume,
+        owner: "multiplayer",
+      })
+      audioManager.setMuted(muted, "multiplayer")
+      setManualPlayRequired(false)
+    } catch (err) {
+      console.error("manual_play_failed", err)
+    }
+  }
 
-  const header = (
-    <div className="flex items-center gap-3 text-sm text-white/60">
-      <span>
-        Manche {state?.currentRound ?? 0} / {state?.totalRounds ?? 0}
-      </span>
-      <span aria-hidden className="text-white/40">·</span>
-      <span>{remaining.toString().padStart(2, "0")}s</span>
-      {onExit ? (
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={onExit}
-          className="rounded-full border-white/20 px-3 py-1 text-xs text-white"
-          style={{ borderColor: "rgba(255,255,255,0.2)", color: "rgba(255,255,255,0.8)" }}
-        >
-          Quitter
-        </Button>
-      ) : null}
-    </div>
-  )
+  const verdictColor = (verdict: string | null | undefined) => {
+    if (verdict === "correct") return "var(--success)"
+    if (verdict === "close") return "var(--warn)"
+    return "var(--error)"
+  }
 
-  const audioButton = (
-    <button
-      className="rounded-full border border-white/10 bg-white/5 p-2 text-white"
-      onClick={() => {
-        const next = !muted
-        audioManager.setMuted(next)
-        if (!next) {
-          audioManager.setVolume(PLAYBACK_VOLUME, "multiplayer")
-        }
-        setMuted(next)
-      }}
-      title={muted ? "Activer le son" : "Couper le son"}
-    >
-      {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-    </button>
-  )
+  const verdictLabel = (verdict: string | null | undefined) => {
+    if (verdict === "correct") return "Validé"
+    if (verdict === "close") return "Partiel"
+    return "Raté"
+  }
 
-  const timeProgress =
-    totalSeconds != null ? (
-      <div className="w-full overflow-hidden rounded-full bg-white/10" style={{ height: 10 }}>
-        <div
-          className="h-full transition-[width,background-color] duration-200"
-          style={{
-            width: `${Math.max(0, Math.min(100, ((totalSeconds - remaining) / totalSeconds) * 100))}%`,
-            transitionDuration: tempo.cadence === "snappy" ? "150ms" : tempo.cadence === "steady" ? "240ms" : "320ms",
-            backgroundColor: accentTint(mode === "event" ? 0.7 : 0.5),
-          }}
+  const panelClassName =
+    "rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.35)]"
+
+  // Waveform bars component
+  const WaveformBars = ({ active }: { active: boolean }) => (
+    <div className="flex items-end gap-[2px] h-4">
+      {[0, 1, 2, 3].map(i => (
+        <motion.div
+          key={i}
+          className="w-[3px] rounded-full"
+          style={{ background: accent }}
+          animate={active ? {
+            height: ["6px", `${12 + Math.sin(i * 1.5) * 4}px`, "6px"],
+          } : { height: "4px" }}
+          transition={active ? {
+            duration: 0.6 + i * 0.1,
+            repeat: Infinity,
+            ease: "easeInOut",
+          } : { duration: 0.2 }}
         />
-      </div>
-    ) : null
+      ))}
+    </div>
+  )
 
-  const amplitudeFactor = useMemo(() => {
-    if (uiState !== RoundUiState.Playing) return 0.35
-    return Math.max(0.25, Math.min(1.2, bassLevel * 1.25))
-  }, [bassLevel, uiState])
-
-  const coverCard = (
+  return (
     <div
-      className="relative h-16 w-full overflow-hidden rounded-2xl border border-white/10 bg-[#0f0f0f] shadow-[0_12px_30px_rgba(0,0,0,0.35)] sm:h-20"
-      style={{
-        borderColor: feedbackSignal ? accentTint(0.7) : "rgba(255,255,255,0.12)",
-        transition: `border-color ${feedbackMs}ms ease`,
-      }}
+      className="relative min-h-screen overflow-hidden"
+      style={{ ...theme, background: "var(--bg)", color: "var(--ink)" }}
     >
-      <div className="flex h-full w-full items-end justify-between px-3">
-        {Array.from({ length: 24 }).map((_, idx) => {
-          const delay = (idx % 8) * 70
-          const base = 18 + (idx % 7) * 6
-          return (
-            <span
-              key={idx}
-              className="eq-bar"
-              style={{
-                animationDelay: `${delay}ms`,
-                height: `${base * amplitudeFactor}%`,
-                backgroundColor: accent,
-                animationPlayState: uiState === RoundUiState.Playing ? "running" : "paused",
-              }}
-            />
-          )
-        })}
+      {/* Background effects */}
+      <div className="pointer-events-none absolute inset-0">
+        <div
+          className="absolute -left-16 top-0 h-[460px] w-[460px] rounded-full blur-3xl"
+          style={{ background: `radial-gradient(circle at center, ${accent}3d 0, transparent 60%)` }}
+        />
+        <div
+          className="absolute -right-10 bottom-0 h-[420px] w-[420px] rounded-full blur-3xl"
+          style={{ background: `radial-gradient(circle at center, ${accent}33 0, transparent 65%)` }}
+        />
+        <div className="absolute inset-0 bg-[linear-gradient(140deg,rgba(143,167,255,0.12)_0,transparent_40%,rgba(16,13,23,0.6)_100%)]" />
       </div>
-      <style jsx>{`
-        .eq-bar {
-          width: 6px;
-          min-width: 4px;
-          border-radius: 9999px;
-          animation: eq-bounce 800ms ease-in-out infinite;
-          transform-origin: bottom;
-          opacity: 0.85;
-        }
-        @keyframes eq-bounce {
-          0%,
-          100% {
-            transform: scaleY(0.35);
-          }
-          50% {
-            transform: scaleY(1);
-          }
-        }
-      `}</style>
-    </div>
-  )
 
-  const livePositionCard = (
-    <div className="rounded-2xl border border-white/10 bg-[#0c0c0c] p-4 sm:p-5">
-      <div className="flex items-center justify-between text-xs uppercase tracking-[0.25em] text-white/60">
-        <span>Position live</span>
-        {playerCount ? <span className="text-[11px] text-white/50">{displayAnsweredCount} réponses</span> : null}
-      </div>
-      {playerCount === 0 ? (
-        <p className="mt-3 text-sm text-white/60">En attente des joueurs…</p>
-      ) : playerCount === 2 ? (
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div
-            className="rounded-xl border border-white/10 bg-[#111] px-3 py-3"
-            style={selfEntry ? { borderColor: accentTint(0.6) } : undefined}
-          >
-            <p className="text-xs text-white/60">Toi</p>
-            <p className="text-base font-semibold text-white">{selfEntry?.score ?? 0} pts</p>
-          </div>
-          <div className="rounded-xl border border-white/10 bg-[#0f0f0f] px-3 py-3">
-            <p className="text-xs text-white/60">Adversaire</p>
-            <p className="text-base font-semibold text-white">
-              {sortedPlayers.find(p => p.userId !== user.id)?.username || "Adversaire"}
-            </p>
-          </div>
-        </div>
-      ) : playerCount <= 6 ? (
-        <div className="mt-4 space-y-2">
-          {(function () {
-            if (!selfEntry) return sortedPlayers.slice(0, 3)
-            const idx = sortedPlayers.findIndex(p => p.userId === selfEntry.userId)
-            if (idx <= 1) return sortedPlayers.slice(0, 3)
-            const next = sortedPlayers[idx + 1] ?? sortedPlayers[idx - 1] ?? null
-            return [sortedPlayers[0], selfEntry, next].filter(Boolean) as typeof sortedPlayers
-          })().map((entry, idx) => (
-            <div
-              key={entry.userId}
-              className="flex items-center justify-between rounded-lg border border-white/10 bg-[#111] px-3 py-2 text-sm"
-              style={
-                entry.userId === user.id
-                  ? { borderColor: accentTint(0.6), backgroundColor: accentTint(0.12) }
-                  : undefined
-              }
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] text-white/50">#{idx + 1}</span>
-                <span className="font-semibold text-white">{entry.username || `Joueur ${entry.userId}`}</span>
+      <div className="relative flex min-h-screen flex-col">
+        {/* Header - compact */}
+        <header className="shrink-0 border-b border-[var(--border)]/80 backdrop-blur">
+          <div className="mx-auto flex w-full items-center justify-between gap-4 px-6 py-3 lg:px-12">
+            <div className="flex items-center gap-3">
+              <div className="relative flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface-strong)]">
+                <span
+                  className="absolute inset-0 rounded-full opacity-40"
+                  style={{ background: `radial-gradient(circle at center, ${accent} 0, transparent 65%)` }}
+                />
+                <Clock className="relative h-4 w-4" style={{ color: timerColor }} />
               </div>
-              <span className="text-xs text-white/70">{entry.score} pts</span>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="mt-4 space-y-2">
-          <p className="text-lg font-semibold text-white">
-            Ta position : {selfRank ? `${selfRank} / ${playerCount}` : `— / ${playerCount}`}
-          </p>
-          {leader && selfEntry ? (
-            <p className="text-sm text-white/70">
-              {Math.max(0, leader.score - selfEntry.score)} pts derrière le leader
-            </p>
-          ) : (
-            <p className="text-sm text-white/60">Classement en cours…</p>
-          )}
-        </div>
-      )}
-    </div>
-  )
-
-  const miniFeed =
-    playerCount > 0 ? (
-      <div className="rounded-2xl border border-white/10 bg-[#0c0c0c] p-4 sm:p-5">
-        <div className="flex items-center justify-between text-xs uppercase tracking-[0.25em] text-white/60">
-          <span>Direct</span>
-          <span className="rounded-full bg-white/10 px-2 py-[2px] text-[11px] text-white/70">
-            {displayAnsweredCount}/{playerCount}
-          </span>
-        </div>
-        <div className="mt-3 space-y-2 text-sm text-white/80">
-          {sortedPlayers
-            .filter(p => p.hasAnswered || p.lastGuess)
-            .slice(0, 4)
-            .map(entry => (
-              <div
-                key={entry.userId}
-                className="flex items-center justify-between rounded-lg border border-white/10 bg-[#111] px-3 py-2"
-              >
-                <span className="truncate font-medium">{entry.username || `Joueur ${entry.userId}`}</span>
-                <span className="text-xs text-white/60">{entry.hasAnswered ? "réponse envoyée" : "…"} </span>
-              </div>
-            ))}
-          {sortedPlayers.filter(p => p.hasAnswered || p.lastGuess).length === 0 ? (
-            <div className="rounded-lg border border-white/10 bg-[#111] px-3 py-2 text-xs text-white/60">
-              Aucune réponse pour l’instant
-            </div>
-          ) : null}
-        </div>
-      </div>
-    ) : null
-
-  const revealBlock =
-    uiState === RoundUiState.Revealed && currentTrack ? (
-      <div className="rounded-2xl border border-white/10 bg-[#0c0c0c] p-4 sm:p-5">
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-xs uppercase tracking-[0.25em] text-white/50">Réponse</div>
-              <div className="text-lg font-semibold text-white">{currentTrack.title}</div>
-              <div className="text-sm text-white/70">{currentTrack.artist}</div>
-              {trackOwnerUsername ? (
-                <div className="text-xs text-white/60">Proposé par {trackOwnerUsername}</div>
-              ) : null}
-            </div>
-            {verdictBadge()}
-          </div>
-          <div className="text-sm text-white/70">
-            Ta proposition : {player?.lastGuess ? <span className="text-white">{player.lastGuess}</span> : "aucune"}
-          </div>
-          <div className="flex justify-end">
-            <Button
-              onClick={onReady}
-              disabled={disabled || player?.isReady}
-              variant="outline"
-              className="gap-2 rounded-full border-white/20 px-4 py-2 text-sm"
-              style={{ borderColor: accent, color: accent }}
-            >
-              {player?.isReady ? "En attente des autres..." : "Prêt pour la suite"}
-            </Button>
-          </div>
-        </div>
-      </div>
-    ) : null
-
-  const competitionSection = (
-    <div className="space-y-4">
-      <div className="rounded-2xl border border-white/10 bg-[#0c0c0c] p-4 sm:p-5">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <div className="text-xs uppercase tracking-[0.25em] text-white/50">Statut</div>
-            <div className="text-xl font-semibold text-white sm:text-2xl">{statusLabel}</div>
-            {localHasAnswered && uiState === RoundUiState.Playing ? (
-              <div className="mt-1 text-xs uppercase tracking-[0.25em] text-white/50">En attente des autres joueurs…</div>
-            ) : null}
-          </div>
-          <div className="flex items-center gap-2">{audioButton}</div>
-        </div>
-        {timeProgress ? <div className="mt-4">{timeProgress}</div> : null}
-      </div>
-      <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-        {livePositionCard}
-        {miniFeed}
-      </div>
-      {revealBlock}
-    </div>
-  )
-
-  const answerSection = (
-    <div className="rounded-2xl border border-white/10 bg-[#0c0c0c] p-4 sm:p-6">
-      <div className="flex flex-col items-center gap-4">
-        {coverCard}
-        <div className="w-full space-y-3">
-          <form
-            className="space-y-3"
-            onSubmit={event => {
-              event.preventDefault()
-              if (uiState !== RoundUiState.Playing || disabled || localHasAnswered || justSubmitted) return
-              const guess = `${guessTitle} ${guessArtist}`.trim()
-              setJustSubmitted(true)
-              onAnswer(guess, sourceGuess)
-            }}
-          >
-            <input
-              value={guessTitle}
-              onChange={event => setGuessTitle(event.target.value)}
-              placeholder="Titre du morceau"
-              disabled={uiState !== RoundUiState.Playing || disabled || isLocked || justSubmitted || localHasAnswered}
-              className={`w-full rounded-lg border ${"border-white/10 bg-[#0f0f0f]"} px-3 py-3 text-sm text-white outline-none focus:border-[var(--ma-border,#444)]`}
-            />
-            <input
-              value={guessArtist}
-              onChange={event => setGuessArtist(event.target.value)}
-              placeholder="Artiste"
-              disabled={uiState !== RoundUiState.Playing || disabled || isLocked || justSubmitted || localHasAnswered}
-              className={`w-full rounded-lg border ${"border-white/10 bg-[#0f0f0f]"} px-3 py-3 text-sm text-white outline-none focus:border-[var(--ma-border,#444)]`}
-            />
-            <div className={`flex flex-col gap-2 rounded-lg border ${"border-white/10 bg-[#0f0f0f]"} px-3 py-3`}>
-              <label className="text-xs uppercase tracking-[0.25em] text-[var(--ma-muted,#a0a0a0)]">
-                De quel joueur vient ce titre ?
-              </label>
-              <select
-                value={sourceGuess ?? ""}
-                onChange={e => setSourceGuess(e.target.value ? Number(e.target.value) : null)}
-                disabled={uiState !== RoundUiState.Playing || disabled || isLocked || justSubmitted || localHasAnswered}
-                className={`w-full rounded-lg border ${"border-white/10 bg-[#0f0f0f]"} px-3 py-2 text-sm text-white outline-none focus:border-[var(--ma-border,#444)]`}
-              >
-                <option value="">Je ne sais pas</option>
-                {Object.values(state?.players ?? {}).map(player => (
-                  <option key={player.userId} value={player.userId}>
-                    {player.username || `Joueur ${player.userId}`}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <Button
-              type="submit"
-              variant="outline"
-              disabled={uiState !== RoundUiState.Playing || disabled || localHasAnswered || justSubmitted}
-              className="w-full justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-semibold text-white transition duration-150 hover:-translate-y-0.5"
-              style={{ borderColor: accent, color: accent }}
-            >
-              {disabled || localHasAnswered || justSubmitted ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-              {localHasAnswered || justSubmitted ? "Réponse envoyée" : "Valider"}
-            </Button>
-          </form>
-          <div className="flex flex-wrap items-center justify_between gap-2 text-xs text-white/60">
-            <span>{displayAnsweredCount} joueurs ont déjà répondu</span>
-            {streakText ? <span className="text-white/70">{streakText}</span> : null}
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-
-  const mainStage = (
-    <div className="space-y-6">
-      {competitionSection}
-      <div className="h-px bg-white/10" />
-      {answerSection}
-      {state?.phase === "FINISHED" ? (
-        <div className="rounded-2xl border border-white/10 bg-[#0c0c0c] p-4 text-center text-sm text-[var(--ma-muted,#c2c2c2)]">
-          Partie terminée. Merci d’avoir joué !
-        </div>
-      ) : null}
-      {showRevealModal && uiState === RoundUiState.Revealed && currentTrack ? (
-        <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
-          <div className="w-full max-w-3xl space-y-4 rounded-2xl border border-white/10 bg-[#0b0b0b] p-6 sm:p-8">
-            <div className="flex items-center justify-between">
               <div>
-                <div className="text-xs uppercase tracking-[0.25em] text-white/50">Révélation</div>
-                <div className="text-2xl font-semibold text-white">{currentTrack.title}</div>
-                <div className="text-sm text-white/70">{currentTrack.artist}</div>
-                {trackOwnerUsername ? (
-                  <div className="text-xs text-white/60">Proposé par {trackOwnerUsername}</div>
-                ) : null}
+                <p className="text-[9px] uppercase tracking-[0.4em] text-[var(--muted)]">Blindify</p>
+                <h1 className="text-lg font-semibold leading-tight">
+                  {mode === "event" ? "Événement" : mode === "streamer" ? "Streamer" : "Amis"}
+                </h1>
               </div>
-              {verdictBadge()}
             </div>
-            <div className="space-y-2 rounded-2xl border border-white/10 bg-[#0f0f0f] p-4">
-              <div className="text-xs uppercase tracking-[0.25em] text-white/50">Réponses</div>
-              {revealResponses.length === 0 ? (
-                <p className="text-sm text-white/70">En attente des données…</p>
-              ) : (
-                <div className="space-y-2">
-                  {revealResponses.map((entry, idx) => (
-                    <div
-                      key={`${entry.username}-${idx}`}
-                      className="flex items-center justify-between rounded-xl border border-white/10 bg-[#111] px-3 py-2 text-sm text-white"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-white/50">#{idx + 1}</span>
-                        <span className="font-semibold">{entry.username}</span>
-                      </div>
-                      <div className="text-right text-sm text-white/80">
-                        <div>{entry.guess || "—"}</div>
-                        <div className="text-xs text-white/50">
-                          {entry.verdict === "correct"
-                            ? "Validé"
-                            : entry.verdict === "close"
-                              ? "Partiel"
-                              : entry.hasAnswered
-                                ? "Répondu"
-                                : "—"}
+
+            <motion.div
+              className="rounded-full border border-[var(--border)] bg-[var(--surface-strong)] px-4 py-1.5"
+              animate={isPlaying && remaining <= 5 && remaining > 0 ? { x: [0, -2, 2, -2, 2, 0], scale: [1, 1.02, 1] } : { x: 0, scale: 1 }}
+              transition={isPlaying && remaining <= 5 && remaining > 0 ? { duration: 0.4, repeat: Infinity, repeatDelay: 0.6 } : { duration: 0.2 }}
+            >
+              <div className="flex items-center gap-3">
+                <span className={`${isLargeUI ? "text-2xl" : "text-base"} font-semibold`} style={{ color: timerColor }}>
+                  {isPlaying ? `${remaining}s` : isLocked ? "LOCK" : "REVEAL"}
+                </span>
+                <div className={`${isLargeUI ? "h-2 w-40" : "h-1.5 w-28"} rounded-full bg-[var(--bg)]`}>
+                  <div
+                    className="h-full rounded-full transition-all duration-1000"
+                    style={{ width: `${timerProgress}%`, background: timerColor }}
+                  />
+                </div>
+                <span className="text-xs text-[var(--muted)]">
+                  {state?.currentRound ?? 0}/{state?.totalRounds ?? 0}
+                </span>
+              </div>
+            </motion.div>
+
+            <div className="flex items-center gap-2">
+              <div className="hidden items-center gap-1.5 text-xs text-[var(--muted)] md:flex">
+                <Users className="h-3.5 w-3.5" />
+                <span>{playerCount}</span>
+              </div>
+              {/* Volume control (hidden for event participants — audio plays on presenter only) */}
+              {!isEventParticipant && <div className="flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface-strong)] px-2 py-1.5">
+                <button
+                  className="text-[var(--muted)] transition hover:text-[var(--ink)]"
+                  onClick={() => {
+                    const next = !muted
+                    audioManager.setMuted(next)
+                    setMuted(next)
+                  }}
+                  title={muted ? "Activer le son" : "Couper le son"}
+                >
+                  {muted ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
+                </button>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={muted ? 0 : Math.round(volume * 100)}
+                  onChange={e => {
+                    const v = Number(e.target.value) / 100
+                    audioManager.setVolume(v, "multiplayer")
+                    setVolume(v)
+                    if (v > 0 && muted) {
+                      audioManager.setMuted(false)
+                      setMuted(false)
+                    }
+                    if (v === 0 && !muted) {
+                      audioManager.setMuted(true)
+                      setMuted(true)
+                    }
+                  }}
+                  className="h-1 w-16 cursor-pointer appearance-none rounded-full bg-[var(--border)] accent-[var(--accent)] md:w-20"
+                  style={{ accentColor: accent }}
+                />
+              </div>}
+              {onExit && (
+                <button
+                  className="rounded-full border border-[var(--border)] bg-[var(--surface-strong)] px-3 py-1.5 text-[10px] uppercase tracking-[0.3em] text-[var(--muted)] transition hover:text-[var(--ink)]"
+                  onClick={onExit}
+                >
+                  Quitter
+                </button>
+              )}
+            </div>
+          </div>
+        </header>
+
+        {/* Main content */}
+        <div className="mx-auto flex w-full flex-1 flex-col gap-5 px-5 pb-8 pt-5 lg:flex-row lg:items-stretch lg:px-10">
+          <main className="flex flex-1 flex-col gap-5">
+            <AnimatePresence mode="wait">
+              {/* ===== EVENT PRESENTER VIEW (projection-optimized) ===== */}
+              {isEventPresenter ? (
+                <motion.section
+                  key="presenter"
+                  className="flex-1"
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.4 }}
+                >
+                  <div className={`${panelClassName} relative overflow-hidden h-full flex flex-col items-center justify-center min-h-[60vh]`}>
+                    {state?.phase === "FINISHED" ? (
+                      /* --- PRESENTER: FINISHED --- */
+                      <div className="relative flex flex-col items-center gap-8 py-6 w-full max-w-2xl">
+                        <div className="flex h-16 w-16 items-center justify-center rounded-full" style={{ background: `${accent}22` }}>
+                          <Trophy className="h-8 w-8" style={{ color: accent }} />
                         </div>
+                        <h2 className="text-5xl font-bold text-center">Partie terminée</h2>
+                        {/* Podium top 3 */}
+                        {sortedPlayersFixed.length >= 3 ? (
+                          <div className="flex items-end justify-center gap-4 mt-4">
+                            {/* 2nd place */}
+                            <div className="flex w-32 flex-col items-center">
+                              <div className="mb-2 text-sm text-[var(--muted)]">2e</div>
+                              {sortedPlayersFixed[1].avatar ? (
+                                <img src={sortedPlayersFixed[1].avatar} alt="" className="mb-2 h-12 w-12 rounded-full object-cover" />
+                              ) : (
+                                <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-[var(--surface-strong)] text-lg font-bold text-[var(--muted)]">
+                                  {(sortedPlayersFixed[1].username || "?")[0].toUpperCase()}
+                                </div>
+                              )}
+                              <div className="flex h-24 w-full flex-col items-center justify-center rounded-t-2xl border border-[var(--border)] bg-[var(--surface-strong)]">
+                                <span className="text-lg font-semibold">{sortedPlayersFixed[1].username || "?"}</span>
+                                <span className="text-2xl font-bold text-[var(--muted)]">{sortedPlayersFixed[1].score}</span>
+                              </div>
+                            </div>
+                            {/* 1st place */}
+                            <div className="flex w-36 flex-col items-center">
+                              <Crown className="mb-2 h-8 w-8" style={{ color: accent }} />
+                              {sortedPlayersFixed[0].avatar ? (
+                                <img src={sortedPlayersFixed[0].avatar} alt="" className="mb-2 h-16 w-16 rounded-full object-cover border-2" style={{ borderColor: accent }} />
+                              ) : (
+                                <div className="mb-2 flex h-16 w-16 items-center justify-center rounded-full text-xl font-bold" style={{ background: `${accent}22`, color: accent }}>
+                                  {(sortedPlayersFixed[0].username || "?")[0].toUpperCase()}
+                                </div>
+                              )}
+                              <div className="flex h-36 w-full flex-col items-center justify-center rounded-t-2xl border-2" style={{ borderColor: accent, background: `${accent}14` }}>
+                                <span className="text-xl font-bold">{sortedPlayersFixed[0].username || "?"}</span>
+                                <span className="text-3xl font-bold" style={{ color: accent }}>{sortedPlayersFixed[0].score}</span>
+                                <span className="text-sm text-[var(--muted)]">{Math.round(sortedPlayersFixed[0].accuracy ?? 0)}%</span>
+                              </div>
+                            </div>
+                            {/* 3rd place */}
+                            <div className="flex w-32 flex-col items-center">
+                              <div className="mb-2 text-sm text-[var(--muted)]">3e</div>
+                              {sortedPlayersFixed[2].avatar ? (
+                                <img src={sortedPlayersFixed[2].avatar} alt="" className="mb-2 h-12 w-12 rounded-full object-cover" />
+                              ) : (
+                                <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-[var(--surface-strong)] text-lg font-bold text-[var(--muted)]">
+                                  {(sortedPlayersFixed[2].username || "?")[0].toUpperCase()}
+                                </div>
+                              )}
+                              <div className="flex h-20 w-full flex-col items-center justify-center rounded-t-2xl border border-[var(--border)] bg-[var(--surface-strong)]">
+                                <span className="text-lg font-semibold">{sortedPlayersFixed[2].username || "?"}</span>
+                                <span className="text-2xl font-bold text-[var(--muted)]">{sortedPlayersFixed[2].score}</span>
+                              </div>
+                            </div>
+                          </div>
+                        ) : sortedPlayersFixed.length >= 1 ? (
+                          <div className="flex items-center justify-center gap-6 mt-4">
+                            {sortedPlayersFixed.slice(0, 2).map((p, idx) => (
+                              <div key={p.userId} className="flex flex-col items-center gap-2">
+                                {idx === 0 && <Crown className="h-6 w-6" style={{ color: accent }} />}
+                                <div className="flex h-28 w-28 flex-col items-center justify-center rounded-2xl border-2"
+                                  style={{ borderColor: idx === 0 ? accent : "var(--border)", background: idx === 0 ? `${accent}14` : "var(--surface-strong)" }}>
+                                  <span className="text-lg font-semibold">{p.username || "?"}</span>
+                                  <span className="text-2xl font-bold" style={{ color: idx === 0 ? accent : "var(--muted)" }}>{p.score}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                        {onRematch && (
+                          <button
+                            onClick={onRematch}
+                            className="mt-4 rounded-full px-8 py-3 text-lg font-semibold transition hover:opacity-90"
+                            style={{ background: accent, color: "#0b0d11" }}
+                          >
+                            Rejouer
+                          </button>
+                        )}
+                      </div>
+                    ) : isRevealed && currentTrack ? (
+                      /* --- PRESENTER: REVEAL --- */
+                      <div className="relative flex flex-col items-center gap-6 py-4 w-full max-w-2xl">
+                        <motion.div
+                          initial={{ scale: 0.8, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          transition={{ duration: 0.5 }}
+                        >
+                          <VinylDisc size={200} spinning={false} accentColor={accent} coverUrl={currentTrack.albumCover} blurred={false} />
+                        </motion.div>
+                        <motion.div
+                          className="text-center"
+                          initial={{ y: 12, opacity: 0 }}
+                          animate={{ y: 0, opacity: 1 }}
+                          transition={{ duration: 0.4, delay: 0.15 }}
+                        >
+                          <p className="text-sm uppercase tracking-[0.4em] text-[var(--muted)]">La réponse était</p>
+                          <h2 className="mt-3 text-5xl font-bold">{currentTrack.title}</h2>
+                          <p className="mt-2 text-2xl text-[var(--muted)]">{currentTrack.artist}</p>
+                          {trackOwnerUsername && (
+                            <p className="mt-3 text-base text-[var(--muted)]">Proposé par <span className="font-semibold" style={{ color: accent }}>{trackOwnerUsername}</span></p>
+                          )}
+                        </motion.div>
+                        {/* Mini top 3 */}
+                        <motion.div
+                          className="flex items-center gap-3 mt-2"
+                          initial={{ y: 12, opacity: 0 }}
+                          animate={{ y: 0, opacity: 1 }}
+                          transition={{ duration: 0.4, delay: 0.3 }}
+                        >
+                          {sortedPlayersFixed.slice(0, 3).map((p, idx) => (
+                            <div
+                              key={p.userId}
+                              className="flex items-center gap-2 rounded-xl border px-3 py-2"
+                              style={{
+                                borderColor: idx === 0 ? accent : "var(--border)",
+                                background: idx === 0 ? `${accent}14` : "var(--surface-strong)",
+                              }}
+                            >
+                              <span className="flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold"
+                                style={{ background: idx === 0 ? accent : "var(--surface)", color: idx === 0 ? "#0b0d11" : "var(--muted)" }}>
+                                {idx + 1}
+                              </span>
+                              {p.avatar ? (
+                                <img src={p.avatar} alt="" className="h-6 w-6 rounded-full object-cover" />
+                              ) : null}
+                              <span className="text-sm font-medium">{p.username || "?"}</span>
+                              <span className="text-sm font-bold" style={{ color: idx === 0 ? accent : "var(--muted)" }}>{p.score}</span>
+                            </div>
+                          ))}
+                        </motion.div>
+                        <div className="text-center text-base text-[var(--muted)]">
+                          {readyCount}/{playerCount} prêts · prochain round dans {revealCountdown}s
+                        </div>
+                      </div>
+                    ) : (
+                      /* --- PRESENTER: GUESSING / LOCKED --- */
+                      <div className="relative flex flex-col items-center gap-8 py-6">
+                        <VinylDisc size={320} spinning={isPlaying && !manualPlayRequired} accentColor={accent} coverUrl={currentTrack?.albumCover} blurred={!isRevealed} />
+                        {manualPlayRequired && isAudioPhase && (
+                          <button
+                            onClick={handleManualPlay}
+                            className="absolute top-[30%] flex h-20 w-20 items-center justify-center rounded-full border-2 transition-transform hover:scale-110"
+                            style={{ borderColor: accent, background: `${accent}33` }}
+                            title="Lancer la musique"
+                          >
+                            <Play className="h-10 w-10" style={{ color: accent }} />
+                          </button>
+                        )}
+                        <div className="text-center">
+                          <p className="text-base uppercase tracking-[0.4em] text-[var(--muted)]">
+                            {isPlaying ? "Écoute en cours" : "Réponses verrouillées"}
+                          </p>
+                          <p className="mt-3 text-6xl font-bold" style={{ color: accent }}>
+                            {displayAnsweredCount} / {playerCount}
+                          </p>
+                          <p className="mt-2 text-base text-[var(--muted)]">réponses reçues</p>
+                        </div>
+                        {/* Player status dots */}
+                        <div className="flex flex-wrap justify-center gap-3 max-w-md">
+                          {sortedPlayersFixed.map(p => (
+                            <div key={p.userId} className="flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm"
+                              style={{
+                                borderColor: p.hasAnswered ? "var(--success)" : "var(--border)",
+                                background: p.hasAnswered ? "rgba(141,240,190,0.1)" : "var(--surface-strong)",
+                              }}>
+                              {p.avatar ? (
+                                <img src={p.avatar} alt="" className="h-5 w-5 rounded-full object-cover" />
+                              ) : (
+                                <span className="flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-bold bg-[var(--surface)]">
+                                  {(p.username || "?")[0].toUpperCase()}
+                                </span>
+                              )}
+                              <span className={p.hasAnswered ? "text-[var(--success)]" : "text-[var(--muted)]"}>
+                                {p.username || `J${p.userId}`}
+                              </span>
+                              {p.hasAnswered && <Check className="h-3.5 w-3.5 text-[var(--success)]" />}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </motion.section>
+              ) : isRevealed && currentTrack ? (
+                /* ===== REVEAL VIEW ===== */
+                <motion.section
+                  key="reveal"
+                  className="flex-1"
+                  initial={{ opacity: 0, scale: 0.97 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.45 }}
+                >
+                  <div className={`${panelClassName} relative overflow-hidden h-full`}>
+                    <div
+                      className="absolute -left-10 top-10 h-40 w-40 rounded-full blur-2xl"
+                      style={{ background: `radial-gradient(circle at center, ${accent}29 0, transparent 60%)` }}
+                    />
+
+                    <div className="relative flex flex-col items-center gap-5 py-2">
+                      {/* Vinyl with unblurred cover */}
+                      <motion.div
+                        initial={{ scale: 0.8, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        transition={{ duration: 0.5 }}
+                      >
+                        <VinylDisc size={160} spinning={false} accentColor={accent} coverUrl={currentTrack.albumCover} blurred={false} />
+                      </motion.div>
+
+                      {/* Track info */}
+                      <motion.div
+                        className="text-center"
+                        initial={{ y: 12, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        transition={{ duration: 0.4, delay: 0.15 }}
+                      >
+                        <p className="text-[10px] uppercase tracking-[0.4em] text-[var(--muted)]">La réponse était</p>
+                        <h2 className={`mt-2 ${isLargeUI ? "text-4xl" : "text-3xl"} font-bold`}>{currentTrack.title}</h2>
+                        <p className={`mt-1 ${isLargeUI ? "text-lg" : "text-base"} text-[var(--muted)]`}>{currentTrack.artist}</p>
+                        {trackOwnerUsername && (
+                          <p className="mt-1 text-xs text-[var(--muted)]">Proposé par <span style={{ color: accent }}>{trackOwnerUsername}</span></p>
+                        )}
+                      </motion.div>
+
+                      {/* Verdict card */}
+                      <motion.div
+                        className="w-full max-w-sm rounded-xl border px-4 py-3"
+                        style={{ borderColor: verdictColor(player?.lastVerdict), background: `${verdictColor(player?.lastVerdict)}14` }}
+                        initial={{ y: 12, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        transition={{ duration: 0.4, delay: 0.3 }}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-xs text-[var(--muted)]">Ta réponse</p>
+                            <p className="mt-0.5 text-sm font-medium">{player?.lastGuess || "(pas de réponse)"}</p>
+                          </div>
+                          <span
+                            className="rounded-full px-3 py-1 text-xs font-semibold"
+                            style={{ background: `${verdictColor(player?.lastVerdict)}22`, color: verdictColor(player?.lastVerdict) }}
+                          >
+                            {verdictLabel(player?.lastVerdict)}
+                          </span>
+                        </div>
+                      </motion.div>
+
+                      {/* Ready button with countdown */}
+                      <motion.div
+                        initial={{ y: 12, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        transition={{ duration: 0.4, delay: 0.45 }}
+                      >
+                        <Button
+                          onClick={onReady}
+                          disabled={disabled || player?.isReady}
+                          variant="outline"
+                          className="rounded-full px-5 py-2 text-sm"
+                          style={{ borderColor: accent, color: accent }}
+                        >
+                          {player?.isReady
+                            ? `En attente (${readyCount}/${playerCount})`
+                            : `Prêt pour la suite (${revealCountdown}s)`}
+                        </Button>
+                      </motion.div>
+                    </div>
+                  </div>
+                </motion.section>
+              ) : (
+                /* ===== GUESSING / LOCKED VIEW (form integrated) ===== */
+                <motion.section
+                  key="guessing"
+                  className="flex-1"
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.4 }}
+                >
+                  <div className={`${panelClassName} relative overflow-hidden h-full`}>
+                    <div
+                      className="absolute -left-10 top-10 h-40 w-40 rounded-full blur-2xl"
+                      style={{ background: `radial-gradient(circle at center, ${accent}29 0, transparent 60%)` }}
+                    />
+                    <div
+                      className="absolute -right-16 bottom-0 h-48 w-48 rounded-full blur-2xl"
+                      style={{ background: `radial-gradient(circle at center, ${accent}2e 0, transparent 65%)` }}
+                    />
+
+                    <div className="relative flex flex-col gap-5">
+                      {/* Vinyl + status row (friends/streamer) */}
+                      {!isEventParticipant && (
+                        <div className="relative flex items-center gap-4">
+                          <motion.div
+                            className="shrink-0"
+                            animate={isLocked ? { scale: [1, 1.03, 1] } : { scale: 1 }}
+                            transition={isLocked ? { duration: 2, repeat: Infinity, ease: "easeInOut" } : {}}
+                          >
+                            <VinylDisc
+                              size={isLargeUI ? 140 : 100}
+                              spinning={isPlaying && !manualPlayRequired}
+                              accentColor={accent}
+                              coverUrl={currentTrack?.albumCover}
+                              blurred={!isRevealed}
+                            />
+                          </motion.div>
+                          {manualPlayRequired && isAudioPhase && (
+                            <button
+                              onClick={handleManualPlay}
+                              className="absolute left-[50px] top-1/2 -translate-x-1/2 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full border-2 transition-transform hover:scale-110"
+                              style={{ borderColor: accent, background: `${accent}33` }}
+                              title="Lancer la musique"
+                            >
+                              <Play className="h-6 w-6" style={{ color: accent }} />
+                            </button>
+                          )}
+                          <div className="flex flex-1 flex-col gap-2">
+                            <div className="flex items-center gap-2 text-sm text-[var(--muted)]">
+                              {isAudioPhase && !manualPlayRequired ? (
+                                <>
+                                  <WaveformBars active={true} />
+                                  <span>Extrait en cours</span>
+                                </>
+                              ) : manualPlayRequired && isAudioPhase ? (
+                                <>
+                                  <Play className="h-3 w-3" style={{ color: accent }} />
+                                  <span>Cliquer pour lancer</span>
+                                </>
+                              ) : isLocked ? (
+                                <>
+                                  <Lock className="h-3 w-3" style={{ color: accent }} />
+                                  <span>Reveal dans {remaining}s</span>
+                                </>
+                              ) : (
+                                <>
+                                  <span className="h-2 w-2 rounded-full" style={{ background: accent }} />
+                                  <span>Reveal</span>
+                                </>
+                              )}
+                            </div>
+                            <p className="text-xs text-[var(--muted)]">
+                              {displayAnsweredCount}/{playerCount} réponses reçues
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Compact status bar for event participants (no audio, no vinyl) */}
+                      {isEventParticipant && (
+                        <div className="flex items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--surface-strong)] px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            {isPlaying ? (
+                              <span className="h-2.5 w-2.5 animate-pulse rounded-full" style={{ background: accent }} />
+                            ) : isLocked ? (
+                              <Lock className="h-3.5 w-3.5" style={{ color: accent }} />
+                            ) : (
+                              <span className="h-2 w-2 rounded-full" style={{ background: accent }} />
+                            )}
+                            <div className="text-sm">
+                              <span className="font-semibold" style={{ color: isPlaying && remaining <= 5 ? "var(--error)" : "var(--ink)" }}>
+                                {isPlaying ? `${remaining}s` : isLocked ? "LOCK" : "REVEAL"}
+                              </span>
+                              <span className="ml-2 text-[var(--muted)]">
+                                Round {state?.currentRound ?? 0}/{state?.totalRounds ?? 0}
+                              </span>
+                            </div>
+                          </div>
+                          <span className="text-xs text-[var(--muted)]">
+                            {displayAnsweredCount}/{playerCount} réponses
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Answer form */}
+                      <div className="relative flex flex-col gap-4">
+
+                        {/* Locked overlay */}
+                        {isLocked && (
+                          <motion.div
+                            className="absolute inset-0 z-10 flex flex-col items-center justify-center rounded-2xl backdrop-blur-[2px]"
+                            style={{ background: "rgba(11,7,16,0.7)" }}
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            transition={{ duration: 0.3 }}
+                          >
+                            <motion.div
+                              className="flex flex-col items-center gap-3"
+                              initial={{ scale: 0.9 }}
+                              animate={{ scale: 1 }}
+                              transition={{ duration: 0.3 }}
+                            >
+                              <div className="flex h-14 w-14 items-center justify-center rounded-full" style={{ background: `${accent}22` }}>
+                                <Lock className="h-6 w-6" style={{ color: accent }} />
+                              </div>
+                              <p className="text-lg font-semibold">Réponse envoyée</p>
+                              <p className="text-sm text-[var(--muted)]">Reveal dans {remaining}s</p>
+                              <div className="mt-2 flex flex-wrap justify-center gap-1.5">
+                                {sortedPlayersFixed.filter(p => !p.hasAnswered).length > 0 && (
+                                  <p className="text-xs text-[var(--muted)]">
+                                    En attente de : {sortedPlayersFixed.filter(p => !p.hasAnswered).map(p => p.username || `Joueur ${p.userId}`).join(", ")}
+                                  </p>
+                                )}
+                              </div>
+                            </motion.div>
+                          </motion.div>
+                        )}
+
+                        {/* Form content */}
+                        <form
+                          className="flex flex-col gap-4"
+                          onSubmit={e => {
+                            e.preventDefault()
+                            handleSubmit()
+                          }}
+                        >
+                          <div className="grid gap-4 sm:grid-cols-2">
+                            <label className="space-y-2 text-xs text-[var(--muted)]">
+                              <span className="uppercase tracking-[0.3em]">Titre</span>
+                              <input
+                                value={guessTitle}
+                                onChange={e => setGuessTitle(e.target.value)}
+                                disabled={localHasAnswered || disabled}
+                                autoComplete="off"
+                                className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-strong)] px-4 py-3 text-base text-[var(--ink)] outline-none transition focus:border-[var(--accent)]"
+                                placeholder="Titre du morceau"
+                              />
+                            </label>
+                            <label className="space-y-2 text-xs text-[var(--muted)]">
+                              <span className="uppercase tracking-[0.3em]">Artiste</span>
+                              <input
+                                value={guessArtist}
+                                onChange={e => setGuessArtist(e.target.value)}
+                                disabled={localHasAnswered || disabled}
+                                autoComplete="off"
+                                className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-strong)] px-4 py-3 text-base text-[var(--ink)] outline-none transition focus:border-[var(--accent)]"
+                                placeholder="Artiste"
+                              />
+                            </label>
+                          </div>
+
+                          <div className="space-y-2 text-xs text-[var(--muted)]">
+                            <span className="uppercase tracking-[0.3em]">Qui a ajouté ce titre ?</span>
+                            <div className="flex flex-wrap gap-2">
+                              {sortedPlayersFixed.map(p => (
+                                <button
+                                  key={p.userId}
+                                  type="button"
+                                  disabled={localHasAnswered || disabled}
+                                  onClick={() => setSourceGuess(sourceGuess === p.userId ? null : p.userId)}
+                                  className="flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition disabled:opacity-60"
+                                  style={{
+                                    borderColor: sourceGuess === p.userId ? accent : "var(--border)",
+                                    color: sourceGuess === p.userId ? accent : "var(--muted)",
+                                    background: sourceGuess === p.userId ? `${accent}14` : "var(--surface-strong)",
+                                  }}
+                                >
+                                  {p.avatar ? (
+                                    <img
+                                      src={p.avatar}
+                                      alt=""
+                                      className="h-5 w-5 rounded-full object-cover"
+                                    />
+                                  ) : (
+                                    <span
+                                      className="flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-bold"
+                                      style={{
+                                        background: sourceGuess === p.userId ? accent : "var(--surface)",
+                                        color: sourceGuess === p.userId ? "#0b0d11" : "var(--muted)",
+                                      }}
+                                    >
+                                      {(p.username || "?")[0].toUpperCase()}
+                                    </span>
+                                  )}
+                                  {p.username || `Joueur ${p.userId}`}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          <motion.button
+                            type="submit"
+                            disabled={localHasAnswered || disabled}
+                            className="relative w-full rounded-xl py-3 text-base font-semibold transition disabled:opacity-60"
+                            style={{
+                              background: localHasAnswered ? "var(--surface-strong)" : `linear-gradient(135deg, ${accent}, ${accent}cc)`,
+                              color: localHasAnswered ? "var(--muted)" : "#0b0d11",
+                              border: localHasAnswered ? "1px solid var(--border)" : "none",
+                              boxShadow: hasInput && !localHasAnswered ? `0 0 20px ${accent}44` : "none",
+                            }}
+                            whileTap={!localHasAnswered ? { scale: 0.93 } : undefined}
+                            animate={localHasAnswered ? { scale: [1.06, 1], transition: { duration: 0.3 } } : undefined}
+                          >
+                            {localHasAnswered ? (
+                              <span className="flex items-center justify-center gap-2">
+                                <Check className="h-4 w-4" style={{ color: accent }} />
+                                Envoyée
+                              </span>
+                            ) : (
+                              <span className="flex items-center justify-center gap-2">
+                                <Check className="h-4 w-4" />
+                                Valider
+                              </span>
+                            )}
+                          </motion.button>
+                        </form>
+                      </div>
+                    </div>
+                  </div>
+                </motion.section>
+              )}
+            </AnimatePresence>
+
+            {/* Leaderboard in reveal */}
+            {isRevealed && (
+              <motion.section
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.35, delay: 0.2 }}
+                className={panelClassName}
+              >
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold">Classement</h3>
+                  <span className="text-xs text-[var(--muted)]">Manche {state?.currentRound}</span>
+                </div>
+
+                <div className="mt-4 space-y-1.5">
+                  {(leaderboardMode === "top3" ? sortedPlayersFixed.slice(0, 3) : sortedPlayersFixed).map((p, idx) => (
+                    <div
+                      key={p.userId}
+                      className={`flex items-center justify-between rounded-xl border ${isLargeUI ? "px-4 py-3" : "px-3 py-2.5"}`}
+                      style={{
+                        borderColor: p.userId === user.id ? accent : "var(--border)",
+                        background: p.userId === user.id ? `${accent}14` : "var(--surface-strong)",
+                      }}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <span
+                          className={`flex ${isLargeUI ? "h-8 w-8 text-sm" : "h-7 w-7 text-xs"} items-center justify-center rounded-full font-semibold`}
+                          style={{
+                            background: idx === 0 ? accent : "var(--surface)",
+                            color: idx === 0 ? "#0b0d11" : "var(--muted)",
+                          }}
+                        >
+                          {idx + 1}
+                        </span>
+                        <div>
+                          <div className="text-sm font-semibold">{p.username || `Joueur ${p.userId}`}</div>
+                          <div className="text-[11px] text-[var(--muted)]">
+                            {p.lastVerdict === "correct" ? "Validé" : p.lastVerdict === "close" ? "Partiel" : "Raté"}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {p.streak >= 2 && (
+                          <span className="text-xs" style={{ color: "var(--warn)" }}>
+                            {p.streak}x
+                          </span>
+                        )}
+                        <span className="text-sm font-semibold" style={{ color: accent }}>
+                          {p.score}
+                        </span>
                       </div>
                     </div>
                   ))}
                 </div>
-              )}
-            </div>
-            <div className="flex justify-end gap-3">
-              <Button
-                variant="outline"
-                disabled={disabled || player?.isReady}
-                className="rounded-full border-white/20 px-4 py-2 text-sm"
-                style={{ borderColor: accent, color: accent }}
-                onClick={() => {
-                  setShowRevealModal(false)
-                  onReady()
-                }}
+              </motion.section>
+            )}
+
+            {/* Game over (presenter has its own FINISHED view) */}
+            {state?.phase === "FINISHED" && !isEventPresenter && (
+              <motion.section
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.5 }}
+                className={panelClassName}
               >
-                {player?.isReady ? "En attente des autres..." : "Prêt"}
-              </Button>
-            </div>
-          </div>
+                <div className="text-center">
+                  <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full" style={{ background: `${accent}22` }}>
+                    <Trophy className="h-6 w-6" style={{ color: accent }} />
+                  </div>
+                  <h3 className="text-xl font-semibold">Partie terminée</h3>
+                  <p className="mt-1 text-xs text-[var(--muted)]">
+                    {state.totalRounds ?? 10} rounds joués
+                  </p>
+                </div>
+
+                {/* Podium for 3+ players */}
+                {sortedPlayersFixed.length >= 3 && (
+                  <div className="mt-5 flex items-end justify-center gap-2">
+                    <div className="flex w-20 flex-col items-center">
+                      <div className="mb-1 text-[10px] text-[var(--muted)]">2e</div>
+                      <div className="flex h-16 w-full flex-col items-center justify-center rounded-t-xl border border-[var(--border)] bg-[var(--surface-strong)]">
+                        <span className="text-xs font-semibold">{sortedPlayersFixed[1].username || "?"}</span>
+                        <span className="text-[11px] text-[var(--muted)]">{sortedPlayersFixed[1].score}</span>
+                      </div>
+                    </div>
+                    <div className="flex w-24 flex-col items-center">
+                      <Crown className="mb-1 h-4 w-4" style={{ color: accent }} />
+                      <div
+                        className="flex h-24 w-full flex-col items-center justify-center rounded-t-xl border-2"
+                        style={{ borderColor: accent, background: `${accent}14` }}
+                      >
+                        <span className="font-semibold text-sm">{sortedPlayersFixed[0].username || "?"}</span>
+                        <span className="text-base font-bold" style={{ color: accent }}>{sortedPlayersFixed[0].score}</span>
+                        <span className="text-[10px] text-[var(--muted)]">{Math.round(sortedPlayersFixed[0].accuracy ?? 0)}%</span>
+                      </div>
+                    </div>
+                    <div className="flex w-20 flex-col items-center">
+                      <div className="mb-1 text-[10px] text-[var(--muted)]">3e</div>
+                      <div className="flex h-14 w-full flex-col items-center justify-center rounded-t-xl border border-[var(--border)] bg-[var(--surface-strong)]">
+                        <span className="text-xs font-semibold">{sortedPlayersFixed[2].username || "?"}</span>
+                        <span className="text-[11px] text-[var(--muted)]">{sortedPlayersFixed[2].score}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Duel layout for 2 players */}
+                {sortedPlayersFixed.length === 2 && (
+                  <div className="mt-5 flex items-center justify-center gap-4">
+                    {sortedPlayersFixed.map((p, idx) => (
+                      <div key={p.userId} className="flex flex-col items-center gap-1.5">
+                        {idx === 0 && <Crown className="h-4 w-4" style={{ color: accent }} />}
+                        {idx === 1 && <div className="h-4" />}
+                        <div
+                          className="flex h-20 w-24 flex-col items-center justify-center rounded-xl border-2"
+                          style={{
+                            borderColor: idx === 0 ? accent : "var(--border)",
+                            background: idx === 0 ? `${accent}14` : "var(--surface-strong)",
+                          }}
+                        >
+                          <span className="text-sm font-semibold">{p.username || "?"}</span>
+                          <span className="text-base font-bold" style={{ color: idx === 0 ? accent : "var(--muted)" }}>
+                            {p.score}
+                          </span>
+                          <span className="text-[10px] text-[var(--muted)]">{Math.round(p.accuracy ?? 0)}%</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Full leaderboard */}
+                <div className="mt-4 space-y-1.5">
+                  {sortedPlayersFixed.map((p, idx) => (
+                    <div
+                      key={p.userId}
+                      className="flex items-center justify-between rounded-xl border px-3 py-2"
+                      style={{
+                        borderColor: idx === 0 ? accent : "var(--border)",
+                        background: idx === 0 ? `${accent}14` : "var(--surface-strong)",
+                      }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold"
+                          style={{
+                            background: idx === 0 ? accent : "var(--surface)",
+                            color: idx === 0 ? "#0b0d11" : "var(--muted)",
+                          }}
+                        >
+                          {idx + 1}
+                        </span>
+                        <span className="text-sm font-semibold">{p.username || `Joueur ${p.userId}`}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm">
+                        {p.bestStreak >= 2 && (
+                          <span className="text-xs" style={{ color: "var(--warn)" }}>{p.bestStreak}x</span>
+                        )}
+                        <span style={{ color: accent }} className="font-semibold">{p.score}</span>
+                        <span className="text-[10px] text-[var(--muted)]">{Math.round(p.accuracy ?? 0)}%</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+                  {onRematch && (
+                    <button
+                      onClick={onRematch}
+                      className="rounded-full px-5 py-2 text-sm font-semibold transition hover:opacity-90"
+                      style={{ background: accent, color: "#0b0d11" }}
+                    >
+                      Rejouer
+                    </button>
+                  )}
+                  {onExit && (
+                    <button
+                      onClick={onExit}
+                      className="rounded-full border border-[var(--border)] bg-[var(--surface-strong)] px-5 py-2 text-sm text-[var(--muted)] transition hover:text-[var(--ink)]"
+                    >
+                      Retour au lobby
+                    </button>
+                  )}
+                </div>
+              </motion.section>
+            )}
+          </main>
+
+          {/* Sidebar with scoreboard + activity (hidden for event presenter only) */}
+          {!isEventPresenter && (
+            <motion.aside
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.1 }}
+              className="flex w-full flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-[0_20px_50px_rgba(0,0,0,0.3)] lg:sticky lg:top-4 lg:h-[calc(100vh-100px)] lg:w-72"
+            >
+              {/* Scoreboard */}
+              <div className="border-b border-[var(--border)] px-4 py-3">
+                <p className="text-[10px] uppercase tracking-[0.35em] text-[var(--muted)]">Joueurs</p>
+                <div className="mt-2 space-y-1">
+                  {sortedPlayersFixed.map((p, idx) => (
+                    <div
+                      key={p.userId}
+                      className="flex items-center justify-between rounded-lg px-2 py-1.5 text-xs"
+                      style={{
+                        background: p.userId === user.id ? `${accent}10` : "transparent",
+                      }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-bold"
+                          style={{
+                            background: idx === 0 ? accent : "var(--surface-strong)",
+                            color: idx === 0 ? "#0b0d11" : "var(--muted)",
+                          }}
+                        >
+                          {idx + 1}
+                        </span>
+                        <span className={`font-medium ${p.userId === user.id ? "" : "text-[var(--muted)]"}`}>
+                          {p.username || `J${p.userId}`}
+                        </span>
+                        {/* Status indicator */}
+                        {isPlaying && p.hasAnswered && (
+                          <span className="h-1.5 w-1.5 rounded-full" style={{ background: accent }} />
+                        )}
+                        {isRevealed && p.isReady && (
+                          <Check className="h-3 w-3" style={{ color: "var(--success)" }} />
+                        )}
+                      </div>
+                      <span className="font-semibold" style={{ color: idx === 0 ? accent : "var(--muted)" }}>
+                        {p.score}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Round status */}
+              <div className="border-b border-[var(--border)] px-4 py-2">
+                <p className="text-[10px] uppercase tracking-[0.35em] text-[var(--muted)]">
+                  Round {state?.currentRound ?? 0}/{state?.totalRounds ?? 0}
+                </p>
+                <p className="mt-1 text-xs text-[var(--muted)]">
+                  {isPlaying ? `${answeredCount}/${playerCount} ont répondu` :
+                   isLocked ? `${answeredCount}/${playerCount} ont répondu · ${remaining}s` :
+                   isRevealed ? `${readyCount}/${playerCount} prêts` : ""}
+                </p>
+              </div>
+
+              {/* Chat */}
+              <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-2">
+                <p className="text-[10px] uppercase tracking-[0.35em] text-[var(--muted)]">Chat</p>
+              </div>
+              <div ref={chatScrollRef} className="flex-1 space-y-1 overflow-auto px-3 py-2 text-xs">
+                {chatMessages.length === 0 && (
+                  <div className="px-1 py-1 text-[11px] text-[var(--muted)] italic">
+                    Aucun message
+                  </div>
+                )}
+                {chatMessages.map((msg, idx) => (
+                  <div key={idx} className="px-1 py-0.5 text-[11px]">
+                    <span className="font-semibold" style={{ color: msg.userId === user.id ? accent : "var(--muted)" }}>
+                      {msg.username}
+                    </span>{" "}
+                    <span className="text-[var(--ink)]">{msg.message}</span>
+                  </div>
+                ))}
+              </div>
+              {onSendChat && (
+                <form
+                  className="border-t border-[var(--border)] px-3 py-2"
+                  onSubmit={e => {
+                    e.preventDefault()
+                    const text = chatInput.trim()
+                    if (!text) return
+                    onSendChat(text)
+                    setChatInput("")
+                  }}
+                >
+                  <input
+                    value={chatInput}
+                    onChange={e => setChatInput(e.target.value)}
+                    placeholder="Message..."
+                    maxLength={200}
+                    className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-strong)] px-2.5 py-1.5 text-xs text-[var(--ink)] outline-none transition placeholder:text-[var(--muted)] focus:border-[var(--accent)]"
+                  />
+                </form>
+              )}
+            </motion.aside>
+          )}
         </div>
-      ) : null}
+      </div>
     </div>
   )
-
-  return <GameShell mode={mode} header={header} main={mainStage} variant="balanced" />
 }

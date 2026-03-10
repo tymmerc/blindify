@@ -41,6 +41,21 @@ find out -name "*.html" -type f | while read file; do
   sed -i "s|=\"/blindify/blindify|=\"/blindify|g" "$file"
 done
 
+# Move HTML files to their respective directories as index.html
+echo "Creating index.html in subdirectories..."
+for file in out/*.html; do
+  if [ -f "$file" ]; then
+    filename=$(basename "$file" .html)
+    # Skip special files
+    if [[ "$filename" != "index" && "$filename" != "404" && "$filename" != "_not-found" ]]; then
+      # Check if directory exists
+      if [ -d "out/$filename" ]; then
+        cp "$file" "out/$filename/index.html"
+      fi
+    fi
+  fi
+done
+
 # Fix permissions for nginx (www-data)
 echo "Setting permissions for nginx..."
 sudo chown -R www-data:www-data out/

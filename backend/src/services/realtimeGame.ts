@@ -23,7 +23,10 @@ export type PlayerState = {
   bestStreak: number;
   hasAnswered: boolean;
   isReady: boolean;
+  disconnected?: boolean;
   lastGuess?: string;
+  lastGuessTitle?: string | null;
+  lastGuessArtist?: string | null;
   lastSourceGuess?: number | null;
   lastVerdict?: Verdict;
   answerAt?: number | null;
@@ -32,7 +35,8 @@ export type PlayerState = {
 export type GameState = {
   roomCode: string;
   hostUserId: number | null;
-  status: "lobby" | "playing" | "reveal" | "finished";
+  mode: string;
+  phase: "LOBBY" | "GUESSING" | "REVEAL" | "FINISHED";
   currentRound: number;
   totalRounds: number;
   currentTrack: RoundTrack | null;
@@ -41,14 +45,17 @@ export type GameState = {
     revealAt: number | null;
   };
   players: Record<number, PlayerState>;
+  config: { autoAdvance: boolean; roundDurationMs: number };
 };
 
 type GameContext = {
   state: GameState;
   tracks: RoundTrack[];
+  mode: string;
+  roundDurationMs: number;
 };
 
-const LISTENING_MS = 45_000;
+const DEFAULT_LISTENING_MS = 20_000;
 
 const games = new Map<string, GameContext>();
 
@@ -56,10 +63,12 @@ export function bootstrapGameState(params: {
   roomCode: string;
   hostUserId: number;
   tracks: RoundTrack[];
-  participantIds: Array<{ userId: number; username: string | null; avatar?: string | null }>;
+  participants: Array<{ userId: number; username: string | null; avatar?: string | null }>;
+  mode?: string;
+  config?: { roundDurationMs?: number; autoAdvance?: boolean };
 }): GameState {
   const initialPlayers: Record<number, PlayerState> = {};
-  for (const participant of params.participantIds) {
+  for (const participant of params.participants) {
     initialPlayers[participant.userId] = {
       userId: participant.userId,
       username: participant.username ?? null,
@@ -78,7 +87,8 @@ export function bootstrapGameState(params: {
   const state: GameState = {
     roomCode: params.roomCode,
     hostUserId: params.hostUserId,
-    status: "lobby",
+    mode: params.mode ?? "friends",
+    phase: "LOBBY",
     currentRound: 0,
     totalRounds: params.tracks.length,
     currentTrack: null,
@@ -87,14 +97,44 @@ export function bootstrapGameState(params: {
       revealAt: null,
     },
     players: initialPlayers,
+    config: {
+      autoAdvance: params.config?.autoAdvance ?? false,
+      roundDurationMs: params.config?.roundDurationMs ?? DEFAULT_LISTENING_MS,
+    },
   };
 
-  games.set(params.roomCode, { state, tracks: params.tracks });
+  const roundDurationMs = params.config?.roundDurationMs ?? DEFAULT_LISTENING_MS;
+  games.set(params.roomCode, { state, tracks: params.tracks, mode: params.mode ?? "friends", roundDurationMs });
   return state;
 }
 
 export function getGameState(roomCode: string): GameState | undefined {
   return games.get(roomCode)?.state;
+}
+
+export function getGameMode(roomCode: string): string | undefined {
+  return games.get(roomCode)?.mode;
+}
+
+export function allAnswerablePlayers(roomCode: string): PlayerState[] {
+  const ctx = games.get(roomCode);
+  if (!ctx) return [];
+  let players = Object.values(ctx.state.players);
+  // In event mode, the host is a presenter and doesn't answer
+  if (ctx.mode === "event" && ctx.state.hostUserId) {
+    players = players.filter(p => p.userId !== ctx.state.hostUserId);
+  }
+  // Exclude disconnected players so they don't block or prematurely trigger reveals
+  return players.filter(p => !p.disconnected);
+}
+
+export function markDisconnected(roomCode: string, userId: number): GameState | undefined {
+  const ctx = games.get(roomCode);
+  if (!ctx) return undefined;
+  const player = ctx.state.players[userId];
+  if (!player) return ctx.state;
+  player.disconnected = true;
+  return ctx.state;
 }
 
 export function clearGame(roomCode: string): void {
@@ -106,7 +146,7 @@ export function startNextRound(roomCode: string, opts?: { forceRound?: number; s
   if (!ctx) return undefined;
   const nextRound = opts?.forceRound ?? ctx.state.currentRound + 1;
   if (nextRound > ctx.state.totalRounds) {
-    ctx.state.status = "finished";
+    ctx.state.phase = "FINISHED";
     ctx.state.currentTrack = null;
     ctx.state.timing = { startAt: null, revealAt: null };
     return ctx.state;
@@ -114,16 +154,16 @@ export function startNextRound(roomCode: string, opts?: { forceRound?: number; s
 
   const track = ctx.tracks.find(t => t.round === nextRound);
   if (!track) {
-    ctx.state.status = "finished";
+    ctx.state.phase = "FINISHED";
     ctx.state.currentTrack = null;
     ctx.state.timing = { startAt: null, revealAt: null };
     return ctx.state;
   }
 
   const startAt = opts?.startAt ?? Date.now();
-  const revealAt = startAt + LISTENING_MS;
+  const revealAt = startAt + ctx.roundDurationMs;
 
-  ctx.state.status = "playing";
+  ctx.state.phase = "GUESSING";
   ctx.state.currentRound = nextRound;
   ctx.state.currentTrack = track;
   ctx.state.timing = { startAt, revealAt };
@@ -131,7 +171,10 @@ export function startNextRound(roomCode: string, opts?: { forceRound?: number; s
   Object.values(ctx.state.players).forEach(player => {
     player.hasAnswered = false;
     player.isReady = false;
+    player.disconnected = false;
     player.lastGuess = undefined;
+    player.lastGuessTitle = null;
+    player.lastGuessArtist = null;
     player.lastSourceGuess = undefined;
     player.lastVerdict = undefined;
     player.answerAt = null;
@@ -144,15 +187,19 @@ export function recordAnswer(
   roomCode: string,
   userId: number,
   guess: string,
-  sourceUserId?: number | null
+  sourceUserId?: number | null,
+  guessTitle?: string,
+  guessArtist?: string,
 ): GameState | undefined {
   const ctx = games.get(roomCode);
   if (!ctx) return undefined;
-  if (ctx.state.status !== "playing") return ctx.state;
+  if (ctx.state.phase !== "GUESSING") return ctx.state;
   const player = ctx.state.players[userId];
   if (!player) return ctx.state;
   player.hasAnswered = true;
   player.lastGuess = guess;
+  player.lastGuessTitle = guessTitle ?? null;
+  player.lastGuessArtist = guessArtist ?? null;
   player.lastSourceGuess = sourceUserId ?? null;
   player.answerAt = Date.now();
   return ctx.state;
@@ -161,13 +208,18 @@ export function recordAnswer(
 export function markReady(roomCode: string, userId: number): GameState | undefined {
   const ctx = games.get(roomCode);
   if (!ctx) return undefined;
+  // Only accept ready signals during REVEAL phase to prevent "ghost ready" bugs
+  // where a premature ready from GUESSING phase causes instant advancement on reveal.
+  if (ctx.state.phase !== "REVEAL") return ctx.state;
   const player = ctx.state.players[userId];
   if (!player) return ctx.state;
   player.isReady = true;
 
+  const answerablePlayers = allAnswerablePlayers(roomCode);
   const everyoneReady =
-    ctx.state.status === "reveal" &&
-    Object.values(ctx.state.players).every(p => p.isReady);
+    ctx.state.phase === "REVEAL" &&
+    answerablePlayers.length > 0 &&
+    answerablePlayers.every(p => p.isReady);
 
   if (everyoneReady) {
     const advanced = startNextRound(roomCode);
@@ -219,20 +271,25 @@ export function removePlayer(roomCode: string, userId: number): GameState | unde
 export function revealRound(roomCode: string): GameState | undefined {
   const ctx = games.get(roomCode);
   if (!ctx) return undefined;
-  if (ctx.state.status !== "playing") return ctx.state;
+  if (ctx.state.phase !== "GUESSING") return ctx.state;
   const track = ctx.state.currentTrack;
   if (!track) return ctx.state;
 
   const startAt = ctx.state.timing.startAt;
 
   Object.values(ctx.state.players).forEach(player => {
-    const detail = evaluateGuessDetail(player.lastGuess ?? "", track);
+    const detail = evaluateGuessDetail(
+      player.lastGuess ?? "",
+      track,
+      player.lastGuessTitle,
+      player.lastGuessArtist,
+    );
     const { next } = computeScore({
       previous: player,
       detail,
       answerAt: player.answerAt,
       startAt: startAt,
-      maxDuration: ctx.state.timing.revealAt && startAt ? ctx.state.timing.revealAt - startAt : LISTENING_MS,
+      maxDuration: ctx.state.timing.revealAt && startAt ? ctx.state.timing.revealAt - startAt : ctx.roundDurationMs,
       sourceOwnerId: (track.metadata as any)?.owner_user_id ?? null,
       sourceGuess: player.lastSourceGuess ?? null,
     });
@@ -242,7 +299,7 @@ export function revealRound(roomCode: string): GameState | undefined {
     };
   });
 
-  ctx.state.status = "reveal";
+  ctx.state.phase = "REVEAL";
   ctx.state.timing = {
     startAt,
     revealAt: ctx.state.timing.revealAt,
@@ -282,16 +339,78 @@ function tokenize(text: string): string[] {
     .filter(word => !STOP_WORDS.has(word));
 }
 
-function evaluateGuessDetail(guess: string, track: RoundTrack): {
+function levenshteinDistance(a: string, b: string): number {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+  const dp = Array.from({ length: a.length + 1 }, () => new Array<number>(b.length + 1).fill(0));
+  for (let i = 0; i <= a.length; i++) dp[i][0] = i;
+  for (let j = 0; j <= b.length; j++) dp[0][j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
+    }
+  }
+  return dp[a.length][b.length];
+}
+
+function isWordMatch(word: string, candidates: string[]): boolean {
+  if (candidates.includes(word)) return true;
+  const tolerance = word.length <= 4 ? 1 : 2;
+  return candidates.some(candidate => {
+    if (Math.abs(candidate.length - word.length) > tolerance) return false;
+    return levenshteinDistance(word, candidate) <= tolerance;
+  });
+}
+
+function evaluateGuessDetail(
+  guess: string,
+  track: RoundTrack,
+  separateTitle?: string | null,
+  separateArtist?: string | null,
+): {
   verdict: Verdict;
   matchedTitle: boolean;
   matchedArtist: boolean;
   guessProvided: boolean;
 } {
+  const hasSeparateFields = (separateTitle && separateTitle.trim().length > 0) || (separateArtist && separateArtist.trim().length > 0);
+
+  if (hasSeparateFields) {
+    // Structured matching: check each field independently
+    const titleInput = separateTitle?.trim() ?? "";
+    const artistInput = separateArtist?.trim() ?? "";
+    const guessProvided = titleInput.length > 0 || artistInput.length > 0;
+
+    const titleTokens = tokenize(track.title);
+    const artistTokens = tokenize(track.artist);
+
+    let matchedTitle = false;
+    if (titleInput.length > 0) {
+      const inputTokens = tokenize(titleInput);
+      matchedTitle = normalize(track.title) === normalize(titleInput) ||
+        (inputTokens.length > 0 && titleTokens.length > 0 && titleTokens.every(tok => isWordMatch(tok, inputTokens)));
+    }
+
+    let matchedArtist = false;
+    if (artistInput.length > 0) {
+      const inputTokens = tokenize(artistInput);
+      matchedArtist = normalize(track.artist) === normalize(artistInput) ||
+        (inputTokens.length > 0 && artistTokens.length > 0 && artistTokens.every(tok => isWordMatch(tok, inputTokens)));
+    }
+
+    let verdict: Verdict = "wrong";
+    if (matchedTitle && matchedArtist) verdict = "correct";
+    else if (matchedTitle || matchedArtist) verdict = "close";
+
+    return { verdict, matchedTitle, matchedArtist, guessProvided };
+  }
+
+  // Legacy: single combined guess string
   const normalizedGuess = normalize(guess);
   const guessProvided = normalizedGuess.length > 0;
 
-  // Strict match on normalized full strings, fallback to token containment for title/artist fields
   const titleMatch = guessProvided && normalize(track.title) === normalizedGuess;
   const artistMatch = guessProvided && normalize(track.artist) === normalizedGuess;
 
@@ -299,9 +418,9 @@ function evaluateGuessDetail(guess: string, track: RoundTrack): {
   const titleTokens = tokenize(track.title);
   const artistTokens = tokenize(track.artist);
   const titleMatchTokens =
-    guessTokens.length > 0 && titleTokens.length > 0 && titleTokens.every(tok => guessTokens.includes(tok));
+    guessTokens.length > 0 && titleTokens.length > 0 && titleTokens.every(tok => isWordMatch(tok, guessTokens));
   const artistMatchTokens =
-    guessTokens.length > 0 && artistTokens.length > 0 && artistTokens.every(tok => guessTokens.includes(tok));
+    guessTokens.length > 0 && artistTokens.length > 0 && artistTokens.every(tok => isWordMatch(tok, guessTokens));
 
   const matchedTitle = titleMatch || titleMatchTokens;
   const matchedArtist = artistMatch || artistMatchTokens;
@@ -333,10 +452,10 @@ function computeScore(params: {
   const artistPoints = correctArtist ? 30 : 0;
 
   let speedPoints = 0;
-  const maxMs = maxDuration ?? LISTENING_MS;
+  const maxMs = maxDuration ?? DEFAULT_LISTENING_MS;
   if (reactionMs !== null && detail.guessProvided && (correctTitle || correctArtist)) {
     const timeRatio = 1 - Math.min(Math.max(reactionMs / maxMs, 0), 1);
-    speedPoints = Math.round(20 * timeRatio);
+    speedPoints = Math.round(30 * timeRatio);
   }
 
   const sourceBonus = sourceOwnerId && sourceGuess && sourceOwnerId === sourceGuess ? 10 : 0;

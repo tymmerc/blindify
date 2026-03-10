@@ -4,6 +4,7 @@ import Link from "next/link"
 import { ArrowRight, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { SurfaceCard } from "@/components/ui/SurfaceCard"
+import { ProfileImportBlock } from "@/components/import/ProfileImportBlock"
 import { modeAccent } from "@/lib/uiTokens"
 import type { LobbyRendererProps } from "./lobbyTypes"
 
@@ -105,6 +106,7 @@ function FriendsLobby({
   starting,
   canStart,
   isHost,
+  isGuest,
   room,
 }: LobbyRendererProps) {
   const accent = modeAccent("friends")
@@ -122,6 +124,7 @@ function FriendsLobby({
             <p className="text-xs uppercase tracking-[0.3em] text-white/60">Rivalité active</p>
             <h3 className="text-2xl font-semibold text-white">Prêts / pas prêts</h3>
             <p className="text-sm text-white/70">On lance dès que vos rivaux sont alignés.</p>
+            {isGuest ? <p className="text-xs text-white/60">Invité : pas d'audio, mais réponses comptées.</p> : null}
           </div>
           <Button
             variant="outline"
@@ -177,7 +180,11 @@ function FriendsLobby({
         ) : null}
 
         <SurfaceCard className="space-y-3">
-          <p className="text-sm text-white/70">Les invitations sont coupées pour l’instant. Partage simplement ton code.</p>
+          <ProfileImportBlock accent={accent} />
+        </SurfaceCard>
+
+        <SurfaceCard className="space-y-3">
+          <p className="text-sm text-white/70">Les invitations sont coupées pour l'instant. Partage simplement ton code.</p>
         </SurfaceCard>
       </div>
     </section>

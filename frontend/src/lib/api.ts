@@ -18,23 +18,6 @@ export type CurrentUserPayload = {
   providerConnection: ProviderConnectionSummary | null
 }
 
-function setSessionCookie(token: string, maxAgeSeconds = 60 * 60 * 24) {
-  if (typeof document === "undefined") return
-  const maxAge = Math.max(60, Math.floor(maxAgeSeconds))
-  const isHttps = typeof window !== "undefined" && window.location.protocol === "https:"
-  const sameSite = isHttps ? "None" : "Lax"
-  const secureFlag = isHttps ? "; Secure" : ""
-  document.cookie = `blindify_session_token=${encodeURIComponent(token)}; Path=/; Max-Age=${maxAge}; SameSite=${sameSite}${secureFlag}`
-}
-
-function clearSessionCookie() {
-  if (typeof document === "undefined") return
-  const isHttps = typeof window !== "undefined" && window.location.protocol === "https:"
-  const sameSite = isHttps ? "None" : "Lax"
-  const secureFlag = isHttps ? "; Secure" : ""
-  document.cookie = `blindify_session_token=; Path=/; Max-Age=0; SameSite=${sameSite}${secureFlag}`
-}
-
 export const api = {
   getLoginUrl(): string {
     return clientApi.getLoginUrl()
@@ -54,8 +37,7 @@ export const api = {
     }
 
     try {
-      const { sessionToken } = await clientApi.createGuestSession(nickname)
-      setSessionCookie(sessionToken, 60 * 60 * 4)
+      await clientApi.createGuestSession(nickname)
       return await clientApi.currentUser()
     } catch (err) {
       console.error("ensure_guest_session_failed", err)
@@ -212,11 +194,9 @@ export const api = {
   },
   async logout(): Promise<void> {
     await clientApi.logout()
-    clearSessionCookie()
   },
   async startGuestSession(nickname?: string): Promise<void> {
-    const { sessionToken } = await clientApi.createGuestSession(nickname)
-    setSessionCookie(sessionToken, 60 * 60 * 4)
+    await clientApi.createGuestSession(nickname)
   },
   async detailedStats() {
     return clientApi.detailedStats()
@@ -224,6 +204,13 @@ export const api = {
   async gameHistory() {
     return clientApi.gameHistory()
   },
-  setSessionCookie,
-  clearSessionCookie,
+  async importPlaylists(url: string) {
+    return clientApi.importPlaylists(url)
+  },
+  async importSync(provider: string, playlistId: string) {
+    return clientApi.importSync(provider, playlistId)
+  },
+  async importSyncAll(provider: string, playlistIds: string[]) {
+    return clientApi.importSyncAll(provider, playlistIds)
+  },
 }

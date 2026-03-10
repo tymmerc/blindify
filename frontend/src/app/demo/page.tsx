@@ -231,7 +231,7 @@ export default function DemoPage() {
           user={DEMO_USER}
           state={state}
           serverNow={serverNow}
-          onAnswer={guess => handleAnswer(guess)}
+          onAnswer={(title, artist) => handleAnswer(`${title} ${artist}`.trim())}
           onReady={handleReady}
           onExit={() => router.push("/modes?from=/demo")}
           disabled={state.phase === "FINISHED"}

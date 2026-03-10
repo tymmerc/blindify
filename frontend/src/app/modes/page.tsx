@@ -4,7 +4,7 @@ import { Suspense, useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import type { Mode } from "@/contexts/ModeContext"
 import { useMode } from "@/contexts/ModeContext"
-import { Button } from "@/components/ui/button"
+
 
 type ModeCard = {
   key: Mode
@@ -14,6 +14,7 @@ type ModeCard = {
   accent: string
   destination: string
   posture: string
+  wip?: boolean
 }
 
 const MODE_CARDS: ModeCard[] = [
@@ -43,6 +44,7 @@ const MODE_CARDS: ModeCard[] = [
     accent: "#f97316",
     destination: "/streamer",
     posture: "Live",
+    wip: true,
   },
 ]
 
@@ -58,15 +60,21 @@ function hexToRgba(hex: string, alpha: number): string {
 function ModeSelectionContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { mode, setMode } = useMode()
+  const { mode, setMode, isGuest, setGuest } = useMode()
   const [selection, setSelection] = useState<Mode | null>(mode)
   const [hovered, setHovered] = useState<Mode | null>(null)
+  const [showHelp, setShowHelp] = useState(false)
 
   const fallbackRoute = useMemo(() => searchParams.get("from") || "/menu", [searchParams])
 
   useEffect(() => {
     if (mode) setSelection(mode)
   }, [mode])
+
+  useEffect(() => {
+    // Sortie du mode invité quand on revient choisir un mode.
+    setGuest(false)
+  }, [setGuest])
 
   const getCard = (key: Mode | null) => MODE_CARDS.find(card => card.key === key) ?? null
   const activeCard = getCard(selection)
@@ -77,6 +85,18 @@ function ModeSelectionContent() {
     if (!selected || !card) return
     setMode(selected)
     const target = card.destination || fallbackRoute
+    router.replace(target)
+  }
+
+  const handleGuestQuickStart = () => {
+    setGuest(true)
+    const choice = (window.prompt("Choisis un mode : friends / event / streamer", "event") || "").trim().toLowerCase()
+    if (choice !== "friends" && choice !== "event" && choice !== "streamer") return
+    setMode(choice as Mode)
+    const target =
+      choice === "friends"
+        ? "/multiplayer?mode=friends"
+        : `/multiplayer?mode=${choice}&autojoin=1`
     router.replace(target)
   }
 
@@ -112,11 +132,18 @@ function ModeSelectionContent() {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="text-xs uppercase tracking-[0.25em] text-white/60">Mode</div>
-                    <span
-                      aria-hidden
-                      className="h-2.5 w-2.5 rounded-full transition-colors"
-                      style={{ background: dotColor }}
-                    />
+                    <div className="flex items-center gap-2">
+                      {card.wip && (
+                        <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.15em] text-white/50">
+                          Bientôt
+                        </span>
+                      )}
+                      <span
+                        aria-hidden
+                        className="h-2.5 w-2.5 rounded-full transition-colors"
+                        style={{ background: dotColor }}
+                      />
+                    </div>
                   </div>
                   <div className="space-y-1">
                     <h2 className="text-xl font-semibold">{card.title}</h2>
@@ -152,6 +179,72 @@ function ModeSelectionContent() {
             Valider ce mode
           </button>
         </div>
+
+        <button
+          type="button"
+          onClick={() => router.push("/solo")}
+          className="fixed bottom-6 right-6 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-semibold text-white hover:bg-white/15"
+          aria-label="Jouer en solo"
+        >
+          Jouer en solo
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowHelp(h => !h)}
+          className="fixed bottom-6 left-6 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-xs font-semibold text-white hover:bg-white/10"
+        >
+          {showHelp ? "Fermer" : "Comment ça marche ?"}
+        </button>
+        {showHelp && (
+          <div className="fixed inset-0 z-50 flex items-end justify-start p-6" onClick={() => setShowHelp(false)}>
+            <div
+              className="w-full max-w-md space-y-4 rounded-2xl border border-white/10 bg-[#0c0c0c]/95 p-6 shadow-2xl backdrop-blur-sm"
+              onClick={e => e.stopPropagation()}
+            >
+              <h3 className="text-lg font-semibold text-white">Comment ça marche ?</h3>
+              <p className="text-sm text-white/60">
+                Blindify te fait écouter des extraits de musique. Tu dois deviner le titre et l'artiste le plus vite possible.
+              </p>
+
+              <div className="space-y-3">
+                <div className="rounded-xl border border-pink-500/20 bg-pink-500/5 p-3">
+                  <p className="text-sm font-semibold text-pink-400">Entre amis</p>
+                  <p className="mt-1 text-xs text-white/60">
+                    Crée une salle, invite tes potes avec un code et jouez ensemble. Chacun écoute la musique et répond de son côté. Celui qui devine le plus vite gagne le plus de points.
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-3">
+                  <p className="text-sm font-semibold text-violet-400">Événement</p>
+                  <p className="mt-1 text-xs text-white/60">
+                    Parfait pour une soirée ou un bar. Un écran principal diffuse la musique (le présentateur), les joueurs rejoignent avec un code et répondent depuis leur téléphone.
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-orange-500/20 bg-orange-500/5 p-3">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-semibold text-orange-400">Streamer</p>
+                    <span className="rounded-full bg-orange-500/15 px-2 py-0.5 text-[10px] uppercase tracking-[0.15em] text-orange-400/70">
+                      En développement
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-white/60">
+                    Joue en live avec ton chat Twitch. Tes viewers participent directement depuis le chat. Plusieurs modes de jeu prévus.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        {isGuest ? (
+          <button
+            type="button"
+            onClick={() => setGuest(false)}
+            className="fixed bottom-[4.5rem] left-6 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-xs font-semibold text-white hover:bg-white/10"
+          >
+            Revenir en mode connecté
+          </button>
+        ) : null}
       </div>
     </div>
   )

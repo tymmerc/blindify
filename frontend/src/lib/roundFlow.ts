@@ -70,29 +70,38 @@ export function roundFlowReducer(state: RoundFlowState, event: RoundFlowEvent): 
 }
 
 export type ScoreInput = {
-  correct: boolean
+  matchedTitle: boolean
+  matchedArtist: boolean
+  guessProvided: boolean
   reactionMs: number | null
   maxDurationMs: number
   streak: number
 }
 
-export type ScoreBreakdown = { base: number; speed: number; streakBonus: number }
+export type ScoreBreakdown = { title: number; artist: number; speed: number; penalty: number }
 
-export function computeScore({ correct, reactionMs, maxDurationMs, streak }: ScoreInput): {
+export function computeScore({ matchedTitle, matchedArtist, guessProvided, reactionMs, maxDurationMs, streak }: ScoreInput): {
   gained: number
   nextStreak: number
   breakdown: ScoreBreakdown
 } {
-  const nextStreak = correct ? Math.min(streak + 1, 5) : 0
-  const base = correct ? 100 : 0
+  const correctBoth = matchedTitle && matchedArtist
+  const nextStreak = correctBoth ? Math.min(streak + 1, 5) : 0
+
+  const title = matchedTitle ? 40 : 0
+  const artist = matchedArtist ? 30 : 0
+
   let speed = 0
-  if (correct && reactionMs !== null && maxDurationMs > 0) {
+  if ((matchedTitle || matchedArtist) && reactionMs !== null && maxDurationMs > 0) {
     const ratio = 1 - Math.min(Math.max(reactionMs / maxDurationMs, 0), 1)
-    speed = Math.round(50 * ratio)
+    speed = Math.round(30 * ratio)
   }
-  const streakBonus = correct ? nextStreak * 10 : 0
-  const gained = base + speed + streakBonus
-  return { gained, nextStreak, breakdown: { base, speed, streakBonus } }
+
+  // Penalty only when a guess was provided but nothing matched
+  const penalty = guessProvided && !matchedTitle && !matchedArtist ? 10 : 0
+
+  const gained = Math.max(0, title + artist + speed - penalty)
+  return { gained, nextStreak, breakdown: { title, artist, speed, penalty } }
 }
 
 export type ModeFlags = {

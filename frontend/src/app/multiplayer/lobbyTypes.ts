@@ -29,6 +29,7 @@ export type LobbyRendererProps = {
   onAcceptInvite: (invitationId: number) => void
   canStart: boolean
   isHost: boolean
+  isGuest: boolean
   currentUserId: number
   room: MultiplayerRoom | null
   hostUser?: { user_id: number; username: string | null } | null

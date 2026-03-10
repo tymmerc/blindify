@@ -2,6 +2,7 @@ import { pool } from "../../config/db";
 import { makeSpotify } from "../../config/spotify";
 import type { AudioSourceRow } from "../../types/audio";
 import type { MusicProvider, UserConnection } from "../../types/user";
+import { hydratePreviewUrl } from "../trackResolution";
 
 type SpotifyLibraryTrack = {
   id?: string;
@@ -119,6 +120,21 @@ export async function syncSpotifyLibrary(
       ]
     );
     inserted.push(rows[0]);
+  }
+
+  // Hydrate preview URLs via Deezer for tracks missing audio_url (fire-and-forget)
+  const toHydrate = inserted.filter(s => !s.audio_url);
+  if (toHydrate.length > 0) {
+    Promise.all(
+      toHydrate.map(async source => {
+        try {
+          const preview = await hydratePreviewUrl(source);
+          if (preview) source.audio_url = preview;
+        } catch {
+          // Non-critical, will be retried at game start
+        }
+      })
+    ).catch(() => {});
   }
 
   return { sources: inserted, connection: working };

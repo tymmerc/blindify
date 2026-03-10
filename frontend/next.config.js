@@ -1,5 +1,6 @@
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "/blindify"
 
+/** @type {import('next').NextConfig} */
 const nextConfig = {
   output: "export",
   basePath,
@@ -8,8 +9,8 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  // Force a fresh build id on each build to bust cached _next/static assets
-  generateBuildId: async () => `${Date.now()}`,
+  generateBuildId: () => null,
+  turbopack: {},
   webpack: (config, { dev }) => {
     // Avoid eval-based source maps so strict CSP policies work in dev too
     if (dev) {
@@ -19,4 +20,4 @@ const nextConfig = {
   },
 };
 
-export default nextConfig;
+module.exports = nextConfig;

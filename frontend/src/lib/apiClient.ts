@@ -64,12 +64,6 @@ async function parseJson<T>(response: Response): Promise<T> {
   }
 }
 
-function getCookie(name: string): string | null {
-  if (typeof document === "undefined") return null
-  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]+)`))
-  return match ? decodeURIComponent(match[1]) : null
-}
-
 function normalizeInvitation(raw: RawInvitation): RoomInvitation {
   return {
     id: raw.id,
@@ -86,14 +80,12 @@ function normalizeInvitation(raw: RawInvitation): RoomInvitation {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const accessToken = getCookie("blindify_session_token")
   const response = await fetch(buildUrl(path), {
     ...init,
     credentials: "include",
     headers: {
       Accept: "application/json",
       ...init?.headers,
-      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
     },
   })
 
@@ -368,9 +360,6 @@ export const clientApi = {
     await request("/api/auth/logout", {
       method: "POST",
     })
-    if (typeof document !== "undefined") {
-      document.cookie = "blindify_session_token=; Path=/; Max-Age=0; Secure; SameSite=Lax"
-    }
   },
   async createGuestSession(nickname?: string): Promise<{ sessionToken: string }> {
     return request<{ sessionToken: string }>("/api/auth/guest", {
@@ -395,6 +384,32 @@ export const clientApi = {
   },
   async gameHistory(): Promise<{ sessions: GameSessionSummary[] }> {
     return request("/api/games/history")
+  },
+  async importPlaylists(url: string): Promise<{
+    provider: "spotify" | "deezer"
+    type: "user" | "playlist"
+    playlists: Array<{ id: string; name: string; trackCount: number; cover: string | null }>
+    notice: string
+  }> {
+    return request("/api/import/playlists", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url }),
+    })
+  },
+  async importSync(provider: string, playlistId: string): Promise<{ synced: number; failed: number }> {
+    return request("/api/import/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider, playlistId }),
+    })
+  },
+  async importSyncAll(provider: string, playlistIds: string[]): Promise<{ synced: number; failed: number; total: number }> {
+    return request("/api/import/sync-all", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider, playlistIds }),
+    })
   },
 }
 

@@ -8,9 +8,10 @@ import { getSocket, disconnectSocket } from "@/lib/socket"
 import { api } from "@/lib/api"
 import { ApiError } from "@/lib/apiClient"
 import type { CurrentUserPayload } from "@/lib/api"
+import { audioManager } from "@/lib/audioManager"
 import type { MultiplayerGameState, MultiplayerParticipant, MultiplayerRoom, SoloTrack, StreamerState, StreamerSubMode } from "@/lib/types"
 import { StreamerGameClient } from "@/components/game/StreamerGameClient"
-import { MultiplayerGameClient } from "@/components/game/MultiplayerGameClient"
+import { MultiplayerGameClient, type ChatMessage } from "@/components/game/MultiplayerGameClient"
 import { Button } from "@/components/ui/button"
 import { useServerTime } from "@/hooks/useServerTime"
 import { useMode } from "@/contexts/ModeContext"
@@ -114,6 +115,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
 
   const [tracks, setTracks] = useState<SoloTrack[]>([])
   const [gameState, setGameState] = useState<MultiplayerGameState | StreamerState | null>(null)
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [starting, setStarting] = useState(false)
   const [joining, setJoining] = useState(false)
   const [streamerMode, setStreamerMode] = useState<StreamerSubMode>("duo")
@@ -128,6 +130,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   const invites: RoomInvitation[] = []
 
   const socketRef = useRef<Socket | null>(null)
+  const [socketConnected, setSocketConnected] = useState(false)
   const PENDING_EVENT_CODE_KEY = "blindify:pending_event_code"
   const PENDING_AUTH_REDIRECT_KEY = "blindify:post_auth_redirect"
   const handlersRef = useRef<{
@@ -138,6 +141,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     roundStart?: (payload: { roomCode: string; round: number; track: MultiplayerGameState["currentTrack"]; timing: { startAt: number | null; revealAt: number | null } }) => void
     roundReveal?: (payload: { roomCode: string; round: number; players: MultiplayerGameState["players"]; timing: { startAt: number | null; revealAt: number | null } }) => void
     gameOver?: (payload: { roomCode: string; players: MultiplayerGameState["players"] }) => void
+    chat?: (payload: ChatMessage) => void
   }>({})
   const roomRef = useRef<MultiplayerRoom | null>(null)
   const userRef = useRef<CurrentUserPayload | null>(null)
@@ -179,23 +183,19 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         if (!active) return
 
         if (existing) {
-          // If user has guest session but isGuest is false, it means they have old guest session
-          // We should force them to re-auth with Spotify
+          // Refuse guest sessions for multiplayer: force Spotify login
           if (existing.user.provider === "guest") {
-            // Old guest session - clear it and require Spotify
-            setError("Session invité expirée. Connecte-toi avec Spotify pour jouer.")
+            await api.logout()
             setGuest(false)
-            setLoading(false)
+            // Redirect to login
+            window.location.href = "/blindify/auth/login"
             return
           }
-
-          // User has Spotify session
-          setUserPayload(existing)
           setGuest(false)
+          setUserPayload(existing)
         } else {
-          // No session - require Spotify authentication
-          setError("Connecte-toi avec Spotify pour jouer.")
-          setLoading(false)
+          // No session - redirect to login
+          window.location.href = "/blindify/auth/login"
           return
         }
       } finally {
@@ -224,10 +224,11 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
           socket.off("game:over", handlersRef.current.gameOver)
           socket.off("game:game:over", handlersRef.current.gameOver)
         }
+        if (handlersRef.current.chat) socket.off("room:chat", handlersRef.current.chat)
       }
       disconnectSocket()
     }
-  }, [router, isGuest])
+  }, [router, isGuest, setGuest])
 
   useEffect(() => {
     roomRef.current = room
@@ -239,12 +240,94 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     // Guest mode is now explicitly controlled by user choice
   }, [userPayload, setGuest])
 
+  // Fallback: if game is stuck in GUESSING with expired revealAt, request sync
+  const lastSyncRef = useRef<number>(0)
+  useEffect(() => {
+    if (!gameState || !room) return
+    const gs = gameState as MultiplayerGameState
+    if (gs.phase !== "GUESSING" || !gs.timing?.revealAt) return
+    const overdue = serverNow - gs.timing.revealAt
+    if (overdue < 3000) return // wait 3s past expiry before syncing
+    if (Date.now() - lastSyncRef.current < 5000) return // max once per 5s
+    const socket = socketRef.current
+    if (!socket?.connected) return
+    lastSyncRef.current = Date.now()
+    socket.emit("game:sync", { roomCode: room.room_code })
+  }, [gameState, room, serverNow])
+
+  // Safety net: if game is stuck in REVEAL for too long, re-emit game:ready
+  const revealStuckRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (!gameState || !room) {
+      revealStuckRef.current = null
+      return
+    }
+    const gs = gameState as MultiplayerGameState
+    if (gs.phase !== "REVEAL") {
+      revealStuckRef.current = null
+      return
+    }
+    // Record when we first noticed REVEAL phase
+    if (revealStuckRef.current === null) {
+      revealStuckRef.current = Date.now()
+    }
+    const stuckMs = Date.now() - revealStuckRef.current
+    if (stuckMs < 15000) return // wait 15s before considering it stuck
+    if (Date.now() - lastSyncRef.current < 5000) return // max once per 5s
+    const socket = socketRef.current
+    if (!socket?.connected) return
+    lastSyncRef.current = Date.now()
+    // Re-emit ready to unstick the game
+    socket.emit("game:ready", { roomCode: room.room_code })
+  }, [gameState, room, serverNow])
+
+  // Safety net: ensure socket joins the room whenever we have a room and socket is connected
+  // Track the last socket ID + room combo to re-emit on reconnect
+  const lastJoinKeyRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!room?.room_code || !userPayload?.user) return
+    const socket = socketRef.current
+    if (!socket?.connected || !socket.id) return
+
+    // Re-emit room:join whenever socket ID or room changes (handles reconnections)
+    const joinKey = `${socket.id}:${room.room_code}`
+    if (lastJoinKeyRef.current === joinKey) return
+    lastJoinKeyRef.current = joinKey
+
+    console.log(`[socket] safety-net: emitting room:join for room ${room.room_code}, user ${userPayload.user.id}, socketId: ${socket.id}`)
+    socket.emit("room:join", {
+      roomCode: room.room_code,
+      user: { id: userPayload.user.id, username: userPayload.user.username ?? undefined },
+    })
+  }, [room?.room_code, userPayload?.user, socketConnected])
+
   const ensureSocket = useCallback((): Socket => {
     if (!socketRef.current) {
       socketRef.current = getSocket()
+      // Track connection status
+      socketRef.current.on("connect", () => {
+        console.log(`[socket] ensureSocket: connected, id=${socketRef.current?.id}`)
+        setSocketConnected(true)
+      })
+      socketRef.current.on("disconnect", () => {
+        console.log(`[socket] ensureSocket: disconnected`)
+        setSocketConnected(false)
+        // Reset join key to force re-join on reconnect
+        lastJoinKeyRef.current = null
+      })
+      // Check if already connected
+      if (socketRef.current.connected) {
+        setSocketConnected(true)
+      }
     }
     return socketRef.current
   }, [])
+
+  // Initialize socket early when user is available
+  useEffect(() => {
+    if (!userPayload?.user) return
+    ensureSocket()
+  }, [userPayload?.user, ensureSocket])
 
   const syncParticipants = useCallback((list: MultiplayerParticipant[]) => {
     setParticipants(list)
@@ -270,29 +353,6 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     return () => clearInterval(interval)
   }, [room?.room_code, view, refreshParticipants])
 
-  const ensureSpotify = useCallback(
-    async (_next: PendingAction): Promise<boolean> => {
-      // Host display-only: no enforced Spotify; server will gate start if no connected players.
-      return true
-    },
-    []
-  )
-
-  const resolveViewFromState = useCallback(
-    (state: MultiplayerGameState | StreamerState): LobbyViewState => {
-      const isStreamer = mode === "streamer"
-      const basePhase = state.phase
-      const isFinished = isStreamer ? basePhase === "GAME_OVER" : basePhase === "FINISHED"
-      const isPlaying = isStreamer
-        ? ["LOBBY", "STARTING_ROUND", "GUESSING_CHAT", "GUESSING_STREAMER", "REVEAL_PARTIAL", "REVEAL_FINAL", "ROUND_ENDED"].includes(basePhase as any)
-        : basePhase === "GUESSING" ||
-          basePhase === "REVEAL" ||
-          (basePhase === "LOBBY" && (state as MultiplayerGameState).currentRound > 0)
-      return isFinished ? "results" : isPlaying ? "playing" : "waiting"
-    },
-    [mode]
-  )
-
   const storePostAuthRedirect = useCallback(
     (action?: PendingAction | null) => {
       if (typeof window === "undefined") return
@@ -313,6 +373,41 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       }
     },
     [mode, pendingAction, joinCode]
+  )
+
+  const ensureSpotify = useCallback(
+    async (_next: PendingAction): Promise<boolean> => {
+      // Host display-only: no enforced Spotify; server will gate start if no connected players.
+      return true
+    },
+    []
+  )
+
+  const requireSession = useCallback(
+    (action?: PendingAction): boolean => {
+      if (loading) return false
+      if (userPayload) return true
+      if (action) setPendingAction(action)
+      storePostAuthRedirect(action ?? null)
+      router.replace("/auth/login")
+      return false
+    },
+    [loading, router, storePostAuthRedirect, userPayload]
+  )
+
+  const resolveViewFromState = useCallback(
+    (state: MultiplayerGameState | StreamerState): LobbyViewState => {
+      const isStreamer = mode === "streamer"
+      const basePhase = state.phase
+      const isFinished = isStreamer ? basePhase === "GAME_OVER" : basePhase === "FINISHED"
+      const isPlaying = isStreamer
+        ? ["LOBBY", "STARTING_ROUND", "GUESSING_CHAT", "GUESSING_STREAMER", "REVEAL_PARTIAL", "REVEAL_FINAL", "ROUND_ENDED"].includes(basePhase as any)
+        : basePhase === "GUESSING" ||
+          basePhase === "REVEAL" ||
+          (basePhase === "LOBBY" && (state as MultiplayerGameState).currentRound > 0)
+      return isFinished ? "results" : isPlaying ? "playing" : "waiting"
+    },
+    [mode]
   )
 
   type LobbyActionType = "reset" | "hosting" | "waiting" | "playing" | "results"
@@ -348,6 +443,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         socket.off("game:over", handlersRef.current.gameOver)
         socket.off("game:game:over", handlersRef.current.gameOver)
       }
+      if (handlersRef.current.chat) socket.off("room:chat", handlersRef.current.chat)
 
       const presenceHandler = (payload: RoomPresenceEvent) => {
         if (payload.roomCode !== roomCode) return
@@ -382,7 +478,22 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
 
       const gameStateHandler = (payload: MultiplayerGameState | StreamerState) => {
         if (payload.roomCode !== roomCode) return
-        setGameState(payload)
+        setGameState(prev => {
+          // Prevent a stale GUESSING broadcast from overwriting a REVEAL state
+          // within the same round (race condition when both players answer near-simultaneously)
+          if (prev && "phase" in prev && "phase" in payload) {
+            const prevMulti = prev as MultiplayerGameState
+            const newMulti = payload as MultiplayerGameState
+            if (
+              prevMulti.phase === "REVEAL" &&
+              newMulti.phase === "GUESSING" &&
+              newMulti.currentRound === prevMulti.currentRound
+            ) {
+              return prev
+            }
+          }
+          return payload
+        })
         const nextView = resolveViewFromState(payload)
         setView(nextView)
         dispatchLobby({ type: viewToLobbyAction(nextView) })
@@ -397,7 +508,22 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         if (payload.roomCode !== roomCode) return
         if (mode === "streamer") return
         setGameState(prev => {
-          if (!prev) return null
+          if (!prev) {
+            // Build a minimal state from the round:start payload so the game can begin
+            // even if game:state hasn't arrived yet (slow connection / mid-game rejoin).
+            return {
+              roomCode,
+              hostUserId: null,
+              mode: mode as MultiplayerGameState["mode"],
+              phase: "GUESSING" as const,
+              currentRound: payload.round,
+              totalRounds: payload.round,
+              currentTrack: payload.track,
+              players: {},
+              timing: payload.timing,
+              config: { autoAdvance: false, roundDurationMs: 20000 },
+            } satisfies MultiplayerGameState
+          }
           const multi = prev as MultiplayerGameState
           return {
             ...multi,
@@ -417,8 +543,16 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         players: MultiplayerGameState["players"]
         timing: { startAt: number | null; revealAt: number | null }
       }) => {
-        if (payload.roomCode !== roomCode) return
-        if (mode === "streamer") return
+        console.log("[reveal] received game:round:reveal", { payloadRoom: payload.roomCode, expectedRoom: roomCode, mode })
+        if (payload.roomCode !== roomCode) {
+          console.log("[reveal] SKIPPED - roomCode mismatch")
+          return
+        }
+        if (mode === "streamer") {
+          console.log("[reveal] SKIPPED - streamer mode")
+          return
+        }
+        console.log("[reveal] updating game state to REVEAL")
         setGameState(prev => {
           if (!prev) return null
           const multi = prev as MultiplayerGameState
@@ -455,6 +589,10 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         dispatchLobby({ type: "results" })
       }
 
+      const chatHandler = (payload: ChatMessage) => {
+        setChatMessages(prev => [...prev, payload].slice(-100))
+      }
+
       socket.on("room:presence", presenceHandler)
       socket.on("player-joined", playerJoinedHandler)
       socket.on("game:state", gameStateHandler)
@@ -463,6 +601,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       socket.on("game:round:reveal", roundRevealHandler)
       socket.on("game:over", gameOverHandler)
       socket.on("game:game:over", gameOverHandler)
+      socket.on("room:chat", chatHandler)
 
       handlersRef.current = {
         connect: undefined,
@@ -472,10 +611,12 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         roundStart: roundStartHandler,
         roundReveal: roundRevealHandler,
         gameOver: gameOverHandler,
+        chat: chatHandler,
       }
 
       const emitJoin = () => {
         if (!userPayload?.user) return
+        console.log(`[socket] emitting room:join for room ${roomCode}, user ${userPayload.user.id} (${userPayload.user.username}), socketId: ${socket.id}`)
         socket.emit("room:join", {
           roomCode,
           user: { id: userPayload.user.id, username: userPayload.user.username ?? undefined },
@@ -513,6 +654,8 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
 
   const handleCreateRoom = useCallback(
     async (skipSpotify?: boolean) => {
+      audioManager.unlock()
+      if (!requireSession({ type: "host" })) return
       if (!skipSpotify) {
         const ok = await ensureSpotify({ type: "host" })
         if (!ok) return
@@ -542,16 +685,22 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         dispatchLobby({ type: "error", message })
       }
     },
-    [attachSocketListeners, syncParticipants, mode, canHostNow, lobby.status, ensureSpotify]
+    [attachSocketListeners, syncParticipants, mode, canHostNow, lobby.status, ensureSpotify, requireSession]
   )
 
   useEffect(() => {
     if (abortFlowRef.current) return
+    if (loading) return
+    if (!userPayload) {
+      storePostAuthRedirect({ type: "host" })
+      router.replace("/auth/login")
+      return
+    }
     if (intent === "host" && !autoHostTriggered.current && view === "landing" && !room && (lobby.status === "idle" || lobby.status === "error")) {
       autoHostTriggered.current = true
       handleCreateRoom()
     }
-  }, [intent, view, room, handleCreateRoom, lobby.status])
+  }, [intent, view, room, handleCreateRoom, lobby.status, loading, userPayload, router, storePostAuthRedirect])
 
   useEffect(() => {
     if (abortFlowRef.current) return
@@ -567,13 +716,17 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
 
   const joinRoomCode = useCallback(
     async (code: string, skipSpotify?: boolean) => {
+      const normalizedCode = code.trim().toUpperCase()
+      if (!requireSession({ type: "join", code: normalizedCode })) {
+        setJoinCode(normalizedCode)
+        return
+      }
       if (!skipSpotify) {
         const ok = await ensureSpotify({ type: "join", code })
         if (!ok) return
       }
       setRequireSpotify(false)
       if (joining || lobby.status === "joining") return
-      const normalizedCode = code.trim().toUpperCase()
       if (!normalizedCode) {
         const message = friendlyError(mode, "join")
         setError(message)
@@ -603,12 +756,13 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         setJoining(false)
       }
     },
-    [attachSocketListeners, joining, lobby.status, syncParticipants, mode, ensureSpotify]
+    [attachSocketListeners, joining, lobby.status, syncParticipants, mode, ensureSpotify, requireSession]
   )
 
   const handleJoinRoom = useCallback(
     async (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault()
+      audioManager.unlock()
       joinRoomCode(joinCode)
     },
     [joinCode, joinRoomCode]
@@ -626,6 +780,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
 
   const handleStartGame = useCallback(
     async (skipSpotify?: boolean) => {
+      audioManager.unlock()
       if (!room || !canStartGame) return
       if (!skipSpotify) {
         const ok = await ensureSpotify({ type: "host" })
@@ -920,6 +1075,10 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     if (room) return
     const code = initialJoinCode ?? autojoin
     if (!code) return
+    if (!requireSession({ type: "join", code })) {
+      setJoinCode(code.toUpperCase())
+      return
+    }
     // For join-by-code, enforce Spotify only in streamer mode
     if (mode === "streamer" && !hasSpotify) {
       setJoinCode(code.toUpperCase())
@@ -927,10 +1086,24 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       return
     }
     joinRoomCode(code)
-  }, [initialJoinCode, autojoin, room, joinRoomCode, hasSpotify, mode])
+  }, [initialJoinCode, autojoin, room, joinRoomCode, hasSpotify, mode, requireSession])
 
   const dataAttrs = modeDataAttrs(mode)
   const headerCopy = HEADER_COPY[mode]
+
+  useEffect(() => {
+    if (loading) return
+    if (!userPayload) {
+      storePostAuthRedirect(
+        pendingAction ?? (intent === "host"
+          ? { type: "host" }
+          : initialJoinCode
+            ? { type: "join", code: initialJoinCode }
+            : null),
+      )
+      router.replace("/auth/login")
+    }
+  }, [loading, userPayload, router, storePostAuthRedirect, pendingAction, intent, initialJoinCode])
 
   if (loading) {
     return (
@@ -942,30 +1115,8 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
 
   if (!userPayload) {
     return (
-      <div className="grid min-h-screen place-items-center px-6 bg-[#050505]">
-        <div className="surface max-w-md rounded-3xl border border-white/10 bg-[#0b0b0b] p-8 text-center">
-          <p className="text-sm text-white/70">{error || "Connecte-toi avec Spotify pour jouer."}</p>
-          <div className="mt-6 flex flex-col gap-3">
-            <Button
-              onClick={() => {
-                const url = api.getProviderLoginUrl("spotify")
-                if (typeof window !== "undefined") {
-                  window.location.href = url
-                }
-              }}
-              className="w-full rounded-xl border border-white/20 bg-white/10 px-5 py-3 text-sm font-semibold text-white hover:bg-white/15"
-            >
-              Se connecter avec Spotify
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => router.replace("/modes")}
-              className="w-full rounded-xl border border-white/15 bg-transparent px-5 py-3 text-sm text-white/70 hover:bg-white/5"
-            >
-              Retour aux modes
-            </Button>
-          </div>
-        </div>
+      <div className="grid min-h-screen place-items-center bg-[#050505]">
+        <Loader2 className="h-8 w-8 animate-spin text-white/50" />
       </div>
     )
   }
@@ -1014,6 +1165,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     onAcceptInvite: handleAcceptInvite,
     canStart: canStartGame,
     isHost,
+    isGuest,
     currentUserId,
   }
 
@@ -1121,10 +1273,10 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
           user={userPayload.user}
           state={gameState as MultiplayerGameState}
           serverNow={serverNow}
-          onAnswer={guess => {
+          onAnswer={(guessTitle, guessArtist, sourceUserId) => {
             const socket = socketRef.current
             if (!socket) return
-            socket.emit("game:answer", { roomCode: room.room_code, guess })
+            socket.emit("game:answer", { roomCode: room.room_code, guessTitle, guessArtist, sourceUserId })
           }}
           onReady={() => {
             const socket = socketRef.current
@@ -1135,6 +1287,21 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
           modeConfig={modeConfig}
           accentColor={accentColor}
           onExit={handleLeaveRoom}
+          onRematch={isHost ? async () => {
+            try {
+              const { tracks: newTracks, gameState: newState } = await api.startMultiplayerGame(room.room_code, { source: "library" })
+              setTracks(newTracks)
+              if (newState) setGameState(newState)
+            } catch (err) {
+              console.error("rematch_failed", err)
+            }
+          } : undefined}
+          chatMessages={chatMessages}
+          onSendChat={(message) => {
+            const socket = socketRef.current
+            if (!socket || !room) return
+            socket.emit("room:chat", { roomCode: room.room_code, message })
+          }}
         />
       )
     ) : view === "results" ? (
@@ -1144,16 +1311,27 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         currentUserId={currentUserId}
         accentColor={accentColor}
         onReturn={() => router.replace("/modes")}
-        onReplay={() => {
-          autoStartGameRef.current = false
-          autoHostTriggered.current = false
-          setView("landing")
-          setRoom(null)
-          setParticipants([])
-          setTracks([])
-          setGameState(null)
-          setFlowStarted(false)
-          dispatchLobby({ type: "reset" })
+        onReplay={async () => {
+          if (!room || !isHost) return
+          try {
+            setView("playing")
+            dispatchLobby({ type: "playing" })
+            const { tracks: newTracks, gameState: newState } = await api.startMultiplayerGame(room.room_code, { source: "library" })
+            setTracks(newTracks)
+            if (newState) setGameState(newState)
+          } catch (err) {
+            console.error("replay_failed", err)
+            // Fallback: reset to lobby
+            autoStartGameRef.current = false
+            autoHostTriggered.current = false
+            setView("landing")
+            setRoom(null)
+            setParticipants([])
+            setTracks([])
+            setGameState(null)
+            setFlowStarted(false)
+            dispatchLobby({ type: "reset" })
+          }
         }}
       />
     ) : loadingGame ? (

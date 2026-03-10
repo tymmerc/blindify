@@ -24,6 +24,30 @@ class AudioManager {
   private lastStopReason: string | null = null;
   private listeners = new Set<(state: AudioState) => void>();
   private handlers: Array<[keyof HTMLMediaElementEventMap, EventListener]> = [];
+  private unlocked = false;
+
+  /**
+   * Pre-authorize audio playback by playing a silent sound.
+   * Call this during a user interaction (click, form submit) to unlock
+   * audio autoplay for the rest of the session.
+   */
+  async unlock(): Promise<void> {
+    if (this.unlocked) return;
+    if (typeof Audio === "undefined") return;
+
+    const silence = new Audio(
+      "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA=="
+    );
+    silence.volume = 0;
+
+    try {
+      await silence.play();
+      silence.pause();
+      this.unlocked = true;
+    } catch {
+      // Ignore - fallback to manual play button will be used
+    }
+  }
 
   getState(): AudioState {
     const active = Boolean(this.audio && !this.audio.paused && !this.audio.ended);
@@ -174,3 +198,48 @@ class AudioManager {
 }
 
 export const audioManager = new AudioManager();
+
+// --- Audio feedback (Web Audio API for lightweight SFX) ---
+let feedbackCtx: AudioContext | null = null;
+
+function getFeedbackCtx(): AudioContext | null {
+  if (typeof AudioContext === "undefined") return null;
+  if (!feedbackCtx || feedbackCtx.state === "closed") {
+    feedbackCtx = new AudioContext();
+  }
+  if (feedbackCtx.state === "suspended") {
+    feedbackCtx.resume().catch(() => {});
+  }
+  return feedbackCtx;
+}
+
+function playTone(frequency: number, duration: number, type: OscillatorType = "sine", volume = 0.15) {
+  const ctx = getFeedbackCtx();
+  if (!ctx) return;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(frequency, ctx.currentTime);
+  gain.gain.setValueAtTime(volume, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(ctx.currentTime);
+  osc.stop(ctx.currentTime + duration);
+}
+
+export function playCorrectSound() {
+  // Ascending two-note chime
+  playTone(523, 0.15, "sine", 0.12); // C5
+  setTimeout(() => playTone(784, 0.25, "sine", 0.14), 100); // G5
+}
+
+export function playPartialSound() {
+  // Single neutral tone
+  playTone(440, 0.2, "triangle", 0.1); // A4
+}
+
+export function playWrongSound() {
+  // Low short buzz
+  playTone(220, 0.2, "sawtooth", 0.08); // A3
+}

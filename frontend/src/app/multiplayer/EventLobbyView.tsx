@@ -1,8 +1,10 @@
 "use client"
 
 import { Sparkles, Users } from "lucide-react"
+import { QRCodeSVG } from "qrcode.react"
 import { Button } from "@/components/ui/button"
 import { SurfaceCard } from "@/components/ui/SurfaceCard"
+import { ProfileImportBlock } from "@/components/import/ProfileImportBlock"
 import { modeAccent } from "@/lib/uiTokens"
 import { ParticipantPanel } from "./LobbyViews"
 import type { LobbyRendererProps } from "./lobbyTypes"
@@ -21,32 +23,18 @@ function EventEntry({
   joining: LobbyRendererProps["joining"]
 }) {
   const accent = modeAccent("event")
-  const points = ["Affichage lisible", "Un seul hôte", "Rythme constant"]
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+    <div className="grid gap-4 lg:grid-cols-2">
+      {/* Créer une salle (host) */}
       <SurfaceCard className="flex flex-col gap-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="space-y-2">
-            <p className="text-xs uppercase tracking-[0.3em]" style={{ color: accent }}>
-              Mode événement
-            </p>
-            <h2 className="text-3xl font-semibold leading-tight text-white">Démarre la projection</h2>
-            <p className="text-sm text-white/70">Un écran principal, un tempo clair. Les participants suivent en direct.</p>
-          </div>
-          <span className="rounded-full border border-white/12 px-3 py-1 text-[11px] uppercase tracking-[0.3em]" style={{ borderColor: accent, color: accent }}>
-            Collectif
-          </span>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {points.map(point => (
-            <span
-              key={point}
-              className="rounded-full border border-white/10 bg-[#0f0f0f] px-3 py-[6px] text-xs font-semibold text-white/80"
-              style={{ borderColor: accent, color: accent }}
-            >
-              {point}
-            </span>
-          ))}
+        <div className="space-y-2">
+          <p className="text-xs uppercase tracking-[0.3em]" style={{ color: accent }}>
+            Organiser
+          </p>
+          <h2 className="text-3xl font-semibold leading-tight text-white">Créer une salle</h2>
+          <p className="text-sm text-white/70">
+            Tu seras l'hôte : la musique joue sur ton écran, les joueurs répondent depuis leur téléphone.
+          </p>
         </div>
         <Button
           variant="outline"
@@ -55,46 +43,45 @@ function EventEntry({
           style={{ borderColor: accent, color: accent }}
         >
           <Sparkles className="h-4 w-4" />
-          Démarrer l’événement
+          Créer la salle
         </Button>
-        <p className="text-xs text-white/60">Lisible à distance, les participants suivent ton rythme.</p>
-        </SurfaceCard>
+        <div className="rounded-xl border border-white/10 bg-[#0f0f0f] p-3 text-xs text-white/55">
+          <p>L'hôte diffuse la musique et affiche les résultats. Les joueurs n'entendent rien de leur côté — tout passe par l'écran principal.</p>
+        </div>
+      </SurfaceCard>
 
-      <div className="space-y-4">
-        <SurfaceCard className="space-y-3">
-          <h3 className="text-lg font-semibold text-white">Rejoindre une projection</h3>
-          <p className="text-sm text-white/70">Colle le code projeté pour entrer dans le lobby.</p>
-          <form onSubmit={onJoinSubmit} className="space-y-3">
-            <input
-              value={joinCode}
-              onChange={e => setJoinCode(e.target.value.toUpperCase())}
-              placeholder="CODE"
-              className="w-full rounded-xl border border-white/15 bg-[#0f0f0f] px-4 py-3 text-sm uppercase tracking-[0.25em] text-white outline-none focus:border-white/30"
-            />
-            <Button
-              type="submit"
-              variant="outline"
-              disabled={joining}
-              className="w-full justify-center rounded-xl border-white/20 bg-white/5 px-4 py-2 text-sm font-semibold text-white hover:bg-white/10 disabled:opacity-60"
-              style={{ borderColor: accent, color: accent }}
-            >
-              Rejoindre
-            </Button>
-          </form>
-        </SurfaceCard>
-
-        <SurfaceCard className="space-y-3">
-          <h3 className="text-lg font-semibold text-white">Brief rapide</h3>
-          <p className="text-sm text-white/70">Un seul hôte contrôle le tempo, les autres rejoignent via l’écran principal.</p>
-          <div className="rounded-xl border border-white/10 bg-[#0f0f0f] p-4 text-sm text-white/70">
-            <p className="text-xs uppercase tracking-[0.3em] text-white/50">Code de salle</p>
-            <p className="mt-1 text-2xl font-semibold tracking-[0.18em] text-white">
-              {joinCode ? joinCode : "-----"}
-            </p>
-            <p className="mt-2 text-xs text-white/55">Projette ce code pour que les joueurs rejoignent depuis leur téléphone.</p>
-          </div>
-        </SurfaceCard>
-      </div>
+      {/* Rejoindre une salle (participant) */}
+      <SurfaceCard className="flex flex-col gap-4">
+        <div className="space-y-2">
+          <p className="text-xs uppercase tracking-[0.3em]" style={{ color: accent }}>
+            Participer
+          </p>
+          <h2 className="text-3xl font-semibold leading-tight text-white">Rejoindre</h2>
+          <p className="text-sm text-white/70">
+            Entre le code affiché sur l'écran principal pour rejoindre la partie.
+          </p>
+        </div>
+        <form onSubmit={onJoinSubmit} className="space-y-3">
+          <input
+            value={joinCode}
+            onChange={e => setJoinCode(e.target.value.toUpperCase())}
+            placeholder="CODE DE LA SALLE"
+            className="w-full rounded-xl border border-white/15 bg-[#0f0f0f] px-4 py-3 text-sm uppercase tracking-[0.25em] text-white outline-none focus:border-white/30"
+          />
+          <Button
+            type="submit"
+            variant="outline"
+            disabled={joining}
+            className="w-full justify-center rounded-xl border-white/20 bg-white/5 px-4 py-2 text-sm font-semibold text-white hover:bg-white/10 disabled:opacity-60"
+            style={{ borderColor: accent, color: accent }}
+          >
+            Rejoindre la partie
+          </Button>
+        </form>
+        <div className="rounded-xl border border-white/10 bg-[#0f0f0f] p-3 text-xs text-white/55">
+          <p>Tu répondras depuis ton téléphone. La musique est diffusée sur l'écran de l'hôte.</p>
+        </div>
+      </SurfaceCard>
     </div>
   )
 }
@@ -150,6 +137,11 @@ function EventLobby(props: LobbyRendererProps) {
         </SurfaceCard>
       </SurfaceCard>
 
+      <div className="space-y-4">
+      <SurfaceCard className="space-y-3">
+        <ProfileImportBlock accent={accent} />
+      </SurfaceCard>
+
       <SurfaceCard className="space-y-3">
         <p className="text-xs uppercase tracking-[0.35em] text-white/60">Rappel</p>
         <h4 className="text-xl font-semibold text-white">Projette le code</h4>
@@ -157,9 +149,21 @@ function EventLobby(props: LobbyRendererProps) {
         <div className="rounded-xl border border-white/10 bg-[#0f0f0f] px-4 py-3">
           <p className="text-xs uppercase tracking-[0.35em] text-white/50">Code salle</p>
           <p className="mt-1 text-3xl font-semibold tracking-[0.24em] text-white">{roomCode}</p>
-          <p className="mt-2 text-xs text-white/55">Partage ce code sur l’écran principal pour que les joueurs rejoignent avec Spotify.</p>
+          <p className="mt-2 text-xs text-white/55">Projette ce QR code ou dicte le code pour que les joueurs rejoignent.</p>
+          {roomCode !== "-----" && (
+            <div className="mt-3 flex justify-center rounded-lg bg-white p-3">
+              <QRCodeSVG
+                value={`${typeof window !== "undefined" ? window.location.origin : ""}/multiplayer?mode=event&code=${roomCode}`}
+                size={140}
+                bgColor="#ffffff"
+                fgColor="#0b0710"
+                level="M"
+              />
+            </div>
+          )}
         </div>
       </SurfaceCard>
+      </div>
     </section>
   )
 }

@@ -257,7 +257,7 @@ export function ResultsView({
           style={{ borderColor: accent, color: accent }}
         >
           <ShieldCheck className="h-4 w-4" />
-          Nouveau lobby
+          Rejouer
         </Button>
       </div>
     </section>

@@ -3,12 +3,6 @@ import { API_BASE_URL } from "./config"
 
 let socket: Socket | null = null
 
-function getSessionToken(): string | null {
-  if (typeof document === "undefined") return null
-  const match = document.cookie.match(/(?:^|; )blindify_session_token=([^;]+)/)
-  return match ? decodeURIComponent(match[1]) : null
-}
-
 export function getSocket(): Socket {
   if (!socket) {
     const origin =
@@ -20,17 +14,21 @@ export function getSocket(): Socket {
       API_BASE_URL.includes("/blindify") || (typeof window !== "undefined" && window.location.pathname.startsWith("/blindify"))
         ? "/blindify/socket.io"
         : "/socket.io"
-    const sessionToken = getSessionToken()
     socket = io(origin, {
       withCredentials: true,
       path,
       transports: ["websocket", "polling"],
-      ...(sessionToken
-        ? {
-            auth: { token: sessionToken },
-            extraHeaders: { Authorization: `Bearer ${sessionToken}` },
-          }
-        : {}),
+      // Session cookie is HttpOnly — authentication is handled automatically
+      // via withCredentials sending the cookie in the handshake headers.
+    })
+    socket.on("connect", () => {
+      console.log(`[socket] connected with id: ${socket?.id}`)
+    })
+    socket.on("disconnect", (reason) => {
+      console.log(`[socket] disconnected, reason: ${reason}`)
+    })
+    socket.on("connect_error", (err) => {
+      console.log(`[socket] connect_error: ${err.message}`)
     })
   }
   return socket

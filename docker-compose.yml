@@ -11,7 +11,7 @@ services:
       POSTGRES_USER: blindify
       POSTGRES_PASSWORD: ${DB_PASSWORD:-blindify_pass}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backend/init-db.mjs:/docker-entrypoint-initdb.d/init-db.mjs
@@ -31,7 +31,7 @@ services:
     command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-}
     ports:
       # Use a non-default host port to avoid conflicts with local Redis instances
-      - "6380:6379"
+      - "127.0.0.1:6380:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -70,13 +70,13 @@ services:
       COOKIE_SECURE: ${COOKIE_SECURE:-true}
       SENTRY_DSN: ${SENTRY_DSN:-}
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     volumes:
       - ./backend/logs:/app/logs
     networks:
       - blindify-network
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/health"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:3000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -98,11 +98,11 @@ services:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
       NEXT_PUBLIC_SOCKET_URL: ${NEXT_PUBLIC_SOCKET_URL}
     ports:
-      - "3001:3000"
+      - "127.0.0.1:3001:80"
     networks:
       - blindify-network
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:80"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -35,6 +35,20 @@ function frontendBaseUrl(): string {
   return raw.replace(/\/$/, "");
 }
 
+function setSessionCookie(res: Response, token: string, maxAgeMs = 1000 * 60 * 60 * 24): void {
+  const frontend = frontendBaseUrl();
+  const isHttps = frontend.startsWith("https://");
+  const isProd = process.env.NODE_ENV === "production";
+  res.cookie("blindify_session_token", token, {
+    httpOnly: true,
+    secure: process.env.COOKIE_SECURE ? process.env.COOKIE_SECURE === "true" : isProd && isHttps,
+    sameSite: isHttps ? "none" : "lax",
+    domain: process.env.COOKIE_DOMAIN || (isProd ? "tymmerc.eu" : undefined),
+    path: "/",
+    maxAge: maxAgeMs,
+  });
+}
+
 async function upsertUser(
   provider: MusicProvider,
   providerId: string,
@@ -168,9 +182,10 @@ async function performSpotifyCallback(req: Request, res: Response): Promise<void
   req.session.userId = user.id;
   req.session.sessionToken = session.token;
 
+  setSessionCookie(res, session.token, 1000 * 60 * 60 * 24);
+
   const frontend = frontendBaseUrl();
   const redirectUrl = new URL(`${frontend}/auth/callback`);
-  redirectUrl.searchParams.set("session_token", session.token);
   redirectUrl.searchParams.set("provider", "spotify");
 
   res.redirect(302, redirectUrl.toString());
@@ -243,9 +258,10 @@ async function performDeezerCallback(req: Request, res: Response): Promise<void>
   req.session.userId = user.id;
   req.session.sessionToken = session.token;
 
+  setSessionCookie(res, session.token, 1000 * 60 * 60 * 24);
+
   const frontend = frontendBaseUrl();
   const redirectUrl = new URL(`${frontend}/auth/callback`);
-  redirectUrl.searchParams.set("session_token", session.token);
   redirectUrl.searchParams.set("provider", "deezer");
 
   res.redirect(302, redirectUrl.toString());
@@ -306,15 +322,6 @@ export const authController = {
     try {
       const providerParam = (req.params.provider as MusicProvider | undefined) ?? "spotify";
       const stateParam = typeof req.query.state === "string" ? req.query.state : undefined;
-
-      console.log("oauth_callback_debug", {
-        providerParam,
-        stateParam,
-        session: req.session,
-        originalUrl: req.originalUrl,
-        query: req.query,
-        cookies: req.headers.cookie,
-      });
 
       if (!validateState(req, providerParam, stateParam)) {
         clearOAuthState(req);
@@ -382,13 +389,15 @@ export const authController = {
         avatar: null,
       });
 
-      const session = await createSessionToken(user.id, 1000 * 60 * 60 * 4); // 4h guest session
+      const guestTtlMs = 1000 * 60 * 60 * 4; // 4h guest session
+      const session = await createSessionToken(user.id, guestTtlMs);
       if (!req.session) {
         req.session = {};
       }
       req.session.userId = user.id;
       req.session.sessionToken = session.token;
 
+      setSessionCookie(res, session.token, guestTtlMs);
       ok(res, { sessionToken: session.token, user });
     } catch (error) {
       console.error("guest_auth_failed", error);
@@ -407,6 +416,7 @@ export const authController = {
 
   async logout(req: Request, res: Response): Promise<void> {
     try {
+      // Revoke token from Bearer header
       const authHeader = req.headers.authorization;
       if (authHeader && authHeader.startsWith("Bearer ")) {
         const token = authHeader.slice(7);
@@ -414,7 +424,13 @@ export const authController = {
           await revokeSessionToken(token);
         }
       }
+      // Revoke token from session
+      if (req.session && typeof req.session.sessionToken === "string") {
+        await revokeSessionToken(req.session.sessionToken);
+      }
       clearSession(req);
+      // Clear the HttpOnly session cookie
+      res.clearCookie("blindify_session_token", { path: "/" });
       ok(res, { success: true });
     } catch (error) {
       console.error("logout_failed", error);

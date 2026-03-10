@@ -34,7 +34,7 @@ export function LobbyShell({
   const accent = modeAccent(mode)
   return (
     <main className="min-h-screen bg-[#050505] text-white" {...(dataAttrs ?? {})}>
-      <div className="relative mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-8">
+      <div className={`relative mx-auto flex w-full flex-col ${stage === "game" ? "gap-0" : "max-w-6xl gap-6 px-6 py-8"}`}>
         {!hideHeader ? (
           <LobbyHeader
             mode={mode}

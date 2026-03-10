@@ -7,12 +7,13 @@ import { api } from "@/lib/api"
 import type { SoloTrack, UserSummary } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import { ArrowRight, Check, Flame, Heart, Loader2, Play, Sparkles, Timer, Volume2, VolumeX } from "lucide-react"
+import { VinylDisc } from "./VinylDisc"
 import { getSocket } from "@/lib/socket"
 import { audioManager, DEFAULT_AUDIO_VOLUME } from "@/lib/audioManager"
 import { RoundUiState, roundFlowReducer, computeScore, resolveModeFlags, ROUND_FEEDBACK_MS } from "@/lib/roundFlow"
 import { useMode } from "@/contexts/ModeContext"
+import { evaluateGuess as evaluateGuessShared, evaluateGuessSeparate, normalize, tokenize, type Verdict } from "@/lib/matching"
 
-type Verdict = "correct" | "close" | "wrong"
 type FinalizeReason = "timeout" | "reveal" | "guess"
 type RoundState = "pending" | "current" | Verdict
 
@@ -68,35 +69,6 @@ function ListeningSurface({ active }: { active: boolean }) {
   )
 }
 
-function AudioBars() {
-  return (
-    <div className="flex items-end gap-1">
-      {[6, 10, 14, 10, 6].map((h, idx) => (
-        <span
-          key={idx}
-          className="w-1.5 rounded-sm bg-[var(--ma-gradient)]"
-          style={{
-            height: `${h * 4}px`,
-            animation: `barPulse 1.2s ease-in-out ${idx * 0.1}s infinite`,
-          }}
-        />
-      ))}
-      <style jsx>{`
-        @keyframes barPulse {
-          0%,
-          100% {
-            transform: scaleY(0.6);
-            opacity: 0.6;
-          }
-          50% {
-            transform: scaleY(1);
-            opacity: 1;
-          }
-        }
-      `}</style>
-    </div>
-  )
-}
 
 export function SoloGameClient({
   user,
@@ -150,9 +122,10 @@ export function SoloGameClient({
     guessArtist: string
     points: number
     breakdown: {
-      base: number
+      title: number
+      artist: number
       speed: number
-      streakBonus: number
+      penalty: number
     }
   } | null>(null)
   const lastDialogRoundRef = useRef<number>(0)
@@ -268,7 +241,7 @@ export function SoloGameClient({
       if (readyRoundRef.current === roundNumber) return
       readyRoundRef.current = roundNumber
       const socket = getSocket()
-      socket.emit("round:ready", { roomCode, round: roundNumber })
+      socket.emit("game:ready", { roomCode, round: roundNumber })
     },
     [isMultiplayer, roomCode]
   )
@@ -443,13 +416,21 @@ export function SoloGameClient({
 
       const startedAt = flow.startAt
       const reactionMs = startedAt ? Math.max(0, now - startedAt) : null
-      const detail = evaluateGuessDetail(submittedGuess, track)
+      // Use separate title/artist fields when available for more accurate matching
+      const currentGuessTitle = guessTitleRef.current
+      const currentGuessArtist = guessArtistRef.current
+      const hasSeparateFields = (currentGuessTitle && currentGuessTitle.trim().length > 0) || (currentGuessArtist && currentGuessArtist.trim().length > 0)
+      const detail = hasSeparateFields
+        ? evaluateGuessSeparate(currentGuessTitle, currentGuessArtist, track)
+        : evaluateGuessShared(submittedGuess, track)
       const finalVerdict = detail.verdict ?? nextVerdict
 
       const prevStats = statsRef.current
-      const correct = finalVerdict === "correct"
+      const guessProvided = detail.guessProvided
       const scoreResult = computeScore({
-        correct,
+        matchedTitle: detail.matchedTitle,
+        matchedArtist: detail.matchedArtist,
+        guessProvided,
         reactionMs,
         maxDurationMs: LISTENING_DURATION_MS,
         streak: prevStats.streak,
@@ -457,6 +438,7 @@ export function SoloGameClient({
       const gainedPoints = scoreResult.gained
       const streak = scoreResult.nextStreak
 
+      const correct = detail.matchedTitle && detail.matchedArtist
       const updatedStats: RoundStats = {
         rounds: prevStats.rounds + 1,
         correct: prevStats.correct + (correct ? 1 : 0),
@@ -537,7 +519,7 @@ export function SoloGameClient({
         setTimer(prev => (prev === nextSeconds ? prev : nextSeconds))
         if (remainingMs <= 0) {
           const latestGuess = guessRef.current
-          const computedVerdict = verdictRef.current ?? evaluateGuess(latestGuess, track)
+          const computedVerdict = verdictRef.current ?? evaluateGuessShared(latestGuess, track).verdict
           finalizeRound(computedVerdict, "timeout", track, latestGuess)
         } else {
           listeningRafRef.current = requestAnimationFrame(tick)
@@ -621,6 +603,17 @@ export function SoloGameClient({
     const targetId = targetTrack?.audioSourceId ?? targetTrack?.track_id
     startTrackForRound(index + 1, targetId, sharedDeadlineMs ?? undefined, { skipCountdown: false })
   }, [flow.state, trackList, index, startTrackForRound, sharedDeadlineMs])
+
+  // Safety net: if stuck in LOCKED state for >500ms without transitioning to REVEALED, force reveal.
+  useEffect(() => {
+    if (flow.state !== RoundUiState.Locked) return
+    const safetyTimer = setTimeout(() => {
+      if (flow.state === RoundUiState.Locked) {
+        dispatchFlow({ type: "REVEAL", at: Date.now() })
+      }
+    }, 500)
+    return () => clearTimeout(safetyTimer)
+  }, [flow.state, dispatchFlow])
 
   // Synchronise le timer avec une échéance partagée (round:start/started socket)
   useEffect(() => {
@@ -766,6 +759,10 @@ export function SoloGameClient({
         cancelAnimationFrame(listeningRafRef.current)
         listeningRafRef.current = null
       }
+      if (revealTimeoutRef.current) {
+        clearTimeout(revealTimeoutRef.current)
+        revealTimeoutRef.current = null
+      }
       audioManager.stop("solo_listening_cleanup", AUDIO_OWNER)
     }
   }, [
@@ -825,7 +822,7 @@ export function SoloGameClient({
     (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault()
       if (!current || isRevealed || isLocked || uiState !== RoundUiState.Playing) return
-      const currentVerdict = evaluateGuess(guess, current)
+      const currentVerdict = evaluateGuessShared(guess, current).verdict
       setVerdict(currentVerdict)
       finalizeRound(currentVerdict, "guess", current, guess)
     },
@@ -834,7 +831,7 @@ export function SoloGameClient({
 
   const handleReveal = useCallback(() => {
     if (!current) return
-    const finalVerdict = verdict ?? evaluateGuess(guess, current)
+    const finalVerdict = verdict ?? evaluateGuessShared(guess, current).verdict
     finalizeRound(finalVerdict, "reveal", current, guess)
   }, [current, verdict, guess, finalizeRound])
 
@@ -1000,7 +997,7 @@ export function SoloGameClient({
       guessTitle: guessTitleRef.current,
       guessArtist: guessArtistRef.current,
       points: 0,
-      breakdown: { base: 0, speed: 0, streakBonus: 0 },
+      breakdown: { title: 0, artist: 0, speed: 0, penalty: 0 },
     })
     lastDialogRoundRef.current = roundNumber
   }, [uiState, current, index, verdict, guess, resultDialog])
@@ -1022,7 +1019,7 @@ export function SoloGameClient({
       guessTitle: guessTitleRef.current,
       guessArtist: guessArtistRef.current,
       points: 0,
-      breakdown: { base: 0, speed: 0, streakBonus: 0 },
+      breakdown: { title: 0, artist: 0, speed: 0, penalty: 0 },
     })
     lastDialogRoundRef.current = stats.rounds
   }, [stats.rounds, trackList, current, verdict, guess, resultDialog])
@@ -1081,6 +1078,12 @@ export function SoloGameClient({
     autoAdvanceTimerRef.current = setTimeout(() => {
       handleNext(true)
     }, 900)
+    return () => {
+      if (autoAdvanceTimerRef.current) {
+        clearTimeout(autoAdvanceTimerRef.current)
+        autoAdvanceTimerRef.current = null
+      }
+    }
   }, [isMultiplayer, isHost, autoAdvance, resultDialog, gameFinished, handleNext])
 
   if (!current) {
@@ -1089,7 +1092,7 @@ export function SoloGameClient({
         <Sparkles className="h-10 w-10 text-neon" />
         <p className="text-sm text-slate-300">No tracks available — try syncing another provider.</p>
         <Button variant="outline" asChild>
-          <Link href="/menu">Return to menu</Link>
+          <Link href="/solo">Retour</Link>
         </Button>
       </div>
     )
@@ -1105,7 +1108,7 @@ export function SoloGameClient({
         </p>
         <div className="flex gap-3">
           <Button asChild variant="outline">
-            <Link href="/menu">Return to menu</Link>
+            <Link href="/solo">Retour</Link>
           </Button>
           <Button asChild>
             <Link href="/solo">Play again</Link>
@@ -1130,7 +1133,7 @@ export function SoloGameClient({
       <div className="px-6 pb-10 pt-6">
         <div className="flex items-center justify-between mb-6">
           <Link
-            href="/menu"
+            href="/solo"
             className="rounded-md border border-[#1b1b1b] bg-transparent px-4 py-2 text-sm text-white hover:bg-[#151515]"
           >
             ← Quitter
@@ -1173,16 +1176,14 @@ export function SoloGameClient({
             </div>
           </div>
 
-          <div className="relative mx-auto mb-6 grid h-[200px] w-[200px] place-items-center rounded-xl shadow-[0_25px_60px_rgba(204,90,196,0.35)] overflow-hidden bg-gradient-to-br from-[#b155f0] to-[#f24f90]">
-            {current?.album_cover ? (
-              <div
-                className="absolute inset-0 scale-110 blur-md brightness-75"
-                style={{ backgroundImage: `url(${current.album_cover})`, backgroundSize: "cover", backgroundPosition: "center" }}
-              />
-            ) : null}
-            <div className="relative z-10 opacity-90">
-              <AudioBars />
-            </div>
+          <div className="relative mx-auto mb-6 flex items-center justify-center">
+            <VinylDisc size={220} spinning={isPlaying && !isLocked && !isRevealed} accentColor={accentColor} />
+            {isPlaying && !isLocked && !isRevealed && (
+              <div className="absolute bottom-2 flex items-center gap-2 rounded-full border border-white/20 bg-black/60 px-3 py-1.5 text-xs text-white/80 backdrop-blur">
+                <span className="h-2 w-2 rounded-full animate-pulse" style={{ backgroundColor: accentColor }} />
+                <span>Extrait en cours</span>
+              </div>
+            )}
           </div>
 
           <div
@@ -1480,7 +1481,7 @@ export function SoloGameClient({
           <div className="mt-3 rounded-xl border border-white/10 bg-black/30 p-3 text-sm text-white flex flex-col gap-1">
             <div className="font-semibold text-base">+{resultDialog.points} pts</div>
             <div className="text-[12px] text-[var(--ma-muted,#9b9b9b)]">
-              Base {resultDialog.breakdown.base} · Vitesse {resultDialog.breakdown.speed} · Série {resultDialog.breakdown.streakBonus}
+              Titre {resultDialog.breakdown.title} · Artiste {resultDialog.breakdown.artist} · Vitesse {resultDialog.breakdown.speed}{resultDialog.breakdown.penalty > 0 ? ` · Pénalité -${resultDialog.breakdown.penalty}` : ""}
             </div>
           </div>
 
@@ -1551,100 +1552,6 @@ export function SoloGameClient({
     ) : null}
     </>
   )
-}
-
-const NORMALIZE_SUBS: Record<string, string> = {
-  $: "s",
-  "@": "a",
-  "\u20ac": "e",
-  "&": "and",
-}
-
-function normalize(text: string): string {
-  // Soft-normalize to handle accents and stylized characters (e.g., A$AP -> asap) before token matching
-  const folded = text
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-  const replaced = folded.replace(/[@$€&]/g, char => NORMALIZE_SUBS[char] ?? " ")
-  return replaced.replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim()
-}
-
-const STOP_WORDS = new Set(["feat", "featuring", "feat.", "ft", "ft.", "with", "and", "x", "feat,", "featuring,"])
-
-function tokenize(text: string): string[] {
-  return normalize(text)
-    .split(" ")
-    .filter(Boolean)
-    .filter(word => !STOP_WORDS.has(word))
-}
-
-function levenshteinDistance(a: string, b: string): number {
-  if (a === b) return 0
-  if (!a.length) return b.length
-  if (!b.length) return a.length
-  const dp = Array.from({ length: a.length + 1 }, () => new Array<number>(b.length + 1).fill(0))
-  for (let i = 0; i <= a.length; i++) dp[i][0] = i
-  for (let j = 0; j <= b.length; j++) dp[0][j] = j
-  for (let i = 1; i <= a.length; i++) {
-    for (let j = 1; j <= b.length; j++) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1
-      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost)
-    }
-  }
-  return dp[a.length][b.length]
-}
-
-function isWordMatch(word: string, candidates: string[]): boolean {
-  if (candidates.includes(word)) return true
-  const tolerance = word.length <= 4 ? 1 : 2
-  return candidates.some(candidate => {
-    if (Math.abs(candidate.length - word.length) > tolerance) return false
-    return levenshteinDistance(word, candidate) <= tolerance
-  })
-}
-
-function evaluateGuessDetail(guess: string, track: SoloTrack): {
-  verdict: Verdict
-  matchedTitle: boolean
-  matchedArtist: boolean
-} {
-  const guessWords = tokenize(guess)
-  if (!guessWords.length) return { verdict: "wrong", matchedTitle: false, matchedArtist: false }
-
-  const titleWords = tokenize(track.title)
-  const artistWords = tokenize(track.artist)
-
-  let matches = 0
-  let titleMatches = 0
-  let artistMatches = 0
-  for (const word of guessWords) {
-    if (isWordMatch(word, titleWords)) {
-      matches += 1
-      titleMatches += 1
-    } else if (isWordMatch(word, artistWords)) {
-      matches += 1
-      artistMatches += 1
-    }
-  }
-
-  const matchRatio = matches / Math.max(1, guessWords.length)
-  let verdict: Verdict = "wrong"
-  if (matchRatio === 1) {
-    verdict = "correct"
-  } else if (matchRatio >= 0.6 && matches >= 1) {
-    verdict = "close"
-  }
-
-  return {
-    verdict,
-    matchedTitle: titleMatches > 0,
-    matchedArtist: artistMatches > 0,
-  }
-}
-
-function evaluateGuess(guess: string, track: SoloTrack): Verdict {
-  return evaluateGuessDetail(guess, track).verdict
 }
 
 // Global styles for the compact volume slider

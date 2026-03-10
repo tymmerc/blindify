@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { api } from "@/lib/api"
 
 type Playlist = {
@@ -13,36 +14,13 @@ type Playlist = {
   owner?: string | null
 }
 
-const quickOptions = [
-  { title: "Titres likés", description: "Vos favoris", icon: "❤️", href: "/solo?source=liked&count=10" },
-  { title: "Mix aléatoire", description: "Bibliothèque complète", icon: "🎲", href: "/solo?source=library&count=10" },
-  { title: "Top semaine", description: "20 plus écoutés (7j)", icon: "📈", href: "/solo?source=top_week&count=20" },
-  { title: "Top mois", description: "20 plus écoutés (30j)", icon: "📊", href: "/solo?source=top_month&count=20" },
-]
-
-const recommended: Playlist[] = [
-  { id: "discover-weekly", title: "Discover Weekly", count: "30 morceaux", emoji: "🎵" },
-  { id: "release-radar", title: "Release Radar", count: "45 morceaux", emoji: "⚡" },
-  { id: "daily-mix-1", title: "Daily Mix 1", count: "50 morceaux", emoji: "🌟" },
-  { id: "repeat-rewind", title: "Repeat Rewind", count: "100 morceaux", emoji: "🔁" },
-]
-
-const userPlaylists: Playlist[] = [
-  { id: "top-2024", title: "Top 2024", count: "142 morceaux", emoji: "🎸" },
-  { id: "workout-mix", title: "Workout Mix", count: "87 morceaux", emoji: "💪" },
-  { id: "chill-vibes", title: "Chill Vibes", count: "234 morceaux", emoji: "🌙" },
-  { id: "road-trip", title: "Road Trip", count: "156 morceaux", emoji: "🚗" },
-  { id: "summer-hits", title: "Summer Hits", count: "203 morceaux", emoji: "☀️" },
-  { id: "party-time", title: "Party Time", count: "178 morceaux", emoji: "🎉" },
-  { id: "focus-flow", title: "Focus Flow", count: "95 morceaux", emoji: "🎧" },
-  { id: "throwback-classics", title: "Throwback Classics", count: "267 morceaux", emoji: "📻" },
-]
-
 export default function PlaylistSelectionPage() {
+  const router = useRouter()
   const [query, setQuery] = useState("")
   const [spotifyPlaylists, setSpotifyPlaylists] = useState<Playlist[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [hasSpotify, setHasSpotify] = useState<boolean | null>(null)
   const normalizedQuery = query.trim().toLowerCase()
 
   useEffect(() => {
@@ -52,6 +30,8 @@ export default function PlaylistSelectionPage() {
         setLoading(true)
         setError(null)
         const token = await api.getSpotifyToken()
+        if (cancelled) return
+        setHasSpotify(true)
         const resp = await fetch("https://api.spotify.com/v1/me/playlists?limit=50", {
           headers: { Authorization: `Bearer ${token.accessToken}` },
         })
@@ -83,7 +63,8 @@ export default function PlaylistSelectionPage() {
       } catch (err) {
         console.error("load_spotify_playlists_failed", err)
         if (!cancelled) {
-          setError("Impossible de récupérer vos playlists Spotify.")
+          setHasSpotify(false)
+          setError(null)
           setSpotifyPlaylists([])
         }
       } finally {
@@ -96,16 +77,31 @@ export default function PlaylistSelectionPage() {
     }
   }, [])
 
-  const filteredRecommended = useMemo(() => {
-    if (!normalizedQuery) return recommended
-    return recommended.filter(playlist => playlist.title.toLowerCase().includes(normalizedQuery))
-  }, [normalizedQuery])
+  useEffect(() => {
+    if (hasSpotify === false) {
+      router.replace("/import")
+    }
+  }, [hasSpotify, router])
 
-  const filteredUserPlaylists = useMemo(() => {
-    const base = spotifyPlaylists.length ? spotifyPlaylists : userPlaylists
-    if (!normalizedQuery) return base
-    return base.filter(playlist => playlist.title.toLowerCase().includes(normalizedQuery))
+  const quickOptions = [
+    { title: "Titres likés", description: "Vos favoris", icon: "❤️", href: "/solo?source=liked&count=10" },
+    { title: "Mix aléatoire", description: "Bibliothèque complète", icon: "🎲", href: "/solo?source=library&count=10" },
+    { title: "Top semaine", description: "20 plus écoutés (7j)", icon: "📈", href: "/solo?source=top_week&count=20" },
+    { title: "Top mois", description: "20 plus écoutés (30j)", icon: "📊", href: "/solo?source=top_month&count=20" },
+  ]
+
+  const filteredPlaylists = useMemo(() => {
+    if (!normalizedQuery) return spotifyPlaylists
+    return spotifyPlaylists.filter(playlist => playlist.title.toLowerCase().includes(normalizedQuery))
   }, [normalizedQuery, spotifyPlaylists])
+
+  if (hasSpotify === false) {
+    return (
+      <div className="grid min-h-screen place-items-center bg-[var(--ma-bg)] text-sm text-white/70">
+        Redirection...
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-[var(--ma-bg)] text-white">
@@ -116,25 +112,33 @@ export default function PlaylistSelectionPage() {
               href="/modes"
               className="inline-flex w-fit items-center gap-2 rounded-lg border border-[var(--ma-border-strong)] px-4 py-2 text-sm font-medium text-white/80 transition hover:bg-white/5"
             >
-              ← Retour
+              &larr; Retour
             </Link>
             <div className="space-y-1">
               <h1 className="text-3xl font-bold tracking-[-0.03em] sm:text-4xl">Choisir une playlist</h1>
               <p className="text-[15px] text-[var(--ma-muted)]">Sélectionnez une playlist pour commencer</p>
             </div>
           </div>
-          <div className="w-full max-w-md">
-            <label className="sr-only" htmlFor="playlist-search">
-              Rechercher une playlist
-            </label>
-            <input
-              id="playlist-search"
-              type="search"
-              value={query}
-              onChange={event => setQuery(event.target.value)}
-              placeholder="Rechercher une playlist..."
-              className="w-full rounded-lg border border-[var(--ma-border-strong)] bg-[#0f0f0f] px-4 py-3 text-sm text-white placeholder:text-[#606060] outline-none transition focus:border-[rgba(168,85,247,0.5)]"
-            />
+          <div className="flex items-center gap-3">
+            <Link
+              href="/import"
+              className="rounded-lg border border-purple-500/30 px-4 py-2 text-sm font-medium text-purple-400 transition hover:bg-purple-500/10"
+            >
+              Importer via lien
+            </Link>
+            <div className="w-full max-w-md">
+              <label className="sr-only" htmlFor="playlist-search">
+                Rechercher une playlist
+              </label>
+              <input
+                id="playlist-search"
+                type="search"
+                value={query}
+                onChange={event => setQuery(event.target.value)}
+                placeholder="Rechercher une playlist..."
+                className="w-full rounded-lg border border-[var(--ma-border-strong)] bg-[#0f0f0f] px-4 py-3 text-sm text-white placeholder:text-[#606060] outline-none transition focus:border-[rgba(168,85,247,0.5)]"
+              />
+            </div>
           </div>
         </div>
 
@@ -158,27 +162,17 @@ export default function PlaylistSelectionPage() {
         </div>
 
         <section className="ma-section">
-          <div className="mb-6 flex items-center gap-3">
-            <h2 className="text-2xl font-semibold tracking-[-0.02em]">Recommandés pour vous</h2>
-            <span className="rounded-full bg-[rgba(168,85,247,0.16)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.4px] text-[#a855f7]">
-              Nouveauté
-            </span>
-          </div>
-          <PlaylistGrid playlists={filteredRecommended} emptyLabel="Aucune recommandation trouvée" />
-        </section>
-
-        <section className="ma-section">
-          <h2 className="mb-6 text-2xl font-semibold tracking-[-0.02em]">Vos playlists</h2>
+          <h2 className="mb-6 text-2xl font-semibold tracking-[-0.02em]">Vos playlists Spotify</h2>
           {error ? <p className="text-sm text-red-400 mb-2">{error}</p> : null}
-          {loading ? <p className="text-sm text-[var(--ma-muted)]">Chargement…</p> : null}
-          <PlaylistGrid playlists={filteredUserPlaylists} emptyLabel="Aucune playlist ne correspond à votre recherche" />
+          {loading ? <p className="text-sm text-[var(--ma-muted)]">Chargement...</p> : null}
+          <PlaylistGrid playlists={filteredPlaylists} emptyLabel="Aucune playlist ne correspond à votre recherche" />
         </section>
       </div>
     </div>
   )
 }
 
-function PlaylistGrid({ playlists, emptyLabel }: { playlists: Playlist[]; emptyLabel: string }) {
+function PlaylistGrid({ playlists, emptyLabel }: { playlists: { id: string; title: string; count: string; emoji: string; cover?: string | null }[]; emptyLabel: string }) {
   if (playlists.length === 0) {
     return <p className="text-sm text-[var(--ma-muted)]">{emptyLabel}</p>
   }
@@ -187,7 +181,7 @@ function PlaylistGrid({ playlists, emptyLabel }: { playlists: Playlist[]; emptyL
     <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
       {playlists.map(playlist => (
         <Link
-          key={playlist.title}
+          key={playlist.id}
           href={`/solo?source=playlist&playlistId=${encodeURIComponent(playlist.id)}`}
           className="group relative block cursor-pointer overflow-hidden rounded-xl border border-[var(--ma-border)] bg-[var(--ma-surface)] p-4 transition duration-200 hover:-translate-y-1 hover:border-[rgba(168,85,247,0.3)] hover:shadow-[0_12px_32px_rgba(168,85,247,0.15)]"
           aria-label={`Lancer un blindtest sur ${playlist.title}`}

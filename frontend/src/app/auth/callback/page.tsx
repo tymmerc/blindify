@@ -2,30 +2,32 @@
 
 import { useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { api } from "@/lib/api"
 
 export const dynamic = "force-dynamic"
+
+const PENDING_AUTH_REDIRECT_KEY = "blindify:post_auth_redirect"
 
 export default function AuthCallbackPage() {
   const router = useRouter()
 
   useEffect(() => {
-    const url = new URL(window.location.href)
-    const sessionToken = url.searchParams.get("session_token")
-    const expiresInParam = url.searchParams.get("expires_in")
-
-    if (!sessionToken) {
-      router.replace("/auth/login?error=session_invalid")
-      return
+    // Session cookie is now set by the backend as HttpOnly — no JS handling needed.
+    // Check for pending redirect (e.g., user was joining a game before login)
+    let pendingRedirect: string | null = null
+    try {
+      pendingRedirect = window.localStorage.getItem(PENDING_AUTH_REDIRECT_KEY)
+      if (pendingRedirect) {
+        window.localStorage.removeItem(PENDING_AUTH_REDIRECT_KEY)
+      }
+    } catch {
+      // ignore storage errors
     }
 
-    const expiresIn = Number.isNaN(Number(expiresInParam))
-      ? 60 * 60 * 24
-      : Math.max(300, Number(expiresInParam))
-
-    api.setSessionCookie(sessionToken, expiresIn)
-
-    router.replace("/menu")
+    if (pendingRedirect && pendingRedirect.startsWith("/") && !pendingRedirect.includes("://")) {
+      router.replace(pendingRedirect)
+    } else {
+      router.replace("/friends")
+    }
   }, [router])
 
   return (
