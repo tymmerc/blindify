@@ -63,7 +63,7 @@ export default function AuthLoginPage() {
                 onClick={() => { setMode("login"); setError(null) }}
                 className={`flex-1 rounded-lg py-2 text-sm font-medium transition ${
                   mode === "login"
-                    ? "bg-purple-500/20 text-purple-300"
+                    ? "bg-white/10 text-white"
                     : "text-white/50 hover:text-white/70"
                 }`}
               >
@@ -74,7 +74,7 @@ export default function AuthLoginPage() {
                 onClick={() => { setMode("register"); setError(null) }}
                 className={`flex-1 rounded-lg py-2 text-sm font-medium transition ${
                   mode === "register"
-                    ? "bg-purple-500/20 text-purple-300"
+                    ? "bg-white/10 text-white"
                     : "text-white/50 hover:text-white/70"
                 }`}
               >
@@ -100,7 +100,7 @@ export default function AuthLoginPage() {
                 onChange={e => setUsername(e.target.value)}
                 placeholder="Pseudo"
                 autoComplete="username"
-                className="w-full rounded-xl border border-white/15 bg-black/40 px-4 py-3 text-sm text-white placeholder:text-white/25 outline-none transition focus:border-purple-500/50"
+                className="w-full rounded-xl border border-white/15 bg-black/40 px-4 py-3 text-sm text-white placeholder:text-white/25 outline-none transition focus:border-white/30"
               />
               <input
                 type="password"
@@ -108,13 +108,13 @@ export default function AuthLoginPage() {
                 onChange={e => setPassword(e.target.value)}
                 placeholder="Mot de passe"
                 autoComplete={mode === "register" ? "new-password" : "current-password"}
-                className="w-full rounded-xl border border-white/15 bg-black/40 px-4 py-3 text-sm text-white placeholder:text-white/25 outline-none transition focus:border-purple-500/50"
+                className="w-full rounded-xl border border-white/15 bg-black/40 px-4 py-3 text-sm text-white placeholder:text-white/25 outline-none transition focus:border-white/30"
               />
               {error && <p className="text-xs text-red-400 text-center">{error}</p>}
               <button
                 type="submit"
                 disabled={loading || !username.trim() || !password}
-                className="w-full rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 px-6 py-3 text-sm font-bold text-white shadow-[0_8px_24px_rgba(168,85,247,0.3)] transition hover:brightness-110 disabled:opacity-40"
+                className="w-full rounded-xl border-2 border-[#a855f7] bg-transparent px-6 py-3 text-sm font-semibold text-[#a855f7] transition hover:-translate-y-0.5 hover:shadow-[0_8px_20px_rgba(0,0,0,0.25)] disabled:opacity-40 disabled:hover:translate-y-0"
               >
                 {loading
                   ? "Chargement..."
