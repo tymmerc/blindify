@@ -21,14 +21,8 @@ export function getSocket(): Socket {
       // Session cookie is HttpOnly — authentication is handled automatically
       // via withCredentials sending the cookie in the handshake headers.
     })
-    socket.on("connect", () => {
-      console.log(`[socket] connected with id: ${socket?.id}`)
-    })
-    socket.on("disconnect", (reason) => {
-      console.log(`[socket] disconnected, reason: ${reason}`)
-    })
     socket.on("connect_error", (err) => {
-      console.log(`[socket] connect_error: ${err.message}`)
+      console.error(`[socket] connect_error: ${err.message}`)
     })
   }
   return socket

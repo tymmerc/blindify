@@ -217,7 +217,6 @@ export function MultiplayerGameClient({
     const timer = setTimeout(() => {
       if (Date.now() - lastResubmitRef.current < 5000) return
       lastResubmitRef.current = Date.now()
-      console.log("[stuck] re-emitting answer: timer expired but backend has hasAnswered=false")
       onAnswerRef.current(guessTitle.trim(), guessArtist.trim(), sourceGuess)
     }, 2000)
     return () => clearTimeout(timer)

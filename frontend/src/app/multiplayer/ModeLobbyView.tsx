@@ -294,7 +294,6 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     if (lastJoinKeyRef.current === joinKey) return
     lastJoinKeyRef.current = joinKey
 
-    console.log(`[socket] safety-net: emitting room:join for room ${room.room_code}, user ${userPayload.user.id}, socketId: ${socket.id}`)
     socket.emit("room:join", {
       roomCode: room.room_code,
       user: { id: userPayload.user.id, username: userPayload.user.username ?? undefined },
@@ -306,11 +305,9 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       socketRef.current = getSocket()
       // Track connection status
       socketRef.current.on("connect", () => {
-        console.log(`[socket] ensureSocket: connected, id=${socketRef.current?.id}`)
         setSocketConnected(true)
       })
       socketRef.current.on("disconnect", () => {
-        console.log(`[socket] ensureSocket: disconnected`)
         setSocketConnected(false)
         // Reset join key to force re-join on reconnect
         lastJoinKeyRef.current = null
@@ -543,16 +540,12 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         players: MultiplayerGameState["players"]
         timing: { startAt: number | null; revealAt: number | null }
       }) => {
-        console.log("[reveal] received game:round:reveal", { payloadRoom: payload.roomCode, expectedRoom: roomCode, mode })
         if (payload.roomCode !== roomCode) {
-          console.log("[reveal] SKIPPED - roomCode mismatch")
           return
         }
         if (mode === "streamer") {
-          console.log("[reveal] SKIPPED - streamer mode")
           return
         }
-        console.log("[reveal] updating game state to REVEAL")
         setGameState(prev => {
           if (!prev) return null
           const multi = prev as MultiplayerGameState
@@ -616,7 +609,6 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
 
       const emitJoin = () => {
         if (!userPayload?.user) return
-        console.log(`[socket] emitting room:join for room ${roomCode}, user ${userPayload.user.id} (${userPayload.user.username}), socketId: ${socket.id}`)
         socket.emit("room:join", {
           roomCode,
           user: { id: userPayload.user.id, username: userPayload.user.username ?? undefined },

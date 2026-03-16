@@ -14,9 +14,9 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: "Blindify — Play your music differently",
+  title: "Blindify — Jouez votre musique autrement",
   description:
-    "Connect your favorite music services and battle friends in a neon-soaked blind test experience with universal audio sources.",
+    "Connectez vos services de musique préférés et défiez vos amis dans un blind test immersif aux couleurs néon.",
   icons: {
     icon: [
       { url: publicPath("/favicon.ico") },
@@ -24,6 +24,19 @@ export const metadata: Metadata = {
       { url: publicPath("/favicon-16x16.png"), sizes: "16x16", type: "image/png" },
     ],
     apple: publicPath("/apple-touch-icon.png"),
+  },
+  openGraph: {
+    title: "Blindify — Jouez votre musique autrement",
+    description:
+      "Connectez vos services de musique préférés et défiez vos amis dans un blind test immersif aux couleurs néon.",
+    type: "website",
+    locale: "fr_FR",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Blindify — Jouez votre musique autrement",
+    description:
+      "Connectez vos services de musique préférés et défiez vos amis dans un blind test immersif aux couleurs néon.",
   },
 }
 
@@ -33,7 +46,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="fr" suppressHydrationWarning>
       <body className={`${inter.variable} font-sans antialiased min-h-screen`}>
         <div className="fixed inset-0 -z-10 overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-br from-[#090915] via-[#0a0a12] to-[#050510]" />

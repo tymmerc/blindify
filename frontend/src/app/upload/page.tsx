@@ -8,18 +8,18 @@ export default function UploadPlaceholderPage() {
   return (
     <main className="mx-auto flex min-h-screen max-w-3xl flex-col justify-center gap-10 px-6 text-center">
       <div className="space-y-4">
-        <p className="text-xs uppercase tracking-[0.5em] text-slate-400">Local uploads</p>
-        <h1 className="text-4xl font-semibold text-white">Coming soon</h1>
+        <p className="text-xs uppercase tracking-[0.5em] text-slate-400">Imports locaux</p>
+        <h1 className="text-4xl font-semibold text-white">Bientôt disponible</h1>
         <p className="text-sm text-slate-300">
-          You&apos;ll soon be able to upload your own MP3 snippets and craft custom rounds. The feature is currently in
-          development—stay tuned!
+          Vous pourrez bientôt importer vos propres extraits MP3 et créer des manches personnalisées. Cette
+          fonctionnalité est en cours de développement — restez connectés !
         </p>
       </div>
       <div className="flex justify-center">
         <Button asChild variant="outline" className="gap-2">
           <Link href="/menu">
             <ArrowLeft className="h-4 w-4" />
-            Return to menu
+            Retour au menu
           </Link>
         </Button>
       </div>

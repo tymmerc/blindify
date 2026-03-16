@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { api, type CurrentUserPayload } from "@/lib/api"
@@ -48,12 +48,8 @@ export default function SettingsPage() {
   }, [router])
 
   const user: UserSummary | null = userPayload?.user ?? null
-  const displayName = user?.username || "Jean Dupont"
-  const email = user?.email || "jean.dupont@email.com"
-
-  const usedStorage = 164
-  const totalStorage = 387
-  const storagePercent = useMemo(() => Math.round((usedStorage / totalStorage) * 100), [usedStorage, totalStorage])
+  const displayName = user?.username || "Utilisateur"
+  const email = user?.email || "Non renseigné"
 
   const updateToggle = (key: keyof typeof toggleDefaults) => {
     setToggles(prev => ({ ...prev, [key]: !prev[key] }))
@@ -88,37 +84,9 @@ export default function SettingsPage() {
           <SettingRow label="Email" description={email}>
             <GhostButton>Modifier</GhostButton>
           </SettingRow>
-          <SettingRow label="Compte Spotify" description="Connecté">
-            <GhostButton>Déconnecter</GhostButton>
-          </SettingRow>
         </Section>
 
         <Section title="Jeu">
-          <SettingRow
-            label="Télécharger les titres likés en avance"
-            description="Précharge vos morceaux favoris pour un démarrage instantané des parties"
-          >
-            <Toggle checked={toggles.prefetchLiked} onChange={() => updateToggle("prefetchLiked")} />
-          </SettingRow>
-
-          <div className="rounded-xl border border-[rgba(168,85,247,0.3)] bg-[rgba(168,85,247,0.08)] px-4 py-4">
-            <div className="flex items-center justify-between text-sm text-[var(--ma-muted)]">
-              <span>Espace utilisé</span>
-              <span>
-                {usedStorage} MB / {totalStorage} MB
-              </span>
-            </div>
-            <div className="mt-3 h-2 rounded-full bg-white/10">
-              <div
-                className="h-full rounded-full"
-                style={{ width: `${storagePercent}%`, backgroundImage: "var(--ma-gradient)" }}
-              />
-            </div>
-            <p className="mt-2 text-xs text-[var(--ma-muted)]">
-              Les morceaux sont téléchargés automatiquement lorsque vous êtes connecté au Wi-Fi
-            </p>
-          </div>
-
           <SettingRow label="Durée des extraits" description="Temps d'écoute pour deviner chaque morceau">
             <Select value={duration} onChange={setDuration} options={["5 secondes", "10 secondes", "15 secondes", "20 secondes"]} />
           </SettingRow>

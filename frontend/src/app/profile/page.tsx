@@ -68,7 +68,7 @@ export default function ProfilePage() {
   }, [router])
 
   const user: UserSummary | null = userPayload?.user ?? null
-  const displayName = user?.username || "Jean Dupont"
+  const displayName = user?.username || "Utilisateur"
   const providerLabel = user?.provider ? user.provider.toUpperCase() : "Blindify"
   const initials = useMemo(() => {
     if (!displayName) return "?"
