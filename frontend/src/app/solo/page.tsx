@@ -5,6 +5,7 @@ import { Suspense, useState, type FormEvent } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { SurfaceCard } from "@/components/ui/SurfaceCard"
+import { audioManager } from "@/lib/audioManager"
 import GameClient from "../game/GameClient"
 
 export const dynamic = "force-dynamic"
@@ -24,6 +25,8 @@ function SoloSelector() {
     const trimmed = quickUrl.trim()
     if (!trimmed) return
     setQuickError(null)
+    // Unlock audio autoplay on user gesture (before async navigation)
+    audioManager.unlock()
     const encoded = encodeURIComponent(trimmed)
     router.push(`/solo?source=quickplay&quickUrl=${encoded}&count=${roundCount}`)
   }
