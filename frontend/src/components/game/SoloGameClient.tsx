@@ -1158,6 +1158,20 @@ export function SoloGameClient({
 
           <div className="relative mx-auto mb-6 flex items-center justify-center">
             <VinylDisc size={220} spinning={isPlaying && !isLocked && !isRevealed} accentColor={accentColor} />
+            {manualPlayRequired && !isPlaying && !isRevealed && (
+              <button
+                type="button"
+                onClick={handleManualPlay}
+                className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-full"
+              >
+                <div className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-white/30 bg-black/60 text-white backdrop-blur transition hover:border-white/50 hover:bg-black/80">
+                  <Play className="h-6 w-6 ml-0.5" />
+                </div>
+                <span className="rounded-full border border-white/15 bg-black/60 px-3 py-1 text-xs text-white/70 backdrop-blur">
+                  Appuie pour lancer le son
+                </span>
+              </button>
+            )}
             {noAudioAvailable && !isRevealed && (
               <div className="absolute bottom-2 flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-400 backdrop-blur">
                 <span>⚠ Pas d'aperçu audio disponible</span>
