@@ -6,7 +6,6 @@ import { getSessionContext } from "../utils/session";
 import { ok, fail } from "../utils/response";
 import type { MusicProvider } from "../types/user";
 import type { AudioSourceRow } from "../types/audio";
-import { syncSpotifyLibrary } from "../services/providers/spotifySync";
 import { bootstrapGameState, getGameState, clearGame } from "../services/realtimeGame";
 import { startRoundAndBroadcast } from "../services/realtimeOrchestrator";
 import { GameMode, type RoundTrack } from "../types/game";
@@ -406,7 +405,6 @@ export const roomsController = {
     const sourceParam = typeof req.body?.source === "string" ? req.body.source : "library";
     const preferredProvider = req.body?.provider as MusicProvider | undefined;
     const playlistId = typeof req.body?.playlistId === "string" ? req.body.playlistId.trim() : null;
-    const likedOnly = sourceParam === "liked";
     const topRange =
       sourceParam === "top_week"
         ? "short_term"
@@ -654,21 +652,6 @@ export const roomsController = {
         continue;
       }
 
-      // Si le joueur a une connexion Spotify, on sync sa librairie/playlist/top avant de tirer ses pistes
-      if (userConn?.provider === "spotify" && userConn.access_token) {
-        try {
-          await syncSpotifyLibrary(pid, { ...userConn, provider: "spotify" as MusicProvider }, room.question_count);
-          if (choice === "playlist" && playlistChoice) {
-            await syncPlaylistTracks(pid, playlistChoice, userConn.access_token);
-          }
-          if (timeChoice) {
-            await syncTopTracks(pid, timeChoice as "short_term" | "medium_term" | "long_term", userConn.access_token);
-          }
-        } catch (err) {
-          console.error("sync_participant_library_failed", { userId: pid, choice, err });
-        }
-      }
-
       const slice = await fetchAudioSources(pid, poolProvider, perUserCount, {
         likedOnly: likedChoice,
         playlistId: playlistChoice,
@@ -689,18 +672,6 @@ export const roomsController = {
 
     let sources = collected;
 
-    if (sources.length < room.question_count && provider === "spotify" && context.connection) {
-      const { connection } = await syncSpotifyLibrary(context.user.id, context.connection, room.question_count);
-      if (connection) {
-        context.connection = connection;
-      }
-      sources = await collectPlayableSources(participantIds, room.question_count, {
-        likedOnly,
-        playlistId: playlistId ?? undefined,
-        timeRange: topRange ?? undefined,
-        provider: poolProvider,
-      });
-    }
 
     // Si toujours insuffisant, compléter avec le pool global (provider "any")
     if (sources.length < room.question_count) {

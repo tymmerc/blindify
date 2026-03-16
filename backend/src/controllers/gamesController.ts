@@ -4,7 +4,6 @@ import { pool } from "../config/db";
 import { getSessionContext } from "../utils/session";
 import { ok, fail } from "../utils/response";
 import type { AudioSourceRow } from "../types/audio";
-import { syncSpotifyLibrary } from "../services/providers/spotifySync";
 import axios from "axios";
 import { hydratePreviewUrl } from "../services/trackResolution";
 
@@ -503,25 +502,6 @@ export const gamesController = {
       excludeIds: isQuickGame ? recentIds : undefined,
       excludeExternalIds: isQuickGame ? recentFirstExternalList : undefined,
     });
-
-    // Try to resync library if we are short on tracks
-    if (sources.length < count && provider === "spotify" && context.connection) {
-      const { connection } = await syncSpotifyLibrary(
-        context.user.id,
-        context.connection,
-        count
-      );
-      if (connection) {
-        context.connection = connection;
-      }
-      sources = await collectPlayableSources(context.user.id, provider, count, {
-        likedOnly,
-        playlistId: playlistId ?? undefined,
-        timeRange: topRange ?? undefined,
-        excludeIds: isQuickGame ? recentIds : undefined,
-        excludeExternalIds: isQuickGame ? recentFirstExternalList : undefined,
-      });
-    }
 
     // If liked-only or playlist is too small, backfill with full library to avoid hard failure
     if ((likedOnly || playlistId) && sources.length < count) {

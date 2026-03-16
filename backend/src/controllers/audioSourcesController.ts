@@ -7,7 +7,6 @@ import { getSessionContext } from "../utils/session";
 import { ok, fail } from "../utils/response";
 import type { MusicProvider } from "../types/user";
 import type { AudioSourceRow } from "../types/audio";
-import { syncSpotifyLibrary } from "../services/providers/spotifySync";
 
 const DEFAULT_UPLOAD_DIR = path.join(process.cwd(), "storage", "uploads");
 
@@ -55,27 +54,8 @@ export const audioSourcesController = {
     ok(res, { sources });
   },
 
-  async sync(req: Request, res: Response): Promise<void> {
-    const provider = (req.body?.provider as MusicProvider | undefined) ?? "spotify";
-    const count = Number.isFinite(Number(req.body?.count)) ? Math.min(Math.max(Number(req.body.count), 10), 200) : 50;
-
-    const context = await getSessionContext(req, res, {
-      provider,
-      requireConnection: provider !== "local" && provider !== "guest",
-    });
-    if (!context) return;
-
-    if (provider === "spotify") {
-      if (!context.connection) {
-        fail(res, "spotify_connection_missing", "Connexion Spotify requise", 400);
-        return;
-      }
-      const { sources } = await syncSpotifyLibrary(context.user.id, context.connection, count);
-      ok(res, { synced: sources.length });
-      return;
-    }
-
-    fail(res, "provider_not_supported", "La synchronisation n'est pas disponible pour ce fournisseur", 400);
+  async sync(_req: Request, res: Response): Promise<void> {
+    fail(res, "provider_not_supported", "La synchronisation n'est pas disponible", 400);
   },
 
   async createLocal(req: Request, res: Response): Promise<void> {

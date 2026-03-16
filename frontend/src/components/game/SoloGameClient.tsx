@@ -675,33 +675,7 @@ export function SoloGameClient({
         previewUrlRef.current = current.audio_url
         return current.audio_url
       }
-      if (current.type !== "spotify") return null
-      try {
-        const token = await api.getSpotifyToken()
-        const queries = [
-          `track:${current.title} artist:${current.artist}`,
-          current.title,
-        ]
-        for (const q of queries) {
-          const resp = await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(q)}&type=track&limit=1`, {
-            headers: { Authorization: `Bearer ${token.accessToken}` },
-          })
-          if (!resp.ok) continue
-          const data = await resp.json()
-          const preview = data?.tracks?.items?.[0]?.preview_url as string | undefined
-          if (preview) {
-            setTrackList(prev =>
-              prev.map(t => (t.audioSourceId === current.audioSourceId ? { ...t, audio_url: preview } : t))
-            )
-            previewUrlRef.current = preview
-            return preview
-          }
-        }
-        return null
-      } catch (err) {
-        console.error("preview_fallback_failed", err)
-        return null
-      }
+      return null
     }
 
     const startAudio = async (previewUrl: string, track: SoloTrack) => {
