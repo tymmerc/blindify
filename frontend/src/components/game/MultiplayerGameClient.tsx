@@ -475,7 +475,7 @@ export function MultiplayerGameClient({
                             <div className="flex w-32 flex-col items-center">
                               <div className="mb-2 text-sm text-[var(--muted)]">2e</div>
                               {sortedPlayersFixed[1].avatar ? (
-                                <img src={sortedPlayersFixed[1].avatar} alt="" className="mb-2 h-12 w-12 rounded-full object-cover" />
+                                <img src={sortedPlayersFixed[1].avatar} alt={sortedPlayersFixed[1].username ?? "2e joueur"} className="mb-2 h-12 w-12 rounded-full object-cover" />
                               ) : (
                                 <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-[var(--surface-strong)] text-lg font-bold text-[var(--muted)]">
                                   {(sortedPlayersFixed[1].username || "?")[0].toUpperCase()}
@@ -490,7 +490,7 @@ export function MultiplayerGameClient({
                             <div className="flex w-36 flex-col items-center">
                               <Crown className="mb-2 h-8 w-8" style={{ color: accent }} />
                               {sortedPlayersFixed[0].avatar ? (
-                                <img src={sortedPlayersFixed[0].avatar} alt="" className="mb-2 h-16 w-16 rounded-full object-cover border-2" style={{ borderColor: accent }} />
+                                <img src={sortedPlayersFixed[0].avatar} alt={sortedPlayersFixed[0].username ?? "1er joueur"} className="mb-2 h-16 w-16 rounded-full object-cover border-2" style={{ borderColor: accent }} />
                               ) : (
                                 <div className="mb-2 flex h-16 w-16 items-center justify-center rounded-full text-xl font-bold" style={{ background: `${accent}22`, color: accent }}>
                                   {(sortedPlayersFixed[0].username || "?")[0].toUpperCase()}
@@ -506,7 +506,7 @@ export function MultiplayerGameClient({
                             <div className="flex w-32 flex-col items-center">
                               <div className="mb-2 text-sm text-[var(--muted)]">3e</div>
                               {sortedPlayersFixed[2].avatar ? (
-                                <img src={sortedPlayersFixed[2].avatar} alt="" className="mb-2 h-12 w-12 rounded-full object-cover" />
+                                <img src={sortedPlayersFixed[2].avatar} alt={sortedPlayersFixed[2].username ?? "3e joueur"} className="mb-2 h-12 w-12 rounded-full object-cover" />
                               ) : (
                                 <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-[var(--surface-strong)] text-lg font-bold text-[var(--muted)]">
                                   {(sortedPlayersFixed[2].username || "?")[0].toUpperCase()}
@@ -586,7 +586,7 @@ export function MultiplayerGameClient({
                                 {idx + 1}
                               </span>
                               {p.avatar ? (
-                                <img src={p.avatar} alt="" className="h-6 w-6 rounded-full object-cover" />
+                                <img src={p.avatar} alt={p.username ?? "Joueur"} className="h-6 w-6 rounded-full object-cover" />
                               ) : null}
                               <span className="text-sm font-medium">{p.username || "?"}</span>
                               <span className="text-sm font-bold" style={{ color: idx === 0 ? accent : "var(--muted)" }}>{p.score}</span>
@@ -629,7 +629,7 @@ export function MultiplayerGameClient({
                                 background: p.hasAnswered ? "rgba(141,240,190,0.1)" : "var(--surface-strong)",
                               }}>
                               {p.avatar ? (
-                                <img src={p.avatar} alt="" className="h-5 w-5 rounded-full object-cover" />
+                                <img src={p.avatar} alt={p.username ?? "Joueur"} className="h-5 w-5 rounded-full object-cover" />
                               ) : (
                                 <span className="flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-bold bg-[var(--surface)]">
                                   {(p.username || "?")[0].toUpperCase()}
@@ -920,7 +920,7 @@ export function MultiplayerGameClient({
                                   {p.avatar ? (
                                     <img
                                       src={p.avatar}
-                                      alt=""
+                                      alt={p.username ?? "Joueur"}
                                       className="h-5 w-5 rounded-full object-cover"
                                     />
                                   ) : (

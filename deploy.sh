@@ -79,7 +79,7 @@ deploy_backend() {
     # Run tests
     if [ "$SKIP_TESTS" != "true" ]; then
         log_info "Running tests..."
-        npm test || log_warning "Tests failed, continuing anyway..."
+        npm test || { log_error "Tests failed — aborting deploy. Use SKIP_TESTS=true to override."; exit 1; }
     fi
 
     # Build

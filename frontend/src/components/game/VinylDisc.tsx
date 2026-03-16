@@ -37,7 +37,7 @@ export function VinylDisc({ size = 280, spinning = true, accentColor = "#ff4fa5"
         {coverUrl ? (
           <div className="absolute inset-[22%] overflow-hidden rounded-full border-2 border-white/20 shadow-inner">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={coverUrl} alt="" className="h-full w-full object-cover transition-[filter] duration-700" style={{ filter: blurred ? "blur(4px) saturate(0.8)" : "none" }} />
+            <img src={coverUrl} alt="Pochette d'album" className="h-full w-full object-cover transition-[filter] duration-700" style={{ filter: blurred ? "blur(4px) saturate(0.8)" : "none" }} />
             <div className="absolute inset-0 rounded-full shadow-[inset_0_0_20px_rgba(0,0,0,0.5)]" />
             <div className="absolute inset-[42%] rounded-full bg-[#0b0710] border border-white/20" />
           </div>

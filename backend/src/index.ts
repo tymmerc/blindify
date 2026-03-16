@@ -77,8 +77,6 @@ const allowedOrigins = [
   frontendBase,
   "https://tymmerc.eu",
   "https://tymmerc.eu/blindify",
-  "https://blindify-chi.vercel.app",
-  "https://blindify-production.up.railway.app",
   "http://localhost:3000",
   "http://localhost:5173",
 ].filter(Boolean) as string[];

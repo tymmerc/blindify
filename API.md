@@ -2,8 +2,8 @@
 
 ## Base URL
 ```
-Production: https://blindify.app/api
-Development: http://localhost:3000/api
+Production: https://tymmerc.eu/blindify/api
+Development: http://localhost:8080/api
 ```
 
 ## Authentication
