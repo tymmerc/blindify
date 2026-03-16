@@ -57,12 +57,10 @@ function QuickPlayInner() {
         if (!active) return
         const raw = err instanceof Error ? err.message : ""
         let userMessage: string
-        if (raw.includes("spotify_profile_unsupported") || raw.includes("profils Spotify")) {
-          userMessage = "Les profils Spotify ne sont pas supportés. Utilise un lien de playlist Spotify ou un profil/playlist Deezer."
-        } else if (raw.includes("no_tracks") || raw.includes("Aucun titre") || raw.includes("no_playlists")) {
-          userMessage = "Aucune playlist publique trouvée. Vérifie que la playlist est publique, ou essaie un lien Deezer."
+        if (raw.includes("no_tracks") || raw.includes("Aucun titre") || raw.includes("no_playlists")) {
+          userMessage = "Aucune playlist publique trouvée pour ce profil. Vérifie que tes playlists sont en mode public."
         } else if (raw.includes("invalid") || raw.includes("URL") || raw.includes("unsupported")) {
-          userMessage = "L'URL n'est pas reconnue. Colle un lien Deezer (profil ou playlist) ou un lien de playlist Spotify."
+          userMessage = "L'URL n'est pas reconnue. Colle un lien de profil ou playlist Spotify / Deezer."
         } else {
           userMessage = raw || "Impossible de préparer le jeu. Vérifie l'URL et réessaie."
         }

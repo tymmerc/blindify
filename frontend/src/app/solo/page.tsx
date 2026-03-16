@@ -64,7 +64,7 @@ function SoloSelector() {
               </span>
             </div>
             <p className="text-sm text-white/70">
-              Profil Deezer, playlist Deezer ou playlist Spotify publique.
+              Profil ou playlist Spotify / Deezer.
               On pioche des titres au hasard — devine le titre et l'artiste !
             </p>
           </div>
@@ -80,7 +80,7 @@ function SoloSelector() {
                 type="url"
                 value={quickUrl}
                 onChange={e => setQuickUrl(e.target.value)}
-                placeholder="https://deezer.com/playlist/... ou spotify.com/playlist/..."
+                placeholder="https://open.spotify.com/user/... ou deezer.com/profile/..."
                 className="w-full rounded-xl border border-white/15 bg-[#0c0c0c] px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/25 focus:border-white/30"
               />
             </div>
@@ -123,9 +123,10 @@ function SoloSelector() {
 
           {/* Supported URLs */}
           <div className="flex flex-wrap gap-2 text-[10px] text-white/30">
+            <span className="rounded-full border border-white/8 px-2.5 py-0.5">spotify.com/user/...</span>
+            <span className="rounded-full border border-white/8 px-2.5 py-0.5">spotify.com/playlist/...</span>
             <span className="rounded-full border border-white/8 px-2.5 py-0.5">deezer.com/profile/...</span>
             <span className="rounded-full border border-white/8 px-2.5 py-0.5">deezer.com/playlist/...</span>
-            <span className="rounded-full border border-white/8 px-2.5 py-0.5">spotify.com/playlist/...</span>
           </div>
         </SurfaceCard>
 
@@ -142,7 +143,7 @@ function SoloSelector() {
               </span>
             </div>
             <ul className="space-y-2 text-sm text-white/80 leading-relaxed list-disc list-inside">
-              <li>Choisis un profil Deezer ou une playlist publique (Deezer ou Spotify)</li>
+              <li>Choisis un profil ou une playlist publique (Spotify ou Deezer)</li>
               <li>Copie le lien depuis l'app ou le navigateur</li>
               <li>Écoute les extraits, tape le titre et/ou l'artiste pour marquer des points</li>
             </ul>
@@ -155,7 +156,7 @@ function SoloSelector() {
             </div>
             <ul className="space-y-2 text-sm text-white/80 leading-relaxed list-disc list-inside">
               <li>Les playlists doivent être <strong>publiques</strong> pour être trouvées</li>
-              <li>Les profils Spotify ne sont pas supportés — utilise une playlist Spotify ou un profil Deezer</li>
+              <li>Profils et playlists Spotify et Deezer sont tous supportés</li>
               <li>Les extraits audio viennent de Deezer (30 secondes par titre)</li>
             </ul>
           </SurfaceCard>

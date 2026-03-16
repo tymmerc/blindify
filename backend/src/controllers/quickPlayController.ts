@@ -82,15 +82,7 @@ export const quickPlayController = {
     }
 
     try {
-      // Spotify user profiles are not supported (requires Spotify API)
-      if (parsed.provider === "spotify" && parsed.type === "user") {
-        fail(res, "spotify_profile_unsupported",
-          "Les profils Spotify ne sont pas supportés. Utilise un lien de playlist Spotify ou un lien Deezer (profil ou playlist).",
-          400);
-        return;
-      }
-
-      // 1. Fetch public playlists (via Deezer API — free, no auth)
+      // 1. Fetch public playlists
       const playlists = await fetchPublicPlaylists(parsed);
       if (playlists.length === 0) {
         fail(res, "no_playlists", "Aucune playlist publique trouvée. Vérifie que la playlist est publique.");

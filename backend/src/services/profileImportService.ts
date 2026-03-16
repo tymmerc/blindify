@@ -1,4 +1,5 @@
 import axios from "axios";
+import { Buffer } from "node:buffer";
 import { logger } from "../utils/logger";
 
 // ---------------------------------------------------------------------------
@@ -82,83 +83,82 @@ export interface ImportedTrack {
 }
 
 // ---------------------------------------------------------------------------
-// Spotify → Deezer bridge (no Spotify API credentials needed)
+// Spotify Client Credentials (public data only — no user login needed)
 // ---------------------------------------------------------------------------
 
-/**
- * Get playlist name from Spotify oEmbed API (free, no auth).
- */
-async function getSpotifyPlaylistName(playlistId: string): Promise<string | null> {
-  try {
-    const { data } = await axios.get("https://open.spotify.com/oembed", {
-      params: { url: `https://open.spotify.com/playlist/${playlistId}` },
-      timeout: 10_000,
-    });
-    return data?.title ?? null;
-  } catch (err) {
-    logger.error("spotify_oembed_failed", { playlistId, error: err });
-    return null;
-  }
-}
+let spotifyTokenCache: { token: string; expiresAt: number } | null = null;
 
-/**
- * Search Deezer for a playlist by name.
- */
-async function searchDeezerPlaylist(name: string): Promise<PublicPlaylist[]> {
-  try {
-    const { data } = await axios.get("https://api.deezer.com/search/playlist", {
-      params: { q: name, limit: 5 },
-      timeout: 10_000,
-    });
-    if (data?.error || !data?.data) return [];
-    return (data.data as any[])
-      .filter((p: any) => p?.id && p?.nb_tracks > 0)
-      .map((p: any) => ({
-        id: String(p.id),
-        name: p.title ?? "Playlist",
-        trackCount: p.nb_tracks ?? 0,
-        cover: p.picture_medium ?? null,
-      }));
-  } catch {
-    return [];
+async function getSpotifyClientToken(): Promise<string> {
+  if (spotifyTokenCache && Date.now() < spotifyTokenCache.expiresAt - 5_000) {
+    return spotifyTokenCache.token;
   }
+
+  const clientId = process.env.SPOTIFY_CLIENT_ID;
+  const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
+  if (!clientId || !clientSecret) throw new Error("Missing SPOTIFY_CLIENT_ID or SPOTIFY_CLIENT_SECRET");
+
+  const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
+  const body = new URLSearchParams({ grant_type: "client_credentials" });
+
+  const { data } = await axios.post<{ access_token?: string; expires_in?: number }>(
+    "https://accounts.spotify.com/api/token",
+    body.toString(),
+    { headers: { Authorization: `Basic ${credentials}`, "Content-Type": "application/x-www-form-urlencoded" } }
+  );
+
+  if (!data.access_token) throw new Error("Spotify returned empty access token");
+  spotifyTokenCache = {
+    token: data.access_token,
+    expiresAt: Date.now() + (data.expires_in ?? 3600) * 1000,
+  };
+  return data.access_token;
 }
 
 // ---------------------------------------------------------------------------
-// Fetch Public Playlists (all via Deezer API — free, no auth)
+// Fetch Public Playlists
 // ---------------------------------------------------------------------------
 
 export async function fetchPublicPlaylists(parsed: ParsedUrl): Promise<PublicPlaylist[]> {
-  if (parsed.provider === "deezer") {
-    if (parsed.type === "playlist") {
-      return fetchDeezerSinglePlaylist(parsed.id);
-    }
-    return fetchDeezerUserPlaylists(parsed.id);
-  }
-
-  // Spotify URLs — bridge through Deezer
   if (parsed.type === "playlist") {
-    // Get playlist name via oEmbed, then search on Deezer
-    const name = await getSpotifyPlaylistName(parsed.id);
-    if (!name) return [];
-    const results = await searchDeezerPlaylist(name);
-    // Return best match (first result)
-    return results.slice(0, 1);
+    return fetchSinglePlaylistInfo(parsed);
   }
 
-  // Spotify user profile — not possible without Spotify API
-  // Return empty with a log so the controller can return a helpful error
-  logger.info("spotify_user_not_supported", { userId: parsed.id });
-  return [];
+  if (parsed.provider === "spotify") {
+    return fetchSpotifyUserPlaylists(parsed.id);
+  }
+  return fetchDeezerUserPlaylists(parsed.id);
 }
 
-// ---------------------------------------------------------------------------
-// Deezer API (free, no credentials needed)
-// ---------------------------------------------------------------------------
+// --- Spotify ---
 
-async function fetchDeezerSinglePlaylist(playlistId: string): Promise<PublicPlaylist[]> {
+async function fetchSinglePlaylistInfo(parsed: ParsedUrl): Promise<PublicPlaylist[]> {
+  if (parsed.provider === "spotify") {
+    try {
+      const token = await getSpotifyClientToken();
+      const { data } = await axios.get(`https://api.spotify.com/v1/playlists/${encodeURIComponent(parsed.id)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        params: { fields: "id,name,tracks.total,images" },
+        timeout: 10_000,
+      });
+      if (!data?.id) return [];
+      return [{
+        id: data.id,
+        name: data.name ?? "Playlist",
+        trackCount: data.tracks?.total ?? 0,
+        cover: data.images?.[0]?.url ?? null,
+      }];
+    } catch (err) {
+      logger.error("spotify_playlist_info_failed", { id: parsed.id, error: err });
+      // Fallback: try to find the playlist on Deezer via oEmbed name
+      const name = await getSpotifyPlaylistName(parsed.id);
+      if (name) return searchDeezerPlaylist(name);
+      return [];
+    }
+  }
+
+  // Deezer
   try {
-    const { data } = await axios.get(`https://api.deezer.com/playlist/${playlistId}`, { timeout: 10_000 });
+    const { data } = await axios.get(`https://api.deezer.com/playlist/${parsed.id}`, { timeout: 10_000 });
     if (data?.error || !data?.id) return [];
     return [{
       id: String(data.id),
@@ -170,6 +170,33 @@ async function fetchDeezerSinglePlaylist(playlistId: string): Promise<PublicPlay
     return [];
   }
 }
+
+async function fetchSpotifyUserPlaylists(userId: string): Promise<PublicPlaylist[]> {
+  const token = await getSpotifyClientToken();
+  const playlists: PublicPlaylist[] = [];
+  let cursor: string | null = `https://api.spotify.com/v1/users/${encodeURIComponent(userId)}/playlists?limit=50`;
+
+  while (cursor && playlists.length < 200) {
+    const { data } = await axios.get(cursor, {
+      headers: { Authorization: `Bearer ${token}` },
+      timeout: 10_000,
+    }) as { data: { items?: any[]; next?: string | null } };
+    for (const item of data?.items ?? []) {
+      if (!item?.id) continue;
+      playlists.push({
+        id: item.id,
+        name: item.name ?? "Playlist",
+        trackCount: item.tracks?.total ?? 0,
+        cover: item.images?.[0]?.url ?? null,
+      });
+    }
+    cursor = data?.next ?? null;
+  }
+
+  return playlists;
+}
+
+// --- Deezer ---
 
 async function fetchDeezerUserPlaylists(userId: string): Promise<PublicPlaylist[]> {
   const playlists: PublicPlaylist[] = [];
@@ -197,16 +224,81 @@ async function fetchDeezerUserPlaylists(userId: string): Promise<PublicPlaylist[
   return playlists;
 }
 
+// --- Spotify oEmbed fallback ---
+
+async function getSpotifyPlaylistName(playlistId: string): Promise<string | null> {
+  try {
+    const { data } = await axios.get("https://open.spotify.com/oembed", {
+      params: { url: `https://open.spotify.com/playlist/${playlistId}` },
+      timeout: 10_000,
+    });
+    return data?.title ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function searchDeezerPlaylist(name: string): Promise<PublicPlaylist[]> {
+  try {
+    const { data } = await axios.get("https://api.deezer.com/search/playlist", {
+      params: { q: name, limit: 3 },
+      timeout: 10_000,
+    });
+    if (data?.error || !data?.data) return [];
+    return (data.data as any[])
+      .filter((p: any) => p?.id && p?.nb_tracks > 0)
+      .map((p: any) => ({
+        id: String(p.id),
+        name: p.title ?? "Playlist",
+        trackCount: p.nb_tracks ?? 0,
+        cover: p.picture_medium ?? null,
+      }));
+  } catch {
+    return [];
+  }
+}
+
 // ---------------------------------------------------------------------------
-// Fetch Playlist Tracks (always via Deezer)
+// Fetch Playlist Tracks
 // ---------------------------------------------------------------------------
 
 export async function fetchPlaylistTracks(
-  _provider: "spotify" | "deezer",
+  provider: "spotify" | "deezer",
   playlistId: string
 ): Promise<ImportedTrack[]> {
-  // All playlists are now resolved to Deezer IDs
+  if (provider === "spotify") {
+    return fetchSpotifyPlaylistTracks(playlistId);
+  }
   return fetchDeezerPlaylistTracks(playlistId);
+}
+
+async function fetchSpotifyPlaylistTracks(playlistId: string): Promise<ImportedTrack[]> {
+  const token = await getSpotifyClientToken();
+  const tracks: ImportedTrack[] = [];
+  let cursor: string | null = `https://api.spotify.com/v1/playlists/${encodeURIComponent(playlistId)}/tracks?limit=100&fields=items(track(id,name,artists,album,duration_ms)),next`;
+
+  while (cursor && tracks.length < 500) {
+    const { data } = await axios.get(cursor, {
+      headers: { Authorization: `Bearer ${token}` },
+      timeout: 15_000,
+    }) as { data: { items?: any[]; next?: string | null } };
+    for (const item of data?.items ?? []) {
+      const t = item?.track;
+      if (!t?.id || !t.name) continue;
+      tracks.push({
+        title: t.name,
+        artist: (t.artists ?? []).map((a: { name?: string }) => a.name).filter(Boolean).join(", "),
+        album: t.album?.name ?? null,
+        cover: t.album?.images?.[0]?.url ?? null,
+        externalId: t.id,
+        provider: "spotify",
+        durationMs: t.duration_ms ?? null,
+      });
+    }
+    cursor = data?.next ?? null;
+  }
+
+  return tracks;
 }
 
 async function fetchDeezerPlaylistTracks(playlistId: string): Promise<ImportedTrack[]> {
