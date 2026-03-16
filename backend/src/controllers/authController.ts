@@ -10,6 +10,7 @@ import {
   revokeSessionToken,
 } from "../utils/session";
 import { fail, ok } from "../utils/response";
+import { logger } from "../utils/logger";
 
 const BCRYPT_ROUNDS = 10;
 
@@ -77,7 +78,7 @@ export const authController = {
       setSessionCookie(res, session.token, 1000 * 60 * 60 * 24);
       ok(res, { user, sessionToken: session.token });
     } catch (error) {
-      console.error("register_failed", error);
+      logger.error("register_failed", { error });
       fail(res, "register_failed", "Impossible de créer le compte", 500);
     }
   },
@@ -123,7 +124,7 @@ export const authController = {
       const { password_hash: _, ...safeUser } = user;
       ok(res, { user: safeUser, sessionToken: session.token });
     } catch (error) {
-      console.error("login_failed", error);
+      logger.error("login_failed", { error });
       fail(res, "login_failed", "Impossible de se connecter", 500);
     }
   },
@@ -150,7 +151,7 @@ export const authController = {
       setSessionCookie(res, session.token, guestTtlMs);
       ok(res, { sessionToken: session.token, user });
     } catch (error) {
-      console.error("guest_auth_failed", error);
+      logger.error("guest_auth_failed", { error });
       fail(res, "guest_auth_failed", "Impossible de créer un invité", 500);
     }
   },
@@ -178,7 +179,7 @@ export const authController = {
       res.clearCookie("blindify_session_token", { path: "/" });
       ok(res, { success: true });
     } catch (error) {
-      console.error("logout_failed", error);
+      logger.error("logout_failed", { error });
       fail(res, "logout_failed", "Impossible de se déconnecter", 500);
     }
   },

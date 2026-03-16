@@ -3,6 +3,7 @@ import type { MusicProvider } from "../types/user";
 import { pool } from "../config/db";
 import { getSessionContext } from "../utils/session";
 import { ok, fail } from "../utils/response";
+import { logger } from "../utils/logger";
 import type { AudioSourceRow } from "../types/audio";
 import axios from "axios";
 import { hydratePreviewUrl } from "../services/trackResolution";
@@ -54,7 +55,7 @@ async function importItunesTopTracks(limit: number): Promise<AudioSourceRow[]> {
 
     return results;
   } catch (err) {
-    console.error("itunes_top_import_failed", err);
+    logger.error("itunes_top_import_failed", { error: err });
     return [];
   }
 }
@@ -477,7 +478,7 @@ export const gamesController = {
       try {
         await syncPlaylistTracks(context.user.id, playlistId, context.connection.access_token);
       } catch (err) {
-        console.error("sync_playlist_failed", { playlistId, err });
+        logger.error("sync_playlist_failed", { playlistId, error: err });
         // continue with fallback below
       }
     }
@@ -486,7 +487,7 @@ export const gamesController = {
       try {
         await syncTopTracks(context.user.id, topRange, context.connection.access_token);
       } catch (err) {
-        console.error("sync_top_tracks_failed", { timeRange: topRange, err });
+        logger.error("sync_top_tracks_failed", { timeRange: topRange, error: err });
       }
     }
 

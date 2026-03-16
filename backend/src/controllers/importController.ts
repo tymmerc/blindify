@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { pool } from "../config/db";
 import { getSessionContext } from "../utils/session";
 import { ok, fail } from "../utils/response";
+import { logger } from "../utils/logger";
 import { parseProfileUrl, fetchPublicPlaylists, fetchPlaylistTracks, type ImportedTrack } from "../services/profileImportService";
 import { deezerPreviewService } from "../services/deezerPreviewService";
 
@@ -67,10 +68,10 @@ function preResolveInBackground(userId: number): void {
         }
       }
       if (resolved > 0) {
-        console.log("pre_resolve_done", { userId, resolved, total: rows.length });
+        logger.info("pre_resolve_done", { userId, resolved, total: rows.length });
       }
     } catch (err) {
-      console.error("pre_resolve_failed", { userId, err });
+      logger.error("pre_resolve_failed", { userId, error: err });
     }
   })();
 }
@@ -105,7 +106,7 @@ export const importController = {
         notice: "Seules les playlists publiques sont récupérées.",
       });
     } catch (err) {
-      console.error("import_playlists_failed", { url, err });
+      logger.error("import_playlists_failed", { url, error: err });
       fail(res, "import_failed", "Impossible de récupérer les playlists. Vérifie l'URL et réessaie.", 500);
     }
   },
@@ -141,7 +142,7 @@ export const importController = {
           await upsertTrack(context.user.id, track, playlistId);
           synced++;
         } catch (err) {
-          console.error("import_track_failed", { title: track.title, err });
+          logger.error("import_track_failed", { title: track.title, error: err });
         }
       }
 
@@ -150,7 +151,7 @@ export const importController = {
       // Pre-resolve a batch of Deezer previews in background
       preResolveInBackground(context.user.id);
     } catch (err) {
-      console.error("import_sync_failed", { provider, playlistId, err });
+      logger.error("import_sync_failed", { provider, playlistId, error: err });
       fail(res, "sync_failed", "Erreur lors de la synchronisation des titres.", 500);
     }
   },
@@ -190,7 +191,7 @@ export const importController = {
             await upsertTrack(context.user.id, track, playlistId);
             synced++;
           } catch (err) {
-            console.error("import_track_failed", { title: track.title, err });
+            logger.error("import_track_failed", { title: track.title, error: err });
           }
         }
       }
@@ -205,7 +206,7 @@ export const importController = {
       // Pre-resolve a batch of Deezer previews in background
       preResolveInBackground(context.user.id);
     } catch (err) {
-      console.error("import_sync_all_failed", { provider, err });
+      logger.error("import_sync_all_failed", { provider, error: err });
       fail(res, "sync_failed", "Erreur lors de la synchronisation des titres.", 500);
     }
   },

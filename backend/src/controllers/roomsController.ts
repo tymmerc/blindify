@@ -4,6 +4,7 @@ import { pool } from "../config/db";
 import { io } from "../socket";
 import { getSessionContext } from "../utils/session";
 import { ok, fail } from "../utils/response";
+import { logger } from "../utils/logger";
 import type { MusicProvider } from "../types/user";
 import type { AudioSourceRow } from "../types/audio";
 import { bootstrapGameState, getGameState, clearGame } from "../services/realtimeGame";
@@ -540,7 +541,7 @@ export const roomsController = {
       try {
         await syncPlaylistTracks(context.user.id, playlistId, context.connection.access_token);
       } catch (err) {
-        console.error("sync_playlist_failed_multi", { playlistId, err });
+        logger.error("sync_playlist_failed_multi", { playlistId, error: err });
       }
     }
 
@@ -548,7 +549,7 @@ export const roomsController = {
       try {
         await syncTopTracks(context.user.id, topRange, context.connection.access_token);
       } catch (err) {
-        console.error("sync_top_tracks_failed_multi", { timeRange: topRange, err });
+        logger.error("sync_top_tracks_failed_multi", { timeRange: topRange, error: err });
       }
     }
 
@@ -762,30 +763,6 @@ export const roomsController = {
     // Ajuster le nombre de rounds à ce qui est réellement disponible (borné par la demande)
     const effectiveRounds = Math.max(1, sources.length);
 
-    const { rows: sessionRows } = await pool.query(
-      `INSERT INTO game_sessions (host_user_id, mode, difficulty, source_provider, total_rounds, state, room_code)
-       VALUES ($1,$2,$3,$4,$5,'in_progress',$6)
-       RETURNING id, mode, difficulty, source_provider, total_rounds, started_at`,
-      [context.user.id, room.mode, room.difficulty, provider, effectiveRounds, room.room_code]
-    );
-    const session = sessionRows[0];
-
-    await pool.query(
-      `UPDATE multiplayer_rooms
-       SET status='in_progress', session_id=$2, started_at=NOW()
-       WHERE id=$1`,
-      [room.id, session.id]
-    );
-
-    for (const participant of participantRows) {
-      await pool.query(
-        `INSERT INTO game_participants (session_id, user_id, score)
-         VALUES ($1,$2,0)
-         ON CONFLICT (session_id, user_id) DO NOTHING`,
-        [session.id, participant.user_id]
-      );
-    }
-
     const { rows: participantUsers } = await pool.query<{ id: number; username: string | null; avatar: string | null }>(
       `SELECT id, username, avatar FROM users WHERE id = ANY($1::int[])`,
       [participantIds]
@@ -797,7 +774,42 @@ export const roomsController = {
       avatarMap.set(u.id, u.avatar);
     });
 
-    const normalizedTracks = sources.map((source, index) => ({
+    // Wrap game creation in a transaction to ensure atomicity
+    const client = await pool.connect();
+    let session: any;
+    let normalizedTracks: Array<{
+      round: number; audioSourceId: string; type: string; track_id: string;
+      title: string; artist: string; album: string | null; album_cover: string | null;
+      audio_url: string | null; metadata: Record<string, any>;
+    }>;
+    try {
+      await client.query("BEGIN");
+
+      const { rows: sessionRows } = await client.query(
+        `INSERT INTO game_sessions (host_user_id, mode, difficulty, source_provider, total_rounds, state, room_code)
+         VALUES ($1,$2,$3,$4,$5,'in_progress',$6)
+         RETURNING id, mode, difficulty, source_provider, total_rounds, started_at`,
+        [context.user.id, room.mode, room.difficulty, provider, effectiveRounds, room.room_code]
+      );
+      session = sessionRows[0];
+
+      await client.query(
+        `UPDATE multiplayer_rooms
+         SET status='in_progress', session_id=$2, started_at=NOW()
+         WHERE id=$1`,
+        [room.id, session.id]
+      );
+
+      for (const participant of participantRows) {
+        await client.query(
+          `INSERT INTO game_participants (session_id, user_id, score)
+           VALUES ($1,$2,0)
+           ON CONFLICT (session_id, user_id) DO NOTHING`,
+          [session.id, participant.user_id]
+        );
+      }
+
+    normalizedTracks = sources.map((source, index) => ({
       round: index + 1,
       audioSourceId: source.id,
       type: source.provider,
@@ -820,12 +832,20 @@ export const roomsController = {
     }));
 
     for (const track of normalizedTracks) {
-      await pool.query(
+      await client.query(
         `INSERT INTO game_rounds (session_id, round_index, audio_source_id, correct_title, correct_artist)
          VALUES ($1,$2,$3,$4,$5)
         ON CONFLICT (session_id, round_index) DO NOTHING`,
         [session.id, track.round, track.audioSourceId, track.title, track.artist]
       );
+    }
+
+    await client.query("COMMIT");
+    } catch (txErr) {
+      await client.query("ROLLBACK");
+      throw txErr;
+    } finally {
+      client.release();
     }
 
     const roundDurationMs = room.mode === GameMode.EVENT ? EVENT_ROUND_DURATION_MS : 20_000;

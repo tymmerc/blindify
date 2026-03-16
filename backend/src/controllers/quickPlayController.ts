@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { ok, fail } from "../utils/response";
+import { logger } from "../utils/logger";
 import {
   parseProfileUrl,
   fetchPublicPlaylists,
@@ -38,7 +39,7 @@ async function pickRandomTracks(
       const tracks = await fetchPlaylistTracks(provider, pid);
       allTracks.push(...tracks);
     } catch (err) {
-      console.error("quick_play_fetch_failed", { pid, err });
+      logger.error("quick_play_fetch_failed", { pid, error: err });
     }
   }
 
@@ -165,7 +166,7 @@ export const quickPlayController = {
         },
       });
     } catch (err) {
-      console.error("quick_play_failed", { url, err });
+      logger.error("quick_play_failed", { url, error: err });
       fail(res, "quick_play_failed", "Erreur lors de la préparation du jeu. Réessaie.", 500);
     }
   },

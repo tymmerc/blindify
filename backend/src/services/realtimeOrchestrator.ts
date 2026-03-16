@@ -1,4 +1,5 @@
 import type { Server as IOServer } from "socket.io";
+import { logger } from "../utils/logger";
 import {
   clearGame,
   gameStateSnapshot,
@@ -22,7 +23,7 @@ function emitRoundStart(io: IOServer, state: GameState) {
   const room = io.sockets.adapter.rooms.get(state.roomCode);
   const socketCount = room ? room.size : 0;
   const socketIds = room ? Array.from(room) : [];
-  console.log(`[start] emitting game:round:start to room ${state.roomCode}, sockets in room: ${socketCount}, ids: ${socketIds.join(", ")}`);
+  logger.debug(`emitting game:round:start to room ${state.roomCode}, sockets in room: ${socketCount}, ids: ${socketIds.join(", ")}`);
   io.to(state.roomCode).emit("game:round:start", {
     roomCode: state.roomCode,
     round: state.currentRound,
@@ -35,7 +36,7 @@ async function emitRoundReveal(io: IOServer, state: GameState) {
   const room = io.sockets.adapter.rooms.get(state.roomCode);
   const socketCount = room ? room.size : 0;
   const socketIds = room ? Array.from(room) : [];
-  console.log(`[reveal] emitting game:round:reveal to room ${state.roomCode}, sockets in room: ${socketCount}, ids: ${socketIds.join(", ")}`);
+  logger.debug(`emitting game:round:reveal to room ${state.roomCode}, sockets in room: ${socketCount}, ids: ${socketIds.join(", ")}`);
   io.to(state.roomCode).emit("game:round:reveal", {
     roomCode: state.roomCode,
     round: state.currentRound,
@@ -60,12 +61,12 @@ export function scheduleReveal(io: IOServer, roomCode: string, revealAt: number)
   const existing = revealTimers.get(roomCode);
   if (existing) clearTimeout(existing);
   const delay = Math.max(0, revealAt - Date.now());
-  console.log(`[reveal] scheduling for ${roomCode} in ${delay}ms`);
+  logger.debug(`scheduling reveal for ${roomCode} in ${delay}ms`);
   const timer = setTimeout(() => {
     revealTimers.delete(roomCode);
-    console.log(`[reveal] timer fired for ${roomCode}`);
+    logger.debug(`reveal timer fired for ${roomCode}`);
     const updated = revealRound(roomCode);
-    console.log(`[reveal] revealRound result: phase=${updated?.phase}, players=${updated ? Object.keys(updated.players).length : 0}`);
+    logger.debug(`revealRound result: phase=${updated?.phase}, players=${updated ? Object.keys(updated.players).length : 0}`);
     if (updated) {
       emitRoundReveal(io, updated);
       emitState(io, roomCode);
@@ -85,7 +86,7 @@ export function startRoundAndBroadcast(
   opts?: { forceRound?: number; startAt?: number }
 ): GameState | undefined {
   const state = startNextRound(roomCode, opts);
-  console.log(`[game] startRoundAndBroadcast ${roomCode}: round=${state?.currentRound}, phase=${state?.phase}, revealAt=${state?.timing?.revealAt}`);
+  logger.debug(`startRoundAndBroadcast ${roomCode}: round=${state?.currentRound}, phase=${state?.phase}, revealAt=${state?.timing?.revealAt}`);
   if (!state) return undefined;
   if (state.phase === "FINISHED") {
     emitGameOver(io, state);

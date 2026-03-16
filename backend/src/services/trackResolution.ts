@@ -2,6 +2,7 @@ import { pool } from "../config/db";
 import type { AudioSourceRow } from "../types/audio";
 import type { MusicProvider } from "../types/user";
 import { deezerPreviewService } from "./deezerPreviewService";
+import { logger } from "../utils/logger";
 
 // ---------------------------------------------------------------------------
 // Preview hydration — resolves audio URLs via Deezer search
@@ -29,7 +30,7 @@ export async function hydratePreviewUrl(source: AudioSourceRow): Promise<string 
     }
     return null;
   } catch (err) {
-    console.error("deezer_hydrate_failed", { id: source.id, title, err });
+    logger.error("deezer_hydrate_failed", { id: source.id, title, error: err });
     return null;
   }
 }
@@ -132,7 +133,7 @@ export async function collectPlayableSources(
       const preview = await hydratePreviewUrl(source);
       if (preview) {
         source.audio_url = preview;
-        console.log("deezer_preview_found", { sourceId: source.id, title: source.title });
+        logger.debug("deezer_preview_found", { sourceId: source.id, title: source.title });
       }
     })
   );

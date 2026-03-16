@@ -1,4 +1,5 @@
 import axios from "axios";
+import { logger } from "../utils/logger";
 
 const DEEZER_SEARCH_URL = "https://api.deezer.com/search";
 const DEEZER_TRACK_URL = "https://api.deezer.com/track";
@@ -96,7 +97,7 @@ export class DeezerPreviewService {
       });
 
       if (data?.error) {
-        console.error("deezer_search_error", data.error);
+        logger.error("deezer_search_error", { error: data.error });
         return null;
       }
 
@@ -121,7 +122,7 @@ export class DeezerPreviewService {
       this.cache.set(key, { track, ts: Date.now() });
       return track;
     } catch (err) {
-      console.error("deezer_search_failed", { title: trimmedTitle, artist: trimmedArtist, err });
+      logger.error("deezer_search_failed", { title: trimmedTitle, artist: trimmedArtist, error: err });
       return null;
     }
   }
