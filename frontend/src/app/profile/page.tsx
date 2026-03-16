@@ -106,7 +106,7 @@ export default function ProfilePage() {
       <div className="ma-container">
         <div className="mb-8 flex items-center justify-between">
           <Link
-            href="/menu"
+            href="/modes"
             className="inline-flex items-center gap-2 rounded-lg border border-[var(--ma-border-strong)] px-4 py-2 text-sm font-medium text-white/80 transition hover:bg-white/5"
           >
             ← Retour

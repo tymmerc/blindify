@@ -6,7 +6,7 @@ export function BottomNav({ active }: { active: NavActive }) {
   return (
     <nav className="ma-nav-bottom">
       <div className="ma-nav-inner">
-        <Link href="/menu" className={`ma-nav-item ${active === "menu" ? "active" : ""}`}>
+        <Link href="/modes" className={`ma-nav-item ${active === "menu" ? "active" : ""}`}>
           <span className="text-lg">○</span>
           <span className="text-[11px] font-semibold uppercase tracking-[0.4px]">Accueil</span>
         </Link>

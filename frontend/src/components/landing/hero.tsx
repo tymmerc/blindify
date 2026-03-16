@@ -31,7 +31,7 @@ export function Hero() {
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
             <Link
-              href="/menu"
+              href="/modes"
               className="px-6 py-3 rounded-full bg-gradient-to-r from-primary to-accent text-white font-semibold flex items-center justify-center gap-2 hover:opacity-90 transition"
             >
               <Play className="w-5 h-5" />

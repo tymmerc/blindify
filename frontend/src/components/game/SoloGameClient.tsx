@@ -682,6 +682,7 @@ export function SoloGameClient({
 
     const startAudio = async (previewUrl: string, track: SoloTrack) => {
       audioManager.stop("solo_replace")
+      await audioManager.unlock()
       await audioManager.play({
         src: previewUrl,
         loop: true,
@@ -915,7 +916,7 @@ export function SoloGameClient({
         audioManager.resume(AUDIO_OWNER)
         setIsPlaying(true)
       } catch {
-        // ignore
+        handleManualPlay()
       }
     } else {
       handleManualPlay()

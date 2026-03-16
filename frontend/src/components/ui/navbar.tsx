@@ -20,7 +20,7 @@ export default function Navbar() {
 
         {/* Bouton menu */}
         <Link
-          href="/menu"
+          href="/modes"
           className="flex items-center gap-2 px-5 py-2 rounded-full bg-gradient-to-r from-primary to-accent text-primary-foreground font-semibold hover:opacity-90 transition"
         >
           <Play className="w-4 h-4" />

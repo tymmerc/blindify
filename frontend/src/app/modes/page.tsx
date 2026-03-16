@@ -65,7 +65,7 @@ function ModeSelectionContent() {
   const [hovered, setHovered] = useState<Mode | null>(null)
   const [showHelp, setShowHelp] = useState(false)
 
-  const fallbackRoute = useMemo(() => searchParams.get("from") || "/menu", [searchParams])
+  const fallbackRoute = useMemo(() => searchParams.get("from") || "/modes", [searchParams])
 
   useEffect(() => {
     if (mode) setSelection(mode)

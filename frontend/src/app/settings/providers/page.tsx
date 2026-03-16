@@ -16,7 +16,7 @@ export default function ProviderSettingsPlaceholder() {
         </p>
       </div>
       <Button asChild variant="outline" className="gap-2">
-        <Link href="/menu">
+        <Link href="/modes">
           <ArrowLeft className="h-4 w-4" />
           Return to menu
         </Link>

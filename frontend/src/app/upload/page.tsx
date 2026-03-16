@@ -17,7 +17,7 @@ export default function UploadPlaceholderPage() {
       </div>
       <div className="flex justify-center">
         <Button asChild variant="outline" className="gap-2">
-          <Link href="/menu">
+          <Link href="/modes">
             <ArrowLeft className="h-4 w-4" />
             Retour au menu
           </Link>

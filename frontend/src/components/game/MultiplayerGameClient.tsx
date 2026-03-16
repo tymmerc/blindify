@@ -157,6 +157,7 @@ export function MultiplayerGameClient({
       audioManager.stop("multiplayer_phase_end", "multiplayer")
       return
     }
+    audioManager.unlock()
     audioManager.setVolume(volume, "multiplayer")
     audioManager.setMuted(muted, "multiplayer")
     audioManager.play({ src: currentTrack.previewUrl, loop: true, volume, owner: "multiplayer" })
@@ -283,9 +284,13 @@ export function MultiplayerGameClient({
     onAnswer(guessTitle.trim(), guessArtist.trim(), sourceGuess)
   }
 
+  const [playLoading, setPlayLoading] = useState(false)
+
   const handleManualPlay = async () => {
-    if (!currentTrack?.previewUrl) return
+    if (!currentTrack?.previewUrl || playLoading) return
+    setPlayLoading(true)
     try {
+      await audioManager.unlock()
       await audioManager.play({
         src: currentTrack.previewUrl,
         loop: true,
@@ -294,8 +299,10 @@ export function MultiplayerGameClient({
       })
       audioManager.setMuted(muted, "multiplayer")
       setManualPlayRequired(false)
-    } catch (err) {
-      console.error("manual_play_failed", err)
+    } catch {
+      // Keep manualPlayRequired visible so user can retry
+    } finally {
+      setPlayLoading(false)
     }
   }
 

@@ -162,7 +162,7 @@ export default function StatsPage() {
           <p className="mt-2 text-sm text-[var(--ma-muted)]">{error}</p>
           <div className="mt-4 flex justify-center gap-3">
             <Link
-              href="/menu"
+              href="/modes"
               className="inline-flex items-center gap-2 rounded-lg border border-[var(--ma-border-strong)] px-4 py-2 text-sm font-medium text-white/80 transition hover:bg-white/5"
             >
               ← Retour
@@ -193,7 +193,7 @@ export default function StatsPage() {
             </div>
           </div>
           <Link
-            href="/menu"
+            href="/modes"
             className="inline-flex items-center gap-2 rounded-lg border border-[var(--ma-border-strong)] px-4 py-2 text-sm font-medium text-white/80 transition hover:bg-white/5"
           >
             ← Retour

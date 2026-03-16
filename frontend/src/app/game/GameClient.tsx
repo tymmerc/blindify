@@ -150,7 +150,7 @@ export default function GameClient() {
         <div className="surface flex max-w-md flex-col items-center gap-4 rounded-3xl border border-white/10 p-8 text-center">
           <AlertTriangle className="h-10 w-10 text-neon" />
           <p className="text-sm text-slate-300">{error}</p>
-          <Button variant="outline" onClick={() => router.replace("/menu")} className="gap-2">
+          <Button variant="outline" onClick={() => router.replace("/modes")} className="gap-2">
             Return to menu
           </Button>
         </div>
@@ -163,7 +163,7 @@ export default function GameClient() {
       <div className="grid min-h-screen place-items-center px-6">
         <div className="surface flex max-w-md flex-col items-center gap-3 rounded-3xl border border-white/10 p-8 text-center text-sm text-slate-300">
           <p>No playable tracks were found for this configuration.</p>
-          <Button variant="outline" onClick={() => router.replace("/menu")}>
+          <Button variant="outline" onClick={() => router.replace("/modes")}>
             Back to menu
           </Button>
         </div>
