@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS users (
     UNIQUE(provider, provider_id)
 );
 
+CREATE INDEX IF NOT EXISTS idx_users_username_lower ON users(LOWER(username));
+
 CREATE TABLE IF NOT EXISTS user_connections (
     id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -235,22 +237,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_room_invitation_unique
     ON room_invitations (room_id, from_user, to_user, status) WHERE status='pending';
 CREATE INDEX IF NOT EXISTS idx_room_invitation_to_status ON room_invitations(to_user, status);
 CREATE INDEX IF NOT EXISTS idx_room_invitation_expires ON room_invitations(expires_at);
-
--- Friendships --------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS friendships (
-    id SERIAL PRIMARY KEY,
-    user_a INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    user_b INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    status TEXT NOT NULL DEFAULT 'pending',
-    requested_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    CHECK (user_a <> user_b),
-    UNIQUE(user_a, user_b)
-);
-
-CREATE INDEX IF NOT EXISTS idx_friendships_user_a ON friendships(user_a);
-CREATE INDEX IF NOT EXISTS idx_friendships_user_b ON friendships(user_b);
 
 -- Seed default badges ---------------------------------------------------
 INSERT INTO badges (slug, name, description, icon, tier, requirement_type, requirement_value)
