@@ -18,8 +18,8 @@ const roundOptions = [
 const tutorialSteps = [
   {
     step: "1",
-    title: "Ouvre Spotify ou Deezer",
-    desc: "Va sur ton profil ou une playlist publique.",
+    title: "Ouvre Deezer (ou Spotify)",
+    desc: "Profil Deezer, playlist Deezer ou playlist Spotify publique.",
   },
   {
     step: "2",
@@ -29,7 +29,7 @@ const tutorialSteps = [
   {
     step: "3",
     title: "Colle ici et joue !",
-    desc: "On pioche des titres au hasard dans les playlists publiques.",
+    desc: "On pioche des titres au hasard et on trouve les extraits audio.",
   },
 ]
 
@@ -86,7 +86,7 @@ function SoloSelector() {
                 type="url"
                 value={quickUrl}
                 onChange={e => setQuickUrl(e.target.value)}
-                placeholder="https://open.spotify.com/user/... ou deezer.com/profile/..."
+                placeholder="https://deezer.com/profile/... ou open.spotify.com/playlist/..."
                 className="w-full rounded-xl border border-white/15 bg-black/30 px-4 py-3 text-sm text-white placeholder:text-white/30 outline-none transition focus:border-purple-500/50"
               />
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -117,9 +117,9 @@ function SoloSelector() {
             </form>
             {quickError && <p className="text-xs text-red-400">{quickError}</p>}
             <div className="flex flex-wrap gap-2 text-[11px] text-white/30">
-              <span className="rounded-full border border-white/10 px-2.5 py-0.5">open.spotify.com/user/...</span>
               <span className="rounded-full border border-white/10 px-2.5 py-0.5">deezer.com/profile/...</span>
-              <span className="rounded-full border border-white/10 px-2.5 py-0.5">...playlist/...</span>
+              <span className="rounded-full border border-white/10 px-2.5 py-0.5">deezer.com/playlist/...</span>
+              <span className="rounded-full border border-white/10 px-2.5 py-0.5">open.spotify.com/playlist/...</span>
             </div>
           </div>
         </div>
