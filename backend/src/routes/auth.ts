@@ -3,24 +3,10 @@ import { authController } from "../controllers/authController";
 
 const router = Router();
 
-router.get("/login", (req, res) => {
-  (req.params as { provider?: string }).provider = "spotify";
-  return authController.loginRedirect(req, res);
-});
-
-router.get("/callback", (req, res) => {
-  (req.params as { provider?: string }).provider = "spotify";
-  return authController.callback(req, res);
-});
-
-router.get("/:provider/login", authController.loginRedirect);
-router.get("/:provider/callback", authController.callback);
-
-router.post("/apple/token", authController.appleMusicToken);
-router.post("/guest", authController.guest);
-
-router.get("/me", authController.me);
-router.post("/logout", authController.logout);
-router.get("/providers/spotify/token", authController.spotifyToken);
+router.post("/register", (req, res) => authController.register(req, res));
+router.post("/login", (req, res) => authController.login(req, res));
+router.post("/guest", (req, res) => authController.guest(req, res));
+router.get("/me", (req, res) => authController.me(req, res));
+router.post("/logout", (req, res) => authController.logout(req, res));
 
 export default router;

@@ -855,9 +855,8 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         // ignore
       }
     }
-    const url = api.getProviderLoginUrl("spotify")
     if (typeof window !== "undefined") {
-      window.location.href = url
+      window.location.href = "/auth/login"
     }
   }, [joinCode, pendingAction, storePostAuthRedirect])
 

@@ -120,15 +120,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const clientApi = {
-  getLoginUrl() {
-    return buildUrl("/auth/login")
+  async register(username: string, password: string): Promise<{ user: UserSummary; sessionToken: string }> {
+    return request("/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    })
   },
-  getProviderLoginUrl(provider: string) {
-    const sanitized = provider.trim().toLowerCase()
-    if (!sanitized) {
-      return buildUrl("/auth/login")
-    }
-    return buildUrl(`/auth/${sanitized}/login`)
+  async login(username: string, password: string): Promise<{ user: UserSummary; sessionToken: string }> {
+    return request("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    })
   },
   async currentUser(): Promise<{ user: UserSummary; providerConnection: ProviderConnectionSummary | null } | null> {
     try {
@@ -181,11 +185,6 @@ export const clientApi = {
       },
       body: JSON.stringify({ audio_source_id: audioSourceId }),
     })
-  },
-  async spotifyToken(): Promise<{ accessToken: string; expiresAt: string | null; provider: string }> {
-    return request<{ accessToken: string; expiresAt: string | null; provider: string }>(
-      "/api/auth/providers/spotify/token"
-    )
   },
   async createRoom(options: {
     name?: string

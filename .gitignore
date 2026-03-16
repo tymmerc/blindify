@@ -8,6 +8,14 @@ node_modules/
 dist/
 .next/
 out/
+out_backup/
 tmp/
 *.log
 .DS_Store
+
+# Build artifacts & caches
+frontend/.config/
+frontend/~/
+frontend/post-export.sh
+frontend/test-build.cjs
+frontend/test-build.mjs

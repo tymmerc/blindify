@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS users (
     username VARCHAR(120),
     email VARCHAR(255),
     avatar TEXT,
+    password_hash TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(provider, provider_id)
 );

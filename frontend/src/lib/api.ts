@@ -1,6 +1,5 @@
 import { clientApi } from "./apiClient"
 import type {
-  MusicProvider,
   MultiplayerParticipant,
   MultiplayerRoom,
   MultiplayerGameState,
@@ -19,11 +18,11 @@ export type CurrentUserPayload = {
 }
 
 export const api = {
-  getLoginUrl(): string {
-    return clientApi.getLoginUrl()
+  async register(username: string, password: string): Promise<{ user: UserSummary; sessionToken: string }> {
+    return clientApi.register(username, password)
   },
-  getProviderLoginUrl(provider: string): string {
-    return clientApi.getProviderLoginUrl(provider)
+  async login(username: string, password: string): Promise<{ user: UserSummary; sessionToken: string }> {
+    return clientApi.login(username, password)
   },
   async checkAuth(): Promise<CurrentUserPayload | null> {
     return clientApi.currentUser()
@@ -58,9 +57,6 @@ export const api = {
   },
   async addLike(_userId: number | null | undefined, audioSourceId: string): Promise<void> {
     return clientApi.addLike(audioSourceId)
-  },
-  async getSpotifyToken(): Promise<{ accessToken: string; expiresAt: string | null; provider: MusicProvider }> {
-    return clientApi.spotifyToken() as Promise<{ accessToken: string; expiresAt: string | null; provider: MusicProvider }>
   },
   async createRoom(options?: {
     name?: string
