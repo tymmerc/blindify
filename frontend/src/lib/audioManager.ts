@@ -35,14 +35,18 @@ class AudioManager {
     if (this.unlocked) return;
     if (typeof Audio === "undefined") return;
 
-    const silence = new Audio(
-      "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA=="
-    );
-    silence.volume = 0;
+    // Reuse or create the singleton audio element so the browser's
+    // "user-gesture-unlocked" flag stays on the same element that
+    // will later be used by play().
+    if (!this.audio) {
+      this.audio = new Audio();
+    }
+    this.audio.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==";
+    this.audio.volume = 0;
 
     try {
-      await silence.play();
-      silence.pause();
+      await this.audio.play();
+      this.audio.pause();
       this.unlocked = true;
     } catch {
       // Ignore - fallback to manual play button will be used
@@ -117,13 +121,19 @@ class AudioManager {
   async play(options: { src: string; loop?: boolean; volume?: number; owner?: AudioOwner }): Promise<HTMLAudioElement | null> {
     if (typeof Audio === "undefined") return null;
 
-    // Replace any existing source before starting a new one.
-    this.stop("preempt");
+    // Stop current playback but keep the audio element (preserves unlock state)
+    if (this.audio) {
+      try {
+        this.audio.pause();
+        this.audio.currentTime = 0;
+      } catch {
+        // ignore
+      }
+      this.detach();
+    }
 
     if (!this.audio) {
       this.audio = new Audio();
-    } else {
-      this.detach();
     }
 
     this.owner = options.owner ?? null;
@@ -171,13 +181,12 @@ class AudioManager {
       try {
         this.audio.pause();
         this.audio.currentTime = 0;
-        this.audio.src = "";
       } catch {
         // ignore cleanup errors
       }
     }
     this.detach();
-    this.audio = null;
+    // Keep this.audio alive to preserve browser's unlocked state
     this.owner = null;
     this.emit(reason);
   }
