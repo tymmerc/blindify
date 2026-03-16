@@ -21,6 +21,7 @@ function QuickPlayInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const profileUrl = searchParams.get("url") ?? ""
+  const roundCount = Number(searchParams.get("count")) || 10
 
   const [session, setSession] = useState<QuickSession | null>(null)
   const [tracks, setTracks] = useState<SoloTrack[]>([])
@@ -45,8 +46,8 @@ function QuickPlayInner() {
 
         const decoded = decodeURIComponent(profileUrl)
 
-        setProgress("Recuperation des titres et resolution des previews...")
-        const result = await api.quickPlay(decoded, 10)
+        setProgress("Récupération des titres et résolution des previews...")
+        const result = await api.quickPlay(decoded, roundCount)
 
         if (!active) return
 
@@ -54,11 +55,16 @@ function QuickPlayInner() {
         setTracks(result.tracks as SoloTrack[])
       } catch (err) {
         if (!active) return
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Impossible de preparer le jeu. Verifie l'URL et reessaie."
-        )
+        const raw = err instanceof Error ? err.message : ""
+        let userMessage: string
+        if (raw.includes("no_tracks") || raw.includes("Aucun titre")) {
+          userMessage = "Aucune playlist publique trouvée pour ce profil. Vérifie que tes playlists sont en mode public sur Spotify ou Deezer."
+        } else if (raw.includes("invalid") || raw.includes("URL")) {
+          userMessage = "L'URL n'est pas reconnue. Colle un lien de profil Spotify (open.spotify.com/user/...) ou Deezer (deezer.com/profile/...)."
+        } else {
+          userMessage = raw || "Impossible de préparer le jeu. Vérifie l'URL et réessaie."
+        }
+        setError(userMessage)
       } finally {
         if (active) setLoading(false)
       }
@@ -109,7 +115,7 @@ function QuickPlayInner() {
               onClick={() => window.location.reload()}
               className="rounded-xl border-purple-500/30 px-4 py-2 text-sm text-purple-400 hover:bg-purple-500/10"
             >
-              Reessayer
+              Réessayer
             </Button>
           </div>
         </div>
@@ -119,13 +125,20 @@ function QuickPlayInner() {
 
   if (!session || tracks.length === 0) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#050505] px-6 text-white">
-        <p className="text-sm text-white/60">Aucun titre jouable trouve.</p>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-[#050505] px-6 text-white">
+        <div className="w-full max-w-md space-y-3 text-center">
+          <p className="text-4xl">🎵</p>
+          <p className="text-base font-semibold">Aucun titre jouable trouvé</p>
+          <p className="text-sm text-white/50">
+            Les playlists de ce profil sont peut-être privées, ou aucun titre ne dispose d'un aperçu audio.
+            Essaie avec un autre profil ou une playlist publique.
+          </p>
+        </div>
         <Link
-          href="/"
-          className="text-sm text-purple-400 underline underline-offset-4 hover:text-purple-300"
+          href="/solo"
+          className="rounded-xl bg-purple-500/20 border border-purple-500/30 px-6 py-2 text-sm font-medium text-purple-300 transition hover:bg-purple-500/30"
         >
-          Retour
+          Essayer un autre lien
         </Link>
       </div>
     )

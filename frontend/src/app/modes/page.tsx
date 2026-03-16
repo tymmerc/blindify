@@ -183,10 +183,10 @@ function ModeSelectionContent() {
         <button
           type="button"
           onClick={() => router.push("/solo")}
-          className="fixed bottom-6 right-6 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-semibold text-white hover:bg-white/15"
+          className="fixed bottom-6 right-6 z-40 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 px-6 py-3 text-sm font-bold text-white shadow-[0_8px_24px_rgba(168,85,247,0.35)] transition hover:brightness-110"
           aria-label="Jouer en solo"
         >
-          Jouer en solo
+          🎵 Jouer en solo
         </button>
         <button
           type="button"

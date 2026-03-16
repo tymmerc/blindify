@@ -77,6 +77,10 @@ function SoloSelector() {
             <p className="text-sm text-white/60">
               Colle un lien de profil ou de playlist publique. On pioche des titres au hasard pour ton blindtest.
             </p>
+            <div className="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-400/80">
+              <span className="mt-0.5">⚠</span>
+              <span>Les playlists doivent être en mode <strong>public</strong> sur Spotify ou Deezer pour être trouvées.</span>
+            </div>
             <form onSubmit={handleQuickPlay} className="space-y-3">
               <input
                 type="url"

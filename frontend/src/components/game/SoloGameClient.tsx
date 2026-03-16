@@ -141,6 +141,7 @@ export function SoloGameClient({
     points: 0,
   })
   const [manualPlayRequired, setManualPlayRequired] = useState(false)
+  const [noAudioAvailable, setNoAudioAvailable] = useState(false)
   const [muted, setMuted] = useState(audioManager.getState().muted)
   const lastVolumeRef = useRef(DEFAULT_AUDIO_VOLUME)
   const [volume, setVolume] = useState(DEFAULT_AUDIO_VOLUME)
@@ -345,6 +346,7 @@ export function SoloGameClient({
       finalizeLockRef.current = null
       setError(null)
       setManualPlayRequired(false)
+      setNoAudioAvailable(false)
       setIsPlaying(false)
       pausedByUserRef.current = false
       setMuted(false)
@@ -700,6 +702,7 @@ export function SoloGameClient({
     const startPlayback = async () => {
       const previewUrl = await ensurePreview()
       if (!previewUrl) {
+        setNoAudioAvailable(true)
         setFeedback(true)
         const latestGuess = guessRef.current
         finalizeRound("wrong", "timeout", current, latestGuess)
@@ -1076,16 +1079,19 @@ export function SoloGameClient({
     return (
       <div className="surface flex flex-col items-center gap-6 rounded-3xl border border-white/10 p-10 text-center">
         <Sparkles className="h-12 w-12 text-neon" />
-        <h2 className="text-3xl font-semibold text-white">Session complete!</h2>
+        <h2 className="text-3xl font-semibold text-white">Partie terminée !</h2>
         <p className="text-sm text-slate-300">
-          {stats.correct} / {stats.rounds} correct · {stats.points} pts · Best streak: {stats.bestStreak} · Accuracy {accuracy}%.
+          {stats.correct} / {stats.rounds} correct · {stats.points} pts · Série max : {stats.bestStreak} · Précision {accuracy}%
         </p>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap justify-center gap-3">
           <Button asChild variant="outline">
-            <Link href="/solo">Retour</Link>
+            <Link href="/modes">Retour aux modes</Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/solo">Changer de playlist</Link>
           </Button>
           <Button asChild>
-            <Link href="/solo">Play again</Link>
+            <Link href={typeof window !== "undefined" ? window.location.href : "/solo"}>Rejouer</Link>
           </Button>
         </div>
       </div>
@@ -1152,7 +1158,12 @@ export function SoloGameClient({
 
           <div className="relative mx-auto mb-6 flex items-center justify-center">
             <VinylDisc size={220} spinning={isPlaying && !isLocked && !isRevealed} accentColor={accentColor} />
-            {isPlaying && !isLocked && !isRevealed && (
+            {noAudioAvailable && !isRevealed && (
+              <div className="absolute bottom-2 flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-400 backdrop-blur">
+                <span>⚠ Pas d'aperçu audio disponible</span>
+              </div>
+            )}
+            {isPlaying && !isLocked && !isRevealed && !noAudioAvailable && (
               <div className="absolute bottom-2 flex items-center gap-2 rounded-full border border-white/20 bg-black/60 px-3 py-1.5 text-xs text-white/80 backdrop-blur">
                 <span className="h-2 w-2 rounded-full animate-pulse" style={{ backgroundColor: accentColor }} />
                 <span>Extrait en cours</span>
