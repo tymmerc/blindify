@@ -196,6 +196,8 @@ export function recordAnswer(
   if (ctx.state.phase !== "GUESSING") return ctx.state;
   const player = ctx.state.players[userId];
   if (!player) return ctx.state;
+  // Prevent double submission — keep first answer
+  if (player.hasAnswered) return ctx.state;
   player.hasAnswered = true;
   player.lastGuess = guess;
   player.lastGuessTitle = guessTitle ?? null;

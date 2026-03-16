@@ -443,13 +443,17 @@ export const roomsController = {
       // Allow restart if the game is finished
       const existingState = getGameState(room.room_code);
       if (!existingState || existingState.phase === "FINISHED") {
-        // Reset room to allow a new game
+        // Atomic reset: only succeeds if status hasn't changed since our read
         clearGame(room.room_code);
-        await pool.query(
-          `UPDATE multiplayer_rooms SET status='waiting', session_id=NULL, started_at=NULL WHERE id=$1`,
-          [room.id]
+        const { rowCount } = await pool.query(
+          `UPDATE multiplayer_rooms SET status='waiting', session_id=NULL, started_at=NULL
+           WHERE id=$1 AND status=$2`,
+          [room.id, room.status]
         );
-        // Re-read the room so the rest of the handler sees status='waiting'
+        if (!rowCount) {
+          fail(res, "room_conflict", "La salle a été modifiée par un autre joueur. Réessaie.", 409);
+          return;
+        }
         room.status = "waiting";
         room.session_id = null;
       } else {

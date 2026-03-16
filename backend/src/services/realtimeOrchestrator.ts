@@ -60,10 +60,13 @@ function emitGameOver(io: IOServer, state: GameState) {
 export function scheduleReveal(io: IOServer, roomCode: string, revealAt: number) {
   const existing = revealTimers.get(roomCode);
   if (existing) clearTimeout(existing);
+  // Don't schedule if game is already finished or cleaned up
+  if (finishedRooms.has(roomCode)) return;
   const delay = Math.max(0, revealAt - Date.now());
   logger.debug(`scheduling reveal for ${roomCode} in ${delay}ms`);
   const timer = setTimeout(() => {
     revealTimers.delete(roomCode);
+    if (finishedRooms.has(roomCode)) return;
     logger.debug(`reveal timer fired for ${roomCode}`);
     const updated = revealRound(roomCode);
     logger.debug(`revealRound result: phase=${updated?.phase}, players=${updated ? Object.keys(updated.players).length : 0}`);
@@ -71,9 +74,7 @@ export function scheduleReveal(io: IOServer, roomCode: string, revealAt: number)
       emitRoundReveal(io, updated);
       emitState(io, roomCode);
       if (updated.phase === "FINISHED") {
-        emitGameOver(io, updated);
-        revealTimers.delete(roomCode);
-        clearGame(roomCode);
+        broadcastGameOver(io, roomCode);
       }
     }
   }, delay);
@@ -104,13 +105,19 @@ export function broadcastState(io: IOServer, roomCode: string): GameState | unde
   return emitState(io, roomCode);
 }
 
+const finishedRooms = new Set<string>();
+
 export function broadcastGameOver(io: IOServer, roomCode: string) {
+  // Guard against double emission
+  if (finishedRooms.has(roomCode)) return;
   const snapshot = gameStateSnapshot(roomCode);
-  if (snapshot) {
-    emitGameOver(io, snapshot);
-  }
+  if (!snapshot) return;
+  finishedRooms.add(roomCode);
+  emitGameOver(io, snapshot);
   revealTimers.delete(roomCode);
   clearGame(roomCode);
+  // Clean up the guard after a short delay to avoid memory leak
+  setTimeout(() => finishedRooms.delete(roomCode), 10_000);
 }
 
 export function clearRevealTimer(roomCode: string) {

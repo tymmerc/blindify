@@ -299,6 +299,12 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
           socket.join(roomCode);
         }
         const state = getRealtimeState(roomCode);
+        // Block host from answering in event mode (host is spectator/presenter)
+        const gameMode = getGameMode(roomCode);
+        if (gameMode === "event" && state?.hostUserId === currentUser.id) {
+          emitRoomError(socket, roomCode, "L'hôte ne peut pas répondre en mode événement.");
+          return;
+        }
         if (!state) {
           logger.debug(`game:answer DENIED - no game state for room ${roomCode}`);
           emitRoomError(socket, roomCode, "Partie introuvable pour cette salle.");
