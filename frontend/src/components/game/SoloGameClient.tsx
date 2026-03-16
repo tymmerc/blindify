@@ -704,9 +704,12 @@ export function SoloGameClient({
       const previewUrl = await ensurePreview()
       if (!previewUrl) {
         setNoAudioAvailable(true)
-        setFeedback(true)
-        const latestGuess = guessRef.current
-        finalizeRound("wrong", "timeout", current, latestGuess)
+        // Auto-skip after 3s so user sees the "no audio" message
+        setTimeout(() => {
+          if (cancelled) return
+          const latestGuess = guessRef.current
+          finalizeRound("wrong", "timeout", current, latestGuess)
+        }, 3000)
         return
       }
 
@@ -717,13 +720,8 @@ export function SoloGameClient({
         await startAudio(previewUrl, current)
       } catch (err) {
         if (cancelled) return
-        if ((err as DOMException)?.name === "NotAllowedError") {
-          setManualPlayRequired(true)
-          setFeedback(true)
-          return
-        }
-        console.error("html_audio_play_failed", err)
-        setFeedback(true)
+        // Don't set feedback — it triggers the result popup flow.
+        // Just show the manual play button overlay on the vinyl disc.
         setManualPlayRequired(true)
         setIsPlaying(false)
       }
