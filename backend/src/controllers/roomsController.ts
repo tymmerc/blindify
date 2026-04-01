@@ -150,6 +150,8 @@ export const roomsController = {
       ? Math.min(Math.max(Number(req.body.questionCount), 5), 25)
       : 10;
 
+    const nickname = typeof req.body?.nickname === "string" ? req.body.nickname.trim().slice(0, 30) || null : null;
+
     const code = generateRoomCode();
     const { rows } = await pool.query(
       `INSERT INTO multiplayer_rooms (room_code, host_user_id, name, status, max_players, question_count, difficulty, mode)
@@ -163,11 +165,16 @@ export const roomsController = {
     await pool.query(`UPDATE multiplayer_rooms SET auto_advance=$1 WHERE id=$2`, [autoAdvance, room.id]);
     room.auto_advance = autoAdvance;
 
+    // Update user.username if nickname provided and user is a guest
+    if (nickname && user.provider === "guest") {
+      await pool.query(`UPDATE users SET username=$1 WHERE id=$2`, [nickname, user.id]);
+    }
+
     await pool.query(
-      `INSERT INTO room_participants (room_id, user_id, is_ready)
-       VALUES ($1,$2,TRUE)
-       ON CONFLICT (room_id, user_id) DO NOTHING`,
-      [room.id, user.id]
+      `INSERT INTO room_participants (room_id, user_id, is_ready, nickname)
+       VALUES ($1,$2,TRUE,$3)
+       ON CONFLICT (room_id, user_id) DO UPDATE SET nickname=EXCLUDED.nickname`,
+      [room.id, user.id, nickname]
     );
 
     ok(res, { room });
@@ -210,16 +217,24 @@ export const roomsController = {
       return;
     }
 
+    const nickname = typeof req.body?.nickname === "string" ? req.body.nickname.trim().slice(0, 30) || null : null;
+
+    // Update user.username if nickname provided and user is a guest
+    if (nickname && user.provider === "guest") {
+      await pool.query(`UPDATE users SET username=$1 WHERE id=$2`, [nickname, user.id]);
+    }
+
     await pool.query(
-      `INSERT INTO room_participants (room_id, user_id)
-       VALUES ($1,$2)
-       ON CONFLICT (room_id, user_id) DO NOTHING`,
-      [room.id, user.id]
+      `INSERT INTO room_participants (room_id, user_id, nickname)
+       VALUES ($1,$2,$3)
+       ON CONFLICT (room_id, user_id) DO UPDATE SET nickname=EXCLUDED.nickname`,
+      [room.id, user.id, nickname]
     );
 
+    const displayName = nickname || user.username;
     io.to(room.room_code).emit("player-joined", {
       userId: user.id,
-      username: user.username,
+      username: displayName,
       roomCode: room.room_code,
     });
 
@@ -250,7 +265,7 @@ export const roomsController = {
     }
 
     const { rows: participantRows } = await pool.query(
-      `SELECT rp.user_id, u.username
+      `SELECT rp.user_id, COALESCE(rp.nickname, u.username) AS username
        FROM room_participants rp
        JOIN users u ON u.id = rp.user_id
        WHERE rp.room_id=$1

@@ -24,34 +24,6 @@ class AudioManager {
   private lastStopReason: string | null = null;
   private listeners = new Set<(state: AudioState) => void>();
   private handlers: Array<[keyof HTMLMediaElementEventMap, EventListener]> = [];
-  private unlocked = false;
-
-  /**
-   * Pre-authorize audio playback by playing a silent sound.
-   * Call this during a user interaction (click, form submit) to unlock
-   * audio autoplay for the rest of the session.
-   */
-  async unlock(): Promise<void> {
-    if (this.unlocked) return;
-    if (typeof Audio === "undefined") return;
-
-    // Reuse or create the singleton audio element so the browser's
-    // "user-gesture-unlocked" flag stays on the same element that
-    // will later be used by play().
-    if (!this.audio) {
-      this.audio = new Audio();
-    }
-    this.audio.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==";
-    this.audio.volume = 0;
-
-    try {
-      await this.audio.play();
-      this.audio.pause();
-      this.unlocked = true;
-    } catch {
-      // Ignore - fallback to manual play button will be used
-    }
-  }
 
   getState(): AudioState {
     const active = Boolean(this.audio && !this.audio.paused && !this.audio.ended);
@@ -94,7 +66,6 @@ class AudioManager {
     const onPlay = () => this.emit("play");
     const onPause = () => this.emit("pause");
     const onEnded = () => {
-      // Avoid clearing ownership when another component already took over.
       if (!owner || owner === this.owner) {
         this.emit("ended");
       }
@@ -118,22 +89,16 @@ class AudioManager {
     return this.audio;
   }
 
-  async play(options: { src: string; loop?: boolean; volume?: number; owner?: AudioOwner }): Promise<HTMLAudioElement | null> {
+  async play(options: { src: string; loop?: boolean; volume?: number; owner?: AudioOwner; seekTo?: number }): Promise<HTMLAudioElement | null> {
     if (typeof Audio === "undefined") return null;
 
-    // Stop current playback but keep the audio element (preserves unlock state)
-    if (this.audio) {
-      try {
-        this.audio.pause();
-        this.audio.currentTime = 0;
-      } catch {
-        // ignore
-      }
-      this.detach();
-    }
+    // Replace any existing source before starting a new one.
+    this.stop("preempt");
 
     if (!this.audio) {
       this.audio = new Audio();
+    } else {
+      this.detach();
     }
 
     this.owner = options.owner ?? null;
@@ -145,6 +110,10 @@ class AudioManager {
 
     try {
       await this.audio.play();
+      // Seek to position for sync (e.g. joining a round already in progress)
+      if (options.seekTo != null && options.seekTo > 0 && isFinite(options.seekTo)) {
+        this.audio.currentTime = options.seekTo;
+      }
       this.emit("play");
       return this.audio;
     } catch (err) {
@@ -181,12 +150,13 @@ class AudioManager {
       try {
         this.audio.pause();
         this.audio.currentTime = 0;
+        this.audio.src = "";
       } catch {
         // ignore cleanup errors
       }
     }
     this.detach();
-    // Keep this.audio alive to preserve browser's unlocked state
+    this.audio = null;
     this.owner = null;
     this.emit(reason);
   }
@@ -238,17 +208,14 @@ function playTone(frequency: number, duration: number, type: OscillatorType = "s
 }
 
 export function playCorrectSound() {
-  // Ascending two-note chime
-  playTone(523, 0.15, "sine", 0.12); // C5
-  setTimeout(() => playTone(784, 0.25, "sine", 0.14), 100); // G5
+  playTone(523, 0.15, "sine", 0.12);
+  setTimeout(() => playTone(784, 0.25, "sine", 0.14), 100);
 }
 
 export function playPartialSound() {
-  // Single neutral tone
-  playTone(440, 0.2, "triangle", 0.1); // A4
+  playTone(440, 0.2, "triangle", 0.1);
 }
 
 export function playWrongSound() {
-  // Low short buzz
-  playTone(220, 0.2, "sawtooth", 0.08); // A3
+  playTone(220, 0.2, "sawtooth", 0.08);
 }

@@ -61,6 +61,8 @@ type ModeLobbyViewProps = {
   intent: string | null
   initialJoinCode?: string | null
   autojoin?: string | null
+  initialProfileUrl?: string | null
+  initialNickname?: string | null
 }
 
 function friendlyError(mode: GameMode, phase: "create" | "join" | "start" | "invite"): string {
@@ -87,7 +89,7 @@ function friendlyError(mode: GameMode, phase: "create" | "join" | "start" | "inv
   return base[mode as keyof typeof base][phase]
 }
 
-export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autojoin }: ModeLobbyViewProps) {
+export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autojoin, initialProfileUrl, initialNickname }: ModeLobbyViewProps) {
   const router = useRouter()
   const { accentColor, isGuest, setGuest } = useMode()
   const [userPayload, setUserPayload] = useState<CurrentUserPayload | null>(null)
@@ -118,6 +120,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [starting, setStarting] = useState(false)
   const [joining, setJoining] = useState(false)
+  const [importing, setImporting] = useState(false)
   const [streamerMode, setStreamerMode] = useState<StreamerSubMode>("duo")
   const [soloSource, setSoloSource] = useState<"streamer" | "chat">("streamer")
   const abortFlowRef = useRef(false)
@@ -167,7 +170,8 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     isHost &&
     (lobby.status === "hosting" || lobby.status === "waiting") &&
     activeParticipants.length >= modeConfig.lobby.minPlayers &&
-    !starting
+    !starting &&
+    !importing
   const hasSpotify = Boolean(userPayload?.providerConnection?.provider === "spotify")
 
   useEffect(() => {
@@ -183,20 +187,28 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         if (!active) return
 
         if (existing) {
-          // Refuse guest sessions for multiplayer: force Spotify login
-          if (existing.user.provider === "guest") {
-            await api.logout()
-            setGuest(false)
-            // Redirect to login
-            window.location.href = "/blindify/auth/login"
-            return
-          }
-          setGuest(false)
+          setGuest(existing.user.provider === "guest")
           setUserPayload(existing)
         } else {
-          // No session - redirect to login
-          window.location.href = "/blindify/auth/login"
-          return
+          // No session — auto-create a guest session
+          try {
+            const guest = await api.ensureUserSession(initialNickname || "Joueur")
+            if (!active) return
+            if (guest) {
+              setGuest(true)
+              setUserPayload(guest)
+            } else {
+              storePostAuthRedirect()
+              const ret = window.location.pathname + window.location.search
+              router.replace(`/auth/login?returnTo=${encodeURIComponent(ret)}`)
+              return
+            }
+          } catch {
+            storePostAuthRedirect()
+            const ret = window.location.pathname + window.location.search
+            router.replace(`/auth/login?returnTo=${encodeURIComponent(ret)}`)
+            return
+          }
         }
       } finally {
         if (active) setLoading(false)
@@ -336,8 +348,14 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         const details = await api.roomDetails(roomCode)
         setRoom(details.room)
         syncParticipants(details.participants)
-      } catch {
-        // ignore transient errors
+      } catch (err) {
+        // Room not found → expired or deleted
+        if (err instanceof ApiError && (err.status === 404 || err.status === 410)) {
+          setError("La salle a expiré ou a été fermée. Crée-en une nouvelle.")
+          dispatchLobby({ type: "error", message: "room_expired" })
+          setRoom(null)
+        }
+        // ignore other transient errors
       }
     },
     [syncParticipants]
@@ -346,7 +364,9 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   useEffect(() => {
     if (!room?.room_code) return
     if (view !== "hosting" && view !== "waiting") return
-    const interval = setInterval(() => refreshParticipants(room.room_code), 3500)
+    // Immediate refresh + faster polling (2s) for participant visibility
+    refreshParticipants(room.room_code)
+    const interval = setInterval(() => refreshParticipants(room.room_code), 2000)
     return () => clearInterval(interval)
   }, [room?.room_code, view, refreshParticipants])
 
@@ -386,7 +406,9 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       if (userPayload) return true
       if (action) setPendingAction(action)
       storePostAuthRedirect(action ?? null)
-      router.replace("/auth/login")
+      const currentPath = typeof window !== "undefined" ? window.location.pathname + window.location.search : ""
+      const returnTo = currentPath ? `?returnTo=${encodeURIComponent(currentPath)}` : ""
+      router.replace(`/auth/login${returnTo}`)
       return false
     },
     [loading, router, storePostAuthRedirect, userPayload]
@@ -646,7 +668,6 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
 
   const handleCreateRoom = useCallback(
     async (skipSpotify?: boolean) => {
-      audioManager.unlock()
       if (!requireSession({ type: "host" })) return
       if (!skipSpotify) {
         const ok = await ensureSpotify({ type: "host" })
@@ -660,7 +681,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         dispatchLobby({ type: "creating" })
         setFlowStarted(true)
         autoStartGameRef.current = false
-        const { room: created } = await api.createRoom({ questionCount: 10 })
+        const { room: created } = await api.createRoom({ questionCount: 10, nickname: initialNickname || undefined })
         setRoom(created)
         setGameState(null)
         setView("hosting")
@@ -672,9 +693,10 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       } catch (err) {
         console.error("create_room_failed", err)
         autoHostTriggered.current = false
-        const message = friendlyError(mode, "create")
+        const message = err instanceof ApiError && err.message ? err.message : friendlyError(mode, "create")
         setError(message)
         dispatchLobby({ type: "error", message })
+        setFlowStarted(false)
       }
     },
     [attachSocketListeners, syncParticipants, mode, canHostNow, lobby.status, ensureSpotify, requireSession]
@@ -683,16 +705,14 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   useEffect(() => {
     if (abortFlowRef.current) return
     if (loading) return
-    if (!userPayload) {
-      storePostAuthRedirect({ type: "host" })
-      router.replace("/auth/login")
-      return
-    }
+    // Don't redirect here — the bootstrap effect already handles auth redirect
+    // Just wait for userPayload to be available before auto-creating
+    if (!userPayload) return
     if (intent === "host" && !autoHostTriggered.current && view === "landing" && !room && (lobby.status === "idle" || lobby.status === "error")) {
       autoHostTriggered.current = true
       handleCreateRoom()
     }
-  }, [intent, view, room, handleCreateRoom, lobby.status, loading, userPayload, router, storePostAuthRedirect])
+  }, [intent, view, room, handleCreateRoom, lobby.status, loading, userPayload])
 
   useEffect(() => {
     if (abortFlowRef.current) return
@@ -730,7 +750,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         setError(null)
         dispatchLobby({ type: "joining" })
         setFlowStarted(true)
-        const { room: joined } = await api.joinRoom(normalizedCode)
+        const { room: joined } = await api.joinRoom(normalizedCode, initialNickname || undefined)
         setRoom(joined)
         setGameState(null)
         setView("waiting")
@@ -741,9 +761,10 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         syncParticipants(details.participants)
       } catch (err) {
         console.error("join_room_failed", err)
-        const message = friendlyError(mode, "join")
+        const message = err instanceof ApiError && err.message ? err.message : friendlyError(mode, "join")
         setError(message)
         dispatchLobby({ type: "error", message })
+        setFlowStarted(false)
       } finally {
         setJoining(false)
       }
@@ -754,7 +775,6 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   const handleJoinRoom = useCallback(
     async (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault()
-      audioManager.unlock()
       joinRoomCode(joinCode)
     },
     [joinCode, joinRoomCode]
@@ -772,7 +792,6 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
 
   const handleStartGame = useCallback(
     async (skipSpotify?: boolean) => {
-      audioManager.unlock()
       if (!room || !canStartGame) return
       if (!skipSpotify) {
         const ok = await ensureSpotify({ type: "host" })
@@ -848,7 +867,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       }
     }
     if (typeof window !== "undefined") {
-      window.location.href = "/auth/login"
+      window.location.href = `/blindify/auth/login?returnTo=${encodeURIComponent(window.location.pathname + window.location.search)}`
     }
   }, [joinCode, pendingAction, storePostAuthRedirect])
 
@@ -1045,7 +1064,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   useEffect(() => {
     const hasCode = Boolean(initialJoinCode)
     if (!modeConfig || !mode) return
-    if (roomRef.current || room || autojoin) return
+    if (roomRef.current || room || autojoin || flowStarted) return
     if (loading) return
     // Check if there's pending auth data before redirecting
     try {
@@ -1058,7 +1077,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     if (!intent && !hasCode) {
       router.replace(ENTRY_ROUTE[mode])
     }
-  }, [modeConfig, mode, intent, room, autojoin, initialJoinCode, router, loading])
+  }, [modeConfig, mode, intent, room, autojoin, initialJoinCode, router, loading, flowStarted])
 
   useEffect(() => {
     if (abortFlowRef.current) return
@@ -1092,7 +1111,8 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
             ? { type: "join", code: initialJoinCode }
             : null),
       )
-      router.replace("/auth/login")
+      const ret = typeof window !== "undefined" ? window.location.pathname + window.location.search : ""
+      router.replace(`/auth/login?returnTo=${encodeURIComponent(ret)}`)
     }
   }, [loading, userPayload, router, storePostAuthRedirect, pendingAction, intent, initialJoinCode])
 
@@ -1158,6 +1178,15 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     isHost,
     isGuest,
     currentUserId,
+    importing,
+    onImportingChange: setImporting,
+    chatMessages,
+    onSendChat: room ? (message: string) => {
+      const socket = socketRef.current
+      if (socket && room) {
+        socket.emit("room:chat", { roomCode: room.room_code, message })
+      }
+    } : undefined,
   }
 
   const streamerModeSelector =

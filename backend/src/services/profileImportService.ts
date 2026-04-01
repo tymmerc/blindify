@@ -264,25 +264,29 @@ async function searchDeezerPlaylist(name: string): Promise<PublicPlaylist[]> {
 
 export async function fetchPlaylistTracks(
   provider: "spotify" | "deezer",
-  playlistId: string
+  playlistId: string,
+  maxTracks?: number,
 ): Promise<ImportedTrack[]> {
+  const limit = maxTracks ?? 500;
   if (provider === "spotify") {
-    return fetchSpotifyPlaylistTracks(playlistId);
+    return fetchSpotifyPlaylistTracks(playlistId, limit);
   }
-  return fetchDeezerPlaylistTracks(playlistId);
+  return fetchDeezerPlaylistTracks(playlistId, limit);
 }
 
-async function fetchSpotifyPlaylistTracks(playlistId: string): Promise<ImportedTrack[]> {
+async function fetchSpotifyPlaylistTracks(playlistId: string, maxTracks = 500): Promise<ImportedTrack[]> {
   const token = await getSpotifyClientToken();
   const tracks: ImportedTrack[] = [];
-  let cursor: string | null = `https://api.spotify.com/v1/playlists/${encodeURIComponent(playlistId)}/tracks?limit=100&fields=items(track(id,name,artists,album,duration_ms)),next`;
+  const pageSize = Math.min(maxTracks, 100);
+  let cursor: string | null = `https://api.spotify.com/v1/playlists/${encodeURIComponent(playlistId)}/tracks?limit=${pageSize}&fields=items(track(id,name,artists,album,duration_ms)),next`;
 
-  while (cursor && tracks.length < 500) {
+  while (cursor && tracks.length < maxTracks) {
     const { data } = await axios.get(cursor, {
       headers: { Authorization: `Bearer ${token}` },
       timeout: 15_000,
     }) as { data: { items?: any[]; next?: string | null } };
     for (const item of data?.items ?? []) {
+      if (tracks.length >= maxTracks) break;
       const t = item?.track;
       if (!t?.id || !t.name) continue;
       tracks.push({
@@ -301,15 +305,17 @@ async function fetchSpotifyPlaylistTracks(playlistId: string): Promise<ImportedT
   return tracks;
 }
 
-async function fetchDeezerPlaylistTracks(playlistId: string): Promise<ImportedTrack[]> {
+async function fetchDeezerPlaylistTracks(playlistId: string, maxTracks = 500): Promise<ImportedTrack[]> {
   const tracks: ImportedTrack[] = [];
-  let cursor: string | null = `https://api.deezer.com/playlist/${encodeURIComponent(playlistId)}/tracks?limit=100`;
+  const pageSize = Math.min(maxTracks, 100);
+  let cursor: string | null = `https://api.deezer.com/playlist/${encodeURIComponent(playlistId)}/tracks?limit=${pageSize}`;
 
-  while (cursor && tracks.length < 500) {
+  while (cursor && tracks.length < maxTracks) {
     try {
       const { data } = await axios.get(cursor, { timeout: 15_000 }) as { data: { data?: any[]; error?: any; next?: string | null } };
       if (data?.error) break;
       for (const item of data?.data ?? []) {
+        if (tracks.length >= maxTracks) break;
         if (!item?.id || !item.title) continue;
         tracks.push({
           title: item.title,

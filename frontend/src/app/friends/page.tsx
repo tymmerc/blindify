@@ -1,155 +1,376 @@
 "use client"
 
-import { useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
-import { Button } from "@/components/ui/button"
-import { SurfaceCard } from "@/components/ui/SurfaceCard"
+import { useRouter, useSearchParams } from "next/navigation"
+import { Suspense, useCallback, useEffect, useRef, useState } from "react"
+import { ArrowLeft, ArrowRight, Users, LogIn, Music } from "lucide-react"
 import { useMode } from "@/contexts/ModeContext"
-import { FriendsGameModal } from "@/components/modals/FriendsGameModal"
+import { api } from "@/lib/api"
 
-export default function FriendsEntryPage() {
+type Intent = "create" | "join" | null
+type Step = "nickname" | "music" | "intent" | "code"
+
+const ACCENT = "#ec4899"
+
+function StepDot({ active, done }: { active: boolean; done: boolean }) {
+  return (
+    <div
+      className="h-1.5 rounded-full transition-all duration-300"
+      style={{
+        width: active ? 24 : 8,
+        backgroundColor: active ? ACCENT : done ? "rgba(236,72,153,0.5)" : "rgba(255,255,255,0.1)",
+      }}
+    />
+  )
+}
+
+function StepShell({
+  step,
+  totalSteps,
+  currentIndex,
+  onBack,
+  children,
+}: {
+  step: Step
+  totalSteps: number
+  currentIndex: number
+  onBack: (() => void) | null
+  children: React.ReactNode
+}) {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-[#0a0e17] px-5">
+      <div className="w-full max-w-md">
+        {/* Top bar */}
+        <div className="mb-8 flex items-center justify-between">
+          {onBack ? (
+            <button
+              type="button"
+              onClick={onBack}
+              className="flex items-center gap-1.5 rounded-xl border border-white/[0.08] bg-[rgba(14,18,32,0.45)] backdrop-blur-[16px] px-3 py-1.5 text-xs font-medium text-[#8896b0] transition hover:text-[#E0E8F0] hover:border-white/[0.15]"
+            >
+              <ArrowLeft size={14} />
+              Retour
+            </button>
+          ) : (
+            <span />
+          )}
+          <p className="font-mono text-[11px] uppercase tracking-[0.1em] text-[#ec4899]">Mode amis</p>
+        </div>
+
+        {/* Progress dots */}
+        <div className="mb-10 flex items-center justify-center gap-1.5">
+          {Array.from({ length: totalSteps }).map((_, i) => (
+            <StepDot key={i} active={i === currentIndex} done={i < currentIndex} />
+          ))}
+        </div>
+
+        {/* Step content */}
+        <div className="animate-in fade-in slide-in-from-right-4 duration-300">{children}</div>
+      </div>
+    </div>
+  )
+}
+
+function FriendsEntryContent() {
   const router = useRouter()
-  const { accentColor, setMode, mode } = useMode()
-  const [joinCode, setJoinCode] = useState("")
-  const [chooserOpen, setChooserOpen] = useState(false)
-  const [creating, setCreating] = useState(false)
-  const [joining, setJoining] = useState(false)
-  const [joinError, setJoinError] = useState<string | null>(null)
+  const searchParams = useSearchParams()
+  const { setMode, mode } = useMode()
+
+  // Detect ?join=CODE from shared link
+  const joinParam = searchParams.get("join")?.toUpperCase().replace(/[^A-Z0-9]/g, "") ?? ""
 
   useEffect(() => {
-    if (mode !== "friends") {
-      setMode("friends")
-    }
+    if (mode !== "friends") setMode("friends")
   }, [mode, setMode])
 
-  const handleCreate = async () => {
-    if (creating) return
-    setCreating(true)
-    setJoinError(null)
-    setMode("friends")
-    await router.push("/multiplayer?mode=friends&intent=host")
-    setChooserOpen(false)
-    setCreating(false)
-  }
+  const [intent, setIntent] = useState<Intent>(joinParam ? "join" : null)
+  const [step, setStep] = useState<Step>("nickname")
+  const [nickname, setNickname] = useState(() => {
+    if (typeof window === "undefined") return ""
+    return localStorage.getItem("blindify_nickname") ?? ""
+  })
+  const [profileUrl, setProfileUrl] = useState(() => {
+    if (typeof window === "undefined") return ""
+    return localStorage.getItem("blindify_profile_url") ?? ""
+  })
+  const [joinCode, setJoinCode] = useState(joinParam)
+  const [joinError, setJoinError] = useState<string | null>(null)
+  const [navigating, setNavigating] = useState(false)
+  const nicknameRef = useRef<HTMLInputElement>(null)
+  const codeRef = useRef<HTMLInputElement>(null)
+  const musicRef = useRef<HTMLInputElement>(null)
 
-  const handleJoin = async () => {
-    if (joining) return
-    const code = joinCode.trim().toUpperCase()
-    if (!code) {
-      setJoinError("Entre un code valide.")
+  // Auto-focus inputs on step change
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (step === "nickname") nicknameRef.current?.focus()
+      if (step === "code") codeRef.current?.focus()
+      if (step === "music") musicRef.current?.focus()
+    }, 100)
+    return () => clearTimeout(timer)
+  }, [step])
+
+  // Flow: nickname -> music -> intent -> (code if join)
+  // If ?join=CODE is present, skip intent and code steps entirely
+  const steps: Step[] = joinParam
+    ? ["nickname", "music"]
+    : intent === "join"
+      ? ["nickname", "music", "intent", "code"]
+      : ["nickname", "music", "intent"]
+  const currentIndex = steps.indexOf(step)
+  const totalSteps = steps.length
+
+  const goBack = useCallback(() => {
+    const idx = steps.indexOf(step)
+    if (idx <= 0) {
+      router.push("/modes")
       return
     }
-    setJoinError(null)
-    setJoining(true)
+    // When going back from code, reset intent so user can re-choose
+    if (step === "code") {
+      setIntent(null)
+      setStep("intent")
+      return
+    }
+    setStep(steps[idx - 1])
+  }, [step, steps, router])
+
+  const goNext = useCallback(() => {
+    const idx = steps.indexOf(step)
+    if (idx < steps.length - 1) {
+      setStep(steps[idx + 1])
+    }
+  }, [step, steps])
+
+  const handleGo = useCallback(async () => {
+    if (navigating) return
+    setNavigating(true)
     setMode("friends")
-    await router.push(`/multiplayer?mode=friends&code=${encodeURIComponent(code)}`)
-    setChooserOpen(false)
-    setJoining(false)
+
+    // Persist nickname and profile URL for next visit
+    if (nickname.trim()) localStorage.setItem("blindify_nickname", nickname.trim())
+    if (profileUrl.trim()) localStorage.setItem("blindify_profile_url", profileUrl.trim())
+
+    // Ensure guest session exists before navigating to multiplayer
+    try {
+      await api.ensureUserSession(nickname.trim() || "Joueur")
+    } catch {
+      // Session creation failed - continue anyway, ModeLobbyView will retry
+    }
+
+    const nicknameParam = nickname.trim() ? `&nickname=${encodeURIComponent(nickname.trim())}` : ""
+    const profileParam = profileUrl.trim() ? `&profileUrl=${encodeURIComponent(profileUrl.trim())}` : ""
+
+    if (intent === "join") {
+      const code = joinCode.trim().toUpperCase()
+      if (!code) {
+        setJoinError("Entre un code valide.")
+        setNavigating(false)
+        return
+      }
+      await router.push(`/multiplayer?mode=friends&code=${encodeURIComponent(code)}${nicknameParam}${profileParam}`)
+    } else {
+      await router.push(`/multiplayer?mode=friends&intent=host${nicknameParam}${profileParam}`)
+    }
+  }, [navigating, intent, nickname, profileUrl, joinCode, router, setMode])
+
+  // Step 1: Pseudo
+  if (step === "nickname") {
+    const canContinue = nickname.trim().length >= 2
+    return (
+      <StepShell step="nickname" totalSteps={totalSteps} currentIndex={currentIndex} onBack={() => router.push("/modes")}>
+        <div className="space-y-3 text-center">
+          <h1 className="text-3xl font-semibold tracking-[-0.03em] text-[#E0E8F0]">Comment tu t'appelles ?</h1>
+          <p className="text-sm text-[#8896b0]">C'est le nom que tes rivaux verront.</p>
+        </div>
+
+        <div className="mt-10 space-y-6">
+          <input
+            ref={nicknameRef}
+            value={nickname}
+            onChange={e => setNickname(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === "Enter" && canContinue) goNext()
+            }}
+            placeholder="Ton pseudo"
+            maxLength={20}
+            className="w-full rounded-xl border border-white/[0.08] bg-[rgba(14,18,32,0.65)] backdrop-blur-[16px] px-5 py-4 text-center text-lg font-semibold text-[#E0E8F0] outline-none placeholder:text-[#8896b0]/40 focus:border-[rgba(236,72,153,0.4)]"
+            autoComplete="off"
+          />
+          <button
+            type="button"
+            disabled={!canContinue}
+            onClick={goNext}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border px-5 py-3.5 text-sm font-semibold text-white transition disabled:opacity-30 bg-[rgba(236,72,153,0.12)] border-[rgba(236,72,153,0.25)] hover:bg-[rgba(236,72,153,0.2)] hover:shadow-[0_0_20px_rgba(236,72,153,0.15)]"
+          >
+            Continuer
+            <ArrowRight size={15} />
+          </button>
+        </div>
+      </StepShell>
+    )
   }
 
-  return (
-    <>
-      <div className="min-h-screen bg-[#050505] px-4 py-10 text-white sm:px-6 lg:px-8">
-        <div className="mx-auto flex max-w-6xl flex-col gap-10">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex-1">
-              <p className="text-xs uppercase tracking-[0.35em]" style={{ color: accentColor }}>
-                MODE AMIS
-              </p>
-              <h1 className="mt-2 text-4xl font-semibold leading-tight tracking-[-0.04em]">Des blind tests à partir de vos propres musiques</h1>
-            </div>
-            <Button
-              variant="outline"
-              onClick={() => router.push("/modes")}
-              className="rounded-full border-white/15 bg-white/5 px-3 py-2 text-[11px] font-semibold text-white/80 hover:bg-white/10 hover:text-white"
+  // Step 2: Lien Spotify/Deezer (optionnel)
+  if (step === "music") {
+    const isLastStep = joinParam ? true : false
+    const handleMusicNext = isLastStep ? handleGo : goNext
+    const buttonLabel = isLastStep ? "Rejoindre la partie" : "Continuer"
+
+    return (
+      <StepShell step="music" totalSteps={totalSteps} currentIndex={currentIndex} onBack={goBack}>
+        <div className="space-y-3 text-center">
+          <h1 className="text-3xl font-semibold tracking-[-0.03em] text-[#E0E8F0]">Ta musique</h1>
+          <p className="text-sm text-[#8896b0]">
+            Colle ton lien de profil Spotify ou Deezer pour jouer avec tes propres playlists.
+          </p>
+        </div>
+
+        <div className="mt-10 space-y-4">
+          <div className="relative">
+            <Music size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#8896b0]/50" />
+            <input
+              ref={musicRef}
+              value={profileUrl}
+              onChange={e => setProfileUrl(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === "Enter") handleMusicNext()
+              }}
+              placeholder="https://open.spotify.com/user/..."
+              className="w-full rounded-xl border border-white/[0.08] bg-[rgba(14,18,32,0.65)] backdrop-blur-[16px] py-4 pl-10 pr-5 text-sm text-[#E0E8F0] outline-none placeholder:text-[#8896b0]/40 focus:border-[rgba(236,72,153,0.4)]"
+              autoComplete="off"
+            />
+          </div>
+
+          <button
+            type="button"
+            disabled={isLastStep && navigating}
+            onClick={handleMusicNext}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border px-5 py-3.5 text-sm font-semibold text-white transition disabled:opacity-60 bg-[rgba(236,72,153,0.12)] border-[rgba(236,72,153,0.25)] hover:bg-[rgba(236,72,153,0.2)] hover:shadow-[0_0_20px_rgba(236,72,153,0.15)]"
+          >
+            {navigating && isLastStep ? "Chargement..." : buttonLabel}
+            {!(navigating && isLastStep) && <ArrowRight size={15} />}
+          </button>
+
+          {!profileUrl.trim() && (
+            <button
+              type="button"
+              disabled={isLastStep && navigating}
+              onClick={handleMusicNext}
+              className="w-full py-2 text-xs font-medium text-[#8896b0]/60 transition hover:text-[#8896b0]"
             >
-              Retour au menu
-            </Button>
-          </div>
-
-          <SurfaceCard className="flex flex-col gap-4 rounded-2xl border-white/10 bg-[#0c0c0c] p-7">
-            <div className="space-y-1">
-              <h2 className="text-2xl font-semibold text-white">Jouer avec des amis</h2>
-              <p className="text-sm text-white/70">Invite tes proches et lance une partie sans friction : une seule action, le reste dans le pop-up.</p>
-            </div>
-
-            <div className="space-y-3">
-              <Button
-                variant="outline"
-                onClick={() => setChooserOpen(true)}
-                className="w-full justify-center rounded-xl border-2 px-5 py-3 text-sm font-semibold transition duration-150 hover:-translate-y-0.5 hover:shadow-[0_8px_20px_rgba(0,0,0,0.25)]"
-                style={{ borderColor: accentColor, color: accentColor, backgroundColor: "transparent" }}
-              >
-                Créer ou rejoindre une partie
-              </Button>
-            </div>
-          </SurfaceCard>
-
-          <div className="flex flex-col gap-6">
-            <SurfaceCard className="h-full space-y-3 text-left">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-white">Comment ça se passe ?</h3>
-                <span className="rounded-full border border-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.28em]" style={{ color: accentColor, borderColor: accentColor }}>
-                  Gameplay
-                </span>
-              </div>
-              <ul className="space-y-2 text-sm text-white/80 leading-relaxed list-disc list-inside">
-                <li>Chaque partie se construit à partir de ce que vous écoutez</li>
-                <li>Une musique démarre, chacun réponds de son coté</li>
-                <li>Tu compares vos goûts musicaux et qui a la plus grande culture musicale !</li>
-              </ul>
-            </SurfaceCard>
-          </div>
+              {isLastStep ? "Rejoindre sans importer" : "Passer cette etape"}
+            </button>
+          )}
         </div>
-      </div>
-      {chooserOpen ? (
-        <div className="fixed inset-0 z-40 grid place-items-center bg-black/70 px-6">
-          <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#0b0b0b] p-6 shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-white">Tu veux créer ou rejoindre ?</h3>
-              <button
-                type="button"
-                onClick={() => setChooserOpen(false)}
-                className="text-sm text-white/60 hover:text-white"
-              >
-                Fermer
-              </button>
-            </div>
-            <div className="mt-5 grid gap-4">
-              <button
-                type="button"
-                onClick={handleCreate}
-                className="w-full rounded-xl border border-white/15 bg-[#101010] px-5 py-3 text-left text-sm font-semibold text-white transition hover:border-white/30 hover:bg-[#141414]"
-                style={{ borderColor: accentColor, color: accentColor }}
-              >
-                Créer une salle privée
-                <span className="mt-1 block text-xs font-normal text-white/60">Deviens hôte.</span>
-              </button>
-              <div className="space-y-2 rounded-xl border border-white/10 bg-[#0f0f0f] p-4">
-                <label className="text-xs uppercase tracking-[0.25em] text-white/60">Rejoindre avec un code</label>
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                  <input
-                    value={joinCode}
-                    onChange={e => setJoinCode(e.target.value.toUpperCase())}
-                    placeholder="CODE"
-                    className="w-full rounded-lg border border-white/15 bg-[#0c0c0c] px-3 py-2 text-sm uppercase tracking-[0.25em] text-white outline-none focus:border-white/30"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleJoin}
-                    disabled={!joinCode.trim()}
-                    className="rounded-lg border border-white/20 px-3 py-2 text-sm font-semibold text-white transition hover:bg-white/10 disabled:opacity-50"
-                    style={{ borderColor: accentColor, color: accentColor }}
-                  >
-                    Rejoindre
-                  </button>
-                </div>
-                {joinError ? <p className="text-xs text-red-300">{joinError}</p> : null}
-              </div>
-            </div>
-          </div>
+
+        <p className="mt-6 text-center text-[10px] text-[#8896b0]/50">
+          Tu pourras aussi importer ta musique dans le lobby.
+        </p>
+      </StepShell>
+    )
+  }
+
+  // Step 3: Creer ou Rejoindre
+  if (step === "intent") {
+    return (
+      <StepShell step="intent" totalSteps={totalSteps} currentIndex={currentIndex} onBack={goBack}>
+        <div className="space-y-3 text-center">
+          <h1 className="text-3xl font-semibold tracking-[-0.03em] text-[#E0E8F0]">Qu'est-ce que tu veux faire ?</h1>
+          <p className="text-sm text-[#8896b0]">Lance un blind test avec tes amis.</p>
         </div>
-      ) : null}
-    </>
+
+        <div className="mt-10 grid gap-3">
+          <button
+            type="button"
+            disabled={navigating}
+            onClick={async () => {
+              if (navigating) return
+              setNavigating(true)
+              setMode("friends")
+              try { await api.ensureUserSession(nickname.trim() || "Joueur") } catch {}
+              const nicknameParam = nickname.trim() ? `&nickname=${encodeURIComponent(nickname.trim())}` : ""
+              const profileParam = profileUrl.trim() ? `&profileUrl=${encodeURIComponent(profileUrl.trim())}` : ""
+              await router.push(`/multiplayer?mode=friends&intent=host${nicknameParam}${profileParam}`)
+            }}
+            className="group flex items-center gap-4 rounded-2xl border border-white/[0.08] bg-[rgba(14,18,32,0.45)] backdrop-blur-[16px] px-6 py-5 text-left transition hover:border-[rgba(236,72,153,0.3)] hover:bg-[rgba(14,18,32,0.65)]"
+          >
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[rgba(236,72,153,0.1)] transition group-hover:scale-105">
+              <Users size={20} className="text-[#ec4899]" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-[#E0E8F0]">Creer une partie</p>
+              <p className="mt-0.5 text-xs text-[#8896b0]">Deviens hote, partage le code a tes amis.</p>
+            </div>
+            <ArrowRight size={16} className="text-[#8896b0]/40 transition group-hover:text-[#8896b0]" />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setIntent("join")
+              setStep("code")
+            }}
+            className="group flex items-center gap-4 rounded-2xl border border-white/[0.08] bg-[rgba(14,18,32,0.45)] backdrop-blur-[16px] px-6 py-5 text-left transition hover:border-[rgba(236,72,153,0.3)] hover:bg-[rgba(14,18,32,0.65)]"
+          >
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[rgba(236,72,153,0.1)] transition group-hover:scale-105">
+              <LogIn size={20} className="text-[#ec4899]" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-[#E0E8F0]">Rejoindre une partie</p>
+              <p className="mt-0.5 text-xs text-[#8896b0]">Un ami t'a envoye un code ? Entre-le ici.</p>
+            </div>
+            <ArrowRight size={16} className="text-[#8896b0]/40 transition group-hover:text-[#8896b0]" />
+          </button>
+        </div>
+      </StepShell>
+    )
+  }
+
+  // Step 4 (join only): Code de la salle
+  if (step === "code") {
+    const canContinue = joinCode.trim().length >= 4
+    return (
+      <StepShell step="code" totalSteps={totalSteps} currentIndex={currentIndex} onBack={goBack}>
+        <div className="space-y-3 text-center">
+          <h1 className="text-3xl font-semibold tracking-[-0.03em] text-[#E0E8F0]">Code de la salle</h1>
+          <p className="text-sm text-[#8896b0]">Demande le code a ton ami qui a cree la partie.</p>
+        </div>
+
+        <div className="mt-10 space-y-6">
+          <input
+            ref={codeRef}
+            value={joinCode}
+            onChange={e => setJoinCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))}
+            onKeyDown={e => {
+              if (e.key === "Enter" && canContinue) handleGo()
+            }}
+            placeholder="EX : A3F7K2"
+            maxLength={8}
+            className="w-full rounded-xl border border-white/[0.08] bg-[rgba(14,18,32,0.65)] backdrop-blur-[16px] px-5 py-4 text-center font-mono text-2xl font-bold tracking-[0.3em] text-[#E0E8F0] outline-none placeholder:text-[#8896b0]/30 placeholder:tracking-[0.15em] placeholder:text-lg placeholder:font-normal focus:border-[rgba(236,72,153,0.4)]"
+            autoComplete="off"
+          />
+          {joinError ? <p className="text-center text-xs text-red-400">{joinError}</p> : null}
+          <button
+            type="button"
+            disabled={!canContinue || navigating}
+            onClick={handleGo}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border px-5 py-3.5 text-sm font-semibold text-white transition disabled:opacity-30 bg-[rgba(236,72,153,0.12)] border-[rgba(236,72,153,0.25)] hover:bg-[rgba(236,72,153,0.2)] hover:shadow-[0_0_20px_rgba(236,72,153,0.15)]"
+          >
+            {navigating ? "Chargement..." : "Rejoindre"}
+            {!navigating && <ArrowRight size={15} />}
+          </button>
+        </div>
+      </StepShell>
+    )
+  }
+
+  return null
+}
+
+export default function FriendsEntryPage() {
+  return (
+    <Suspense fallback={<div className="grid min-h-screen place-items-center bg-[#0a0e17] text-sm text-[#8896b0]">Chargement...</div>}>
+      <FriendsEntryContent />
+    </Suspense>
   )
 }

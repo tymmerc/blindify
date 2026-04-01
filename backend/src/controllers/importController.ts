@@ -164,7 +164,7 @@ export const importController = {
     const context = await getSessionContext(req, res);
     if (!context) return;
 
-    const { provider, playlistIds } = req.body as { provider?: string; playlistIds?: string[] };
+    const { provider, playlistIds, maxTracksPerPlaylist } = req.body as { provider?: string; playlistIds?: string[]; maxTracksPerPlaylist?: number };
     if (!provider || !Array.isArray(playlistIds) || playlistIds.length === 0) {
       fail(res, "missing_params", "provider et playlistIds requis.");
       return;
@@ -174,13 +174,18 @@ export const importController = {
       return;
     }
 
+    // Default: 10 tracks per playlist (quick import). Full import requires explicit opt-in.
+    const perPlaylistLimit = Number.isFinite(maxTracksPerPlaylist) && maxTracksPerPlaylist! > 0
+      ? Math.min(maxTracksPerPlaylist!, 500)
+      : 10;
+
     try {
       const seen = new Set<string>();
       let synced = 0;
       let total = 0;
 
       for (const playlistId of playlistIds) {
-        const tracks = await fetchPlaylistTracks(provider, playlistId);
+        const tracks = await fetchPlaylistTracks(provider, playlistId, perPlaylistLimit);
         for (const track of tracks) {
           const key = `${track.provider}:${track.externalId}`;
           if (seen.has(key)) continue;

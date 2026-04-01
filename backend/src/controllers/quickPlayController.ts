@@ -73,7 +73,7 @@ export const quickPlayController = {
       return;
     }
 
-    const count = Math.min(Math.max(Number(rawCount) || 10, 5), 25);
+    const count = Math.min(Math.max(Number(rawCount) || 10, 5), 40);
 
     const parsed = parseProfileUrl(url.trim());
     if (!parsed) {

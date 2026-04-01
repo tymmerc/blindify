@@ -157,10 +157,13 @@ export function MultiplayerGameClient({
       audioManager.stop("multiplayer_phase_end", "multiplayer")
       return
     }
-    audioManager.unlock()
     audioManager.setVolume(volume, "multiplayer")
     audioManager.setMuted(muted, "multiplayer")
-    audioManager.play({ src: currentTrack.previewUrl, loop: true, volume, owner: "multiplayer" })
+    // Calculate seek position to sync audio across players
+    // timing.startAt is the server timestamp when the round started
+    const elapsed = state?.timing?.startAt ? (serverNow - state.timing.startAt) / 1000 : 0
+    const seekTo = elapsed > 0.5 ? elapsed : 0 // Only seek if >500ms has passed
+    audioManager.play({ src: currentTrack.previewUrl, loop: true, volume, owner: "multiplayer", seekTo })
       .then(() => {
         setManualPlayRequired(false)
       })
@@ -290,7 +293,6 @@ export function MultiplayerGameClient({
     if (!currentTrack?.previewUrl || playLoading) return
     setPlayLoading(true)
     try {
-      await audioManager.unlock()
       await audioManager.play({
         src: currentTrack.previewUrl,
         loop: true,

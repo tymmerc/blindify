@@ -36,6 +36,7 @@ import friendsRoutes from "./routes/friends";
 import invitationsRoutes from "./routes/invitations";
 import importRoutes from "./routes/import";
 import quickPlayRoutes from "./routes/quickPlay";
+import challengeRoutes from "./routes/challenges";
 import { fail, ok } from "./utils/response";
 import { getSessionContext } from "./utils/session";
 import {
@@ -99,6 +100,20 @@ setInterval(() => {
     })
     .catch(err => logger.error("invitation_cleanup_failed", { error: err }));
 }, 30_000);
+
+// Cleanup stale rooms (waiting > 30 min with no activity)
+setInterval(() => {
+  pool.query(
+    `DELETE FROM multiplayer_rooms
+     WHERE status = 'waiting'
+     AND (SELECT MAX(joined_at) FROM room_participants WHERE room_id = multiplayer_rooms.id)
+         < NOW() - INTERVAL '30 minutes'`
+  ).then(res => {
+    if (res.rowCount && res.rowCount > 0) {
+      logger.info("stale_rooms_cleaned", { count: res.rowCount });
+    }
+  }).catch(err => logger.error("room_cleanup_failed", { error: err }));
+}, 60_000);
 
 // Heartbeat-based presence expiry sweep
 setInterval(() => {
@@ -267,6 +282,7 @@ app.use("/api/friends", friendsRoutes);
 app.use("/api/invitations", invitationsRoutes);
 app.use("/api/import", importRoutes);
 app.use("/api/quick-play", quickPlayRoutes);
+app.use("/api/challenges", challengeRoutes);
 
 app.use((_req, res) => {
   fail(res, "not_found", "Ressource introuvable", 404);

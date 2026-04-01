@@ -19,3 +19,7 @@ frontend/~/
 frontend/post-export.sh
 frontend/test-build.cjs
 frontend/test-build.mjs
+
+# Node.js local install (headers cause GitHub to detect C)
+frontend/.node/
+e2e-dashboard/node_modules/

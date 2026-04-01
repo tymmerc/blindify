@@ -637,16 +637,104 @@ export const gamesController = {
     const context = await getSessionContext(req, res);
     if (!context) return;
 
-    const { rows } = await pool.query(
-      `SELECT id, mode, difficulty, source_provider, total_rounds, started_at, ended_at, state
-       FROM game_sessions
-       WHERE host_user_id=$1
-       ORDER BY started_at DESC
-       LIMIT 50`,
-      [context.user.id]
-    );
+    try {
+      const { rows: sessions } = await pool.query(
+        `SELECT
+           gs.id,
+           gs.mode,
+           gs.difficulty,
+           gs.state,
+           gs.total_rounds,
+           gs.started_at,
+           gp.score,
+           gp.accuracy,
+           gp.best_streak
+         FROM game_sessions gs
+         LEFT JOIN game_participants gp
+           ON gp.session_id = gs.id AND gp.user_id = $1
+         WHERE gs.host_user_id = $1
+         ORDER BY gs.started_at DESC
+         LIMIT 20`,
+        [context.user.id]
+      );
 
-    ok(res, { sessions: rows });
+      if (sessions.length === 0) {
+        ok(res, { games: [] });
+        return;
+      }
+
+      const sessionIds = sessions.map((s: { id: number }) => s.id);
+
+      const { rows: roundRows } = await pool.query(
+        `SELECT
+           gr.session_id,
+           a.title,
+           a.artist,
+           a.album_cover
+         FROM game_rounds gr
+         LEFT JOIN audio_sources a ON a.id = gr.audio_source_id
+         WHERE gr.session_id = ANY($1::int[])
+         ORDER BY gr.session_id, gr.round_index`,
+        [sessionIds]
+      );
+
+      const tracksBySession = new Map<number, Array<{ title: string; artist: string; album_cover: string | null }>>();
+      for (const row of roundRows) {
+        const sid = row.session_id as number;
+        const list = tracksBySession.get(sid) ?? [];
+        list.push({
+          title: row.title ?? "Inconnu",
+          artist: row.artist ?? "Inconnu",
+          album_cover: row.album_cover ?? null,
+        });
+        tracksBySession.set(sid, list);
+      }
+
+      // Count correct answers per session from round_responses
+      const { rows: correctRows } = await pool.query(
+        `SELECT
+           gr.session_id,
+           COUNT(*) FILTER (WHERE rr.is_correct = true) AS correct_count
+         FROM round_responses rr
+         JOIN game_rounds gr ON gr.id = rr.round_id
+         WHERE rr.user_id = $1 AND gr.session_id = ANY($2::int[])
+         GROUP BY gr.session_id`,
+        [context.user.id, sessionIds]
+      );
+
+      const correctBySession = new Map<number, number>();
+      for (const row of correctRows) {
+        correctBySession.set(row.session_id as number, Number(row.correct_count) || 0);
+      }
+
+      const games = sessions.map((s: {
+        id: number;
+        mode: string;
+        difficulty: string;
+        state: string;
+        total_rounds: number;
+        started_at: string;
+        score: number | null;
+        accuracy: string | null;
+        best_streak: number | null;
+      }) => ({
+        id: s.id,
+        mode: s.mode,
+        difficulty: s.difficulty,
+        state: s.state,
+        totalRounds: s.total_rounds,
+        createdAt: s.started_at,
+        score: s.score ?? 0,
+        correct: correctBySession.get(s.id) ?? 0,
+        bestStreak: s.best_streak ?? 0,
+        tracks: tracksBySession.get(s.id) ?? [],
+      }));
+
+      ok(res, { games });
+    } catch (err) {
+      logger.error("history_fetch_failed", { userId: context.user.id, error: err });
+      fail(res, "history_error", "Impossible de charger l'historique", 500);
+    }
   },
 
   async detailedStats(req: Request, res: Response): Promise<void> {
