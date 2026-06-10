@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blindify — Lecteur Y2K</title>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --bg:#191b1f; --aqua:#74f7e0; --amber:#ffb454; --lcd-bg:#0c211d;
+    --chrome-hi:#e8ecf0; --chrome-mid:#aab1ba; --chrome-lo:#7d848e;
+  }
+  html{scroll-behavior:smooth}
+  body{font-family:'Chakra Petch',sans-serif;background:var(--bg);color:#dfe3e8;-webkit-font-smoothing:antialiased}
+  body::before{content:"";position:fixed;inset:0;z-index:-1;
+    background:repeating-linear-gradient(90deg, rgba(255,255,255,0.012) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse 90% 70% at 50% 0%, #232830 0%, #16181c 70%)}
+  .mono{font-family:'Share Tech Mono',monospace}
+  .tag{position:fixed;top:14px;left:14px;z-index:60;padding:8px 16px;font-size:.68rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;
+    color:#23272d;border-radius:999px;background:linear-gradient(180deg,var(--chrome-hi),var(--chrome-mid) 55%,var(--chrome-lo));
+    box-shadow:inset 0 1px 0 #fff,0 2px 6px rgba(0,0,0,.5)}
+  section{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:70px 24px}
+  .device{width:100%;max-width:880px;border-radius:22px;padding:30px 34px 34px;position:relative;
+    background:linear-gradient(180deg,#d4d9df 0%,#b6bcc5 8%,#9aa1ab 50%,#aeb5be 92%,#878e98 100%);
+    box-shadow:inset 0 2px 0 rgba(255,255,255,.85), inset 0 -3px 6px rgba(0,0,0,.25), 0 24px 60px rgba(0,0,0,.6)}
+  .screw{position:absolute;width:14px;height:14px;border-radius:50%;
+    background:radial-gradient(circle at 35% 30%, #f0f3f6, #8f96a0 60%, #5d646e);box-shadow:inset 0 1px 2px rgba(0,0,0,.4)}
+  .screw::after{content:"";position:absolute;left:2px;right:2px;top:50%;height:1.5px;background:#555c66;transform:translateY(-50%) rotate(40deg)}
+  .screw.tl{top:12px;left:12px}.screw.tr{top:12px;right:12px}.screw.bl{bottom:12px;left:12px}.screw.br{bottom:12px;right:12px}
+
+  .brand{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;color:#3a4049}
+  .brand .logo{font-weight:700;letter-spacing:.22em;text-transform:uppercase;font-size:.85rem}
+  .brand .model{font-size:.6rem;letter-spacing:.18em;text-transform:uppercase;color:#5d646e}
+
+  .lcd{background:var(--lcd-bg);border-radius:10px;padding:18px 22px;position:relative;overflow:hidden;
+    box-shadow:inset 0 3px 10px rgba(0,0,0,.8), inset 0 0 0 2px #08110e, 0 1px 0 rgba(255,255,255,.5);
+    color:var(--aqua);text-shadow:0 0 6px rgba(116,247,224,.55)}
+  .lcd::after{content:"";position:absolute;inset:0;pointer-events:none;
+    background:linear-gradient(160deg, rgba(255,255,255,.12) 0%, transparent 28%)}
+  .lcd .micro{font-family:'Share Tech Mono',monospace;font-size:.66rem;letter-spacing:.28em;text-transform:uppercase;opacity:.75}
+  .lcd h1{font-family:'Share Tech Mono',monospace;font-size:clamp(1.5rem,3.6vw,2.3rem);letter-spacing:.04em;margin:6px 0 4px;font-weight:400}
+  .lcd .sub{font-family:'Share Tech Mono',monospace;font-size:.78rem;opacity:.8}
+
+  .btn-rows{display:flex;flex-direction:column;gap:12px;margin-top:20px}
+  .mode-btn{display:grid;grid-template-columns:26px 1fr auto;align-items:center;gap:16px;text-align:left;cursor:pointer;
+    border:none;border-radius:12px;padding:16px 20px;font-family:'Chakra Petch';color:#272c33;
+    background:linear-gradient(180deg,var(--chrome-hi) 0%,#c3c9d1 45%,var(--chrome-mid) 55%,#c9ced6 100%);
+    box-shadow:inset 0 2px 0 #fff, inset 0 -2px 3px rgba(0,0,0,.22), 0 3px 8px rgba(0,0,0,.35);
+    transition:transform .08s, box-shadow .08s}
+  .mode-btn:hover{filter:brightness(1.04)}
+  .mode-btn:active{transform:translateY(2px);box-shadow:inset 0 2px 6px rgba(0,0,0,.3)}
+  .led{width:11px;height:11px;border-radius:50%;background:radial-gradient(circle at 35% 30%, #b8ffe9, #2adfae 55%, #0d8a66);
+    box-shadow:0 0 8px rgba(42,223,174,.8), inset 0 -1px 2px rgba(0,0,0,.3)}
+  .led.amber{background:radial-gradient(circle at 35% 30%, #ffe2b0, var(--amber) 55%, #b56a16);box-shadow:0 0 8px rgba(255,180,84,.8), inset 0 -1px 2px rgba(0,0,0,.3);
+    animation:blink 1.6s steps(2) infinite}
+  @keyframes blink{50%{opacity:.4}}
+  .mode-btn .nm{font-weight:700;font-size:1.05rem;letter-spacing:.02em}
+  .mode-btn .ds{font-size:.74rem;color:#4d535c;margin-top:1px}
+  .mode-btn .tags{display:flex;gap:6px}
+  .mode-btn .t{font-size:.58rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;padding:4px 9px;border-radius:4px;
+    background:#3a4049;color:#cfd4da;box-shadow:inset 0 1px 2px rgba(0,0,0,.5)}
+
+  .bottom{display:flex;justify-content:space-between;align-items:center;margin-top:22px;gap:18px}
+  .hint{font-family:'Share Tech Mono',monospace;font-size:.66rem;letter-spacing:.1em;color:#454b54;text-transform:uppercase}
+  .cta{border:none;cursor:pointer;border-radius:12px;padding:16px 36px;font-family:'Chakra Petch';font-weight:700;font-size:.95rem;
+    letter-spacing:.08em;text-transform:uppercase;color:#062a23;
+    background:linear-gradient(180deg,#b6fff0 0%,#74f7e0 45%,#3ad0b6 55%,#7cf3de 100%);
+    box-shadow:inset 0 2px 0 rgba(255,255,255,.8), inset 0 -2px 3px rgba(0,0,0,.25), 0 4px 12px rgba(58,208,182,.4);
+    transition:transform .08s}
+  .cta:active{transform:translateY(2px)}
+
+  /* game device */
+  .lcd-timer{display:flex;justify-content:space-between;align-items:center}
+  .lcd-timer .t{font-family:'Share Tech Mono';font-size:clamp(2.6rem,5vw,3.8rem);line-height:1}
+  .lcd-timer .meta{text-align:right;font-family:'Share Tech Mono';font-size:.72rem;opacity:.85;line-height:1.7}
+  .game-body{display:grid;grid-template-columns:300px 1fr;gap:30px;margin-top:22px;align-items:start}
+  .cd-well{background:linear-gradient(180deg,#878e98,#a8aeb8);border-radius:50%;aspect-ratio:1;padding:16px;
+    box-shadow:inset 0 4px 12px rgba(0,0,0,.5), 0 1px 0 rgba(255,255,255,.6)}
+  .cd{width:100%;height:100%;border-radius:50%;position:relative;animation:spin 4.5s linear infinite;
+    background:conic-gradient(#cfd6dd, #9fd8cf, #cfd6dd 25%, #b9c2cb 40%, #a3e0d6 55%, #cfd6dd 70%, #aeb6bf 85%, #cfd6dd);
+    box-shadow:0 2px 10px rgba(0,0,0,.45)}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .cd::after{content:"";position:absolute;inset:38%;border-radius:50%;background:#21252b;
+    box-shadow:inset 0 2px 6px rgba(0,0,0,.7), 0 0 0 6px rgba(255,255,255,.35)}
+  .fields .fld{margin-bottom:12px}
+  .fields label{display:block;font-size:.62rem;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:#3f454e;margin-bottom:5px}
+  .fields input{width:100%;border:none;border-radius:8px;padding:13px 14px;font-family:'Share Tech Mono';font-size:.95rem;
+    background:#23272d;color:var(--aqua);box-shadow:inset 0 2px 6px rgba(0,0,0,.6), 0 1px 0 rgba(255,255,255,.4)}
+  .fields input::placeholder{color:#46555a}
+  .fields input:focus{outline:2px solid var(--aqua)}
+  .avs{display:flex;gap:10px;margin:4px 0 16px}
+  .av{width:44px;height:44px;border-radius:50%;border:none;cursor:pointer;font-family:'Chakra Petch';font-weight:700;font-size:.74rem;color:#272c33;
+    background:linear-gradient(180deg,var(--chrome-hi),var(--chrome-mid));
+    box-shadow:inset 0 1px 0 #fff, inset 0 -2px 3px rgba(0,0,0,.25), 0 2px 5px rgba(0,0,0,.4)}
+  .av.sel{background:linear-gradient(180deg,#b6fff0,#3ad0b6);box-shadow:0 0 10px rgba(58,208,182,.7), inset 0 1px 0 rgba(255,255,255,.8)}
+  .submit{width:100%;border:none;cursor:pointer;border-radius:10px;padding:15px;font-family:'Chakra Petch';font-weight:700;
+    letter-spacing:.08em;text-transform:uppercase;font-size:.9rem;color:#062a23;
+    background:linear-gradient(180deg,#b6fff0 0%,#74f7e0 45%,#3ad0b6 55%,#7cf3de 100%);
+    box-shadow:inset 0 2px 0 rgba(255,255,255,.8), inset 0 -2px 3px rgba(0,0,0,.25)}
+  .playlist{margin-top:24px}
+  .playlist .lcd{padding:14px 18px}
+  .prow{display:grid;grid-template-columns:34px 1fr auto;gap:12px;font-family:'Share Tech Mono';font-size:.95rem;padding:6px 0}
+  .prow.first{color:#fff;text-shadow:0 0 8px rgba(116,247,224,.9)}
+  .eq{display:inline-flex;gap:2px;align-items:flex-end;height:12px;margin-right:6px}
+  .eq i{width:3px;background:var(--aqua);animation:eq 0.9s ease-in-out infinite}
+  .eq i:nth-child(2){animation-delay:.2s}.eq i:nth-child(3){animation-delay:.4s}
+  @keyframes eq{0%,100%{height:4px}50%{height:12px}}
+
+  @media(max-width:760px){
+    .game-body{grid-template-columns:1fr}
+    .cd-well{max-width:280px;margin:0 auto}
+  }
+</style>
+</head>
+<body>
+<div class="tag">Direction · Lecteur Y2K</div>
+
+<!-- SCREEN 1 -->
+<section>
+  <div class="device">
+    <span class="screw tl"></span><span class="screw tr"></span><span class="screw bl"></span><span class="screw br"></span>
+    <div class="brand">
+      <span class="logo">⏤ Blindify</span>
+      <span class="model">BLD-2000 · Lecteur de blind test</span>
+    </div>
+    <div class="lcd">
+      <p class="micro">Select · Mode</p>
+      <h1>COMMENT TU VEUX JOUER ?_</h1>
+      <p class="sub">Choisis ton terrain. Le reste suit.</p>
+    </div>
+    <div class="btn-rows">
+      <button class="mode-btn">
+        <span class="led"></span>
+        <span><span class="nm">Jouer avec des amis</span><div class="ds">Invite, lance une partie, joue entre potes.</div></span>
+        <span class="tags"><span class="t">Social</span><span class="t">Multi</span></span>
+      </button>
+      <button class="mode-btn">
+        <span class="led"></span>
+        <span><span class="nm">Jouer en événement</span><div class="ds">Un écran, un rythme, tout le monde suit.</div></span>
+        <span class="tags"><span class="t">Live</span><span class="t">Présentateur</span></span>
+      </button>
+      <button class="mode-btn">
+        <span class="led amber"></span>
+        <span><span class="nm">Mode Streamer</span><div class="ds">Joue en live avec ton chat.</div></span>
+        <span class="tags"><span class="t">Twitch</span><span class="t">Bientôt</span></span>
+      </button>
+      <button class="mode-btn">
+        <span class="led"></span>
+        <span><span class="nm">Solo</span><div class="ds">Toi, une playlist, le chrono.</div></span>
+        <span class="tags"><span class="t">Rapide</span></span>
+      </button>
+    </div>
+    <div class="bottom">
+      <span class="hint">Hold ► pour démarrage rapide</span>
+      <button class="cta">► Lancer une partie</button>
+    </div>
+  </div>
+</section>
+
+<!-- SCREEN 2 -->
+<section>
+  <div class="device">
+    <span class="screw tl"></span><span class="screw tr"></span><span class="screw bl"></span><span class="screw br"></span>
+    <div class="brand">
+      <span class="logo">⏤ Blindify</span>
+      <span class="model">Round 2/3 · En écoute</span>
+    </div>
+    <div class="lcd">
+      <div class="lcd-timer">
+        <span class="t">00:14</span>
+        <div class="meta">
+          TITRE&nbsp;: ????????<br>
+          ARTISTE&nbsp;: ????????<br>
+          <span class="eq"><i></i><i></i><i></i></span>SIGNAL OK
+        </div>
+      </div>
+    </div>
+    <div class="game-body">
+      <div class="cd-well"><div class="cd"></div></div>
+      <div class="fields">
+        <div class="fld"><label>Titre</label><input placeholder="> SAISIR LE TITRE"></div>
+        <div class="fld"><label>Artiste</label><input placeholder="> SAISIR L'ARTISTE"></div>
+        <div class="fld"><label>Qui l'a ajouté ?</label></div>
+        <div class="avs">
+          <button class="av">TY</button><button class="av sel">LU</button><button class="av">MA</button><button class="av">JO</button><button class="av">SA</button>
+        </div>
+        <button class="submit">▣ Valider ma réponse</button>
+      </div>
+    </div>
+    <div class="playlist">
+      <div class="lcd">
+        <p class="micro" style="margin-bottom:8px">Classement · Live</p>
+        <div class="prow first"><span>01</span><span>TYM</span><span>240 PTS</span></div>
+        <div class="prow"><span>02</span><span>LUCIE</span><span>210 PTS</span></div>
+        <div class="prow"><span>03</span><span>MARC</span><span>180 PTS</span></div>
+        <div class="prow"><span>04</span><span>JO</span><span>150 PTS</span></div>
+        <div class="prow"><span>05</span><span>SARAH</span><span>120 PTS</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+</body>
+</html>

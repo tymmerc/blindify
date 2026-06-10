@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blindify — Exploration DA</title>
+<link href="https://fonts.googleapis.com/css2?family=Jost:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Jost',sans-serif;background:#1a1a18;color:#f0ece2;min-height:100vh;padding:70px 28px}
+  .wrap{max-width:1060px;margin:0 auto}
+  .micro{font-size:.7rem;font-weight:600;letter-spacing:.3em;text-transform:uppercase;color:#8d877b}
+  h1{font-size:2.6rem;font-weight:700;margin:10px 0 6px;text-transform:uppercase;letter-spacing:-.01em}
+  p.sub{color:#8d877b;max-width:62ch;line-height:1.55;font-size:1.02rem}
+  .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:20px;margin-top:42px}
+  a.card{display:block;text-decoration:none;color:inherit;border:2px solid #38362f;padding:0;overflow:hidden;transition:transform .15s,border-color .15s;background:#22211d}
+  a.card:hover{transform:translateY(-3px);border-color:#f0ece2}
+  .swatch{height:110px;display:flex}
+  .swatch i{flex:1}
+  .body{padding:20px 22px 22px}
+  .body h3{font-size:1.25rem;font-weight:600;text-transform:uppercase}
+  .body p{color:#8d877b;font-size:.9rem;line-height:1.5;margin-top:6px}
+  .body .for{margin-top:12px;font-size:.78rem;color:#b5ae9e;font-style:italic}
+  @media(max-width:760px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <span class="micro">Blindify · Exploration nouvelles directions</span>
+  <h1>4 directions, 4 mondes</h1>
+  <p class="sub">Mêmes deux écrans partout (sélecteur de mode + écran de jeu, scroll dans chaque maquette) pour comparer le mood, pas le contenu. Rien à voir avec le néon ni le sobre d'avant.</p>
+
+  <div class="grid">
+    <a class="card" href="explore-brutalist.html">
+      <div class="swatch"><i style="background:#f2efe9"></i><i style="background:#141414"></i><i style="background:#d4f600"></i></div>
+      <div class="body">
+        <h3>01 · Affiche brutaliste</h3>
+        <p>Papier blanc cassé, typo condensée géante, un seul accent acide. Affiche de concert punk, marquee, bordures dures.</p>
+        <p class="for">Pour : l'énergie, l'attitude, zéro déco inutile.</p>
+      </div>
+    </a>
+    <a class="card" href="explore-analog.html">
+      <div class="swatch"><i style="background:#f4ecdb"></i><i style="background:#2e2014"></i><i style="background:#c65133"></i><i style="background:#e0a32e"></i></div>
+      <div class="body">
+        <h3>02 · Club analogique</h3>
+        <p>Crème, espresso, terracotta. Serif chaleureux, grain papier, les modes sont des pochettes de vinyles, le classement une tracklist.</p>
+        <p class="for">Pour : la chaleur, l'amour physique de la musique.</p>
+      </div>
+    </a>
+    <a class="card" href="explore-y2k.html">
+      <div class="swatch"><i style="background:#aab1ba"></i><i style="background:#191b1f"></i><i style="background:#74f7e0"></i></div>
+      <div class="body">
+        <h3>03 · Lecteur Y2K</h3>
+        <p>L'app EST un objet : châssis chrome brossé, vis, boutons physiques, écrans LCD aqua. Nostalgie iPod / Winamp / minidisc.</p>
+        <p class="for">Pour : le fun tactile, la nostalgie 2000s.</p>
+      </div>
+    </a>
+    <a class="card" href="explore-bauhaus.html">
+      <div class="swatch"><i style="background:#f5f1e8"></i><i style="background:#de3b23"></i><i style="background:#2351c6"></i><i style="background:#efb217"></i></div>
+      <div class="body">
+        <h3>04 · Bauhaus</h3>
+        <p>Blanc, géométrie primaire rouge/bleu/jaune, le vinyle comme cercle parfait, scores en barres colorées. Graphique et joueur.</p>
+        <p class="for">Pour : l'intemporel, le caractère sans surcharge.</p>
+      </div>
+    </a>
+  </div>
+</div>
+</body>
+</html>

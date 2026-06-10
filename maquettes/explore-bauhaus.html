@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blindify — Bauhaus</title>
+<link href="https://fonts.googleapis.com/css2?family=Jost:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --paper:#f5f1e8; --ink:#161412; --red:#de3b23; --blue:#2351c6; --yellow:#efb217;
+  }
+  html{scroll-behavior:smooth}
+  body{font-family:'Jost',sans-serif;background:var(--paper);color:var(--ink);-webkit-font-smoothing:antialiased}
+  .tag{position:fixed;top:14px;left:14px;z-index:60;background:var(--ink);color:var(--paper);padding:8px 16px;font-size:.68rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase}
+  section{min-height:100vh;display:flex;align-items:center;position:relative;overflow:hidden}
+  .wrap{max-width:1180px;width:100%;margin:0 auto;padding:80px 32px;position:relative;z-index:2}
+
+  /* side rail */
+  .rail{position:fixed;top:0;bottom:0;left:0;width:54px;background:var(--ink);z-index:40;display:flex;align-items:flex-end;justify-content:center;padding-bottom:26px}
+  .rail span{color:var(--paper);writing-mode:vertical-rl;transform:rotate(180deg);font-weight:600;letter-spacing:.4em;text-transform:uppercase;font-size:.8rem}
+  .rail::after{content:"";position:absolute;top:26px;left:50%;transform:translateX(-50%);width:18px;height:18px;border-radius:50%;background:var(--red)}
+
+  /* deco */
+  .deco-circle{position:absolute;border-radius:50%;z-index:0}
+  .deco-line{position:absolute;background:var(--ink);z-index:1}
+
+  .label{font-size:.72rem;font-weight:600;letter-spacing:.34em;text-transform:uppercase;display:inline-flex;align-items:center;gap:10px}
+  .label::before{content:"";width:34px;height:3px;background:var(--red)}
+  h1{font-weight:700;font-size:clamp(3rem,7vw,5.6rem);line-height:1;letter-spacing:-.015em;margin:18px 0 10px;text-transform:uppercase}
+  h1 .o{color:var(--red)}
+  .sub{font-size:1.1rem;color:#56504a;font-style:italic}
+
+  .tiles{display:grid;grid-template-columns:repeat(4,1fr);margin-top:54px;border:3px solid var(--ink)}
+  .tile{border-right:3px solid var(--ink);padding:30px 24px 26px;cursor:pointer;position:relative;min-height:300px;display:flex;flex-direction:column;justify-content:space-between;background:var(--paper);transition:background .15s}
+  .tile:last-child{border-right:none}
+  .tile:hover{background:#ece6d8}
+  .shape{height:90px;display:flex;align-items:center;margin-bottom:18px}
+  .sh-circles{position:relative;width:84px;height:64px}
+  .sh-circles::before,.sh-circles::after{content:"";position:absolute;width:60px;height:60px;border-radius:50%}
+  .sh-circles::before{background:var(--red);left:0}
+  .sh-circles::after{background:var(--yellow);left:26px;mix-blend-mode:multiply}
+  .sh-tri{width:0;height:0;border-left:38px solid transparent;border-right:38px solid transparent;border-bottom:66px solid var(--blue);transition:transform .25s}
+  .tile:hover .sh-tri{transform:rotate(180deg)}
+  .sh-half{width:74px;height:37px;background:var(--yellow);border-radius:74px 74px 0 0;transition:transform .25s}
+  .tile:hover .sh-half{transform:rotate(180deg)}
+  .sh-square{width:60px;height:60px;border:4px solid var(--ink);position:relative;transition:transform .25s}
+  .sh-square::after{content:"";position:absolute;inset:14px;background:var(--red);border-radius:50%}
+  .tile:hover .sh-square{transform:rotate(45deg)}
+  .tile:hover .sh-circles::before{transform:translateX(8px)}
+  .tile h3{font-size:1.3rem;font-weight:600;line-height:1.15;text-transform:uppercase;letter-spacing:.01em}
+  .tile p{font-size:.88rem;color:#56504a;margin-top:6px;line-height:1.45}
+  .tile .meta{display:flex;gap:7px;margin-top:16px;flex-wrap:wrap}
+  .chip{font-size:.6rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;border:2px solid var(--ink);padding:4px 10px}
+  .chip.r{background:var(--red);border-color:var(--red);color:var(--paper)}
+  .chip.b{background:var(--blue);border-color:var(--blue);color:var(--paper)}
+  .chip.y{background:var(--yellow);border-color:var(--yellow);color:var(--ink)}
+  .num{position:absolute;top:12px;right:14px;font-size:.78rem;font-weight:600;color:#9b938a}
+
+  .cta-line{display:flex;justify-content:space-between;align-items:center;margin-top:44px;gap:24px;flex-wrap:wrap}
+  .hint{font-size:.9rem;font-style:italic;color:#56504a}
+  .cta{font-family:'Jost';font-weight:600;font-size:1.05rem;letter-spacing:.06em;text-transform:uppercase;background:var(--red);color:var(--paper);
+    border:none;padding:18px 44px;cursor:pointer;box-shadow:7px 7px 0 var(--ink);transition:transform .12s,box-shadow .12s}
+  .cta:hover{transform:translate(3px,3px);box-shadow:4px 4px 0 var(--ink)}
+
+  /* game */
+  .game{background:var(--paper);border-top:3px solid var(--ink)}
+  .game-grid{display:grid;grid-template-columns:1.05fr 1fr;gap:70px;align-items:center}
+  .stage{position:relative;aspect-ratio:1;max-width:480px}
+  .quarter{position:absolute;left:-12%;bottom:-8%;width:65%;aspect-ratio:1;background:var(--red);border-radius:0 100% 0 0;z-index:0}
+  .diag{position:absolute;top:8%;right:-4%;width:46%;height:4px;background:var(--ink);transform:rotate(-32deg);z-index:0}
+  .vinyl{position:absolute;inset:6% 0 0 12%;width:82%;aspect-ratio:1;border-radius:50%;background:var(--ink);animation:spin 8s linear infinite;z-index:1}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .vinyl::before{content:"";position:absolute;inset:12%;border-radius:50%;border:2px solid rgba(245,241,232,.25)}
+  .vinyl::after{content:"";position:absolute;inset:36%;border-radius:50%;background:var(--yellow)}
+  .vinyl i{position:absolute;inset:48.5%;border-radius:50%;background:var(--ink);z-index:2}
+  .timer-disc{position:absolute;right:-3%;top:52%;width:130px;height:130px;border-radius:50%;background:var(--yellow);z-index:3;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;border:3px solid var(--ink)}
+  .timer-disc .t{font-weight:700;font-size:2.2rem;line-height:1}
+  .timer-disc .l{font-size:.58rem;font-weight:600;letter-spacing:.2em;text-transform:uppercase}
+
+  .panel .micro{font-size:.72rem;font-weight:600;letter-spacing:.3em;text-transform:uppercase;display:inline-flex;align-items:center;gap:10px}
+  .panel .micro::before{content:"";width:26px;height:3px;background:var(--blue)}
+  .panel h2{font-weight:700;font-size:2.4rem;text-transform:uppercase;margin:10px 0 24px}
+  .fld{margin-bottom:18px;background:#fff;border:3px solid var(--ink);padding:4px 14px 10px;position:relative}
+  .fld label{font-size:.62rem;font-weight:600;letter-spacing:.22em;text-transform:uppercase;color:#56504a}
+  .fld input{width:100%;border:none;background:transparent;font-family:'Jost';font-size:1.15rem;color:var(--ink);padding-top:2px}
+  .fld input:focus{outline:none}
+  .fld:focus-within{border-color:var(--blue)}
+  .who{font-size:.62rem;font-weight:600;letter-spacing:.22em;text-transform:uppercase;color:#56504a;margin-bottom:10px}
+  .avs{display:flex;gap:12px;margin-bottom:24px}
+  .av{width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:.78rem;cursor:pointer;border:3px solid var(--ink);background:#fff}
+  .av:nth-child(1){background:var(--red);color:var(--paper)}
+  .av:nth-child(3){background:var(--blue);color:var(--paper)}
+  .av:nth-child(5){background:var(--yellow)}
+  .av.sel{outline:3px solid var(--ink);outline-offset:3px}
+  .submit{width:100%;font-family:'Jost';font-weight:600;font-size:1.05rem;letter-spacing:.06em;text-transform:uppercase;
+    background:var(--blue);color:var(--paper);border:none;padding:17px;cursor:pointer;box-shadow:6px 6px 0 var(--ink);transition:transform .12s,box-shadow .12s}
+  .submit:hover{transform:translate(3px,3px);box-shadow:3px 3px 0 var(--ink)}
+
+  .board{margin-top:64px}
+  .board h3{font-size:.72rem;font-weight:600;letter-spacing:.3em;text-transform:uppercase;margin-bottom:18px;display:inline-flex;align-items:center;gap:10px}
+  .board h3::before{content:"";width:26px;height:3px;background:var(--red)}
+  .brow{display:grid;grid-template-columns:120px 1fr 70px;align-items:center;gap:18px;margin-bottom:12px}
+  .brow .nm{font-weight:600;font-size:1.05rem;text-transform:uppercase}
+  .brow .track{height:30px;position:relative;background:#e7e0d2}
+  .brow .fill{position:absolute;inset:0 auto 0 0;display:flex;align-items:center}
+  .brow:nth-child(2) .fill{background:var(--red);width:100%}
+  .brow:nth-child(3) .fill{background:var(--blue);width:87%}
+  .brow:nth-child(4) .fill{background:var(--yellow);width:75%}
+  .brow:nth-child(5) .fill{background:var(--ink);width:62%}
+  .brow:nth-child(6) .fill{background:var(--red);width:50%}
+  .brow .sc{font-weight:700;font-size:1.1rem;text-align:right}
+
+  @media(max-width:980px){
+    .rail{display:none}
+    .tiles{grid-template-columns:repeat(2,1fr)}
+    .tile{border-bottom:3px solid var(--ink)}
+    .game-grid{grid-template-columns:1fr}
+    .stage{margin:0 auto}
+  }
+</style>
+</head>
+<body>
+<div class="tag" style="left:68px">Direction · Bauhaus</div>
+<div class="rail"><span>Blindify</span></div>
+
+<!-- SCREEN 1 -->
+<section>
+  <div class="deco-circle" style="width:340px;height:340px;background:var(--yellow);top:-160px;right:-120px;opacity:.9"></div>
+  <div class="deco-line" style="width:300px;height:4px;top:130px;right:60px;transform:rotate(-32deg)"></div>
+  <div class="wrap" style="padding-left:90px">
+    <span class="label">Select · Mode</span>
+    <h1>Comment tu veux<br>j<span class="o">o</span>uer&nbsp;?</h1>
+    <p class="sub">Choisis ton terrain. Le reste suit.</p>
+
+    <div class="tiles">
+      <div class="tile">
+        <span class="num">01</span>
+        <div>
+          <div class="shape"><div class="sh-circles"></div></div>
+          <h3>Jouer avec des amis</h3>
+          <p>Invite, lance une partie, joue entre potes.</p>
+        </div>
+        <div class="meta"><span class="chip r">Social</span><span class="chip">Multi</span></div>
+      </div>
+      <div class="tile">
+        <span class="num">02</span>
+        <div>
+          <div class="shape"><div class="sh-tri"></div></div>
+          <h3>Jouer en événement</h3>
+          <p>Un écran, un rythme, tout le monde suit.</p>
+        </div>
+        <div class="meta"><span class="chip b">Live</span><span class="chip">Présentateur</span></div>
+      </div>
+      <div class="tile">
+        <span class="num">03</span>
+        <div>
+          <div class="shape"><div class="sh-half"></div></div>
+          <h3>Mode Streamer</h3>
+          <p>Joue en live avec ton chat.</p>
+        </div>
+        <div class="meta"><span class="chip y">Twitch</span><span class="chip">Bientôt</span></div>
+      </div>
+      <div class="tile">
+        <span class="num">04</span>
+        <div>
+          <div class="shape"><div class="sh-square"></div></div>
+          <h3>Solo</h3>
+          <p>Toi, une playlist, le chrono.</p>
+        </div>
+        <div class="meta"><span class="chip">Rapide</span></div>
+      </div>
+    </div>
+
+    <div class="cta-line">
+      <span class="hint">La forme suit la fonction. Le son suit le jeu.</span>
+      <button class="cta">Lancer une partie</button>
+    </div>
+  </div>
+</section>
+
+<!-- SCREEN 2 -->
+<section class="game">
+  <div class="wrap" style="padding-left:90px">
+    <div class="game-grid">
+      <div class="stage">
+        <div class="quarter"></div>
+        <div class="diag"></div>
+        <div class="vinyl"><i></i></div>
+        <div class="timer-disc">
+          <span class="t">0:14</span>
+          <span class="l">Restant</span>
+        </div>
+      </div>
+      <div class="panel">
+        <span class="micro">Round 2 / 3 · En écoute</span>
+        <h2>Devine le titre</h2>
+        <div class="fld"><label>Titre</label><input placeholder="Le morceau…"></div>
+        <div class="fld"><label>Artiste</label><input placeholder="Qui chante ?"></div>
+        <p class="who">Qui l'a ajouté ?</p>
+        <div class="avs">
+          <div class="av">TY</div><div class="av sel">LU</div><div class="av">MA</div><div class="av">JO</div><div class="av">SA</div>
+        </div>
+        <button class="submit">Valider ma réponse</button>
+      </div>
+    </div>
+
+    <div class="board">
+      <h3>Classement · Live</h3>
+      <div class="brow"><span class="nm">Tym</span><span class="track"><span class="fill"></span></span><span class="sc">240</span></div>
+      <div class="brow"><span class="nm">Lucie</span><span class="track"><span class="fill"></span></span><span class="sc">210</span></div>
+      <div class="brow"><span class="nm">Marc</span><span class="track"><span class="fill"></span></span><span class="sc">180</span></div>
+      <div class="brow"><span class="nm">Jo</span><span class="track"><span class="fill"></span></span><span class="sc">150</span></div>
+      <div class="brow"><span class="nm">Sarah</span><span class="track"><span class="fill"></span></span><span class="sc">120</span></div>
+    </div>
+  </div>
+</section>
+</body>
+</html>
