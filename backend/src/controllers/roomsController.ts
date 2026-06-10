@@ -951,6 +951,7 @@ export const roomsController = {
         autoAdvance: room.auto_advance ?? false,
         roundDurationMs,
       },
+      sessionId: session.id,
     });
 
     // Start round 1 immediately in a server-authoritative way

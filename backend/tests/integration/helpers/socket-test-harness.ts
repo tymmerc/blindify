@@ -86,6 +86,43 @@ export async function seedRoom(users: TestUser[], status = "in_progress"): Promi
   return roomCode;
 }
 
+/**
+ * Creates a real game_sessions row + game_rounds + game_participants for the
+ * room, so persistence (round_responses, final scores) has FK targets.
+ * Returns the session id to thread into startGame.
+ */
+export async function seedSession(roomCode: string, users: TestUser[], rounds: number): Promise<number> {
+  const { rows } = await pool.query<{ id: number }>(
+    `INSERT INTO game_sessions (host_user_id, mode, difficulty, total_rounds, state, room_code)
+     VALUES ($1, 'friends', 'normal', $2, 'in_progress', $3)
+     RETURNING id`,
+    [users[0].id, rounds, roomCode],
+  );
+  const sessionId = rows[0].id;
+  for (let r = 1; r <= rounds; r++) {
+    await pool.query(
+      `INSERT INTO game_rounds (session_id, round_index, correct_title, correct_artist)
+       VALUES ($1, $2, $3, $4)`,
+      [sessionId, r, `Title ${r}`, `Artist ${r}`],
+    );
+  }
+  for (const u of users) {
+    await pool.query(
+      `INSERT INTO game_participants (session_id, user_id, score) VALUES ($1, $2, 0)
+       ON CONFLICT (session_id, user_id) DO NOTHING`,
+      [sessionId, u.id],
+    );
+  }
+  await pool.query(`UPDATE multiplayer_rooms SET session_id = $2 WHERE room_code = $1`, [roomCode, sessionId]);
+  return sessionId;
+}
+
+/** Removes a seeded session (cascades rounds/responses/participants). */
+export async function cleanupSession(sessionId: number | undefined): Promise<void> {
+  if (!sessionId) return;
+  await pool.query(`DELETE FROM game_sessions WHERE id = $1`, [sessionId]);
+}
+
 /** Synthetic tracks for N rounds (no Deezer/DB dependency). */
 export function makeTracks(rounds: number): RoundTrack[] {
   return Array.from({ length: rounds }, (_, i) => ({
@@ -157,7 +194,7 @@ export async function joinRoom(io: TestServer["io"], roomCode: string, clients: 
 }
 
 /** Starts a game state machine for the room with synthetic tracks. */
-export function startGame(io: TestServer["io"], roomCode: string, users: TestUser[], rounds: number, roundDurationMs = 1500): void {
+export function startGame(io: TestServer["io"], roomCode: string, users: TestUser[], rounds: number, roundDurationMs = 1500, sessionId?: number): void {
   bootstrapGameState({
     roomCode,
     hostUserId: users[0].id,
@@ -165,9 +202,13 @@ export function startGame(io: TestServer["io"], roomCode: string, users: TestUse
     participants: users.map(u => ({ userId: u.id, username: u.username, avatar: null })),
     mode: "friends",
     config: { roundDurationMs, autoAdvance: false },
+    sessionId,
   });
   startRoundAndBroadcast(io, roomCode);
 }
+
+/** Direct DB access for persistence assertions in tests. */
+export { pool };
 
 export function cleanupGame(roomCode: string): void {
   clearRevealTimer(roomCode);

@@ -30,6 +30,7 @@ export type PlayerState = {
   lastSourceGuess?: number | null;
   lastVerdict?: Verdict;
   answerAt?: number | null;
+  lastGained?: number;
 };
 
 export type GameState = {
@@ -53,6 +54,7 @@ type GameContext = {
   tracks: RoundTrack[];
   mode: string;
   roundDurationMs: number;
+  sessionId?: number;
 };
 
 const DEFAULT_LISTENING_MS = 20_000;
@@ -66,6 +68,7 @@ export function bootstrapGameState(params: {
   participants: Array<{ userId: number; username: string | null; avatar?: string | null }>;
   mode?: string;
   config?: { roundDurationMs?: number; autoAdvance?: boolean };
+  sessionId?: number;
 }): GameState {
   const initialPlayers: Record<number, PlayerState> = {};
   for (const participant of params.participants) {
@@ -104,12 +107,17 @@ export function bootstrapGameState(params: {
   };
 
   const roundDurationMs = params.config?.roundDurationMs ?? DEFAULT_LISTENING_MS;
-  games.set(params.roomCode, { state, tracks: params.tracks, mode: params.mode ?? "friends", roundDurationMs });
+  games.set(params.roomCode, { state, tracks: params.tracks, mode: params.mode ?? "friends", roundDurationMs, sessionId: params.sessionId });
   return state;
 }
 
 export function getGameState(roomCode: string): GameState | undefined {
   return games.get(roomCode)?.state;
+}
+
+/** DB session id backing this room's game, if it was started with persistence. */
+export function getSessionId(roomCode: string): number | undefined {
+  return games.get(roomCode)?.sessionId;
 }
 
 export function getGameMode(roomCode: string): string | undefined {
@@ -296,7 +304,7 @@ export function revealRound(roomCode: string): GameState | undefined {
       player.lastGuessTitle,
       player.lastGuessArtist,
     );
-    const { next } = computeScore({
+    const { next, gained } = computeScore({
       previous: player,
       detail,
       answerAt: player.answerAt,
@@ -308,6 +316,7 @@ export function revealRound(roomCode: string): GameState | undefined {
     ctx.state.players[player.userId] = {
       ...next,
       hasAnswered: true,
+      lastGained: gained,
     };
   });
 

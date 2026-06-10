@@ -3,26 +3,29 @@
 @tailwind utilities;
 
 :root {
-  /* Synthwave neon palette */
-  --app-bg: #0a0014;
-  --app-surface: #0f051e;
-  --app-surface-strong: rgba(35, 8, 65, 0.75);
-  --app-surface-well: rgba(15, 5, 30, 0.92);
-  --app-border: rgba(255, 90, 240, 0.18);
-  --app-border-soft: rgba(255, 90, 240, 0.08);
-  --app-border-hover: rgba(0, 247, 255, 0.45);
-  --app-primary: #ff2ec8;
-  --app-primary-soft: rgba(255, 46, 200, 0.18);
-  --app-accent: #00f7ff;
-  --app-foreground: #f8f0ff;
-  --app-muted: #9b7fb8;
+  /* ============================================================
+     HYBRID DA — sober editorial dark is the DEFAULT (utility/nav
+     screens). The neon synthwave look is opt-in via .neon-stage
+     (game/play screens only). See maquettes/direction-C-hybride.html
+     ============================================================ */
+  --app-bg: #09090b;
+  --app-surface: #111113;
+  --app-surface-strong: rgba(255, 255, 255, 0.025);
+  --app-surface-well: #0b0b0d;
+  --app-border: rgba(255, 255, 255, 0.08);
+  --app-border-soft: rgba(255, 255, 255, 0.05);
+  --app-border-hover: rgba(255, 255, 255, 0.18);
+  --app-primary: #8b5cf6;
+  --app-primary-soft: rgba(139, 92, 246, 0.14);
+  --app-accent: #8b5cf6;
+  --app-foreground: #fafafa;
+  --app-muted: #71717a;
   --app-card-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.6),
-    0 0 20px rgba(255, 46, 200, 0.08),
-    inset 0 1px 0 rgba(255, 90, 240, 0.15);
+    0 8px 32px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
   --app-transition: all 160ms ease;
 
-  /* Neon shortcuts */
+  /* Neon shortcuts — only "light up" inside .neon-stage */
   --neon-pink: #ff2ec8;
   --neon-cyan: #00f7ff;
   --neon-purple: #a855f7;
@@ -53,39 +56,8 @@
     overflow-x: hidden;
   }
 
-  /* Synthwave perspective grid + horizon glow. Renders behind everything. */
-  body::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    z-index: -2;
-    background:
-      radial-gradient(ellipse 100% 60% at 50% 100%, rgba(255, 46, 200, 0.18) 0%, transparent 55%),
-      radial-gradient(ellipse 70% 50% at 50% 100%, rgba(0, 247, 255, 0.12) 0%, transparent 50%),
-      linear-gradient(to bottom, transparent 0%, rgba(255, 46, 200, 0.05) 50%, transparent 100%);
-    pointer-events: none;
-  }
-
-  body::after {
-    content: "";
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    height: 50vh;
-    z-index: -1;
-    background-image:
-      linear-gradient(to right, rgba(255, 46, 200, 0.32) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(0, 247, 255, 0.28) 1px, transparent 1px);
-    background-size: 40px 40px;
-    background-position: center bottom;
-    transform: perspective(400px) rotateX(60deg);
-    transform-origin: bottom;
-    animation: gridMove 8s linear infinite;
-    mask-image: linear-gradient(to top, rgba(0, 0, 0, 0.9) 10%, transparent 100%);
-    -webkit-mask-image: linear-gradient(to top, rgba(0, 0, 0, 0.9) 10%, transparent 100%);
-    pointer-events: none;
-  }
+  /* Utility/nav screens stay sober: no global synthwave background.
+     The neon grid + horizon glow live in .neon-stage (game screens). */
 
   @keyframes gridMove {
     0% { background-position: 0 0; }
@@ -108,7 +80,7 @@
   }
 
   ::selection {
-    background: rgba(255, 46, 200, 0.35);
+    background: rgba(139, 92, 246, 0.35);
     color: #fafafa;
   }
 
@@ -151,35 +123,70 @@
   /* ========== Neon arcade utilities ========== */
 
   /* Glowing text — arcade signage */
-  .text-glow {
-    text-shadow:
-      0 0 4px currentColor,
-      0 0 10px currentColor,
-      0 0 22px currentColor;
+  /* ========== HYBRID: .neon-stage scope ==========
+     Wrap a game/play screen in .neon-stage to "light up" the synthwave
+     look. Outside it (utility/nav screens), the loud classes below
+     degrade to the sober editorial style automatically. */
+  .neon-stage {
+    position: relative;
+    isolation: isolate;
+    background: var(--app-bg);
+  }
+  .neon-stage::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -2;
+    background:
+      radial-gradient(ellipse 100% 60% at 50% 100%, rgba(255, 46, 200, 0.18) 0%, transparent 55%),
+      radial-gradient(ellipse 70% 50% at 50% 100%, rgba(0, 247, 255, 0.12) 0%, transparent 50%),
+      linear-gradient(to bottom, transparent 0%, rgba(255, 46, 200, 0.05) 50%, transparent 100%);
+    pointer-events: none;
+  }
+  .neon-stage::after {
+    content: "";
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 50vh;
+    z-index: -1;
+    background-image:
+      linear-gradient(to right, rgba(255, 46, 200, 0.32) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(0, 247, 255, 0.28) 1px, transparent 1px);
+    background-size: 40px 40px;
+    background-position: center bottom;
+    transform: perspective(400px) rotateX(60deg);
+    transform-origin: bottom;
+    animation: gridMove 8s linear infinite;
+    mask-image: linear-gradient(to top, rgba(0, 0, 0, 0.9) 10%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to top, rgba(0, 0, 0, 0.9) 10%, transparent 100%);
+    pointer-events: none;
   }
 
-  .text-glow-pink {
+  /* Glow text: sober by default, neon only inside .neon-stage */
+  .text-glow { text-shadow: none; }
+  .text-glow-pink { color: var(--app-foreground); text-shadow: none; }
+  .text-glow-cyan { color: var(--app-foreground); text-shadow: none; }
+
+  .neon-stage .text-glow {
+    text-shadow: 0 0 4px currentColor, 0 0 10px currentColor, 0 0 22px currentColor;
+  }
+  .neon-stage .text-glow-pink {
     color: var(--neon-pink);
-    text-shadow:
-      0 0 4px var(--neon-pink),
-      0 0 12px var(--neon-pink),
-      0 0 24px rgba(255, 46, 200, 0.6);
+    text-shadow: 0 0 4px var(--neon-pink), 0 0 12px var(--neon-pink), 0 0 24px rgba(255, 46, 200, 0.6);
   }
-
-  .text-glow-cyan {
+  .neon-stage .text-glow-cyan {
     color: var(--neon-cyan);
-    text-shadow:
-      0 0 4px var(--neon-cyan),
-      0 0 12px var(--neon-cyan),
-      0 0 24px rgba(0, 247, 255, 0.6);
+    text-shadow: 0 0 4px var(--neon-cyan), 0 0 12px var(--neon-cyan), 0 0 24px rgba(0, 247, 255, 0.6);
   }
 
-  /* Arcade-style scanlines overlay — apply to game UI containers */
+  /* Scanlines overlay only inside the game stage */
   .scanlines {
     position: relative;
     overflow: hidden;
   }
-  .scanlines::after {
+  .neon-stage .scanlines::after {
     content: "";
     position: absolute;
     inset: 0;
@@ -196,7 +203,8 @@
     z-index: 10;
   }
 
-  /* Neon outline button — primary action */
+  /* Primary action button.
+     Sober (white-on-dark) by default, neon outline inside .neon-stage. */
   .btn-neon {
     position: relative;
     display: inline-flex;
@@ -206,39 +214,48 @@
     padding: 0.85rem 1.6rem;
     border-radius: 10px;
     font-weight: 600;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.02em;
+    color: #09090b;
+    background: #fafafa;
+    border: 1px solid transparent;
+    box-shadow: none;
+    text-shadow: none;
+    transition: all 180ms ease;
+  }
+  .btn-neon:hover { transform: translateY(-1px); background: #fff; }
+
+  .btn-neon-pink {
+    color: var(--app-foreground);
+    background: var(--app-primary-soft);
+    border-color: rgba(139, 92, 246, 0.4);
+    box-shadow: none;
+    text-shadow: none;
+  }
+  .btn-neon-pink:hover { background: rgba(139, 92, 246, 0.25); }
+
+  .neon-stage .btn-neon {
     text-transform: uppercase;
+    letter-spacing: 0.05em;
     color: var(--neon-cyan);
     background: rgba(0, 247, 255, 0.06);
     border: 1px solid var(--neon-cyan);
-    box-shadow:
-      0 0 14px rgba(0, 247, 255, 0.4),
-      inset 0 0 10px rgba(0, 247, 255, 0.18);
+    box-shadow: 0 0 14px rgba(0, 247, 255, 0.4), inset 0 0 10px rgba(0, 247, 255, 0.18);
     text-shadow: 0 0 8px rgba(0, 247, 255, 0.7);
-    transition: all 180ms ease;
   }
-  .btn-neon:hover {
+  .neon-stage .btn-neon:hover {
     background: rgba(0, 247, 255, 0.15);
-    box-shadow:
-      0 0 24px rgba(0, 247, 255, 0.7),
-      inset 0 0 18px rgba(0, 247, 255, 0.3);
-    transform: translateY(-1px);
+    box-shadow: 0 0 24px rgba(0, 247, 255, 0.7), inset 0 0 18px rgba(0, 247, 255, 0.3);
   }
-
-  .btn-neon-pink {
+  .neon-stage .btn-neon-pink {
     color: var(--neon-pink);
     background: rgba(255, 46, 200, 0.06);
     border-color: var(--neon-pink);
-    box-shadow:
-      0 0 14px rgba(255, 46, 200, 0.45),
-      inset 0 0 10px rgba(255, 46, 200, 0.2);
+    box-shadow: 0 0 14px rgba(255, 46, 200, 0.45), inset 0 0 10px rgba(255, 46, 200, 0.2);
     text-shadow: 0 0 8px rgba(255, 46, 200, 0.7);
   }
-  .btn-neon-pink:hover {
+  .neon-stage .btn-neon-pink:hover {
     background: rgba(255, 46, 200, 0.18);
-    box-shadow:
-      0 0 24px rgba(255, 46, 200, 0.8),
-      inset 0 0 18px rgba(255, 46, 200, 0.3);
+    box-shadow: 0 0 24px rgba(255, 46, 200, 0.8), inset 0 0 18px rgba(255, 46, 200, 0.3);
   }
 
   /* "Score popup" — arcade style number reveal */

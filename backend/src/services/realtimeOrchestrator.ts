@@ -3,10 +3,12 @@ import { logger } from "../utils/logger";
 import {
   clearGame,
   gameStateSnapshot,
+  getSessionId,
   revealRound,
   startNextRound,
   type GameState,
 } from "./realtimeGame";
+import { persistGameResults, persistRoundResponses } from "./gamePersistence";
 
 const revealTimers = new Map<string, NodeJS.Timeout>();
 
@@ -73,6 +75,8 @@ export function scheduleReveal(io: IOServer, roomCode: string, revealAt: number)
     if (updated) {
       emitRoundReveal(io, updated);
       emitState(io, roomCode);
+      // Persist this round's answers (fire-and-forget; never blocks the game).
+      void persistRoundResponses(updated, getSessionId(roomCode));
       if (updated.phase === "FINISHED") {
         broadcastGameOver(io, roomCode);
       }
@@ -117,6 +121,8 @@ export function broadcastGameOver(io: IOServer, roomCode: string) {
   if (!snapshot) return;
   finishedRooms.add(roomCode);
   emitGameOver(io, snapshot);
+  // Persist final scores/stats before the in-memory state is dropped.
+  void persistGameResults(snapshot, getSessionId(roomCode));
   revealTimers.delete(roomCode);
   clearGame(roomCode);
   // Clean up the guard after a short delay to avoid memory leak.

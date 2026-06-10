@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blindify — Directions UI</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Space Grotesk';background:#09090b;color:#fafafa;min-height:100vh;padding:60px 24px}
+  .wrap{max-width:980px;margin:0 auto}
+  .label{font-family:'JetBrains Mono';text-transform:uppercase;letter-spacing:.22em;font-size:.66rem;color:#71717a}
+  h1{font-size:2.4rem;font-weight:600;letter-spacing:-.02em;margin:12px 0 8px}
+  p.sub{color:#71717a;max-width:60ch;line-height:1.5}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:40px}
+  a.card{display:block;background:#111113;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:26px;text-decoration:none;color:inherit;transition:.2s}
+  a.card:hover{border-color:rgba(255,255,255,.18);transform:translateY(-3px)}
+  .swatch{height:64px;border-radius:10px;margin-bottom:18px}
+  .sA{background:linear-gradient(92deg,#ff2bd6,#22e0ff)}
+  .sB{background:linear-gradient(92deg,#18181b,#2a2536);border:1px solid rgba(139,92,246,.4)}
+  .sC{background:linear-gradient(92deg,#18181b 0 50%,#ff2bd6 50%,#22e0ff)}
+  a.card h3{font-size:1.2rem;font-weight:600;margin-bottom:6px}
+  a.card span{color:#71717a;font-size:.88rem;line-height:1.5;display:block}
+  .reco{margin-top:8px;font-family:'JetBrains Mono';font-size:.62rem;letter-spacing:.12em;color:#8b5cf6;border:1px solid rgba(139,92,246,.4);border-radius:4px;padding:3px 8px;display:inline-block}
+  @media(max-width:760px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <span class="label">Blindify · finalisation UI</span>
+  <h1>3 directions visuelles</h1>
+  <p class="sub">Chaque maquette montre les deux écrans signature (sélecteur de modes + écran de jeu vinyle) avec le même contenu, pour comparer à l'identique. Scrolle dans chacune.</p>
+  <div class="grid">
+    <a class="card" href="direction-A-neon.html">
+      <div class="swatch sA"></div>
+      <h3>A · Néon arcade</h3>
+      <span>Le look actuel des écrans de jeu. Pink + cyan, titres en glow, grille scanline. Énergique, fun, chargé.</span>
+    </a>
+    <a class="card" href="direction-B-sobre.html">
+      <div class="swatch sB"></div>
+      <h3>B · Sobre editorial</h3>
+      <span>Noir #09090b, accent violet unique, labels mono. Calme, premium, lisible. C'est ta DA documentée.</span>
+      <span class="reco">RECOMMANDÉ</span>
+    </a>
+    <a class="card" href="direction-C-hybride.html">
+      <div class="swatch sC"></div>
+      <h3>C · Hybride assumé</h3>
+      <span>Sobre pour la navigation, néon quand le jeu démarre. Le fun "s'allume" au bon moment.</span>
+    </a>
+  </div>
+</div>
+</body>
+</html>

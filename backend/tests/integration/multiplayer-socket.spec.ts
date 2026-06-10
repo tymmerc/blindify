@@ -16,6 +16,9 @@ import {
   cleanupGame,
   cleanupUsers,
   closePool,
+  seedSession,
+  cleanupSession,
+  pool,
   waitFor,
   type TestServer,
   type TestUser,
@@ -265,6 +268,68 @@ describe("multiplayer socket integration — N players, no desync", () => {
     } finally {
       clients.forEach(c => c.socket.close());
       cleanupGame(roomCode);
+      await cleanupUsers(users);
+    }
+  });
+
+  it("persists final scores, round responses and finished state to the DB", async () => {
+    const users = await seedUsers(3);
+    const roomCode = await seedRoom(users);
+    const sessionId = await seedSession(roomCode, users, 2);
+    const clients: GameClient[] = [];
+
+    try {
+      for (const u of users) clients.push(await connectClient(server.port, u));
+      await joinRoom(server.io, roomCode, clients);
+      startGame(server.io, roomCode, users, 2, 5000, sessionId);
+
+      for (let round = 1; round <= 2; round++) {
+        await waitFor(
+          () => clients.every(c => c.lastState()?.phase === "GUESSING" && c.lastState()?.currentRound === round),
+          5000,
+          `GUESSING round ${round}`,
+        );
+        await allAnswer(clients, roomCode, round);
+        await waitFor(() => clients.every(c => c.lastState()?.phase === "REVEAL"), 5000, `REVEAL round ${round}`);
+        await allReady(clients, roomCode);
+      }
+
+      await waitFor(() => clients.every(c => c.gameOver !== null), 5000, "game over");
+      // Persistence is fire-and-forget; give the async writes a beat to land.
+      await new Promise(r => setTimeout(r, 500));
+
+      // 1. Session flipped to finished
+      const sess = await pool.query(`SELECT state, ended_at FROM game_sessions WHERE id = $1`, [sessionId]);
+      expect(sess.rows[0].state).toBe("finished");
+      expect(sess.rows[0].ended_at).not.toBeNull();
+
+      // 2. Final participant scores match what clients saw at game over
+      const finalScores = scoreMap(clients[0].gameOver.players);
+      const parts = await pool.query(`SELECT user_id, score FROM game_participants WHERE session_id = $1`, [sessionId]);
+      expect(parts.rows.length).toBe(3);
+      for (const row of parts.rows) {
+        expect(row.score).toBe(finalScores[row.user_id]);
+        expect(row.score).toBeGreaterThan(0);
+      }
+
+      // 3. Round responses written for every player in both rounds
+      const resp = await pool.query(
+        `SELECT COUNT(*)::int AS n FROM round_responses rr
+         JOIN game_rounds gr ON gr.id = rr.round_id WHERE gr.session_id = $1`,
+        [sessionId],
+      );
+      expect(resp.rows[0].n).toBe(3 * 2); // 3 players × 2 rounds
+
+      // 4. Lifetime stats incremented
+      const stats = await pool.query(
+        `SELECT COUNT(*)::int AS n FROM user_stats WHERE user_id = ANY($1::int[]) AND total_games >= 1`,
+        [users.map(u => u.id)],
+      );
+      expect(stats.rows[0].n).toBe(3);
+    } finally {
+      clients.forEach(c => c.socket.close());
+      cleanupGame(roomCode);
+      await cleanupSession(sessionId);
       await cleanupUsers(users);
     }
   });

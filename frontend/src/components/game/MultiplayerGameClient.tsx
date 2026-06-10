@@ -430,7 +430,7 @@ export function MultiplayerGameClient({
 
   return (
     <div
-      className="relative min-h-screen overflow-hidden"
+      className="neon-stage relative min-h-screen overflow-hidden"
       style={{ ...theme, background: "var(--bg)", color: "var(--ink)" }}
     >
       {/* Background effects */}

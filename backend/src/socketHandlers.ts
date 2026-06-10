@@ -12,7 +12,10 @@ import {
   markDisconnected,
   markReconnected,
   getGameMode,
+  getSessionId,
 } from "./services/realtimeGame";
+import { persistRoundResponses } from "./services/gamePersistence";
+import { validRoomCode, clampText, toIntOrNull, MAX_GUESS_LEN, MAX_CHAT_LEN } from "./utils/socketValidation";
 import {
   broadcastGameOver,
   broadcastState,
@@ -235,7 +238,8 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
       }
     };
 
-    socket.on("room:join", async ({ roomCode }: { roomCode: string }) => {
+    socket.on("room:join", async (payload: { roomCode?: unknown }) => {
+      const roomCode = validRoomCode(payload?.roomCode);
       logger.debug(`room:join request from user ${currentUser.id} (${currentUser.username}) for room ${roomCode}, socketId=${socket.id}`);
       if (!roomCode) return;
       const access = await requireRoomAccess(roomCode, currentUser.id);
@@ -291,15 +295,20 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
 
     socket.on(
       "game:answer",
-      async ({ roomCode, guess, guessTitle, guessArtist, sourceUserId }: {
-        roomCode: string;
-        guess?: string;
-        guessTitle?: string;
-        guessArtist?: string;
-        sourceUserId?: number | null;
+      async (payload: {
+        roomCode?: unknown;
+        guess?: unknown;
+        guessTitle?: unknown;
+        guessArtist?: unknown;
+        sourceUserId?: unknown;
       }) => {
-        logger.debug(`game:answer received from user ${currentUser.id} for room ${roomCode}`, { guess, guessTitle, guessArtist });
+        const roomCode = validRoomCode(payload?.roomCode);
         if (!roomCode) return;
+        const guess = clampText(payload?.guess, MAX_GUESS_LEN);
+        const guessTitle = clampText(payload?.guessTitle, MAX_GUESS_LEN);
+        const guessArtist = clampText(payload?.guessArtist, MAX_GUESS_LEN);
+        const sourceUserId = toIntOrNull(payload?.sourceUserId);
+        logger.debug(`game:answer received from user ${currentUser.id} for room ${roomCode}`, { guess, guessTitle, guessArtist });
         const access = await requireRoomAccess(roomCode, currentUser.id);
         if (!access) {
           logger.debug(`game:answer DENIED - no access for user ${currentUser.id}`);
@@ -353,6 +362,9 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
               timing: revealed.timing,
               players: revealed.players,
             });
+            // Persist this round's answers on the early-reveal path too
+            // (the timer path persists in the orchestrator).
+            void persistRoundResponses(revealed, getSessionId(roomCode));
             if (revealed.phase === "FINISHED") {
               broadcastGameOver(io, roomCode);
             }
@@ -452,10 +464,14 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
     });
 
     // Chat messages
-    socket.on("room:chat", ({ roomCode, message }: { roomCode: string; message: string }) => {
-      if (!roomCode || typeof message !== "string") return;
-      const text = message.trim().slice(0, 200);
+    socket.on("room:chat", async (payload: { roomCode?: unknown; message?: unknown }) => {
+      const roomCode = validRoomCode(payload?.roomCode);
+      if (!roomCode) return;
+      const text = clampText(payload?.message, MAX_CHAT_LEN);
       if (!text) return;
+      // Only members of the room may broadcast into it.
+      const access = await requireRoomAccess(roomCode, currentUser.id);
+      if (!access) return;
       io.to(roomCode).emit("room:chat", {
         userId: currentUser.id,
         username: currentUser.username ?? `Joueur ${currentUser.id}`,
@@ -472,8 +488,10 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
     });
 
     // Streamer mode: game:guess (chat or host submits a guess)
-    socket.on("game:guess", async ({ roomCode, guess }: { roomCode: string; guess: string }) => {
-      if (!roomCode || typeof guess !== "string") return;
+    socket.on("game:guess", async (payload: { roomCode?: unknown; guess?: unknown }) => {
+      const roomCode = validRoomCode(payload?.roomCode);
+      const guess = clampText(payload?.guess, MAX_GUESS_LEN);
+      if (!roomCode || !guess) return;
       const access = await requireRoomAccess(roomCode, currentUser.id);
       if (!access) {
         emitRoomError(socket, roomCode, "Accès refusé à cette salle.");

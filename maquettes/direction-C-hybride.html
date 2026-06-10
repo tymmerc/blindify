@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blindify — Direction C (Hybride assumé)</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --bg:#09090b; --l1:#111113; --l2:#0b0b0d;
+    --border:rgba(255,255,255,0.07); --border-strong:rgba(255,255,255,0.12);
+    --fg:#fafafa; --muted:#71717a; --accent:#8b5cf6;
+    --pink:#ff2bd6; --cyan:#22e0ff;
+  }
+  html{scroll-behavior:smooth}
+  body{font-family:'Space Grotesk',sans-serif;background:var(--bg);color:var(--fg);-webkit-font-smoothing:antialiased}
+  .label{font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.22em;font-size:.66rem;color:var(--muted)}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 28px;position:relative;z-index:1}
+  section{min-height:100vh;display:flex;flex-direction:column;justify-content:center;padding:80px 0;position:relative}
+  .tag{position:fixed;top:18px;left:18px;z-index:50;background:var(--l1);border:1px solid var(--border);border-radius:999px;padding:7px 14px;font-family:'JetBrains Mono',monospace;font-size:.7rem;letter-spacing:.1em;color:var(--muted)}
+  .tag b{color:var(--accent)}
+  .rule{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:50;background:var(--l1);border:1px solid var(--border);border-radius:999px;padding:8px 16px;font-family:'JetBrains Mono';font-size:.66rem;letter-spacing:.08em;color:var(--muted);white-space:nowrap}
+  .rule b{color:var(--cyan)} .rule i{color:var(--accent);font-style:normal}
+  /* ---- UTILITY screen = SOBRE (modes is an entry/utility screen) ---- */
+  h1{font-size:clamp(2.2rem,5vw,3.6rem);font-weight:600;letter-spacing:-.02em;line-height:1.04;margin:14px 0 10px}
+  .sub{color:var(--muted);font-size:1.02rem;max-width:46ch}
+  .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-top:40px}
+  .card{background:var(--l1);border:1px solid var(--border);border-radius:16px;padding:24px;transition:.2s;cursor:pointer}
+  .card:hover{border-color:var(--border-strong);transform:translateY(-2px)}
+  .card .ico{width:38px;height:38px;border-radius:10px;background:rgba(139,92,246,.14);display:flex;align-items:center;justify-content:center;color:var(--accent);margin-bottom:16px}
+  .card h3{font-size:1.18rem;font-weight:600}
+  .card p{color:var(--muted);font-size:.9rem;margin-top:6px;line-height:1.5}
+  .card .meta{display:flex;gap:8px;margin-top:18px}
+  .pill{font-family:'JetBrains Mono';font-size:.62rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);border:1px solid var(--border);border-radius:999px;padding:4px 9px}
+  .pill.on{color:var(--accent);border-color:rgba(139,92,246,.4)}
+  .badge-sobre{display:inline-block;font-family:'JetBrains Mono';font-size:.6rem;letter-spacing:.12em;color:var(--accent);border:1px solid rgba(139,92,246,.4);border-radius:4px;padding:3px 8px;margin-bottom:8px}
+  .badge-neon{display:inline-block;font-family:'JetBrains Mono';font-size:.6rem;letter-spacing:.12em;color:var(--pink);border:1px solid rgba(255,43,214,.5);border-radius:4px;padding:3px 8px;margin-bottom:8px;box-shadow:0 0 12px -3px rgba(255,43,214,.5)}
+  .btn{font-family:'Space Grotesk';font-weight:600;font-size:.94rem;padding:13px 26px;border-radius:11px;border:1px solid var(--border-strong);background:#fff;color:#09090b;cursor:pointer}
+  .btn.ghost{background:transparent;color:var(--fg)}
+  .cta{margin-top:34px;display:flex;gap:12px}
+  /* ---- GAME screen = NÉON (the fun/play moment lights up) ---- */
+  .game{position:relative;overflow:hidden}
+  .game::before{content:'';position:absolute;inset:0;z-index:0;pointer-events:none;
+    background:
+      radial-gradient(50% 50% at 18% 10%,rgba(255,43,214,.16),transparent 60%),
+      radial-gradient(50% 50% at 90% 90%,rgba(34,224,255,.14),transparent 60%),
+      linear-gradient(rgba(168,85,247,.05) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(168,85,247,.05) 1px,transparent 1px);
+    background-size:auto,auto,46px 46px,46px 46px}
+  .game h1{background:linear-gradient(92deg,var(--pink),var(--cyan));-webkit-background-clip:text;background-clip:text;color:transparent;text-transform:uppercase;filter:drop-shadow(0 0 22px rgba(255,43,214,.4))}
+  .vinyl-row{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;margin-top:30px}
+  .vinyl{aspect-ratio:1;max-width:360px;width:100%;margin:0 auto;border-radius:50%;
+    background:repeating-radial-gradient(circle at 50% 50%,#15101f 0 2px,#0b0814 2px 4px);
+    position:relative;animation:spin 7s linear infinite;box-shadow:0 0 60px -8px rgba(255,43,214,.5),0 0 100px -20px rgba(34,224,255,.4)}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .vinyl::after{content:'';position:absolute;inset:34%;border-radius:50%;background:linear-gradient(135deg,var(--pink),#7b2ff7);border:3px solid var(--bg);filter:blur(1px)}
+  .vinyl::before{content:'';position:absolute;inset:46%;border-radius:50%;background:var(--bg);z-index:2;box-shadow:0 0 0 2px rgba(34,224,255,.4)}
+  .panel{background:rgba(20,14,38,.6);border:1px solid rgba(255,43,214,.28);border-radius:14px;padding:26px;backdrop-filter:blur(6px)}
+  .timer{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:18px}
+  .timer .big{font-family:'JetBrains Mono';font-size:2.1rem;color:var(--cyan);text-shadow:0 0 18px rgba(34,224,255,.7)}
+  .field{margin-top:14px}
+  .field input{width:100%;background:var(--l2);border:1px solid rgba(34,224,255,.25);border-radius:8px;padding:14px 16px;color:var(--fg);font-family:'Space Grotesk';font-size:.95rem}
+  .field input::placeholder{color:#6a5f86}
+  .field input:focus{outline:none;border-color:var(--pink);box-shadow:0 0 16px -4px rgba(255,43,214,.6)}
+  .avatars{display:flex;gap:10px;margin-top:10px}
+  .av{width:42px;height:42px;border-radius:50%;background:var(--l2);border:1px solid rgba(34,224,255,.3);display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono';font-size:.8rem;color:var(--muted);cursor:pointer}
+  .av.sel{border-color:var(--pink);color:var(--pink);box-shadow:0 0 14px -2px rgba(255,43,214,.6)}
+  .gbtn{font-family:'JetBrains Mono';font-weight:700;text-transform:uppercase;letter-spacing:.12em;font-size:.78rem;padding:15px 28px;border-radius:8px;border:1px solid var(--pink);background:rgba(255,43,214,.12);color:var(--pink);cursor:pointer;text-shadow:0 0 10px rgba(255,43,214,.5);width:100%;margin-top:20px}
+  .gbtn:hover{background:var(--pink);color:var(--bg)}
+  .scorebar{display:flex;gap:10px;margin-top:26px;flex-wrap:wrap}
+  .player{display:flex;align-items:center;gap:9px;background:var(--l2);border:1px solid rgba(255,43,214,.28);border-radius:6px;padding:6px 14px 6px 6px;font-size:.85rem}
+  .player .dot{width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,var(--pink),var(--cyan));color:var(--bg);display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono';font-size:.68rem;font-weight:700}
+  .player .pts{font-family:'JetBrains Mono';color:var(--cyan);font-size:.78rem}
+  @media(max-width:820px){.grid,.vinyl-row{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="tag">DIRECTION <b>C</b> · HYBRIDE ASSUMÉ</div>
+<div class="rule">RÈGLE : écrans <i>utilitaires</i> = sobre · écran de <b>jeu</b> = néon (le fun s'allume)</div>
+
+<!-- UTILITY = SOBRE -->
+<section class="modes">
+  <div class="wrap">
+    <span class="badge-sobre">ÉCRAN UTILITAIRE → SOBRE</span>
+    <h1>Comment tu veux jouer ?</h1>
+    <p class="sub">Les écrans de navigation restent calmes et lisibles. Pas de bruit visuel avant le jeu.</p>
+    <div class="grid">
+      <div class="card"><div class="ico">◎</div><h3>Avec des amis</h3><p>Crée une salle, partage le code, jouez en temps réel jusqu'à 8.</p><div class="meta"><span class="pill on">Multi</span><span class="pill">3 rounds</span></div></div>
+      <div class="card"><div class="ico">▣</div><h3>En événement</h3><p>Un écran principal, les participants rejoignent depuis leur tel.</p><div class="meta"><span class="pill on">Live</span><span class="pill">Présentateur</span></div></div>
+      <div class="card"><div class="ico">◈</div><h3>Mode streamer</h3><p>Joue avec ton chat. Chat, streamer ou les deux.</p><div class="meta"><span class="pill on">Twitch</span><span class="pill">Beta</span></div></div>
+      <div class="card"><div class="ico">►</div><h3>Solo</h3><p>Toi, une playlist, le chrono. Entraîne ton oreille.</p><div class="meta"><span class="pill on">Solo</span><span class="pill">Rapide</span></div></div>
+    </div>
+    <div class="cta"><button class="btn">Lancer une partie</button><button class="btn ghost">↓ Voir l'écran de jeu</button></div>
+  </div>
+</section>
+
+<!-- GAME = NÉON -->
+<section class="game">
+  <div class="wrap">
+    <span class="badge-neon">ÉCRAN DE JEU → NÉON</span>
+    <h1 style="font-size:clamp(2rem,5vw,3rem)">Devine le titre</h1>
+    <div class="vinyl-row">
+      <div class="vinyl"></div>
+      <div class="panel">
+        <div class="timer"><span class="label" style="color:var(--cyan)">Temps restant</span><span class="big">0:14</span></div>
+        <div class="field"><input placeholder="Titre du morceau"></div>
+        <div class="field"><input placeholder="Artiste"></div>
+        <div class="field"><span class="label" style="display:block;margin-bottom:8px;color:var(--pink)">Qui l'a ajouté ?</span>
+          <div class="avatars"><div class="av">TY</div><div class="av sel">LU</div><div class="av">MA</div><div class="av">Jo</div><div class="av">+3</div></div>
+        </div>
+        <button class="gbtn">Valider ma réponse</button>
+      </div>
+    </div>
+    <div class="scorebar">
+      <div class="player"><span class="dot">TY</span> Tym <span class="pts">240</span></div>
+      <div class="player"><span class="dot">LU</span> Lucie <span class="pts">210</span></div>
+      <div class="player"><span class="dot">MA</span> Marc <span class="pts">180</span></div>
+      <div class="player"><span class="dot">JO</span> Jo <span class="pts">150</span></div>
+      <div class="player"><span class="dot">SA</span> Sarah <span class="pts">120</span></div>
+    </div>
+  </div>
+</section>
+</body>
+</html>
