@@ -70,21 +70,10 @@ export default function RootLayout({
         />
       </head>
       <body className={`${spaceGrotesk.variable} ${jetbrainsMono.variable} ${audiowide.variable} font-sans antialiased min-h-screen`}>
-        {/* Synthwave background — sun + horizon glow above the grid (grid itself
-            is drawn by body::after in globals.css). */}
+        {/* Sober base background. Game screens add their own neon via
+            .neon-stage; utility pages stay on this near-black base. */}
         <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
-          <div className="absolute inset-0 bg-[#0a0014]" />
-          {/* "Sun" disc at horizon */}
-          <div
-            className="absolute left-1/2 -translate-x-1/2 bottom-[40vh] w-[420px] h-[420px] rounded-full"
-            style={{
-              background:
-                "radial-gradient(circle, rgba(255,46,200,0.55) 0%, rgba(168,85,247,0.25) 35%, transparent 65%)",
-              filter: "blur(8px)",
-            }}
-          />
-          {/* Top atmosphere wash */}
-          <div className="absolute top-0 left-0 right-0 h-[40vh] bg-[radial-gradient(ellipse_at_top,rgba(168,85,247,0.18),transparent_70%)]" />
+          <div className="absolute inset-0 bg-[#09090b]" />
         </div>
         <ThemeProvider>
           <ModeProvider>

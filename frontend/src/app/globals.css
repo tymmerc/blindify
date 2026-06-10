@@ -123,6 +123,22 @@
   /* ========== Neon arcade utilities ========== */
 
   /* Glowing text — arcade signage */
+  /* Subtle technical grid for sober utility pages.
+     Faint white lines on near-black, masked to fade at the edges. */
+  .tech-grid::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.022) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.022) 1px, transparent 1px);
+    background-size: 64px 64px;
+    mask-image: radial-gradient(ellipse 85% 65% at 50% 38%, #000 28%, transparent 100%);
+    -webkit-mask-image: radial-gradient(ellipse 85% 65% at 50% 38%, #000 28%, transparent 100%);
+    pointer-events: none;
+  }
+
   /* ========== HYBRID: .neon-stage scope ==========
      Wrap a game/play screen in .neon-stage to "light up" the synthwave
      look. Outside it (utility/nav screens), the loud classes below

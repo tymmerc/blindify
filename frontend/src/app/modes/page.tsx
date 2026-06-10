@@ -4,7 +4,6 @@ import { Suspense, useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import type { Mode } from "@/contexts/ModeContext"
 import { useMode } from "@/contexts/ModeContext"
-import { MangaSpeakers } from "@/components/ui/MangaSpeakers"
 
 
 type ModeCard = {
@@ -102,33 +101,22 @@ function ModeSelectionContent() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-6 py-14 text-white">
-      <MangaSpeakers />
+    <div className="tech-grid flex min-h-screen items-center justify-center px-6 py-14 text-[#fafafa]">
       <div className="relative z-10 w-full max-w-5xl space-y-10">
-        <header className="flex flex-col gap-3 text-center">
-          <p className="font-mono text-xs uppercase tracking-[0.4em] text-[#00f7ff] text-glow-cyan">
-            &gt; Select_Mode
+        <header className="flex flex-col gap-3">
+          <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-[#71717a]">
+            Select · mode
           </p>
-          <h1
-            className="font-display text-5xl uppercase tracking-[0.06em] text-[#ff2ec8] text-glow-pink sm:text-6xl"
-            style={{ fontFamily: "var(--font-display)" }}
-          >
+          <h1 className="text-4xl font-semibold tracking-[-0.02em] text-[#fafafa] sm:text-5xl">
             Comment tu veux jouer ?
           </h1>
-          <p className="text-sm text-white/70">Choisis un mode, le reste suit.</p>
+          <p className="text-base text-[#71717a]">Choisis ton terrain. Le reste suit.</p>
         </header>
 
-        <div className="grid gap-5 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-3">
           {MODE_CARDS.map(card => {
             const isActive = selection === card.key
-            const isHover = !isActive && hovered === card.key
-            const borderColor = isActive
-              ? card.accent
-              : isHover
-                ? hexToRgba(card.accent, 0.55)
-                : hexToRgba(card.accent, 0.28)
-            const dotColor = isActive ? card.accent : hexToRgba(card.accent, isHover ? 0.5 : 0.22)
-            const glowIntensity = isActive ? 0.6 : isHover ? 0.35 : 0.12
+            const glyph = card.key === "friends" ? "◎" : card.key === "event" ? "▣" : "◈"
             return (
               <button
                 key={card.key}
@@ -136,78 +124,43 @@ function ModeSelectionContent() {
                 onDoubleClick={() => handleConfirm(card.key)}
                 onMouseEnter={() => setHovered(card.key)}
                 onMouseLeave={() => setHovered(current => (current === card.key ? null : current))}
-                className="group relative flex h-full flex-col justify-between rounded-xl border bg-[rgba(15,5,30,0.85)] p-6 text-left backdrop-blur-md transition-all duration-200 hover:-translate-y-1"
+                className="group relative flex h-full flex-col justify-between rounded-2xl border bg-[var(--app-surface)] p-6 text-left transition-all duration-200 hover:-translate-y-0.5"
                 style={{
-                  borderColor,
-                  boxShadow: `0 0 24px ${hexToRgba(card.accent, glowIntensity)}, inset 0 0 18px ${hexToRgba(card.accent, glowIntensity * 0.25)}`,
+                  borderColor: isActive ? hexToRgba(card.accent, 0.5) : "rgba(255,255,255,0.07)",
+                  boxShadow: isActive ? `inset 0 0 0 1px ${hexToRgba(card.accent, 0.35)}` : "none",
                 }}
               >
-                {/* Corner brackets - arcade frame feel */}
-                <span
-                  aria-hidden
-                  className="absolute left-2 top-2 h-3 w-3 border-l-2 border-t-2"
-                  style={{ borderColor: card.accent }}
-                />
-                <span
-                  aria-hidden
-                  className="absolute right-2 top-2 h-3 w-3 border-r-2 border-t-2"
-                  style={{ borderColor: card.accent }}
-                />
-                <span
-                  aria-hidden
-                  className="absolute bottom-2 left-2 h-3 w-3 border-b-2 border-l-2"
-                  style={{ borderColor: card.accent }}
-                />
-                <span
-                  aria-hidden
-                  className="absolute bottom-2 right-2 h-3 w-3 border-b-2 border-r-2"
-                  style={{ borderColor: card.accent }}
-                />
-
-                <div className="space-y-3">
+                <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-white/50">[ Mode ]</div>
-                    <div className="flex items-center gap-2">
-                      {card.wip && (
-                        <span className="rounded-sm bg-white/[0.08] px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.15em] text-white/60">
-                          Bientot
-                        </span>
-                      )}
-                      <span
-                        aria-hidden
-                        className="h-2.5 w-2.5 rounded-full transition-all"
-                        style={{
-                          background: dotColor,
-                          boxShadow: isActive ? `0 0 12px ${card.accent}, 0 0 4px ${card.accent}` : `0 0 6px ${dotColor}`,
-                        }}
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <h2
-                      className="font-display text-xl uppercase tracking-[0.04em]"
-                      style={{
-                        color: card.accent,
-                        textShadow: `0 0 8px ${hexToRgba(card.accent, 0.7)}, 0 0 16px ${hexToRgba(card.accent, 0.4)}`,
-                        fontFamily: "var(--font-display)",
-                      }}
+                    <span
+                      aria-hidden
+                      className="flex h-10 w-10 items-center justify-center rounded-[10px] text-lg"
+                      style={{ background: hexToRgba(card.accent, 0.14), color: card.accent }}
                     >
+                      {glyph}
+                    </span>
+                    {card.wip && (
+                      <span className="rounded-full border border-white/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-[#71717a]">
+                        Bientôt
+                      </span>
+                    )}
+                  </div>
+                  <div className="space-y-1.5">
+                    <h2 className="text-lg font-semibold tracking-[-0.01em] text-[#fafafa]">
                       {card.title}
                     </h2>
-                    <p className="text-sm text-white/70">{card.subtitle}</p>
+                    <p className="text-sm leading-relaxed text-[#71717a]">{card.subtitle}</p>
                   </div>
                 </div>
-                <div className="mt-4 flex items-center justify-between">
-                  <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-white/50">// posture</span>
+                <div className="mt-5 flex items-center gap-2">
                   <span
-                    className="rounded-sm px-3 py-1 font-mono text-[11px] uppercase tracking-[0.12em] text-white"
-                    style={{
-                      background: hexToRgba(card.accent, isActive ? 0.25 : 0.12),
-                      border: `1px solid ${card.accent}`,
-                      boxShadow: `inset 0 0 8px ${hexToRgba(card.accent, 0.3)}`,
-                    }}
+                    className="rounded-full border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em]"
+                    style={{ borderColor: hexToRgba(card.accent, 0.4), color: card.accent }}
                   >
                     {card.posture}
+                  </span>
+                  <span className="rounded-full border border-white/[0.07] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-[#71717a]">
+                    {card.key === "friends" ? "Multi" : card.key === "event" ? "Live" : "Twitch"}
                   </span>
                 </div>
               </button>
@@ -216,21 +169,18 @@ function ModeSelectionContent() {
         </div>
 
         <div className="flex items-center justify-between gap-4">
-          <div className="text-sm text-white/60">Tu peux changer de mode quand tu veux.</div>
+          <div className="text-sm text-[#71717a]">Tu peux changer de mode quand tu veux.</div>
           <button
             type="button"
             onClick={() => handleConfirm()}
             disabled={!selection}
-            className="inline-flex items-center gap-2 rounded-md border-2 px-6 py-2.5 font-display text-sm uppercase tracking-[0.15em] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            className="inline-flex items-center gap-2 rounded-xl px-7 py-3 text-sm font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-40"
             style={{
-              borderColor: activeCard ? activeCard.accent : "rgba(255,255,255,0.2)",
-              color: activeCard ? activeCard.accent : "rgba(255,255,255,0.8)",
-              boxShadow: activeCard ? `0 0 18px ${hexToRgba(activeCard.accent, 0.45)}, inset 0 0 12px ${hexToRgba(activeCard.accent, 0.15)}` : "none",
-              textShadow: activeCard ? `0 0 6px ${hexToRgba(activeCard.accent, 0.7)}` : "none",
-              fontFamily: "var(--font-display)",
+              background: selection ? "#fafafa" : "rgba(255,255,255,0.06)",
+              color: selection ? "#09090b" : "rgba(255,255,255,0.5)",
             }}
           >
-            &gt; Valider
+            Lancer une partie
           </button>
         </div>
 
@@ -248,7 +198,7 @@ function ModeSelectionContent() {
         <button
           type="button"
           onClick={() => setShowHelp(h => !h)}
-          className="fixed bottom-6 left-6 rounded-sm border border-white/20 bg-[rgba(15,5,30,0.7)] px-4 py-2 font-mono text-[11px] uppercase tracking-[0.15em] text-white/80 backdrop-blur transition hover:border-[#00f7ff] hover:text-[#00f7ff]"
+          className="fixed bottom-6 left-6 rounded-lg border border-white/10 bg-[var(--app-surface)] px-4 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-[#71717a] backdrop-blur transition hover:border-white/30 hover:text-[#fafafa]"
         >
           {showHelp ? "[ X ] Fermer" : "[ ? ] Aide"}
         </button>
