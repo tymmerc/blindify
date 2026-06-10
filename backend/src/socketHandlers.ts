@@ -559,6 +559,8 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
     const tick = setInterval(() => {
       socket.emit("server:tick", { serverTimestamp: Date.now() });
     }, 5000);
+    // A heartbeat must never keep the process alive on its own.
+    tick.unref?.();
 
     socket.on("disconnect", () => {
       clearInterval(tick);

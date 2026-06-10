@@ -587,11 +587,23 @@ describe('gamesController', () => {
       await gamesController.history(req, res);
 
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(
+      // Controller maps raw DB rows into a richer history DTO
+      // (totalRounds, createdAt, score, tracks, ...) rather than echoing rows.
+      const payload = (res.json as jest.Mock).mock.calls[0][0];
+      expect(payload.success).toBe(true);
+      expect(payload.data.games).toHaveLength(2);
+      expect(payload.data.games[0]).toEqual(
         expect.objectContaining({
-          success: true,
-          data: { sessions: sessionRows },
+          id: 1,
+          mode: 'solo',
+          difficulty: 'normal',
+          state: 'finished',
+          totalRounds: 10,
+          createdAt: '2025-06-01T00:00:00Z',
         })
+      );
+      expect(payload.data.games[1]).toEqual(
+        expect.objectContaining({ id: 2, totalRounds: 15, state: 'in_progress' })
       );
     });
 
@@ -610,7 +622,7 @@ describe('gamesController', () => {
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({
           success: true,
-          data: { sessions: [] },
+          data: { games: [] },
         })
       );
     });
@@ -637,7 +649,11 @@ describe('gamesController', () => {
       const req = mockReq();
       const res = mockRes();
 
-      await expect(gamesController.history(req, res)).rejects.toThrow('Connection refused');
+      // Controller catches DB errors internally and returns a 500 envelope
+      // rather than letting the rejection propagate.
+      await gamesController.history(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
     });
   });
 

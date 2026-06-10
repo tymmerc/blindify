@@ -119,8 +119,9 @@ export function broadcastGameOver(io: IOServer, roomCode: string) {
   emitGameOver(io, snapshot);
   revealTimers.delete(roomCode);
   clearGame(roomCode);
-  // Clean up the guard after a short delay to avoid memory leak
-  setTimeout(() => finishedRooms.delete(roomCode), 10_000);
+  // Clean up the guard after a short delay to avoid memory leak.
+  // unref so this housekeeping timer never keeps the process alive.
+  setTimeout(() => finishedRooms.delete(roomCode), 10_000).unref?.();
 }
 
 export function clearRevealTimer(roomCode: string) {
