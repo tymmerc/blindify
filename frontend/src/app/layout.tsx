@@ -1,6 +1,6 @@
 import type React from "react"
 import type { Metadata } from "next"
-import { Space_Grotesk, JetBrains_Mono, Audiowide } from "next/font/google"
+import { Karla, JetBrains_Mono, Fraunces } from "next/font/google"
 import "./globals.css"
 import "@/styles/theme-variables.css"
 
@@ -9,7 +9,7 @@ import { ModeProvider } from "@/contexts/ModeContext"
 import { ThemeProvider } from "@/contexts/ThemeContext"
 import { publicPath } from "@/lib/publicPath"
 
-const spaceGrotesk = Space_Grotesk({
+const karla = Karla({
   subsets: ["latin"],
   variable: "--font-sans",
   display: "swap",
@@ -21,9 +21,10 @@ const jetbrainsMono = JetBrains_Mono({
   display: "swap",
 })
 
-const audiowide = Audiowide({
+const fraunces = Fraunces({
   subsets: ["latin"],
-  weight: "400",
+  axes: ["opsz"],
+  style: ["normal", "italic"],
   variable: "--font-display",
   display: "swap",
 })
@@ -31,7 +32,7 @@ const audiowide = Audiowide({
 export const metadata: Metadata = {
   title: "Blindify — Jouez votre musique autrement",
   description:
-    "Connectez vos services de musique préférés et défiez vos amis dans un blind test immersif aux couleurs néon.",
+    "Connectez vos services de musique préférés et défiez vos amis dans un blind test qui sent le vinyle et le café.",
   icons: {
     icon: [
       { url: publicPath("/favicon.ico") },
@@ -43,7 +44,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Blindify — Jouez votre musique autrement",
     description:
-      "Connectez vos services de musique préférés et défiez vos amis dans un blind test immersif aux couleurs néon.",
+      "Connectez vos services de musique préférés et défiez vos amis dans un blind test qui sent le vinyle et le café.",
     type: "website",
     locale: "fr_FR",
   },
@@ -51,7 +52,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Blindify — Jouez votre musique autrement",
     description:
-      "Connectez vos services de musique préférés et défiez vos amis dans un blind test immersif aux couleurs néon.",
+      "Connectez vos services de musique préférés et défiez vos amis dans un blind test qui sent le vinyle et le café.",
   },
 }
 
@@ -69,11 +70,10 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className={`${spaceGrotesk.variable} ${jetbrainsMono.variable} ${audiowide.variable} font-sans antialiased min-h-screen`}>
-        {/* Sober base background. Game screens add their own neon via
-            .neon-stage; utility pages stay on this near-black base. */}
+      <body className={`${karla.variable} ${jetbrainsMono.variable} ${fraunces.variable} font-sans antialiased min-h-screen`}>
+        {/* Club analogique : base papier creme, le grain est pose par globals.css */}
         <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
-          <div className="absolute inset-0 bg-[#09090b]" />
+          <div className="absolute inset-0 bg-[#f4ecdb]" />
         </div>
         <ThemeProvider>
           <ModeProvider>

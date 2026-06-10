@@ -4,33 +4,33 @@
 
 :root {
   /* ============================================================
-     HYBRID DA — sober editorial dark is the DEFAULT (utility/nav
-     screens). The neon synthwave look is opt-in via .neon-stage
-     (game/play screens only). See maquettes/direction-C-hybride.html
+     CLUB ANALOGIQUE — la DA de Blindify.
+     Papier creme, encre espresso, terracotta, or. Serif Fraunces
+     pour le display, Karla pour l'UI. Grain papier global.
+     Reference canonique : maquettes/explore-analog.html
      ============================================================ */
-  --app-bg: #09090b;
-  --app-surface: #111113;
-  --app-surface-strong: rgba(255, 255, 255, 0.025);
-  --app-surface-well: #0b0b0d;
-  --app-border: rgba(255, 255, 255, 0.08);
-  --app-border-soft: rgba(255, 255, 255, 0.05);
-  --app-border-hover: rgba(255, 255, 255, 0.18);
-  --app-primary: #8b5cf6;
-  --app-primary-soft: rgba(139, 92, 246, 0.14);
-  --app-accent: #8b5cf6;
-  --app-foreground: #fafafa;
-  --app-muted: #71717a;
-  --app-card-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  --app-bg: #f4ecdb;
+  --app-surface: #ece1c8;
+  --app-surface-strong: #ece1c8;
+  --app-surface-well: #efe5d0;
+  --app-border: rgba(46, 32, 20, 0.22);
+  --app-border-soft: rgba(46, 32, 20, 0.12);
+  --app-border-hover: rgba(198, 81, 51, 0.6);
+  --app-primary: #c65133;
+  --app-primary-soft: rgba(198, 81, 51, 0.14);
+  --app-accent: #e0a32e;
+  --app-foreground: #2e2014;
+  --app-muted: #8a7558;
+  --app-card-shadow: 4px 4px 0 rgba(46, 32, 20, 0.16);
   --app-transition: all 160ms ease;
 
-  /* Neon shortcuts — only "light up" inside .neon-stage */
-  --neon-pink: #ff2ec8;
-  --neon-cyan: #00f7ff;
-  --neon-purple: #a855f7;
-  --neon-yellow: #ffea00;
-  color-scheme: dark;
+  /* Raccourcis palette */
+  --ink: #2e2014;
+  --terra: #c65133;
+  --gold: #e0a32e;
+  --paper: #f4ecdb;
+  --paper-deep: #ece1c8;
+  color-scheme: light;
 }
 
 @layer base {
@@ -48,20 +48,24 @@
   body {
     background: var(--app-bg);
     color: var(--app-foreground);
-    font-family: var(--font-sans, "Space Grotesk", system-ui, sans-serif);
-    letter-spacing: -0.01em;
+    font-family: var(--font-sans, "Karla", system-ui, sans-serif);
+    letter-spacing: 0;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     position: relative;
     overflow-x: hidden;
   }
 
-  /* Utility/nav screens stay sober: no global synthwave background.
-     The neon grid + horizon glow live in .neon-stage (game screens). */
-
-  @keyframes gridMove {
-    0% { background-position: 0 0; }
-    100% { background-position: 0 40px; }
+  /* Grain papier global — la signature de la DA. */
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    pointer-events: none;
+    opacity: 0.5;
+    mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='0.06'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)'/%3E%3C/svg%3E");
   }
 
   a {
@@ -71,17 +75,18 @@
   }
 
   a:hover {
-    color: inherit;
+    color: var(--terra);
   }
 
   h1, h2, h3, h4 {
-    font-weight: 700;
-    letter-spacing: -0.03em;
+    font-family: var(--font-display, "Fraunces", serif);
+    font-weight: 600;
+    letter-spacing: -0.01em;
   }
 
   ::selection {
-    background: rgba(139, 92, 246, 0.35);
-    color: #fafafa;
+    background: rgba(198, 81, 51, 0.3);
+    color: var(--ink);
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -95,285 +100,147 @@
 }
 
 @layer components {
-  /* ========== 3-Layer System (synthwave) ========== */
-  /* L0: page bg = #0a0014 with grid (body) */
-  /* L1: cards/panels = --app-surface-strong with neon border */
-  /* L2: inputs/wells = --app-surface-well */
+  /* ========== Cartes papier (3 niveaux) ==========
+     L0 : fond papier creme (body)
+     L1 : cartes = papier profond, bordure encre, ombre dure decalee
+     L2 : puits/inputs = papier chaud plus clair, bordure encre fine */
 
   .glass-panel {
     position: relative;
-    background: var(--app-surface-strong);
-    border: 1px solid var(--app-border);
-    border-radius: 12px;
-    box-shadow:
-      var(--app-card-shadow),
-      0 0 20px rgba(255, 46, 200, 0.06);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    transition: border-color 200ms ease, box-shadow 200ms ease;
+    background: var(--app-surface);
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    box-shadow: var(--app-card-shadow);
+    transition: var(--app-transition);
   }
 
   .glass-panel:hover {
-    border-color: rgba(0, 247, 255, 0.4);
-    box-shadow:
-      var(--app-card-shadow),
-      0 0 28px rgba(0, 247, 255, 0.18);
-  }
-
-  /* ========== Neon arcade utilities ========== */
-
-  /* Glowing text — arcade signage */
-  /* Subtle technical grid for sober utility pages.
-     Faint white lines on near-black, masked to fade at the edges. */
-  .tech-grid::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    z-index: -1;
-    background-image:
-      linear-gradient(rgba(255, 255, 255, 0.022) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255, 255, 255, 0.022) 1px, transparent 1px);
-    background-size: 64px 64px;
-    mask-image: radial-gradient(ellipse 85% 65% at 50% 38%, #000 28%, transparent 100%);
-    -webkit-mask-image: radial-gradient(ellipse 85% 65% at 50% 38%, #000 28%, transparent 100%);
-    pointer-events: none;
-  }
-
-  /* ========== HYBRID: .neon-stage scope ==========
-     Wrap a game/play screen in .neon-stage to "light up" the synthwave
-     look. Outside it (utility/nav screens), the loud classes below
-     degrade to the sober editorial style automatically. */
-  .neon-stage {
-    position: relative;
-    isolation: isolate;
-    background: var(--app-bg);
-  }
-  .neon-stage::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    z-index: -2;
-    background:
-      radial-gradient(ellipse 100% 60% at 50% 100%, rgba(255, 46, 200, 0.18) 0%, transparent 55%),
-      radial-gradient(ellipse 70% 50% at 50% 100%, rgba(0, 247, 255, 0.12) 0%, transparent 50%),
-      linear-gradient(to bottom, transparent 0%, rgba(255, 46, 200, 0.05) 50%, transparent 100%);
-    pointer-events: none;
-  }
-  .neon-stage::after {
-    content: "";
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    height: 50vh;
-    z-index: -1;
-    background-image:
-      linear-gradient(to right, rgba(255, 46, 200, 0.32) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(0, 247, 255, 0.28) 1px, transparent 1px);
-    background-size: 40px 40px;
-    background-position: center bottom;
-    transform: perspective(400px) rotateX(60deg);
-    transform-origin: bottom;
-    animation: gridMove 8s linear infinite;
-    mask-image: linear-gradient(to top, rgba(0, 0, 0, 0.9) 10%, transparent 100%);
-    -webkit-mask-image: linear-gradient(to top, rgba(0, 0, 0, 0.9) 10%, transparent 100%);
-    pointer-events: none;
-  }
-
-  /* Glow text: sober by default, neon only inside .neon-stage */
-  .text-glow { text-shadow: none; }
-  .text-glow-pink { color: var(--app-foreground); text-shadow: none; }
-  .text-glow-cyan { color: var(--app-foreground); text-shadow: none; }
-
-  .neon-stage .text-glow {
-    text-shadow: 0 0 4px currentColor, 0 0 10px currentColor, 0 0 22px currentColor;
-  }
-  .neon-stage .text-glow-pink {
-    color: var(--neon-pink);
-    text-shadow: 0 0 4px var(--neon-pink), 0 0 12px var(--neon-pink), 0 0 24px rgba(255, 46, 200, 0.6);
-  }
-  .neon-stage .text-glow-cyan {
-    color: var(--neon-cyan);
-    text-shadow: 0 0 4px var(--neon-cyan), 0 0 12px var(--neon-cyan), 0 0 24px rgba(0, 247, 255, 0.6);
-  }
-
-  /* Scanlines overlay only inside the game stage */
-  .scanlines {
-    position: relative;
-    overflow: hidden;
-  }
-  .neon-stage .scanlines::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background: repeating-linear-gradient(
-      to bottom,
-      transparent 0,
-      transparent 2px,
-      rgba(0, 0, 0, 0.25) 3px,
-      transparent 4px
-    );
-    mix-blend-mode: overlay;
-    opacity: 0.4;
-    z-index: 10;
-  }
-
-  /* Primary action button.
-     Sober (white-on-dark) by default, neon outline inside .neon-stage. */
-  .btn-neon {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    padding: 0.85rem 1.6rem;
-    border-radius: 10px;
-    font-weight: 600;
-    letter-spacing: 0.02em;
-    color: #09090b;
-    background: #fafafa;
-    border: 1px solid transparent;
-    box-shadow: none;
-    text-shadow: none;
-    transition: all 180ms ease;
-  }
-  .btn-neon:hover { transform: translateY(-1px); background: #fff; }
-
-  .btn-neon-pink {
-    color: var(--app-foreground);
-    background: var(--app-primary-soft);
-    border-color: rgba(139, 92, 246, 0.4);
-    box-shadow: none;
-    text-shadow: none;
-  }
-  .btn-neon-pink:hover { background: rgba(139, 92, 246, 0.25); }
-
-  .neon-stage .btn-neon {
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--neon-cyan);
-    background: rgba(0, 247, 255, 0.06);
-    border: 1px solid var(--neon-cyan);
-    box-shadow: 0 0 14px rgba(0, 247, 255, 0.4), inset 0 0 10px rgba(0, 247, 255, 0.18);
-    text-shadow: 0 0 8px rgba(0, 247, 255, 0.7);
-  }
-  .neon-stage .btn-neon:hover {
-    background: rgba(0, 247, 255, 0.15);
-    box-shadow: 0 0 24px rgba(0, 247, 255, 0.7), inset 0 0 18px rgba(0, 247, 255, 0.3);
-  }
-  .neon-stage .btn-neon-pink {
-    color: var(--neon-pink);
-    background: rgba(255, 46, 200, 0.06);
-    border-color: var(--neon-pink);
-    box-shadow: 0 0 14px rgba(255, 46, 200, 0.45), inset 0 0 10px rgba(255, 46, 200, 0.2);
-    text-shadow: 0 0 8px rgba(255, 46, 200, 0.7);
-  }
-  .neon-stage .btn-neon-pink:hover {
-    background: rgba(255, 46, 200, 0.18);
-    box-shadow: 0 0 24px rgba(255, 46, 200, 0.8), inset 0 0 18px rgba(255, 46, 200, 0.3);
-  }
-
-  /* "Score popup" — arcade style number reveal */
-  .score-pop {
-    font-family: var(--font-display, "Audiowide", "Space Grotesk", sans-serif);
-    letter-spacing: 0.05em;
-    color: var(--neon-yellow);
-    text-shadow:
-      0 0 6px var(--neon-yellow),
-      0 0 18px var(--neon-yellow),
-      0 0 36px rgba(255, 234, 0, 0.6);
+    transform: translateY(-2px);
+    box-shadow: 5px 6px 0 rgba(46, 32, 20, 0.2);
   }
 
   .glass-panel-strong {
-    background: var(--app-surface-strong);
-    border: 1px solid var(--app-border);
-    border-radius: 18px;
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.04);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+    background: var(--app-surface);
+    border: 2px solid var(--ink);
+    border-radius: 10px;
+    box-shadow: 5px 5px 0 rgba(46, 32, 20, 0.18);
   }
 
   /* Legacy compat */
   .surface {
-    background: var(--app-surface-strong);
-    border: 1px solid var(--app-border);
-    border-radius: 16px;
+    background: var(--app-surface);
+    border: 1.5px solid var(--app-border);
+    border-radius: 10px;
     box-shadow: var(--app-card-shadow);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
   }
 
   .surface-strong {
-    background: var(--app-surface-strong);
-    border: 1px solid var(--app-border);
-    border-radius: 18px;
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+    background: var(--app-surface);
+    border: 2px solid var(--ink);
+    border-radius: 10px;
+    box-shadow: 5px 5px 0 rgba(46, 32, 20, 0.18);
   }
 
-  /* ========== Buttons ========== */
-  .btn-primary {
+  /* Anciennes classes neon/grille — degradent en analog, plus aucun glow. */
+  .tech-grid::before { content: none; }
+  .neon-stage { background: transparent; }
+  .neon-stage::before, .neon-stage::after { content: none; }
+  .text-glow { text-shadow: none; }
+  .text-glow-pink { color: var(--terra); text-shadow: none; }
+  .text-glow-cyan { color: var(--gold); text-shadow: none; }
+  .scanlines::after { content: none; }
+
+  /* ========== Boutons ========== */
+  /* Bouton principal : terracotta, ombre dure encre, enfonce au hover. */
+  .btn-neon,
+  .btn-primary,
+  .ma-btn-primary,
+  .uiverse-launch {
     position: relative;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    padding: 0.9rem 1.6rem;
-    border-radius: 12px;
-    font-weight: 600;
-    background: rgba(168, 85, 247, 0.12);
-    border: 1px solid rgba(168, 85, 247, 0.25);
-    color: #fafafa;
+    padding: 0.85rem 1.8rem;
+    border-radius: 6px;
+    font-family: var(--font-sans, "Karla", sans-serif);
+    font-weight: 700;
+    font-size: 0.95rem;
     letter-spacing: 0.02em;
-    transition: all 200ms ease;
+    color: var(--paper);
+    background: var(--terra);
+    border: 2px solid var(--ink);
+    box-shadow: 4px 4px 0 var(--ink);
+    text-shadow: none;
+    text-transform: none;
+    cursor: pointer;
+    transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
   }
 
-  .btn-primary:hover {
-    background: rgba(168, 85, 247, 0.2);
-    border-color: rgba(168, 85, 247, 0.4);
-    box-shadow: 0 0 20px rgba(168, 85, 247, 0.15);
+  .btn-neon:hover,
+  .btn-primary:hover,
+  .ma-btn-primary:hover,
+  .uiverse-launch:hover {
+    transform: translate(2px, 2px);
+    box-shadow: 2px 2px 0 var(--ink);
+    background: #b8492d;
+    color: var(--paper);
+  }
+
+  /* Variante secondaire : encre pleine. */
+  .btn-neon-pink {
+    color: var(--paper);
+    background: var(--ink);
+    border-color: var(--ink);
+    box-shadow: 4px 4px 0 rgba(46, 32, 20, 0.3);
+  }
+  .btn-neon-pink:hover {
+    background: #1d140b;
+    transform: translate(2px, 2px);
+    box-shadow: 2px 2px 0 rgba(46, 32, 20, 0.3);
+  }
+
+  .uiverse-launch svg { margin-right: 3px; transition: transform 0.25s ease; }
+  .uiverse-launch span { transition: transform 0.25s ease; }
+  .uiverse-launch:hover svg { transform: translateX(3px); }
+  .uiverse-launch:hover span { transform: translateX(3px); }
+
+  /* Score : chiffre serif, encre or. */
+  .score-pop {
+    font-family: var(--font-display, "Fraunces", serif);
+    font-weight: 700;
+    letter-spacing: 0;
+    color: var(--gold);
+    text-shadow: none;
   }
 
   .text-neon {
-    color: #a855f7;
+    color: var(--terra);
   }
 
   .text-label {
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
+    font-family: var(--font-sans, "Karla", sans-serif);
     font-size: 11px;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.22em;
     color: var(--app-muted);
   }
 
-  /* ========== Glow Effects ========== */
+  /* Carte avec liseret : bordure encre, accent terracotta au hover. */
   .glow-border {
     position: relative;
-    border-radius: 16px;
-    background: var(--app-surface-strong);
-    border: 1px solid var(--app-border);
+    border-radius: 10px;
+    background: var(--app-surface);
+    border: 1.5px solid var(--app-border);
     overflow: hidden;
     transition: all 200ms ease;
   }
 
-  .glow-border::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    box-shadow: inset 0 0 30px rgba(168, 85, 247, 0);
-    transition: box-shadow 300ms ease;
-    pointer-events: none;
-  }
+  .glow-border::after { content: none; }
 
   .glow-border:hover {
-    border-color: var(--app-border-hover);
-  }
-
-  .glow-border:hover::after {
-    box-shadow: inset 0 0 30px rgba(168, 85, 247, 0.06);
+    border-color: var(--terra);
   }
 }
 
@@ -386,8 +253,8 @@
     content: "";
     position: absolute;
     inset: 0;
-    background-image: linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+    background-image: linear-gradient(rgba(46, 32, 20, 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(46, 32, 20, 0.04) 1px, transparent 1px);
     background-size: 48px 48px;
     mask-image: radial-gradient(circle at center, rgba(255, 255, 255, 0.5), transparent 70%);
     pointer-events: none;
@@ -403,7 +270,7 @@
   }
 
   .pulse-glow {
-    animation: pulseGlow 3.4s ease-in-out infinite;
+    animation: none;
   }
 }
 
@@ -412,23 +279,23 @@
   50% { transform: translate3d(0, -12px, 0); }
 }
 
-@keyframes pulseGlow {
-  0%, 100% { box-shadow: 0 0 20px rgba(168, 85, 247, 0.2); }
-  50% { box-shadow: 0 0 35px rgba(168, 85, 247, 0.35); }
+/* Rotation vinyle — utilisable partout (platine, pochettes, loaders). */
+@keyframes vinyl-spin {
+  to { transform: rotate(360deg); }
 }
 
-/* ========== App Styles ========== */
+/* ========== App Styles (tokens legacy --ma-*) ========== */
 :root {
-  --ma-bg: #09090b;
-  --ma-surface: #111113;
-  --ma-surface-card: rgba(22, 30, 55, 0.85);
-  --ma-surface-well: rgba(12, 18, 35, 0.9);
-  --ma-border: rgba(255, 255, 255, 0.06);
-  --ma-border-strong: rgba(255, 255, 255, 0.12);
-  --ma-muted: #71717a;
-  --ma-text: #fafafa;
-  --ma-gradient: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);
-  --ma-shadow-strong: 0 12px 40px rgba(0, 0, 0, 0.5);
+  --ma-bg: #f4ecdb;
+  --ma-surface: #ece1c8;
+  --ma-surface-card: #ece1c8;
+  --ma-surface-well: #efe5d0;
+  --ma-border: rgba(46, 32, 20, 0.22);
+  --ma-border-strong: rgba(46, 32, 20, 0.55);
+  --ma-muted: #8a7558;
+  --ma-text: #2e2014;
+  --ma-gradient: #c65133;
+  --ma-shadow-strong: 5px 5px 0 rgba(46, 32, 20, 0.18);
 }
 
 body {
@@ -441,11 +308,10 @@ body {
 
 .ma-card {
   background: var(--ma-surface-card);
-  border: 1px solid var(--ma-border);
-  border-radius: 16px;
+  border: 1.5px solid var(--ma-border);
+  border-radius: 10px;
   padding: 20px;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  box-shadow: var(--app-card-shadow);
   transition: border-color 200ms ease;
 }
 .ma-card:hover { border-color: var(--ma-border-strong); }
@@ -453,61 +319,39 @@ body {
 .ma-stat-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
 .ma-stat-card {
   background: var(--ma-surface-card);
-  border: 1px solid var(--ma-border);
-  border-radius: 16px;
+  border: 1.5px solid var(--ma-border);
+  border-radius: 10px;
   padding: 24px;
-  backdrop-filter: blur(16px);
+  box-shadow: var(--app-card-shadow);
   transition: all 0.2s ease;
 }
-.ma-stat-card:hover { border-color: var(--ma-border-strong); box-shadow: 0 0 20px rgba(168, 85, 247, 0.08); }
+.ma-stat-card:hover { border-color: var(--terra); }
 
 .ma-stat-label {
-  font-family: var(--font-mono, "JetBrains Mono", monospace);
-  font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em;
+  font-family: var(--font-sans, "Karla", sans-serif);
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.2em;
   color: var(--ma-muted); margin-bottom: 8px;
 }
 
 .ma-stat-value {
-  font-size: 32px; font-weight: 700; letter-spacing: -0.03em;
-  background: var(--ma-gradient); -webkit-background-clip: text; color: transparent;
+  font-family: var(--font-display, "Fraunces", serif);
+  font-size: 32px; font-weight: 700; letter-spacing: -0.01em;
+  color: var(--ink);
 }
-
-.ma-btn-primary {
-  display: inline-flex; align-items: center; gap: 8px;
-  border: 1px solid rgba(168, 85, 247, 0.25); border-radius: 12px;
-  padding: 14px 32px; background: rgba(168, 85, 247, 0.12);
-  color: #fff; font-weight: 600; cursor: pointer; transition: all 0.2s ease;
-}
-.ma-btn-primary:hover {
-  background: rgba(168, 85, 247, 0.2); border-color: rgba(168, 85, 247, 0.4);
-  box-shadow: 0 0 20px rgba(168, 85, 247, 0.15); color: #fff;
-}
-
-.uiverse-launch {
-  display: inline-flex; align-items: center; gap: 6px;
-  font-family: inherit; cursor: pointer; font-weight: 600; font-size: 15px;
-  padding: 0.8em 1.3em 0.8em 0.95em; color: white;
-  background: rgba(168, 85, 247, 0.12); border: 1px solid rgba(168, 85, 247, 0.25);
-  letter-spacing: 0.02em; border-radius: 12px; transition: all 200ms ease;
-}
-.uiverse-launch svg { margin-right: 3px; transition: transform 0.25s ease; }
-.uiverse-launch span { transition: transform 0.25s ease; }
-.uiverse-launch:hover { background: rgba(168, 85, 247, 0.2); border-color: rgba(168, 85, 247, 0.4); box-shadow: 0 0 20px rgba(168, 85, 247, 0.15); }
-.uiverse-launch:hover svg { transform: translateX(3px); }
-.uiverse-launch:hover span { transform: translateX(3px); }
 
 .ma-quick {
-  background: var(--ma-gradient); border-radius: 16px; padding: 40px;
+  background: var(--terra); border: 2px solid var(--ink); border-radius: 10px; padding: 40px;
+  color: var(--paper);
   display: flex; justify-content: space-between; align-items: center;
   box-shadow: var(--ma-shadow-strong);
 }
 
 .ma-nav-bottom {
   position: fixed; inset: auto 0 0 0;
-  background: rgba(9, 9, 11, 0.9);
-  border-top: 1px solid var(--ma-border);
+  background: rgba(244, 236, 219, 0.94);
+  border-top: 2px solid var(--ink);
   padding: 6px 8px; z-index: 40;
-  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
 }
 
 .ma-nav-inner {
@@ -518,48 +362,49 @@ body {
 .ma-nav-item {
   display: flex; flex-direction: column; align-items: center;
   gap: 2px; padding: 5px 8px; color: var(--ma-muted);
-  border-radius: 10px; transition: all 0.2s ease;
+  border-radius: 8px; transition: all 0.2s ease;
 }
-.ma-nav-item.active, .ma-nav-item:hover { color: #fff; background: rgba(168, 85, 247, 0.1); }
+.ma-nav-item.active, .ma-nav-item:hover { color: var(--ink); background: var(--app-primary-soft); }
 
 .ma-pill {
-  display: inline-block; background: rgba(168, 85, 247, 0.08);
-  border: 1px solid rgba(168, 85, 247, 0.2); border-radius: 20px;
-  padding: 8px 12px; font-family: var(--font-mono, "JetBrains Mono", monospace);
-  font-size: 11px; letter-spacing: 0.05em; color: var(--app-primary);
+  display: inline-block; background: transparent;
+  border: 1.5px solid var(--ink); border-radius: 999px;
+  padding: 7px 12px; font-family: var(--font-sans, "Karla", sans-serif);
+  font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--ink);
 }
 
 /* ========== Game Layout ========== */
 .game-layout { display: grid; grid-template-columns: 1fr 320px; min-height: 100vh; background: var(--ma-bg); }
 .sidebar-right {
-  background: var(--ma-surface-card); border-left: 1px solid var(--ma-border);
-  display: flex; flex-direction: column; backdrop-filter: blur(16px);
+  background: var(--ma-surface-card); border-left: 2px solid var(--ink);
+  display: flex; flex-direction: column;
 }
-.sidebar-header { padding: 24px 20px; border-bottom: 1px solid var(--ma-border); }
+.sidebar-header { padding: 24px 20px; border-bottom: 1.5px solid var(--ma-border); }
 .sidebar-title {
-  font-family: var(--font-mono, "JetBrains Mono", monospace);
-  font-size: 11px; font-weight: 600; text-transform: uppercase;
-  letter-spacing: 0.1em; color: var(--ma-muted);
+  font-family: var(--font-sans, "Karla", sans-serif);
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.22em; color: var(--ma-muted);
 }
 .rounds-list { flex: 1; overflow-y: auto; padding: 20px; }
 .round-item {
-  background: rgba(22, 30, 55, 0.4); border: 1px solid var(--ma-border);
-  border-radius: 12px; padding: 16px; margin-bottom: 12px; transition: all 200ms ease;
+  background: var(--ma-surface-well); border: 1.5px solid var(--ma-border);
+  border-radius: 8px; padding: 16px; margin-bottom: 12px; transition: all 200ms ease;
 }
-.round-item.current { border-color: var(--ma-border-strong); background: rgba(22, 30, 55, 0.6); }
-.round-item.correct { border-color: rgba(34, 197, 94, 0.25); background: rgba(34, 197, 94, 0.05); }
-.round-item.incorrect { border-color: rgba(248, 113, 113, 0.25); background: rgba(248, 113, 113, 0.05); }
+.round-item.current { border-color: var(--ink); background: var(--paper); }
+.round-item.correct { border-color: rgba(125, 148, 113, 0.7); background: rgba(125, 148, 113, 0.12); }
+.round-item.incorrect { border-color: rgba(198, 81, 51, 0.55); background: rgba(198, 81, 51, 0.08); }
 .round-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
 .round-number {
-  font-family: var(--font-mono, "JetBrains Mono", monospace);
-  font-size: 11px; font-weight: 600; letter-spacing: 0.05em; color: var(--ma-muted);
+  font-family: var(--font-sans, "Karla", sans-serif);
+  font-size: 11px; font-weight: 700; letter-spacing: 0.12em; color: var(--ma-muted);
 }
 .round-status {
-  font-family: var(--font-mono, "JetBrains Mono", monospace);
-  font-size: 10px; letter-spacing: 0.05em; padding: 4px 8px;
-  border-radius: 6px; background: rgba(255, 255, 255, 0.04);
+  font-family: var(--font-sans, "Karla", sans-serif);
+  font-size: 10px; font-weight: 700; letter-spacing: 0.08em; padding: 4px 8px;
+  border-radius: 4px; background: rgba(46, 32, 20, 0.07);
 }
-.round-status.correct { background: rgba(34, 197, 94, 0.15); color: #22c55e; }
-.round-status.incorrect { background: rgba(248, 113, 113, 0.15); color: #f87171; }
-.round-track { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+.round-status.correct { background: rgba(125, 148, 113, 0.2); color: #4f6a45; }
+.round-status.incorrect { background: rgba(198, 81, 51, 0.16); color: var(--terra); }
+.round-track { font-size: 13px; font-weight: 700; margin-bottom: 2px; }
 .round-artist { font-size: 12px; color: var(--ma-muted); }

@@ -19,76 +19,76 @@ const config: Config = {
     },
     extend: {
       fontFamily: {
-        sans: ["var(--font-sans)", "Space Grotesk", "system-ui", "sans-serif"],
+        sans: ["var(--font-sans)", "Karla", "system-ui", "sans-serif"],
         mono: ["var(--font-mono)", "JetBrains Mono", "monospace"],
-        display: ["var(--font-display)", "Audiowide", "Space Grotesk", "sans-serif"],
+        display: ["var(--font-display)", "Fraunces", "Georgia", "serif"],
       },
       colors: {
-        // Synthwave neon palette. Dark base, electric accents.
-        background: "#0a0014",
-        foreground: "#f8f0ff",
-        border: "rgba(255, 90, 240, 0.18)",
-        ring: "rgba(0, 247, 255, 0.7)",
+        // Club analogique : papier creme, encre espresso, terracotta, or.
+        background: "#f4ecdb",
+        foreground: "#2e2014",
+        border: "rgba(46, 32, 20, 0.22)",
+        ring: "rgba(198, 81, 51, 0.55)",
         primary: {
-          DEFAULT: "#ff2ec8", // hot magenta
-          foreground: "#0a0014",
+          DEFAULT: "#c65133", // terracotta
+          foreground: "#f4ecdb",
         },
         secondary: {
-          DEFAULT: "#00f7ff", // cyan neon
-          foreground: "#0a0014",
+          DEFAULT: "#e0a32e", // or
+          foreground: "#2e2014",
         },
         accent: {
-          DEFAULT: "#a855f7", // electric purple
-          foreground: "#0a0014",
+          DEFAULT: "#c65133",
+          foreground: "#f4ecdb",
         },
         destructive: {
-          DEFAULT: "#ff3868",
-          foreground: "#fff",
+          DEFAULT: "#9c2f1d",
+          foreground: "#f4ecdb",
         },
         muted: {
-          DEFAULT: "#170028",
-          foreground: "#9b7fb8",
+          DEFAULT: "#ece1c8",
+          foreground: "#8a7558",
         },
         popover: {
-          DEFAULT: "rgba(15, 5, 30, 0.95)",
-          foreground: "#f8f0ff",
+          DEFAULT: "#f4ecdb",
+          foreground: "#2e2014",
         },
         card: {
-          DEFAULT: "rgba(35, 8, 65, 0.7)",
-          foreground: "#f8f0ff",
+          DEFAULT: "#ece1c8",
+          foreground: "#2e2014",
         },
         surface: {
-          DEFAULT: "#0f051e",
-          strong: "rgba(35, 8, 65, 0.75)",
-          well: "rgba(15, 5, 30, 0.92)",
+          DEFAULT: "#ece1c8",
+          strong: "#e6d9bd",
+          well: "#efe5d0",
         },
-        // Direct neon colors for explicit usage
+        // Anciennes couleurs "neon" remappees sur la palette chaude
+        // (les classes text-neon-pink etc. degradent proprement).
         neon: {
-          pink: "#ff2ec8",
-          cyan: "#00f7ff",
-          purple: "#a855f7",
-          yellow: "#ffea00",
-          green: "#00ff9d",
+          pink: "#c65133",
+          cyan: "#7d9471",
+          purple: "#e0a32e",
+          yellow: "#e0a32e",
+          green: "#7d9471",
         },
       },
       borderRadius: {
-        lg: "1.25rem",
-        md: "0.75rem",
-        sm: "0.5rem",
+        lg: "0.75rem",
+        md: "0.5rem",
+        sm: "0.25rem",
       },
       boxShadow: {
-        // Neon glows much stronger than before for arcade feel.
-        glow: "0 0 30px rgba(255, 46, 200, 0.45), 0 0 8px rgba(255, 46, 200, 0.6)",
-        "glow-sm": "0 0 14px rgba(255, 46, 200, 0.4)",
-        "glow-cyan": "0 0 30px rgba(0, 247, 255, 0.5), 0 0 8px rgba(0, 247, 255, 0.7)",
-        "glow-purple": "0 0 30px rgba(168, 85, 247, 0.5), 0 0 8px rgba(168, 85, 247, 0.7)",
-        "glow-yellow": "0 0 30px rgba(255, 234, 0, 0.5)",
-        "glow-pink": "0 0 30px rgba(255, 46, 200, 0.5)",
-        "glow-orange": "0 0 30px rgba(249, 115, 22, 0.5)",
-        "glow-violet": "0 0 30px rgba(139, 92, 246, 0.5)",
-        // Inset glow for sunken "screen" feel
-        "neon-inset": "inset 0 0 30px rgba(255, 46, 200, 0.15), inset 0 0 4px rgba(0, 247, 255, 0.3)",
-        glass: "0 8px 32px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 46, 200, 0.15)",
+        // Ombres dures decalees, esprit print/pochette de disque.
+        glow: "4px 4px 0 rgba(46, 32, 20, 0.18)",
+        "glow-sm": "3px 3px 0 rgba(46, 32, 20, 0.15)",
+        "glow-cyan": "4px 4px 0 rgba(125, 148, 113, 0.4)",
+        "glow-purple": "4px 4px 0 rgba(224, 163, 46, 0.4)",
+        "glow-yellow": "4px 4px 0 rgba(224, 163, 46, 0.4)",
+        "glow-pink": "4px 4px 0 rgba(198, 81, 51, 0.4)",
+        "glow-orange": "4px 4px 0 rgba(198, 81, 51, 0.4)",
+        "glow-violet": "4px 4px 0 rgba(224, 163, 46, 0.4)",
+        "neon-inset": "inset 0 1px 3px rgba(46, 32, 20, 0.18)",
+        glass: "4px 4px 0 rgba(46, 32, 20, 0.16)",
       },
       keyframes: {
         "accordion-down": {
@@ -100,8 +100,8 @@ const config: Config = {
           to: { height: "0" },
         },
         "pulse-glow": {
-          "0%, 100%": { boxShadow: "0 0 20px rgba(255, 46, 200, 0.3)" },
-          "50%": { boxShadow: "0 0 40px rgba(255, 46, 200, 0.6), 0 0 10px rgba(0, 247, 255, 0.4)" },
+          "0%, 100%": { boxShadow: "4px 4px 0 rgba(46, 32, 20, 0.14)" },
+          "50%": { boxShadow: "4px 4px 0 rgba(46, 32, 20, 0.26)" },
         },
         shimmer: {
           "0%": { backgroundPosition: "-200% 0" },
@@ -113,12 +113,7 @@ const config: Config = {
           "100%": { transform: "translateY(100vh)" },
         },
         "neon-flicker": {
-          "0%, 19%, 21%, 23%, 25%, 54%, 56%, 100%": {
-            textShadow:
-              "0 0 4px currentColor, 0 0 11px currentColor, 0 0 19px currentColor, 0 0 40px var(--neon-color, #ff2ec8)",
-            opacity: "1",
-          },
-          "20%, 24%, 55%": { textShadow: "none", opacity: "0.85" },
+          "0%, 100%": { textShadow: "none", opacity: "1" },
         },
         "grid-move": {
           "0%": { transform: "translateY(0)" },
