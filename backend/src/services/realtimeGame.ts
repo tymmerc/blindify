@@ -137,6 +137,15 @@ export function markDisconnected(roomCode: string, userId: number): GameState | 
   return ctx.state;
 }
 
+export function markReconnected(roomCode: string, userId: number): GameState | undefined {
+  const ctx = games.get(roomCode);
+  if (!ctx) return undefined;
+  const player = ctx.state.players[userId];
+  if (!player) return ctx.state;
+  player.disconnected = false;
+  return ctx.state;
+}
+
 export function clearGame(roomCode: string): void {
   games.delete(roomCode);
 }
@@ -171,7 +180,8 @@ export function startNextRound(roomCode: string, opts?: { forceRound?: number; s
   Object.values(ctx.state.players).forEach(player => {
     player.hasAnswered = false;
     player.isReady = false;
-    player.disconnected = false;
+    // Keep disconnected state - only reconnection should clear it.
+    // Resetting it here would make offline players block the reveal timer.
     player.lastGuess = undefined;
     player.lastGuessTitle = null;
     player.lastGuessArtist = null;

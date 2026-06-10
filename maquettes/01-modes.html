@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blindify - Choisis ton mode</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+
+  body{
+    font-family:'Space Grotesk',sans-serif;
+    background:#0f1629;
+    color:#E0E8F0;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    overflow-x:hidden;
+    position:relative;
+  }
+
+  /* subtle grid overlay */
+  body::before{
+    content:'';
+    position:fixed;
+    inset:0;
+    background-image:
+      linear-gradient(rgba(148,163,184,0.03) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(148,163,184,0.03) 1px,transparent 1px);
+    background-size:60px 60px;
+    pointer-events:none;
+    z-index:0;
+  }
+
+  .page{
+    position:relative;
+    z-index:1;
+    width:100%;
+    max-width:1100px;
+    padding:40px 24px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:48px;
+  }
+
+  /* Logo */
+  .logo-row{
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  .logo-text{
+    font-weight:700;
+    font-size:22px;
+    letter-spacing:-0.02em;
+  }
+  .live-dot{
+    width:8px;height:8px;
+    border-radius:50%;
+    background:#22c55e;
+    box-shadow:0 0 8px rgba(34,197,94,0.6);
+    animation:pulse-dot 2s ease-in-out infinite;
+  }
+  @keyframes pulse-dot{
+    0%,100%{opacity:1;transform:scale(1)}
+    50%{opacity:.5;transform:scale(0.8)}
+  }
+
+  /* Question */
+  .question{
+    font-size:clamp(24px,4vw,38px);
+    font-weight:600;
+    text-align:center;
+    letter-spacing:-0.02em;
+    line-height:1.2;
+  }
+
+  /* Cards row */
+  .cards{
+    display:flex;
+    gap:28px;
+    width:100%;
+    justify-content:center;
+    flex-wrap:wrap;
+  }
+
+  /* Base card */
+  .mode-card{
+    position:relative;
+    width:320px;
+    min-height:340px;
+    border-radius:20px;
+    border:1px solid rgba(148,163,184,0.12);
+    background:rgba(22,30,55,0.85);
+    backdrop-filter:blur(12px);
+    padding:36px 28px 32px;
+    display:flex;
+    flex-direction:column;
+    align-items:flex-start;
+    gap:16px;
+    cursor:pointer;
+    transition:transform .35s cubic-bezier(.22,1,.36,1),
+               box-shadow .35s cubic-bezier(.22,1,.36,1),
+               border-color .3s ease;
+    overflow:hidden;
+  }
+  .mode-card::before{
+    content:'';
+    position:absolute;
+    inset:0;
+    border-radius:20px;
+    opacity:0;
+    transition:opacity .4s ease;
+    pointer-events:none;
+  }
+
+  /* ---- FRIENDS ---- */
+  .card-friends::before{
+    background:radial-gradient(ellipse at 50% 100%,rgba(236,72,153,0.12) 0%,transparent 70%);
+  }
+  .card-friends:hover{
+    transform:translateY(-8px);
+    border-color:rgba(236,72,153,0.35);
+    box-shadow:0 12px 40px rgba(236,72,153,0.2),0 0 80px rgba(236,72,153,0.08);
+  }
+  .card-friends:hover::before{opacity:1}
+
+  .avatars{
+    display:flex;
+    margin-bottom:4px;
+  }
+  .avatar{
+    width:36px;height:36px;
+    border-radius:50%;
+    border:2px solid #0f1629;
+    margin-left:-10px;
+  }
+  .avatar:first-child{margin-left:0}
+  .av1{background:linear-gradient(135deg,#ec4899,#f472b6)}
+  .av2{background:linear-gradient(135deg,#a855f7,#c084fc)}
+  .av3{background:linear-gradient(135deg,#f97316,#fb923c)}
+  .av4{background:linear-gradient(135deg,#22c55e,#4ade80)}
+
+  .card-label{
+    font-family:'JetBrains Mono',monospace;
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:0.1em;
+    color:#7b8ba3;
+  }
+  .card-friends .card-label{color:rgba(236,72,153,0.7)}
+
+  .card-title{
+    font-size:26px;
+    font-weight:700;
+    letter-spacing:-0.02em;
+    line-height:1.1;
+  }
+  .card-friends .card-title{color:#ec4899}
+
+  .card-sub{
+    font-size:15px;
+    color:#7b8ba3;
+    line-height:1.4;
+  }
+
+  .card-footer{
+    margin-top:auto;
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-family:'JetBrains Mono',monospace;
+    font-size:12px;
+    color:#7b8ba3;
+    transition:color .3s;
+  }
+  .card-friends:hover .card-footer{color:#ec4899}
+  .card-event:hover .card-footer{color:#8b5cf6}
+
+  .arrow-icon{
+    display:inline-block;
+    transition:transform .3s ease;
+  }
+  .mode-card:hover .arrow-icon{
+    transform:translateX(4px);
+  }
+
+  /* ---- EVENT ---- */
+  .card-event::before{
+    background:radial-gradient(ellipse at 50% 100%,rgba(139,92,246,0.12) 0%,transparent 70%);
+  }
+  .card-event:hover{
+    transform:translateY(-8px);
+    border-color:rgba(139,92,246,0.35);
+    box-shadow:0 12px 40px rgba(139,92,246,0.2),0 0 80px rgba(139,92,246,0.08);
+  }
+  .card-event:hover::before{opacity:1}
+  .card-event .card-label{color:rgba(139,92,246,0.7)}
+  .card-event .card-title{color:#8b5cf6}
+
+  .screen-icon{
+    width:64px;
+    height:42px;
+    border-radius:6px;
+    border:2px solid rgba(139,92,246,0.4);
+    position:relative;
+    margin-bottom:4px;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    gap:4px;
+    padding:6px 8px;
+  }
+  .screen-bar{
+    height:3px;
+    border-radius:2px;
+    background:rgba(139,92,246,0.35);
+  }
+  .screen-bar:nth-child(2){width:70%}
+  .screen-stand{
+    width:20px;height:6px;
+    border-bottom:2px solid rgba(139,92,246,0.3);
+    border-left:2px solid rgba(139,92,246,0.3);
+    border-right:2px solid rgba(139,92,246,0.3);
+    border-radius:0 0 4px 4px;
+    margin:2px auto 0 auto;
+  }
+
+  /* ---- STREAMER ---- */
+  .card-streamer::before{
+    background:radial-gradient(ellipse at 50% 100%,rgba(249,115,22,0.12) 0%,transparent 70%);
+  }
+  .card-streamer:hover{
+    transform:translateY(-8px);
+    border-color:rgba(249,115,22,0.35);
+    box-shadow:0 12px 40px rgba(249,115,22,0.2),0 0 80px rgba(249,115,22,0.08);
+  }
+  .card-streamer:hover::before{opacity:1}
+  .card-streamer .card-label{color:rgba(249,115,22,0.7)}
+  .card-streamer .card-title{color:#f97316}
+  .card-streamer:hover .card-footer{color:#f97316}
+
+  .chat-bubbles{
+    display:flex;
+    flex-direction:column;
+    gap:4px;
+    margin-bottom:4px;
+  }
+  .chat-line{
+    height:10px;
+    border-radius:6px;
+    background:rgba(249,115,22,0.2);
+    animation:chat-slide 3s ease-in-out infinite;
+  }
+  .chat-line:nth-child(1){width:80px;animation-delay:0s}
+  .chat-line:nth-child(2){width:56px;animation-delay:.6s}
+  .chat-line:nth-child(3){width:68px;animation-delay:1.2s}
+  @keyframes chat-slide{
+    0%,100%{opacity:.3;transform:translateX(0)}
+    50%{opacity:.7;transform:translateX(4px)}
+  }
+
+  .badge-soon{
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+    background:rgba(249,115,22,0.15);
+    color:#f97316;
+    padding:3px 10px;
+    border-radius:20px;
+    border:1px solid rgba(249,115,22,0.25);
+    display:inline-block;
+    margin-left:8px;
+  }
+
+  .live-indicator{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    margin-bottom:4px;
+  }
+  .live-ring{
+    width:12px;height:12px;
+    border-radius:50%;
+    border:2px solid #f97316;
+    animation:ring-pulse 1.5s ease-in-out infinite;
+  }
+  @keyframes ring-pulse{
+    0%,100%{transform:scale(1);opacity:1}
+    50%{transform:scale(1.4);opacity:.3}
+  }
+  .live-label{
+    font-family:'JetBrains Mono',monospace;
+    font-size:11px;
+    color:#f97316;
+    text-transform:uppercase;
+    letter-spacing:0.1em;
+  }
+
+  /* streamer pulsing border */
+  .card-streamer{
+    animation:border-glow-orange 3s ease-in-out infinite;
+  }
+  @keyframes border-glow-orange{
+    0%,100%{border-color:rgba(249,115,22,0.12)}
+    50%{border-color:rgba(249,115,22,0.25)}
+  }
+
+  /* Bottom section */
+  .bottom{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:16px;
+  }
+
+  .btn-solo{
+    font-family:'Space Grotesk',sans-serif;
+    font-size:15px;
+    font-weight:500;
+    color:#E0E8F0;
+    background:rgba(22,30,55,0.85);
+    border:1px solid rgba(148,163,184,0.15);
+    border-radius:12px;
+    padding:12px 32px;
+    cursor:pointer;
+    transition:all .3s ease;
+    letter-spacing:-0.01em;
+  }
+  .btn-solo:hover{
+    color:#fff;
+    border-color:rgba(148,163,184,0.3);
+    background:rgba(22,30,55,1);
+  }
+
+  .hint{
+    font-size:13px;
+    color:#7b8ba3;
+    opacity:.7;
+  }
+
+  /* Desktop enhancements */
+  @media(min-width:1024px){
+    .page{
+      padding:60px 48px;
+      gap:56px;
+    }
+    .mode-card{
+      padding:44px 36px 36px;
+    }
+    .question{
+      font-size:clamp(28px,4vw,44px);
+    }
+  }
+
+  /* Responsive */
+  @media(max-width:900px){
+    .cards{
+      flex-direction:column;
+      align-items:center;
+    }
+    .mode-card{
+      width:100%;
+      max-width:360px;
+      min-height:auto;
+      padding:28px 24px 24px;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <!-- Logo -->
+  <div class="logo-row">
+    <span class="logo-text">blindify</span>
+    <span class="live-dot"></span>
+  </div>
+
+  <!-- Question -->
+  <h1 class="question">Comment tu veux jouer ?</h1>
+
+  <!-- Mode cards -->
+  <div class="cards">
+
+    <!-- FRIENDS -->
+    <div class="mode-card card-friends">
+      <div class="avatars">
+        <div class="avatar av1"></div>
+        <div class="avatar av2"></div>
+        <div class="avatar av3"></div>
+        <div class="avatar av4"></div>
+      </div>
+      <span class="card-label">Multijoueur</span>
+      <span class="card-title">Entre amis</span>
+      <span class="card-sub">Invite, joue, rigole.</span>
+      <div class="card-footer">
+        Creer une partie <span class="arrow-icon">&rarr;</span>
+      </div>
+    </div>
+
+    <!-- EVENT -->
+    <div class="mode-card card-event">
+      <div class="screen-icon">
+        <div class="screen-bar"></div>
+        <div class="screen-bar"></div>
+        <div class="screen-bar"></div>
+      </div>
+      <div class="screen-stand"></div>
+      <span class="card-label">Collectif</span>
+      <span class="card-title">Evenement</span>
+      <span class="card-sub">Un ecran, tout le monde.</span>
+      <div class="card-footer">
+        Configurer <span class="arrow-icon">&rarr;</span>
+      </div>
+    </div>
+
+    <!-- STREAMER -->
+    <div class="mode-card card-streamer">
+      <div class="live-indicator">
+        <div class="live-ring"></div>
+        <span class="live-label">Live</span>
+      </div>
+      <div class="chat-bubbles">
+        <div class="chat-line"></div>
+        <div class="chat-line"></div>
+        <div class="chat-line"></div>
+      </div>
+      <span class="card-label">Streaming</span>
+      <span class="card-title">Live <span class="badge-soon">Bientot</span></span>
+      <span class="card-sub">Joue avec ton chat.</span>
+      <div class="card-footer">
+        En savoir plus <span class="arrow-icon">&rarr;</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Bottom -->
+  <div class="bottom">
+    <button class="btn-solo">Jouer en solo</button>
+    <span class="hint">Tu peux changer de mode quand tu veux.</span>
+  </div>
+
+</div>
+
+</body>
+</html>

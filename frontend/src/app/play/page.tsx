@@ -6,7 +6,6 @@ import { api } from "@/lib/api"
 import type { SoloTrack } from "@/lib/types"
 import { SoloGameClient } from "@/components/game/SoloGameClient"
 import { Button } from "@/components/ui/button"
-import { audioManager } from "@/lib/audioManager"
 import Link from "next/link"
 
 type QuickSession = {
@@ -43,8 +42,6 @@ function QuickPlayInner() {
       try {
         setLoading(true)
         setError(null)
-        // Pre-unlock audio autoplay while we fetch tracks
-        audioManager.unlock()
         setProgress("Recherche des playlists publiques...")
 
         const decoded = decodeURIComponent(profileUrl)

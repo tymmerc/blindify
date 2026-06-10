@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { audioManager } from "@/lib/audioManager"
 import { GAME_MODES, type GameModeConfig, type GameMode } from "@/lib/gameModes"
 import { VinylDisc } from "./VinylDisc"
+import { TheaterGameView } from "./TheaterGameView"
 
 
 export type ChatMessage = {
@@ -127,16 +128,17 @@ export function MultiplayerGameClient({
   const hasInput = guessTitle.trim().length > 0 || guessArtist.trim().length > 0
 
   const theme = {
-    "--bg": "#0b0710",
-    "--surface": "#100d17",
-    "--surface-strong": "#171225",
-    "--border": `${accent}33`,
-    "--ink": "#fff8fd",
-    "--muted": "#d9cde1",
+    // Synthwave game theme - mostly transparent so the body grid shows through
+    "--bg": "transparent",
+    "--surface": "rgba(15, 5, 30, 0.7)",
+    "--surface-strong": "rgba(25, 5, 50, 0.85)",
+    "--border": `${accent}55`,
+    "--ink": "#f8f0ff",
+    "--muted": "#9b7fb8",
     "--accent": accent,
-    "--success": "#8df0be",
-    "--warn": "#f6c768",
-    "--error": "#ff4d7a",
+    "--success": "#00ff9d",
+    "--warn": "#ffea00",
+    "--error": "#ff3868",
   } as CSSProperties
 
   useEffect(() => {
@@ -151,6 +153,29 @@ export function MultiplayerGameClient({
   // doesn't re-trigger on guessing↔locked transitions.
   // In event mode, only the presenter plays audio — participants hear it from the projector.
   const isAudioPhase = (uiPhase === "guessing" || uiPhase === "locked") && !isEventParticipant
+
+  // Warmup audio on first user interaction in the game view.
+  // This unlocks autoplay for non-host players who didn't click "Lancer".
+  const warmedUp = useRef(false)
+  useEffect(() => {
+    if (warmedUp.current) return
+    const handler = () => {
+      audioManager.warmup()
+      warmedUp.current = true
+      document.removeEventListener("click", handler)
+      document.removeEventListener("touchstart", handler)
+    }
+    document.addEventListener("click", handler, { once: true })
+    document.addEventListener("touchstart", handler, { once: true })
+    return () => {
+      document.removeEventListener("click", handler)
+      document.removeEventListener("touchstart", handler)
+    }
+  }, [])
+
+  // Track the current round to force audio restart on new rounds even if
+  // isAudioPhase and previewUrl happen to be the same across rounds.
+  const currentRound = state?.currentRound ?? 0
 
   useEffect(() => {
     if (!isAudioPhase || !currentTrack?.previewUrl) {
@@ -178,8 +203,8 @@ export function MultiplayerGameClient({
     return () => {
       audioManager.stop("multiplayer_track_cleanup", "multiplayer")
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- volume changes are applied via setVolume, not by re-triggering play
-  }, [isAudioPhase, currentTrack?.previewUrl, muted])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- volume changes are applied via setVolume, not by re-triggering play. currentRound forces re-trigger on new rounds.
+  }, [isAudioPhase, currentTrack?.previewUrl, muted, currentRound])
 
   useEffect(() => {
     return () => {
@@ -343,6 +368,65 @@ export function MultiplayerGameClient({
       ))}
     </div>
   )
+
+  // Theater UI is the new visual for friends/streamer modes.
+  // Event mode keeps its dedicated presenter/participant rendering below.
+  if (mode !== "event") {
+    return (
+      <TheaterGameView
+        user={user}
+        state={state}
+        uiPhase={uiPhase}
+        isPlaying={isPlaying}
+        isLocked={isLocked}
+        isRevealed={isRevealed}
+        remaining={remaining}
+        totalSeconds={totalSeconds}
+        sortedPlayers={sortedPlayersFixed}
+        answeredCount={answeredCount}
+        displayAnsweredCount={displayAnsweredCount}
+        playerCount={playerCount}
+        readyCount={readyCount}
+        guessTitle={guessTitle}
+        setGuessTitle={setGuessTitle}
+        guessArtist={guessArtist}
+        setGuessArtist={setGuessArtist}
+        sourceGuess={sourceGuess}
+        setSourceGuess={setSourceGuess}
+        localHasAnswered={localHasAnswered}
+        onSubmit={handleSubmit}
+        disabled={disabled}
+        muted={muted}
+        volume={volume}
+        onToggleMute={() => {
+          const next = !muted
+          audioManager.setMuted(next)
+          setMuted(next)
+        }}
+        onVolumeChange={v => {
+          audioManager.setVolume(v, "multiplayer")
+          setVolume(v)
+          if (v > 0 && muted) { audioManager.setMuted(false); setMuted(false) }
+          if (v === 0 && !muted) { audioManager.setMuted(true); setMuted(true) }
+        }}
+        manualPlayRequired={manualPlayRequired}
+        isAudioPhase={isAudioPhase}
+        onManualPlay={handleManualPlay}
+        currentTrack={currentTrack}
+        trackOwnerUsername={trackOwnerUsername}
+        player={player}
+        revealCountdown={revealCountdown}
+        onReady={onReady}
+        onRematch={onRematch}
+        onExit={onExit}
+        chatMessages={chatMessages}
+        chatInput={chatInput}
+        setChatInput={setChatInput}
+        onSendChat={onSendChat}
+        chatScrollRef={chatScrollRef}
+      />
+    )
+  }
 
   return (
     <div

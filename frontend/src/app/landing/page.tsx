@@ -8,9 +8,9 @@ import { Pricing } from "@/components/landing/pricing"
 
 export default function LandingPage() {
   return (
-    <div className="relative bg-background text-foreground">
+    <div className="relative bg-[#09090b] text-[#fafafa]">
       <div
-        className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_20%_20%,rgba(168,85,247,0.18),transparent_36%),radial-gradient(circle_at_80%_15%,rgba(34,197,94,0.14),transparent_30%),radial-gradient(circle_at_50%_75%,rgba(236,72,153,0.16),transparent_34%)]"
+        className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_30%_10%,rgba(168,85,247,0.12),transparent_40%)]"
         aria-hidden
       />
       <Navigation />

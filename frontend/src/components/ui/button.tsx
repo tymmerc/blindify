@@ -6,7 +6,7 @@ import { Slot } from "@radix-ui/react-slot"
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   children: ReactNode
-  variant?: "default" | "outline" | "ghost" | "link"
+  variant?: "default" | "outline" | "ghost" | "link" | "glow"
   size?: "default" | "sm" | "lg" | "icon"
   asChild?: boolean
 }
@@ -23,11 +23,12 @@ export function Button({
 
   const variants: Record<NonNullable<ButtonProps["variant"]>, string> = {
     default:
-      "btn-primary px-8 py-3 text-sm tracking-[0.3em] uppercase border border-white/20 before:!opacity-60 hover:before:!opacity-80",
+      "rounded-xl border border-white/[0.06] bg-[rgba(22,30,55,0.85)] text-[#fafafa] backdrop-blur-[16px] hover:border-white/[0.12] hover:bg-[rgba(22,30,55,0.95)]",
     outline:
-      "rounded-full border border-white/15 bg-white/5 text-slate-200 hover:border-white/35 hover:text-white",
-    ghost: "rounded-full text-slate-200 hover:bg-white/10",
-    link: "rounded-none border-none bg-transparent text-neon underline-offset-8 hover:underline",
+      "rounded-xl border border-white/[0.08] bg-transparent text-[#fafafa] hover:border-white/[0.15] hover:bg-[rgba(22,30,55,0.5)]",
+    ghost: "rounded-xl text-[#fafafa] hover:bg-[rgba(22,30,55,0.5)]",
+    link: "rounded-none border-none bg-transparent text-[#a855f7] underline-offset-8 hover:underline",
+    glow: "rounded-xl border border-[rgba(168,85,247,0.25)] bg-[rgba(168,85,247,0.12)] text-white hover:bg-[rgba(168,85,247,0.2)] hover:border-[rgba(168,85,247,0.4)] hover:shadow-glow",
   }
 
   const sizes: Record<NonNullable<ButtonProps["size"]>, string> = {
@@ -40,7 +41,9 @@ export function Button({
   return (
     <Comp
       className={cn(
-        "relative inline-flex items-center justify-center gap-2 font-semibold rounded-full transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#a855f7] focus-visible:ring-offset-2 focus-visible:ring-offset-black disabled:cursor-not-allowed disabled:opacity-50",
+        "relative inline-flex items-center justify-center gap-2 font-semibold transition-all duration-200",
+        "focus:outline-none focus-visible:ring-2 focus-visible:ring-[#a855f7]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#09090b]",
+        "disabled:cursor-not-allowed disabled:opacity-50",
         variants[variant],
         sizes[size],
         className

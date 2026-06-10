@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test"
+import { handleGuestAuth } from "./helpers"
 
 const BASE = "https://tymmerc.eu/blindify"
 
@@ -10,7 +11,9 @@ test.describe("Bug fixes verification", () => {
 
     const nickname = "TestPlayer42"
     await page.goto(`${BASE}/multiplayer?mode=friends&intent=host&nickname=${nickname}`)
-    await page.waitForTimeout(5000)
+    await page.waitForTimeout(3000)
+    await handleGuestAuth(page)
+    await page.waitForTimeout(3000)
 
     const text = await page.textContent("body") || ""
     console.log(`BUG-1 lobby text (400): ${text.substring(0, 400)}`)

@@ -18,6 +18,17 @@ const toggleDefaults = {
   news: false,
 }
 
+function CornerFrame({ color }: { color: string }) {
+  return (
+    <>
+      <span aria-hidden className="absolute left-2 top-2 h-3 w-3 border-l-2 border-t-2" style={{ borderColor: color }} />
+      <span aria-hidden className="absolute right-2 top-2 h-3 w-3 border-r-2 border-t-2" style={{ borderColor: color }} />
+      <span aria-hidden className="absolute bottom-2 left-2 h-3 w-3 border-b-2 border-l-2" style={{ borderColor: color }} />
+      <span aria-hidden className="absolute bottom-2 right-2 h-3 w-3 border-b-2 border-r-2" style={{ borderColor: color }} />
+    </>
+  )
+}
+
 export default function SettingsPage() {
   const router = useRouter()
   const [userPayload, setUserPayload] = useState<CurrentUserPayload | null>(null)
@@ -49,7 +60,7 @@ export default function SettingsPage() {
 
   const user: UserSummary | null = userPayload?.user ?? null
   const displayName = user?.username || "Utilisateur"
-  const email = user?.email || "Non renseigné"
+  const email = user?.email || "Non renseigne"
 
   const updateToggle = (key: keyof typeof toggleDefaults) => {
     setToggles(prev => ({ ...prev, [key]: !prev[key] }))
@@ -57,27 +68,30 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <div className="grid min-h-screen place-items-center text-sm uppercase tracking-[0.3em] text-[var(--ma-muted)]">
-        Chargement
+      <div className="grid min-h-screen place-items-center font-mono text-[10px] uppercase tracking-[0.3em] text-[#00f7ff] text-glow-cyan">
+        Loading...
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-[var(--ma-bg)] text-white pb-16">
-      <div className="ma-container">
+    <div className="min-h-screen text-[#f8f0ff] pb-16">
+      <div className="mx-auto max-w-3xl px-5 pt-10">
         <div className="mb-8 flex items-center justify-between">
           <Link
             href="/profile"
-            className="inline-flex items-center gap-2 rounded-lg border border-[var(--ma-border-strong)] px-4 py-2 text-sm font-medium text-white/80 transition hover:bg-white/5"
+            className="inline-flex items-center gap-2 rounded-sm border border-[#00f7ff]/30 bg-[rgba(15,5,30,0.6)] backdrop-blur-[16px] px-4 py-2 font-mono text-[10px] uppercase tracking-[0.2em] text-[#00f7ff] transition hover:bg-[#00f7ff]/10 hover:shadow-glow-cyan"
           >
-            ← Retour
+            Retour
           </Link>
         </div>
 
-        <h1 className="mb-10 text-4xl font-bold tracking-[-0.04em]">Paramètres</h1>
+        <div className="mb-10 space-y-2">
+          <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#00f7ff] text-glow-cyan">[ Config Panel ]</p>
+          <h1 className="font-display text-4xl md:text-5xl uppercase tracking-[0.04em] text-glow-pink">Parametres</h1>
+        </div>
 
-        <Section title="Compte">
+        <Section title="Compte" accent="#ff2ec8">
           <SettingRow label="Nom d'utilisateur" description={displayName}>
             <GhostButton>Modifier</GhostButton>
           </SettingRow>
@@ -86,64 +100,64 @@ export default function SettingsPage() {
           </SettingRow>
         </Section>
 
-        <Section title="Jeu">
-          <SettingRow label="Durée des extraits" description="Temps d'écoute pour deviner chaque morceau">
+        <Section title="Jeu" accent="#00f7ff">
+          <SettingRow label="Duree des extraits" description="Temps d'ecoute pour deviner chaque morceau">
             <Select value={duration} onChange={setDuration} options={["5 secondes", "10 secondes", "15 secondes", "20 secondes"]} />
           </SettingRow>
-          <SettingRow label="Difficulté" description="Niveau de difficulté des questions">
+          <SettingRow label="Difficulte" description="Niveau de difficulte des questions">
             <Select value={difficulty} onChange={setDifficulty} options={["Facile", "Normal", "Difficile"]} />
           </SettingRow>
           <SettingRow
             label="Son des notifications"
-            description="Activer les sons pour les bonnes et mauvaises réponses"
+            description="Activer les sons pour les bonnes et mauvaises reponses"
           >
             <Toggle checked={toggles.notificationSound} onChange={() => updateToggle("notificationSound")} />
           </SettingRow>
         </Section>
 
-        <Section title="Confidentialité">
+        <Section title="Confidentialite" accent="#a855f7">
           <SettingRow label="Profil public" description="Permettre aux autres utilisateurs de voir votre profil">
             <Toggle checked={toggles.publicProfile} onChange={() => updateToggle("publicProfile")} />
           </SettingRow>
-          <SettingRow label="Afficher dans les classements" description="Apparaître dans les classements publics">
+          <SettingRow label="Afficher dans les classements" description="Apparaitre dans les classements publics">
             <Toggle checked={toggles.leaderboard} onChange={() => updateToggle("leaderboard")} />
           </SettingRow>
-          <SettingRow label="Partage d'activité" description="Partager automatiquement vos scores sur les réseaux sociaux">
+          <SettingRow label="Partage d'activite" description="Partager automatiquement vos scores sur les reseaux sociaux">
             <Toggle checked={toggles.shareActivity} onChange={() => updateToggle("shareActivity")} />
           </SettingRow>
         </Section>
 
-        <Section title="Notifications">
+        <Section title="Notifications" accent="#ffea00">
           <SettingRow
             label="Invitations de jeu"
             description="Recevoir des notifications pour les invitations multijoueur"
           >
             <Toggle checked={toggles.invites} onChange={() => updateToggle("invites")} />
           </SettingRow>
-          <SettingRow label="Nouveaux succès" description="Être notifié lors du déblocage de succès">
+          <SettingRow label="Nouveaux succes" description="Etre notifie lors du deblocage de succes">
             <Toggle checked={toggles.achievements} onChange={() => updateToggle("achievements")} />
           </SettingRow>
-          <SettingRow label="Nouveautés" description="Recevoir des notifications sur les nouvelles fonctionnalités">
+          <SettingRow label="Nouveautes" description="Recevoir des notifications sur les nouvelles fonctionnalites">
             <Toggle checked={toggles.news} onChange={() => updateToggle("news")} />
           </SettingRow>
         </Section>
 
-        <Section title="Zone de danger" variant="danger">
-          <SettingRow label="Supprimer les données téléchargées" description="Libérer l'espace de stockage en supprimant les morceaux téléchargés">
+        <Section title="Zone de danger" accent="#ff3868" variant="danger">
+          <SettingRow label="Supprimer les donnees telechargees" description="Liberer l'espace de stockage en supprimant les morceaux telecharges">
             <DangerButton>Supprimer</DangerButton>
           </SettingRow>
-          <SettingRow label="Réinitialiser les statistiques" description="Remettre à zéro toutes vos statistiques et succès">
-            <DangerButton>Réinitialiser</DangerButton>
+          <SettingRow label="Reinitialiser les statistiques" description="Remettre a zero toutes vos statistiques et succes">
+            <DangerButton>Reinitialiser</DangerButton>
           </SettingRow>
-          <SettingRow label="Supprimer le compte" description="Supprimer définitivement votre compte et toutes vos données">
+          <SettingRow label="Supprimer le compte" description="Supprimer definitivement votre compte et toutes vos donnees">
             <DangerButton>Supprimer</DangerButton>
           </SettingRow>
         </Section>
 
-        <p className="mt-8 text-center text-xs text-[#606060]">
-          Blindify v1.0.0 ·{" "}
-          <span className="cursor-pointer text-[var(--ma-muted)] underline hover:text-white">Conditions d&apos;utilisation</span>{" "}
-          · <span className="cursor-pointer text-[var(--ma-muted)] underline hover:text-white">Confidentialité</span>
+        <p className="mt-8 text-center font-mono text-[10px] uppercase tracking-[0.3em] text-[#9b7fb8]/50">
+          Blindify v1.0.0 .{" "}
+          <span className="cursor-pointer text-[#9b7fb8] underline hover:text-[#00f7ff]">CGU</span>{" "}
+          . <span className="cursor-pointer text-[#9b7fb8] underline hover:text-[#00f7ff]">Privacy</span>
         </p>
       </div>
     </div>
@@ -152,17 +166,34 @@ export default function SettingsPage() {
 
 function Section({
   title,
+  accent,
   variant,
   children,
 }: {
   title: string
+  accent: string
   variant?: "danger"
   children: React.ReactNode
 }) {
   return (
-    <div className={`mb-6 rounded-xl border ${variant === "danger" ? "border-[rgba(244,67,54,0.3)]" : "border-[var(--ma-border)]"} bg-[var(--ma-surface)] p-6`}>
-      <h2 className="mb-4 text-xl font-semibold tracking-[-0.02em]">{title}</h2>
-      <div className="divide-y divide-[var(--ma-border)]">{children}</div>
+    <div
+      className="relative mb-6 rounded-2xl border bg-[rgba(15,5,30,0.6)] backdrop-blur-[16px] p-6"
+      style={{
+        borderColor: `${accent}55`,
+        boxShadow: `0 0 16px ${accent}1a, inset 0 0 8px ${accent}0a`,
+      }}
+    >
+      <CornerFrame color={accent} />
+      <h2
+        className="mb-4 font-display text-sm uppercase tracking-[0.15em]"
+        style={{
+          color: accent,
+          textShadow: `0 0 8px ${accent}aa`,
+        }}
+      >
+        [ {title} ]
+      </h2>
+      <div className={variant === "danger" ? "divide-y divide-[#ff3868]/15" : "divide-y divide-[#ff2ec8]/10"}>{children}</div>
     </div>
   )
 }
@@ -179,8 +210,8 @@ function SettingRow({
   return (
     <div className="flex flex-col items-start gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="max-w-2xl space-y-1">
-        <div className="text-base font-semibold">{label}</div>
-        <p className="text-sm text-[var(--ma-muted)]">{description}</p>
+        <div className="font-display text-base uppercase tracking-[0.03em] text-[#f8f0ff]">{label}</div>
+        <p className="text-sm text-[#9b7fb8]">{description}</p>
       </div>
       <div className="flex items-center gap-3">{children}</div>
     </div>
@@ -192,16 +223,19 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void 
     <button
       type="button"
       onClick={onChange}
-      className={`relative h-7 w-14 rounded-full border border-[var(--ma-border-strong)] transition ${
-        checked ? "" : "bg-white/10"
-      }`}
-      style={checked ? { backgroundImage: "var(--ma-gradient)" } : {}}
+      className="relative h-7 w-14 rounded-full border transition"
+      style={{
+        borderColor: checked ? "#ff2ec8" : "rgba(155,127,184,0.25)",
+        background: checked ? "rgba(255,46,200,0.85)" : "rgba(15,5,30,0.6)",
+        boxShadow: checked ? "0 0 14px rgba(255,46,200,0.6), inset 0 0 6px rgba(0,247,255,0.3)" : "none",
+      }}
       aria-pressed={checked}
     >
       <span
-        className={`absolute left-1 top-1 h-5 w-5 rounded-full bg-white transition ${
-          checked ? "translate-x-7" : ""
-        }`}
+        className={`absolute left-1 top-1 h-5 w-5 rounded-full transition ${checked ? "translate-x-7 bg-[#f8f0ff]" : "bg-[#9b7fb8]"}`}
+        style={{
+          boxShadow: checked ? "0 0 8px rgba(255,255,255,0.6)" : "none",
+        }}
       />
     </button>
   )
@@ -213,22 +247,22 @@ function Select({ value, onChange, options }: { value: string; onChange: (value:
       <select
         value={value}
         onChange={event => onChange(event.target.value)}
-        className="appearance-none rounded-lg border border-[var(--ma-border-strong)] bg-white/5 px-4 py-2 text-sm font-medium outline-none transition focus:border-[rgba(168,85,247,0.5)]"
+        className="appearance-none rounded-sm border border-[#00f7ff]/30 bg-[rgba(15,5,30,0.85)] px-4 py-2 font-mono text-sm uppercase tracking-[0.1em] text-[#00f7ff] outline-none transition focus:border-[#00f7ff] focus:shadow-[0_0_12px_rgba(0,247,255,0.4)] hover:border-[#00f7ff]/60"
       >
         {options.map(option => (
-          <option key={option} className="bg-[var(--ma-bg)] text-white">
+          <option key={option} className="bg-[#0a0014] text-[#f8f0ff]">
             {option}
           </option>
         ))}
       </select>
-      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[var(--ma-muted)]">▼</span>
+      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 font-mono text-xs text-[#00f7ff]">v</span>
     </div>
   )
 }
 
 function GhostButton({ children }: { children: React.ReactNode }) {
   return (
-    <button className="rounded-lg border border-[var(--ma-border-strong)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/5">
+    <button className="rounded-sm border border-[#00f7ff]/30 bg-[rgba(15,5,30,0.6)] px-4 py-2 font-mono text-xs uppercase tracking-[0.15em] text-[#00f7ff] transition hover:bg-[#00f7ff]/10 hover:border-[#00f7ff]/60 hover:shadow-[0_0_12px_rgba(0,247,255,0.3)]">
       {children}
     </button>
   )
@@ -236,7 +270,7 @@ function GhostButton({ children }: { children: React.ReactNode }) {
 
 function DangerButton({ children }: { children: React.ReactNode }) {
   return (
-    <button className="rounded-lg border border-[rgba(244,67,54,0.3)] px-4 py-2 text-sm font-semibold text-[#f44336] transition hover:bg-[rgba(244,67,54,0.16)]">
+    <button className="rounded-sm border border-[#ff3868]/40 bg-[#ff3868]/10 px-4 py-2 font-mono text-xs uppercase tracking-[0.15em] text-[#ff3868] transition hover:bg-[#ff3868]/20 hover:border-[#ff3868] hover:shadow-[0_0_14px_rgba(255,56,104,0.5)]">
       {children}
     </button>
   )

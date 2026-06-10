@@ -93,8 +93,11 @@ export function startRoundAndBroadcast(
     emitGameOver(io, state);
     return state;
   }
-  emitRoundStart(io, state);
+  // Emit complete state FIRST so clients have everything before processing
+  // the round-start trigger event. This eliminates the need for the frontend
+  // to reconstruct a minimal state from the round-start payload alone.
   emitState(io, roomCode);
+  emitRoundStart(io, state);
   if (state.timing.revealAt) {
     scheduleReveal(io, roomCode, state.timing.revealAt);
   }

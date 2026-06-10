@@ -89,6 +89,25 @@ class AudioManager {
     return this.audio;
   }
 
+  /**
+   * Pre-create the Audio element during a user interaction (click/tap).
+   * This unlocks the browser autoplay policy so later programmatic play() works.
+   * Call this on "Lancer la partie" click, before the socket round:start arrives.
+   */
+  warmup(): void {
+    if (typeof Audio === "undefined") return;
+    if (!this.audio) {
+      this.audio = new Audio();
+    }
+    // Play a silent buffer to unlock autoplay
+    this.audio.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+    this.audio.volume = 0;
+    this.audio.play().then(() => {
+      this.audio?.pause();
+      if (this.audio) this.audio.src = "";
+    }).catch(() => {});
+  }
+
   async play(options: { src: string; loop?: boolean; volume?: number; owner?: AudioOwner; seekTo?: number }): Promise<HTMLAudioElement | null> {
     if (typeof Audio === "undefined") return null;
 

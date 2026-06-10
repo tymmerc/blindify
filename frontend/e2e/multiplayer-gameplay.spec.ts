@@ -39,7 +39,7 @@ test.describe("Friends mode — create room and reach lobby", () => {
     await page.screenshot({ path: "e2e/screenshots/mp2-friends-intent.png" })
 
     // Wizard step 3: Intent - create
-    await page.locator("text=Créer une partie").first().click()
+    await page.locator("text=/Cr[eé]er une partie/").first().click()
     await page.waitForTimeout(8_000)
     await page.screenshot({ path: "e2e/screenshots/mp2-friends-lobby.png" })
 
@@ -108,7 +108,7 @@ test.describe("Friends — full game with Spotify", () => {
     await page.waitForTimeout(500)
 
     // Wizard step 3: Intent - create
-    await page.locator("text=Créer une partie").first().click()
+    await page.locator("text=/Cr[eé]er une partie/").first().click()
     await page.waitForTimeout(8_000)
     await page.screenshot({ path: "e2e/screenshots/mp2-friends-room.png" })
 

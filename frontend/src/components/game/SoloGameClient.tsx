@@ -4,13 +4,19 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import Image from "next/image"
 import Link from "next/link"
 import { api } from "@/lib/api"
+import { clientApi } from "@/lib/apiClient"
 import type { SoloTrack, UserSummary } from "@/lib/types"
 import { Button } from "@/components/ui/button"
-import { ArrowRight, Check, Flame, Heart, Loader2, Play, Sparkles, Timer, Volume2, VolumeX } from "lucide-react"
+import { ArrowRight, Check, Flame, Heart, Loader2, Play, Share2, Sparkles, Timer, Volume2, VolumeX } from "lucide-react"
 import { VinylDisc } from "./VinylDisc"
+import { StreakEffects, useStreakCardStyle } from "./StreakEffects"
+import { buildShareText } from "@/lib/shareText"
+import { ShareImageButton } from "./ShareImageButton"
 import { getSocket } from "@/lib/socket"
 import { audioManager, DEFAULT_AUDIO_VOLUME } from "@/lib/audioManager"
 import { RoundUiState, roundFlowReducer, computeScore, resolveModeFlags, ROUND_FEEDBACK_MS } from "@/lib/roundFlow"
+import { getListeningDuration } from "@/lib/progressiveDifficulty"
+import { HintButton } from "./HintButton"
 import { useMode } from "@/contexts/ModeContext"
 import { evaluateGuess as evaluateGuessShared, evaluateGuessSeparate, normalize, tokenize, type Verdict } from "@/lib/matching"
 
@@ -34,6 +40,7 @@ export interface SoloGameClientProps {
   nextRoundNumber?: number
   nextTrackId?: string
   roomCode?: string
+  progressive?: boolean
   onHostNext?: (nextRound: number, revealAt: number) => void
   onRoundComplete?: (payload: {
     track: SoloTrack
@@ -43,6 +50,8 @@ export interface SoloGameClientProps {
     stats: RoundStats
   }) => void
   onGameComplete?: (stats: RoundStats) => void
+  challengeCode?: string
+  onChallengeComplete?: (stats: RoundStats) => void
 }
 
 export interface RoundStats {
@@ -88,6 +97,9 @@ export function SoloGameClient({
   onGameComplete,
   sessionId,
   roomCode,
+  progressive = false,
+  challengeCode,
+  onChallengeComplete,
 }: SoloGameClientProps) {
   const { accentColor } = useMode()
   const modeFlags = resolveModeFlags(undefined, accentColor)
@@ -126,12 +138,15 @@ export function SoloGameClient({
       artist: number
       speed: number
       penalty: number
+      hint: number
     }
   } | null>(null)
   const lastDialogRoundRef = useRef<number>(0)
   const finalizeLockRef = useRef<number | null>(null)
   const [likedTrackIds, setLikedTrackIds] = useState<Record<string, boolean>>({})
   const [likeStatus, setLikeStatus] = useState<{ type: "success" | "error"; message: string } | null>(null)
+  const [hintCount, setHintCount] = useState(0)
+  const hintCountRef = useRef(0)
 
   const [stats, setStats] = useState<RoundStats>({
     rounds: 0,
@@ -225,6 +240,13 @@ export function SoloGameClient({
   const total = trackList.length
   const hasMoreRounds = index < total - 1
   const accuracy = stats.rounds > 0 ? Math.round((stats.correct / stats.rounds) * 100) : 0
+  const currentListeningDuration = progressive ? getListeningDuration(index, total) : LISTENING_DURATION
+  const currentListeningDurationMs = currentListeningDuration * 1000
+  const [shareLabel, setShareLabel] = useState("Partager")
+  const [challengeLabel, setChallengeLabel] = useState("Defier un ami")
+  const [challengeLoading, setChallengeLoading] = useState(false)
+  const streakCardStyle = useStreakCardStyle(stats.streak)
+
   const history = useMemo(
     () =>
       trackList.map((track, i) => ({
@@ -350,8 +372,10 @@ export function SoloGameClient({
       setIsPlaying(false)
       pausedByUserRef.current = false
       setMuted(false)
-      setTimer(LISTENING_DURATION)
+      setTimer(progressive ? getListeningDuration(resolveTargetIndex(targetRound, targetTrackId), total) : LISTENING_DURATION)
       setCountdown(COUNTDOWN_DURATION)
+      setHintCount(0)
+      hintCountRef.current = 0
       setGameFinished(false)
       sharedDeadlineRef.current = revealAt ?? sharedDeadlineRef.current ?? null
       listeningDeadlineRef.current = revealAt ?? listeningDeadlineRef.current ?? 0
@@ -371,7 +395,7 @@ export function SoloGameClient({
       setIndex(Math.min(Math.max(0, targetIndex), Math.max(0, total - 1)))
       return targetIndex
     },
-    [cleanupTimers, resolveTargetIndex, total]
+    [cleanupTimers, resolveTargetIndex, total, progressive]
   )
 
   const startTrackForRound = useCallback(
@@ -379,11 +403,13 @@ export function SoloGameClient({
       readyRoundRef.current = null
       const now = Date.now()
       const warmupMs = opts?.skipCountdown ? 0 : COUNTDOWN_DURATION * 1000
+      const targetIdx = resolveTargetIndex(targetRound, targetTrackId)
+      const roundDurationMs = (progressive ? getListeningDuration(targetIdx, total) : LISTENING_DURATION) * 1000
       const providedDeadline =
         revealAt && Number.isFinite(revealAt) && revealAt > now - 2000 ? revealAt : null
-      const deadlineCandidate = providedDeadline ?? now + warmupMs + LISTENING_DURATION_MS
-      const startAt = Math.max(now + warmupMs, deadlineCandidate - LISTENING_DURATION_MS)
-      const deadline = Math.max(startAt + LISTENING_DURATION_MS, deadlineCandidate)
+      const deadlineCandidate = providedDeadline ?? now + warmupMs + roundDurationMs
+      const startAt = Math.max(now + warmupMs, deadlineCandidate - roundDurationMs)
+      const deadline = Math.max(startAt + roundDurationMs, deadlineCandidate)
       listeningDeadlineRef.current = deadline
       listeningStartAtRef.current = startAt
       const countdownMs = Math.max(0, startAt - now)
@@ -401,8 +427,56 @@ export function SoloGameClient({
       }
       return targetIndex
     },
-    [resetRoundState, dispatchFlow]
+    [resetRoundState, dispatchFlow, resolveTargetIndex, progressive, total]
   )
+
+  const handleReplay = useCallback(() => {
+    const initial: RoundStats = { rounds: 0, correct: 0, streak: 0, bestStreak: 0, points: 0 }
+    setStats(initial)
+    statsRef.current = initial
+    setRoundStates(trackList.map((_, i) => (i === 0 ? "current" : "pending")))
+    setGameFinished(false)
+    setVerdict(null)
+    setResultDialog(null)
+    dismissedRoundsRef.current.clear()
+    lastDialogRoundRef.current = 0
+    startTrackForRound(1)
+  }, [trackList, startTrackForRound])
+
+  const handleShare = useCallback(() => {
+    const text = buildShareText(stats, roundStates)
+    navigator.clipboard.writeText(text).then(() => {
+      setShareLabel("Copié !")
+      setTimeout(() => setShareLabel("Partager"), 2000)
+    }).catch(() => {
+      setShareLabel("Erreur")
+      setTimeout(() => setShareLabel("Partager"), 2000)
+    })
+  }, [stats, roundStates])
+
+  const handleChallenge = useCallback(async () => {
+    if (challengeLoading) return
+    setChallengeLoading(true)
+    try {
+      const { code } = await clientApi.createChallenge({
+        tracks: trackList,
+        creatorName: user.username || "Joueur",
+        score: stats.points,
+        correct: stats.correct,
+        total: stats.rounds,
+        bestStreak: stats.bestStreak,
+      })
+      const challengeUrl = `https://tymmerc.eu/blindify/challenge/?code=${code}`
+      await navigator.clipboard.writeText(challengeUrl)
+      setChallengeLabel("Lien copie !")
+      setTimeout(() => setChallengeLabel("Defier un ami"), 3000)
+    } catch {
+      setChallengeLabel("Erreur")
+      setTimeout(() => setChallengeLabel("Defier un ami"), 2000)
+    } finally {
+      setChallengeLoading(false)
+    }
+  }, [challengeLoading, trackList, user.username, stats])
 
   const finalizeRound = useCallback(
     (nextVerdict: Verdict, reason: FinalizeReason, track: SoloTrack, submittedGuess: string) => {
@@ -434,8 +508,9 @@ export function SoloGameClient({
         matchedArtist: detail.matchedArtist,
         guessProvided,
         reactionMs,
-        maxDurationMs: LISTENING_DURATION_MS,
+        maxDurationMs: currentListeningDurationMs,
         streak: prevStats.streak,
+        hintsUsed: hintCountRef.current,
       })
       const gainedPoints = scoreResult.gained
       const streak = scoreResult.nextStreak
@@ -495,6 +570,7 @@ export function SoloGameClient({
       if (index >= total - 1) {
         setGameFinished(true)
         onGameComplete?.(updatedStats)
+        onChallengeComplete?.(updatedStats)
       }
     },
     [cleanupTimers, uiState, flow.startAt, dispatchFlow, index, total, onRoundComplete, onGameComplete, markReady]
@@ -503,17 +579,18 @@ export function SoloGameClient({
   const scheduleListeningTimer = useCallback(
     (track: SoloTrack) => {
       const now = Date.now()
+      const roundDurMs = currentListeningDurationMs
       const externalDeadline =
         sharedDeadlineRef.current && sharedDeadlineRef.current > now
           ? sharedDeadlineRef.current
           : sharedDeadlineMs && sharedDeadlineMs > now
             ? sharedDeadlineMs
             : null
-      listeningDeadlineRef.current = externalDeadline ?? now + LISTENING_DURATION_MS
+      listeningDeadlineRef.current = externalDeadline ?? now + roundDurMs
       if (listeningDeadlineRef.current <= now) {
-        listeningDeadlineRef.current = now + LISTENING_DURATION_MS
+        listeningDeadlineRef.current = now + roundDurMs
       }
-      listeningStartAtRef.current = Math.max(now, listeningDeadlineRef.current - LISTENING_DURATION_MS)
+      listeningStartAtRef.current = Math.max(now, listeningDeadlineRef.current - roundDurMs)
 
       const tick = () => {
         const remainingMs = listeningDeadlineRef.current - Date.now()
@@ -530,7 +607,7 @@ export function SoloGameClient({
 
       listeningRafRef.current = requestAnimationFrame(tick)
     },
-    [finalizeRound, sharedDeadlineMs]
+    [finalizeRound, sharedDeadlineMs, currentListeningDurationMs]
   )
 
   useEffect(() => {
@@ -549,7 +626,7 @@ export function SoloGameClient({
     const updateCountdown = () => {
       const now = Date.now()
       const startAt = listeningStartAtRef.current || now
-      const deadline = listeningDeadlineRef.current || startAt + LISTENING_DURATION_MS
+      const deadline = listeningDeadlineRef.current || startAt + currentListeningDurationMs
       const untilStart = Math.max(0, Math.ceil((startAt - now) / 1000))
       const untilReveal = Math.max(0, Math.ceil((deadline - now) / 1000))
       setCountdown(untilStart)
@@ -627,7 +704,7 @@ export function SoloGameClient({
     const deadline =
       sharedDeadlineMs && sharedDeadlineMs > now
         ? sharedDeadlineMs
-        : now + LISTENING_DURATION * 1000
+        : now + currentListeningDurationMs
     listeningDeadlineRef.current = deadline
     sharedDeadlineRef.current = deadline
     setTimer(Math.max(0, Math.ceil((deadline - now) / 1000)))
@@ -668,7 +745,7 @@ export function SoloGameClient({
     if (uiState !== RoundUiState.Playing) return
 
     cleanupTimers()
-    setTimer(LISTENING_DURATION)
+    setTimer(currentListeningDuration)
 
     let cancelled = false
 
@@ -682,7 +759,6 @@ export function SoloGameClient({
 
     const startAudio = async (previewUrl: string, track: SoloTrack) => {
       audioManager.stop("solo_replace")
-      await audioManager.unlock()
       await audioManager.play({
         src: previewUrl,
         loop: true,
@@ -816,7 +892,9 @@ export function SoloGameClient({
       const nextRound = typeof targetRound === "number" ? targetRound : index + 2
       if (mode === "multiplayer" && onHostNext && isHost && emitHost) {
         // Host only emits the intent; the round:started broadcast will close the popup for everyone.
-        const revealAt = Date.now() + LISTENING_DURATION * 1000
+        const nextIdx = typeof targetRound === "number" ? targetRound - 1 : index + 1
+        const nextDurMs = (progressive ? getListeningDuration(nextIdx, total) : LISTENING_DURATION) * 1000
+        const revealAt = Date.now() + nextDurMs
         onHostNext(nextRound, revealAt)
         return
       }
@@ -973,7 +1051,7 @@ export function SoloGameClient({
       guessTitle: guessTitleRef.current,
       guessArtist: guessArtistRef.current,
       points: 0,
-      breakdown: { title: 0, artist: 0, speed: 0, penalty: 0 },
+      breakdown: { title: 0, artist: 0, speed: 0, penalty: 0, hint: 0 },
     })
     lastDialogRoundRef.current = roundNumber
   }, [uiState, current, index, verdict, guess, resultDialog])
@@ -995,7 +1073,7 @@ export function SoloGameClient({
       guessTitle: guessTitleRef.current,
       guessArtist: guessArtistRef.current,
       points: 0,
-      breakdown: { title: 0, artist: 0, speed: 0, penalty: 0 },
+      breakdown: { title: 0, artist: 0, speed: 0, penalty: 0, hint: 0 },
     })
     lastDialogRoundRef.current = stats.rounds
   }, [stats.rounds, trackList, current, verdict, guess, resultDialog])
@@ -1089,8 +1167,31 @@ export function SoloGameClient({
           <Button asChild variant="outline">
             <Link href="/solo">Changer de playlist</Link>
           </Button>
-          <Button asChild>
-            <Link href={typeof window !== "undefined" ? window.location.href : "/solo"}>Rejouer</Link>
+          <Button
+            variant="outline"
+            className="border-2 border-[#a855f7] bg-transparent text-[#a855f7] hover:bg-[#a855f7]/10"
+            onClick={handleShare}
+          >
+            {shareLabel}
+          </Button>
+          <ShareImageButton
+            stats={stats}
+            roundStates={roundStates}
+            tracks={trackList.map((t) => ({ title: t.title, artist: t.artist }))}
+          />
+          {!challengeCode && (
+            <Button
+              variant="outline"
+              className="border-2 border-[#a855f7] bg-transparent text-[#a855f7] hover:bg-[#a855f7]/10"
+              onClick={handleChallenge}
+              disabled={challengeLoading}
+            >
+              {challengeLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Share2 className="mr-2 h-4 w-4" />}
+              {challengeLabel}
+            </Button>
+          )}
+          <Button onClick={handleReplay}>
+            Rejouer
           </Button>
         </div>
       </div>
@@ -1125,7 +1226,10 @@ export function SoloGameClient({
               color: accentColor,
             }}
           >
-            <span>Score: {stats.points} pts</span>
+            <span className="inline-flex items-center gap-2">
+              Score: {stats.points} pts
+              <StreakEffects streak={stats.streak} />
+            </span>
             <span className="text-[11px] text-white/80">({stats.correct}/{total} correct)</span>
           </div>
         </div>
@@ -1136,6 +1240,7 @@ export function SoloGameClient({
             borderColor: feedbackSignal ? accentColor : "#1b1b1b",
             boxShadow: feedbackSignal ? `0 0 0 2px ${accentTint(0.45)}` : "0 10px 30px rgba(0,0,0,0.35)",
             transition: `box-shadow ${ROUND_FEEDBACK_MS}ms ease, border-color ${ROUND_FEEDBACK_MS}ms ease`,
+            ...streakCardStyle,
           }}
         >
           <div className="mb-6 flex flex-col gap-2">
@@ -1156,7 +1261,7 @@ export function SoloGameClient({
           </div>
 
           <div className="relative mx-auto mb-6 flex items-center justify-center">
-            <VinylDisc size={220} spinning={isPlaying && !isLocked && !isRevealed} accentColor={accentColor} />
+            <VinylDisc size={220} spinning={isPlaying && !isLocked && !isRevealed} accentColor={accentColor} coverUrl={current?.album_cover} blurred={!isRevealed} />
             {manualPlayRequired && !isPlaying && !isRevealed && (
               <button
                 type="button"
@@ -1222,28 +1327,42 @@ export function SoloGameClient({
               <button
                 type="submit"
                 disabled={isLocked || isRevealed || isArmed}
-                className="min-w-[110px] rounded-lg px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
-                style={{
-                  backgroundImage: `linear-gradient(135deg, ${accentColor}, ${accentTint(0.65)})`,
-                  boxShadow: `0 10px 28px ${accentTint(0.35)}`,
-                  transition: `opacity 120ms ease, filter ${ROUND_FEEDBACK_MS}ms ease`,
-                  filter: isLocked ? "saturate(0.6)" : "none",
-                }}
+                className="min-w-[110px] rounded-lg border-2 border-[#a855f7] bg-transparent px-4 py-3 text-sm font-semibold text-[#a855f7] transition hover:-translate-y-0.5 hover:shadow-[0_8px_20px_rgba(0,0,0,0.25)] disabled:opacity-40 disabled:hover:translate-y-0"
               >
                 Valider
               </button>
             </div>
           </form>
 
+          {current && (
+            <div className="mt-3 flex justify-center">
+              <HintButton
+                track={current}
+                disabled={isLocked || isRevealed || isArmed}
+                onHintUsed={() => {
+                  setHintCount(prev => {
+                    const next = prev + 1
+                    hintCountRef.current = next
+                    return next
+                  })
+                }}
+              />
+            </div>
+          )}
+
+          {progressive && (
+            <div className="mt-2 text-center">
+              <span className="rounded-full border border-[#a855f7]/30 bg-[#a855f7]/10 px-2.5 py-0.5 text-[11px] font-medium text-[#a855f7]">
+                {currentListeningDuration}s
+              </span>
+            </div>
+          )}
+
           <div className="mt-6 flex justify-center gap-3 items-center">
             <button className="circle-btn" onClick={handleRestart} title="Rejouer l'extrait">⟳</button>
             <label
               className="play-toggle"
               title={isPlaying ? "Pause" : "Lecture"}
-              style={{
-                backgroundImage: `linear-gradient(135deg, ${accentColor}, ${accentTint(0.7)})`,
-                boxShadow: `0 10px 30px ${accentTint(0.4)}`,
-              }}
             >
               <input type="checkbox" checked={isPlaying} onChange={handleTogglePlay} />
               <svg viewBox="0 0 384 512" className="play-icon">
@@ -1268,12 +1387,13 @@ export function SoloGameClient({
               }
               .circle-btn:hover { transform: translateY(-1px); }
               .play-toggle {
-                --color: #ffffff;
+                --color: #a855f7;
                 width: 64px;
                 height: 64px;
                 border-radius: 50%;
-                background: linear-gradient(135deg, #b155f0 0%, #f24f90 100%);
-                box-shadow: 0 10px 30px rgba(200,90,200,0.35);
+                background: transparent;
+                border: 2px solid #a855f7;
+                box-shadow: none;
                 display: flex;
                 align-items: center;
                 justify-content: center;
@@ -1453,10 +1573,26 @@ export function SoloGameClient({
             </button>
           </div>
 
-          <div className="mt-5 rounded-xl border border-white/10 bg-white/5 p-4">
-            <div className="text-sm text-[var(--ma-muted,#9b9b9b)]">Titre</div>
-            <div className="text-lg font-semibold text-white">{resultDialog.track.title}</div>
-            <div className="text-sm text-[var(--ma-muted,#9b9b9b)]">{resultDialog.track.artist}</div>
+          <div className="mt-5 flex gap-4 rounded-xl border border-white/10 bg-white/5 p-4">
+            {resultDialog.track.album_cover ? (
+              <Image
+                src={resultDialog.track.album_cover}
+                alt={`${resultDialog.track.title} — ${resultDialog.track.artist}`}
+                width={80}
+                height={80}
+                className="h-20 w-20 shrink-0 rounded-lg object-cover"
+                unoptimized
+              />
+            ) : null}
+            <div className="flex flex-col justify-center gap-0.5 min-w-0">
+              <div className="text-lg font-semibold text-white truncate">{resultDialog.track.title}</div>
+              <div className="text-sm text-[var(--ma-muted,#9b9b9b)] truncate">{resultDialog.track.artist}</div>
+              {(resultDialog.track.metadata as Record<string, unknown>)?.album ? (
+                <div className="text-xs text-white/50 truncate">
+                  Album : {String((resultDialog.track.metadata as Record<string, unknown>).album)}
+                </div>
+              ) : null}
+            </div>
           </div>
 
           <div className="mt-3 rounded-xl border border-white/5 bg-black/40 p-3 text-sm text-[var(--ma-muted,#9b9b9b)] space-y-1">
@@ -1479,7 +1615,7 @@ export function SoloGameClient({
           <div className="mt-3 rounded-xl border border-white/10 bg-black/30 p-3 text-sm text-white flex flex-col gap-1">
             <div className="font-semibold text-base">+{resultDialog.points} pts</div>
             <div className="text-[12px] text-[var(--ma-muted,#9b9b9b)]">
-              Titre {resultDialog.breakdown.title} · Artiste {resultDialog.breakdown.artist} · Vitesse {resultDialog.breakdown.speed}{resultDialog.breakdown.penalty > 0 ? ` · Pénalité -${resultDialog.breakdown.penalty}` : ""}
+              Titre {resultDialog.breakdown.title} · Artiste {resultDialog.breakdown.artist} · Vitesse {resultDialog.breakdown.speed}{resultDialog.breakdown.penalty > 0 ? ` · Pénalité -${resultDialog.breakdown.penalty}` : ""}{resultDialog.breakdown.hint > 0 ? ` · Indices -${resultDialog.breakdown.hint}` : ""}
             </div>
           </div>
 
@@ -1502,15 +1638,15 @@ export function SoloGameClient({
             </Button>
               )
             })()}
-            <Button
+            <button
               type="button"
               onClick={() => handleNext(true)}
-              className="gap-2"
               disabled={isMultiplayer && !isHost}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/10 px-6 py-3 text-sm font-semibold text-white transition hover:bg-white/15 disabled:opacity-50"
             >
               <ArrowRight className="h-4 w-4" />
               {resultDialog.round >= total ? "Terminer" : "Manche suivante"}
-            </Button>
+            </button>
           </div>
           {likeStatus ? (
             <div
@@ -1560,7 +1696,7 @@ const SliderStyles = () => (
       --slider-height: 6px;
       --slider-bg: #3a3a3a;
       --slider-border-radius: 999px;
-      --level-color: #f24f90;
+      --level-color: #a855f7;
       --level-transition-duration: 0.1s;
       --icon-margin: 10px;
       --icon-size: 18px;

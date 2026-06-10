@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blindify - Solo</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+
+  body{
+    font-family:'Space Grotesk',sans-serif;
+    background:#0f1629;
+    color:#E0E8F0;
+    min-height:100vh;
+    overflow-x:hidden;
+    position:relative;
+  }
+
+  /* subtle grid */
+  body::before{
+    content:'';
+    position:fixed;inset:0;
+    background-image:
+      linear-gradient(rgba(148,163,184,0.025) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(148,163,184,0.025) 1px,transparent 1px);
+    background-size:64px 64px;
+    pointer-events:none;z-index:0;
+  }
+
+  .layout{
+    position:relative;z-index:1;
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    min-height:100vh;
+    max-width:1600px;
+    margin:0 auto;
+  }
+
+  /* ===================== LEFT COLUMN ===================== */
+  .left{
+    padding:48px 64px 48px 72px;
+    display:flex;
+    flex-direction:column;
+    gap:32px;
+    max-width:720px;
+    justify-self:end;
+  }
+
+  .back-row{display:flex;align-items:center;gap:12px}
+  .back-arrow{
+    width:38px;height:38px;border-radius:10px;
+    border:1px solid rgba(148,163,184,0.15);
+    background:rgba(30,40,65,0.7);
+    display:flex;align-items:center;justify-content:center;
+    color:#8896b0;font-size:18px;text-decoration:none;
+    transition:all .2s;
+  }
+  .back-arrow:hover{border-color:rgba(148,163,184,0.3);color:#E0E8F0;background:rgba(40,52,80,0.8)}
+  .back-label{
+    font-family:'JetBrains Mono',monospace;
+    font-size:13px;font-weight:600;letter-spacing:0.06em;color:#E0E8F0;
+  }
+
+  /* Tabs - clearly elevated from bg */
+  .tabs{
+    display:flex;gap:4px;
+    background:rgba(22,30,52,0.9);
+    border:1px solid rgba(148,163,184,0.12);
+    border-radius:14px;padding:5px;
+    width:fit-content;
+  }
+  .tab{
+    font-family:'Space Grotesk',sans-serif;
+    font-size:14px;font-weight:600;
+    padding:10px 24px;border-radius:10px;border:none;
+    background:transparent;color:#7b8ba3;
+    cursor:pointer;transition:all .2s;
+  }
+  .tab:hover{color:#c4cfe0;background:rgba(148,163,184,0.08)}
+  .tab.active{
+    background:rgba(168,85,247,0.15);
+    color:#d8b4fe;
+    border:1px solid rgba(168,85,247,0.25);
+  }
+
+  /* Form card - the main content area, visually separated */
+  .form-card{
+    background:rgba(22,30,55,0.85);
+    border:1px solid rgba(148,163,184,0.12);
+    border-radius:20px;
+    padding:36px;
+    display:flex;flex-direction:column;gap:28px;
+    backdrop-filter:blur(16px);
+  }
+
+  .field-group{display:flex;flex-direction:column;gap:10px}
+  .field-label{
+    font-family:'JetBrains Mono',monospace;
+    font-size:11px;text-transform:uppercase;
+    letter-spacing:0.1em;color:#8896b0;
+  }
+
+  .input-wrap{position:relative;display:flex;align-items:center}
+  .input-wrap input{
+    width:100%;
+    font-family:'Space Grotesk',sans-serif;font-size:15px;
+    color:#E0E8F0;
+    background:rgba(12,18,35,0.9);
+    border:1px solid rgba(148,163,184,0.15);
+    border-radius:12px;
+    padding:16px 50px 16px 18px;
+    outline:none;transition:all .2s;
+  }
+  .input-wrap input::placeholder{color:#4e5e78}
+  .input-wrap input:focus{
+    border-color:rgba(168,85,247,0.45);
+    box-shadow:0 0 0 3px rgba(168,85,247,0.08);
+    background:rgba(12,18,38,1);
+  }
+  .paste-icon{
+    position:absolute;right:16px;
+    color:#7b8ba3;cursor:pointer;transition:color .2s;font-size:18px;
+  }
+  .paste-icon:hover{color:#a855f7}
+
+  /* Round pills - darker bg so they pop */
+  .rounds-row{display:flex;gap:8px}
+  .round-pill{
+    font-family:'JetBrains Mono',monospace;
+    font-size:14px;font-weight:600;
+    width:60px;height:46px;
+    border-radius:12px;
+    border:1px solid rgba(148,163,184,0.12);
+    background:rgba(12,18,35,0.9);
+    color:#7b8ba3;
+    cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+    transition:all .2s;
+  }
+  .round-pill:hover{
+    border-color:rgba(148,163,184,0.25);
+    color:#c4cfe0;
+    background:rgba(18,24,42,1);
+  }
+  .round-pill.active{
+    border-color:rgba(168,85,247,0.4);
+    background:rgba(168,85,247,0.12);
+    color:#d8b4fe;
+    box-shadow:0 0 16px rgba(168,85,247,0.1);
+  }
+
+  /* Launch button */
+  .btn-launch{
+    font-family:'Space Grotesk',sans-serif;
+    font-size:17px;font-weight:600;letter-spacing:-0.01em;
+    width:100%;padding:18px;border:none;border-radius:14px;
+    background:linear-gradient(135deg,#a855f7 0%,#ec4899 100%);
+    color:#fff;cursor:pointer;
+    transition:transform .2s,box-shadow .3s;
+    position:relative;overflow:hidden;
+  }
+  .btn-launch:hover{
+    transform:translateY(-2px);
+    box-shadow:0 8px 32px rgba(168,85,247,0.3),0 4px 16px rgba(236,72,153,0.2);
+  }
+
+  /* Tags */
+  .url-tags{display:flex;flex-wrap:wrap;gap:8px}
+  .url-tag{
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;color:#6b7a90;
+    background:rgba(12,18,35,0.7);
+    border:1px solid rgba(148,163,184,0.1);
+    border-radius:8px;padding:5px 12px;letter-spacing:0.02em;
+  }
+
+  /* ===================== RIGHT COLUMN ===================== */
+  .right{
+    display:flex;align-items:center;justify-content:center;
+    padding:48px 72px 48px 32px;
+    position:relative;
+  }
+
+  /* Vertical separator line */
+  .right::after{
+    content:'';
+    position:absolute;left:0;top:10%;bottom:10%;
+    width:1px;
+    background:linear-gradient(to bottom,transparent,rgba(148,163,184,0.1) 30%,rgba(148,163,184,0.1) 70%,transparent);
+  }
+
+  .vibe-panel{
+    width:100%;max-width:560px;height:520px;
+    border-radius:20px;
+    border:1px solid rgba(148,163,184,0.1);
+    background:rgba(18,24,45,0.7);
+    backdrop-filter:blur(16px);
+    display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:32px;
+    position:relative;overflow:hidden;
+  }
+
+  /* Ambient purple glow inside the vibe panel */
+  .vibe-panel::before{
+    content:'';
+    position:absolute;
+    width:350px;height:350px;
+    background:radial-gradient(circle,rgba(168,85,247,0.1) 0%,transparent 60%);
+    border-radius:50%;pointer-events:none;
+  }
+
+  /* pulsing rings */
+  .pulse-ring{
+    position:absolute;
+    width:220px;height:220px;border-radius:50%;
+    border:1px solid rgba(168,85,247,0.12);
+    animation:ring-expand 4s ease-in-out infinite;
+  }
+  .pulse-ring:nth-child(2){animation-delay:1.3s;width:300px;height:300px}
+  .pulse-ring:nth-child(3){animation-delay:2.6s;width:380px;height:380px}
+  @keyframes ring-expand{
+    0%{transform:scale(.85);opacity:.5}
+    50%{transform:scale(1.05);opacity:.12}
+    100%{transform:scale(.85);opacity:.5}
+  }
+
+  /* equalizer */
+  .equalizer{
+    display:flex;align-items:flex-end;
+    gap:6px;height:100px;z-index:2;
+  }
+  .eq-bar{
+    width:7px;border-radius:4px;
+    background:linear-gradient(to top,#a855f7,#ec4899);
+    animation:eq-bounce var(--dur) ease-in-out infinite alternate;
+    opacity:0.9;
+  }
+  @keyframes eq-bounce{
+    0%{height:var(--min)}
+    100%{height:var(--max)}
+  }
+
+  .vibe-text{
+    font-size:17px;font-weight:500;
+    color:#8896b0;z-index:2;letter-spacing:-0.01em;
+  }
+  .vibe-status{
+    font-family:'JetBrains Mono',monospace;
+    font-size:11px;text-transform:uppercase;
+    letter-spacing:0.1em;color:rgba(168,85,247,0.6);z-index:2;
+  }
+
+  /* ambient glow behind vibe panel */
+  .right-glow{
+    position:absolute;
+    width:400px;height:400px;
+    background:radial-gradient(circle,rgba(168,85,247,0.06) 0%,transparent 65%);
+    border-radius:50%;pointer-events:none;
+  }
+
+  /* ===================== RESPONSIVE ===================== */
+  @media(max-width:900px){
+    .layout{grid-template-columns:1fr}
+    .left{max-width:100%;padding:32px 24px;justify-self:stretch}
+    .right{display:none}
+    .mobile-vibe{
+      display:flex !important;align-items:center;justify-content:center;
+      gap:5px;height:48px;margin-bottom:8px;
+    }
+    .mobile-vibe .eq-bar-sm{
+      width:4px;border-radius:2px;
+      background:linear-gradient(to top,#a855f7,#ec4899);
+      animation:eq-bounce var(--dur) ease-in-out infinite alternate;
+    }
+  }
+  @media(min-width:901px){
+    .mobile-vibe{display:none !important}
+  }
+</style>
+</head>
+<body>
+
+<div class="layout">
+
+  <!-- LEFT: Setup -->
+  <div class="left">
+
+    <div class="back-row">
+      <a class="back-arrow" href="01-modes.html">&larr;</a>
+      <span class="back-label">Solo</span>
+    </div>
+
+    <!-- Mobile vibe strip -->
+    <div class="mobile-vibe">
+      <div class="eq-bar-sm" style="--dur:0.6s;--min:8px;--max:28px;height:16px"></div>
+      <div class="eq-bar-sm" style="--dur:0.8s;--min:12px;--max:36px;height:24px"></div>
+      <div class="eq-bar-sm" style="--dur:0.5s;--min:6px;--max:20px;height:12px"></div>
+      <div class="eq-bar-sm" style="--dur:0.9s;--min:10px;--max:32px;height:20px"></div>
+      <div class="eq-bar-sm" style="--dur:0.7s;--min:8px;--max:24px;height:18px"></div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab active">Classique</button>
+      <button class="tab">Chrono</button>
+      <button class="tab">Defi</button>
+    </div>
+
+    <!-- Form inside a visible card -->
+    <div class="form-card">
+
+      <div class="field-group">
+        <label class="field-label">Source musicale</label>
+        <div class="input-wrap">
+          <input type="text" placeholder="Colle ton lien Spotify ou Deezer">
+          <span class="paste-icon" title="Coller">&#128203;</span>
+        </div>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label">Nombre de rounds</label>
+        <div class="rounds-row">
+          <button class="round-pill">5</button>
+          <button class="round-pill active">10</button>
+          <button class="round-pill">15</button>
+          <button class="round-pill">20</button>
+        </div>
+      </div>
+
+      <button class="btn-launch">Lancer</button>
+
+    </div>
+
+    <div class="url-tags">
+      <span class="url-tag">open.spotify.com/playlist/...</span>
+      <span class="url-tag">deezer.com/playlist/...</span>
+      <span class="url-tag">open.spotify.com/album/...</span>
+    </div>
+
+  </div>
+
+  <!-- RIGHT: Vibe panel -->
+  <div class="right">
+    <div class="right-glow"></div>
+    <div class="vibe-panel">
+
+      <div class="pulse-ring"></div>
+      <div class="pulse-ring"></div>
+      <div class="pulse-ring"></div>
+
+      <div class="equalizer">
+        <div class="eq-bar" style="--dur:0.7s;--min:12px;--max:70px;height:30px"></div>
+        <div class="eq-bar" style="--dur:0.5s;--min:18px;--max:85px;height:45px"></div>
+        <div class="eq-bar" style="--dur:0.9s;--min:10px;--max:65px;height:28px"></div>
+        <div class="eq-bar" style="--dur:0.6s;--min:22px;--max:95px;height:50px"></div>
+        <div class="eq-bar" style="--dur:0.8s;--min:14px;--max:78px;height:35px"></div>
+        <div class="eq-bar" style="--dur:0.55s;--min:16px;--max:88px;height:40px"></div>
+        <div class="eq-bar" style="--dur:0.75s;--min:10px;--max:60px;height:25px"></div>
+        <div class="eq-bar" style="--dur:0.65s;--min:20px;--max:82px;height:42px"></div>
+        <div class="eq-bar" style="--dur:0.85s;--min:12px;--max:72px;height:32px"></div>
+        <div class="eq-bar" style="--dur:0.48s;--min:16px;--max:90px;height:38px"></div>
+        <div class="eq-bar" style="--dur:0.72s;--min:14px;--max:68px;height:36px"></div>
+      </div>
+
+      <span class="vibe-text">Pret quand tu es pret</span>
+      <span class="vibe-status">En attente</span>
+
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

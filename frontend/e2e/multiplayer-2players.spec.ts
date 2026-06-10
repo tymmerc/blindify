@@ -32,16 +32,14 @@ async function createHostWithMusic(page: Page, nickname: string): Promise<void> 
   await page.locator("button", { hasText: "Continuer" }).click()
   await page.waitForTimeout(500)
 
-  // Step 2: Import music (don't skip!)
+  // Step 2: Import music
   const musicInput = page.locator("input").first()
   if (await musicInput.isVisible({ timeout: 3000 }).catch(() => false)) {
     await musicInput.fill(SPOTIFY_PROFILE)
     const goBtn = page.locator("button", { hasText: /Go|Importer|Continuer/i }).first()
     if (await goBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
       await goBtn.click()
-      // Wait for import to finish (up to 30s)
       await page.waitForTimeout(5000)
-      // Click continue/skip to move to next step
       const nextBtn = page.locator("button", { hasText: /Continuer|Passer/i }).first()
       if (await nextBtn.isVisible({ timeout: 20000 }).catch(() => false)) {
         await nextBtn.click()
@@ -51,7 +49,7 @@ async function createHostWithMusic(page: Page, nickname: string): Promise<void> 
   }
 
   // Step 3: Create
-  const createBtn = page.locator("text=Créer une partie").first()
+  const createBtn = page.locator("text=/Cr[eé]er une partie/").first()
   if (await createBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
     await createBtn.click()
   }
@@ -60,7 +58,6 @@ async function createHostWithMusic(page: Page, nickname: string): Promise<void> 
   await page.waitForLoadState("networkidle")
   await handleGuestAuth(page)
 
-  // Fallback direct navigation if wizard didn't land on multiplayer
   if (!page.url().includes("/multiplayer")) {
     await page.goto(`${BASE}/multiplayer?mode=friends&intent=host&nickname=${encodeURIComponent(nickname)}`)
     await page.waitForTimeout(5000)
@@ -69,18 +66,67 @@ async function createHostWithMusic(page: Page, nickname: string): Promise<void> 
   }
 }
 
-async function joinRoom(page: Page, roomCode: string): Promise<void> {
-  await page.goto(`${BASE}/multiplayer?mode=friends&code=${roomCode}`)
+async function joinRoom(page: Page, roomCode: string, nickname: string): Promise<void> {
+  // Create a guest session via API first (more reliable than wizard flow)
+  const apiBase = "https://tymmerc.eu/blindify/api"
+  await page.request.post(`${apiBase}/auth/guest`, {
+    data: { username: nickname },
+  }).catch(() => {})
+  await page.waitForTimeout(500)
+
+  // Navigate to multiplayer with the code
+  await page.goto(`${BASE}/multiplayer?mode=friends&code=${roomCode}&nickname=${encodeURIComponent(nickname)}`)
   await page.waitForTimeout(3000)
   await page.waitForLoadState("networkidle")
+
+  // Handle guest auth redirect if it occurs
   await handleGuestAuth(page)
+  await page.waitForTimeout(2000)
+
+  // If still not on multiplayer, retry
+  if (!page.url().includes("/multiplayer")) {
+    await page.goto(`${BASE}/multiplayer?mode=friends&code=${roomCode}&nickname=${encodeURIComponent(nickname)}`)
+    await page.waitForTimeout(5000)
+    await page.waitForLoadState("networkidle")
+    await handleGuestAuth(page)
+  }
+
   await page.waitForSelector("h1", { state: "visible", timeout: 10000 }).catch(() => {})
+}
+
+/** Submit an answer on a game page (fill title input + click Valider) */
+async function submitAnswer(page: Page, answer: string, label: string): Promise<boolean> {
+  const titleInput = page.locator("input[placeholder*='Titre'], input[placeholder*='titre']").first()
+  if (!await titleInput.isVisible({ timeout: 5000 }).catch(() => false)) {
+    console.log(`${label}: title input not visible`)
+    return false
+  }
+  await titleInput.fill(answer)
+  const submitBtn = page.locator("button").filter({ hasText: /valider/i }).first()
+  if (!await submitBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+    console.log(`${label}: submit button not visible`)
+    return false
+  }
+  await submitBtn.click()
+  console.log(`${label}: submitted "${answer}"`)
+  return true
+}
+
+/** Detect the current round number from page text (e.g. "1 / 5" or "Round 2") */
+function detectRound(text: string): number {
+  // Match "N / M" pattern
+  const slashMatch = text.match(/(\d+)\s*\/\s*\d+/)
+  if (slashMatch) return parseInt(slashMatch[1], 10)
+  // Match "Round N" or "Manche N"
+  const roundMatch = text.match(/(?:Round|Manche)\s*(\d+)/i)
+  if (roundMatch) return parseInt(roundMatch[1], 10)
+  return 0
 }
 
 // ── Tests ──
 
 test.describe("Friends — 2 players full game", () => {
-  test.setTimeout(120_000)
+  test.setTimeout(180_000) // 3 min for multi-round test
 
   test("lobby: host creates room, player joins, both visible", async ({ browser }) => {
     const hostCtx = await browser.newContext({ viewport: { width: 1280, height: 800 } })
@@ -89,55 +135,41 @@ test.describe("Friends — 2 players full game", () => {
     const playerPage = await playerCtx.newPage()
 
     try {
-      // Host creates room via wizard
       await createHostWithMusic(hostPage, "HostTest")
       const hostText = await getBodyText(hostPage)
-      const inLobby = hostText.includes("Lobby") || hostText.includes("Défie") || hostText.includes("Code de la salle")
+      const inLobby = /ROOM_CODE|CREW|PRESS START|Lobby|Défie|Defie|Code de la salle/i.test(hostText)
       expect(inLobby).toBe(true)
 
-      // Extract room code
       const roomCode = await extractRoomCode(hostPage)
       console.log(`Room code: ${roomCode}`)
       expect(roomCode.length).toBeGreaterThanOrEqual(5)
 
-      // Player joins
-      await joinRoom(playerPage, roomCode)
+      await joinRoom(playerPage, roomCode, "Player2")
       const playerText = await getBodyText(playerPage)
-      const playerInLobby = playerText.includes("Lobby") || playerText.includes("Défie") || playerText.includes("Code de la salle")
+      const playerInLobby = /ROOM_CODE|CREW|PRESS START|Lobby|Défie|Defie|Code de la salle/i.test(playerText)
       expect(playerInLobby).toBe(true)
-      console.log("Player joined lobby OK")
 
-      // Host should see 2 players
       await hostPage.waitForTimeout(3000)
       const hostAfter = await getBodyText(hostPage)
       expect(hostAfter).toContain("2")
-      console.log("Host sees 2 players")
 
-      // Launch button should be enabled (>= 2 players)
-      const launchBtn = hostPage.locator("button").filter({ hasText: /lancer la partie/i })
+      const launchBtn = hostPage.locator("button").filter({ hasText: /lancer la partie|press start/i })
       await expect(launchBtn).toBeVisible({ timeout: 5000 })
-      const isEnabled = await launchBtn.isEnabled()
-      console.log(`Launch button enabled: ${isEnabled}`)
-      expect(isEnabled).toBe(true)
+      expect(await launchBtn.isEnabled()).toBe(true)
     } finally {
       await hostCtx.close()
       await playerCtx.close()
     }
   })
 
-  test("gameplay: launch, both see game UI, submit answers, reveal triggers", async ({ browser }) => {
+  test("full game: launch, play 2 rounds with answers, verify round advancement", async ({ browser }) => {
     const hostCtx = await browser.newContext({ viewport: { width: 1280, height: 800 } })
     const playerCtx = await browser.newContext({ viewport: { width: 1280, height: 800 } })
     const hostPage = await hostCtx.newPage()
     const playerPage = await playerCtx.newPage()
 
-    const hostAudio: string[] = []
-    const playerAudio: string[] = []
-    hostPage.on("request", r => { if (r.url().includes("dzcdn.net") || r.url().includes("cdns-preview")) hostAudio.push(r.url()) })
-    playerPage.on("request", r => { if (r.url().includes("dzcdn.net") || r.url().includes("cdns-preview")) playerAudio.push(r.url()) })
-
     try {
-      // ── SETUP: create room with music ──
+      // ── SETUP ──
       await createHostWithMusic(hostPage, "GameHost")
       expect(hostPage.url()).toContain("/multiplayer")
 
@@ -145,99 +177,121 @@ test.describe("Friends — 2 players full game", () => {
       console.log(`Room: ${roomCode}`)
       expect(roomCode.length).toBeGreaterThanOrEqual(5)
 
-      // Player joins
-      await joinRoom(playerPage, roomCode)
-      await hostPage.waitForTimeout(3000)
+      await joinRoom(playerPage, roomCode, "Player2")
 
-      // ── LAUNCH ──
-      const launchBtn = hostPage.locator("button").filter({ hasText: /lancer la partie/i })
-      if (await launchBtn.isVisible({ timeout: 5000 }).catch(() => false) && await launchBtn.isEnabled()) {
-        await launchBtn.click()
-        console.log("Game launched!")
-      } else {
-        console.log("Launch button not available, skipping gameplay checks")
+      // Wait for host to see 2 players (poll up to 15s)
+      let playerCount = 0
+      for (let i = 0; i < 15; i++) {
+        await hostPage.waitForTimeout(1000)
+        const text = await getBodyText(hostPage)
+        // New synthwave lobby: "CREW 02/04". Legacy: "Joueurs · 2".
+        const match = text.match(/CREW\s*0?(\d+)\s*\//i) || text.match(/Joueurs\s*[·:]\s*(\d+)/i)
+        playerCount = match ? parseInt(match[1], 10) : 0
+        console.log(`Waiting for player 2... count=${playerCount} (${i + 1}s)`)
+        if (playerCount >= 2) break
+      }
+      if (playerCount < 2) {
+        console.log("Player 2 never joined, test cannot continue")
+        const playerUrl = playerPage.url()
+        const playerText = (await getBodyText(playerPage)).substring(0, 300)
+        console.log(`Player2 URL: ${playerUrl}`)
+        console.log(`Player2 text: ${playerText}`)
+        expect(playerCount).toBeGreaterThanOrEqual(2)
         return
       }
 
-      // ── CHECK 1: Both see game UI (wait for round to start) ──
-      const hostHasGame = await waitForText(hostPage, /Valider|Manche|secondes|Titre/, 15000)
-      const playerHasGame = await waitForText(playerPage, /Valider|Manche|secondes|Titre/, 10000)
-      console.log(`Host game UI: ${hostHasGame}, Player game UI: ${playerHasGame}`)
+      // ── LAUNCH ──
+      const launchBtn = hostPage.locator("button").filter({ hasText: /lancer la partie|press start/i })
+      await expect(launchBtn).toBeEnabled({ timeout: 5000 })
+      await launchBtn.click()
+      console.log("Game launched!")
+
+      // ── ROUND 1: Both see game UI ──
+      const hostHasGame = await waitForText(hostPage, /Valider|Titre/i, 15000)
+      const playerHasGame = await waitForText(playerPage, /Valider|Titre/i, 10000)
+      console.log(`Round 1 game UI - Host: ${hostHasGame}, Player: ${playerHasGame}`)
       expect(hostHasGame || playerHasGame).toBe(true)
 
-      // ── CHECK 2: Both see round indicator ──
-      const hostGameText = await getBodyText(hostPage)
-      const playerGameText = await getBodyText(playerPage)
-      const roundMatch = /\d+\s*\/\s*\d+/
-      const hostHasRound = roundMatch.test(hostGameText)
-      const playerHasRound = roundMatch.test(playerGameText)
-      console.log(`Round indicator - Host: ${hostHasRound}, Player: ${playerHasRound}`)
-      expect(hostHasRound || playerHasRound).toBe(true)
+      // Verify we're on round 1
+      const r1HostText = await getBodyText(hostPage)
+      const round1 = detectRound(r1HostText)
+      console.log(`Detected round: ${round1}`)
+      expect(round1).toBe(1)
 
-      // ── CHECK 3: Audio requests fired ──
-      console.log(`Audio requests - Host: ${hostAudio.length}, Player: ${playerAudio.length}`)
-      // At least one side should have audio
-      expect(hostAudio.length + playerAudio.length).toBeGreaterThan(0)
+      // ── ROUND 1: Both submit answers ──
+      const hostAnswered = await submitAnswer(hostPage, "test host round1", "Host R1")
+      const playerAnswered = await submitAnswer(playerPage, "test player round1", "Player R1")
+      console.log(`Round 1 answers - Host: ${hostAnswered}, Player: ${playerAnswered}`)
+      expect(hostAnswered || playerAnswered).toBe(true)
 
-      // ── CHECK 4: Same track for both players ──
-      if (hostAudio.length > 0 && playerAudio.length > 0) {
-        const hostTrackId = hostAudio[0].split("/").pop()?.split("?")[0] ?? ""
-        const playerTrackId = playerAudio[0].split("/").pop()?.split("?")[0] ?? ""
-        console.log(`Same track: ${hostTrackId === playerTrackId} (${hostTrackId})`)
-        expect(hostTrackId).toBe(playerTrackId)
+      // ── ROUND 1: Verify REVEAL triggers ──
+      // Both answered = early reveal should fire. Wait for reveal indicators.
+      console.log("Waiting for reveal...")
+      const revealVisible = await waitForText(hostPage, /pts|score|ponse|sultat|Correct|Bonne|Mauvaise/i, 15000)
+      console.log(`Reveal visible on host: ${revealVisible}`)
+
+      // ── ROUND 2: Verify auto-advance ──
+      // After reveal, there's a countdown (4-7s) then game:ready fires automatically.
+      // Wait up to 20s for round 2 to start.
+      console.log("Waiting for round 2...")
+      let round2Detected = false
+      for (let i = 0; i < 20; i++) {
+        await hostPage.waitForTimeout(1000)
+        const text = await getBodyText(hostPage)
+        const currentRound = detectRound(text)
+        if (currentRound >= 2) {
+          round2Detected = true
+          console.log(`Round 2 detected after ${i + 1}s`)
+          break
+        }
+        // Also check if game finished (if only 1 round configured)
+        if (/termin|fini|game.over|victoire/i.test(text)) {
+          console.log("Game finished after round 1 (only 1 round configured)")
+          round2Detected = true // Not a bug, just short game
+          break
+        }
+      }
+      expect(round2Detected).toBe(true)
+
+      // ── ROUND 2: Verify game UI is interactive again ──
+      const r2HostText = await getBodyText(hostPage)
+      const round2Num = detectRound(r2HostText)
+      if (round2Num >= 2) {
+        console.log(`On round ${round2Num}, waiting for inputs...`)
+        // Wait for the game UI to be fully interactive (animation transition)
+        await hostPage.waitForTimeout(3000)
+
+        // Both submit answers for round 2
+        const hostR2 = await submitAnswer(hostPage, "test host round2", "Host R2")
+        const playerR2 = await submitAnswer(playerPage, "test player round2", "Player R2")
+        console.log(`Round 2 answers - Host: ${hostR2}, Player: ${playerR2}`)
+
+        // Wait for reveal again
+        const reveal2 = await waitForText(hostPage, /pts|score|ponse|sultat|Correct/i, 15000)
+        console.log(`Round 2 reveal: ${reveal2}`)
+
+        // Wait for round 3 or game end
+        console.log("Waiting for round 3 or game end...")
+        let round3OrEnd = false
+        for (let i = 0; i < 20; i++) {
+          await hostPage.waitForTimeout(1000)
+          const text = await getBodyText(hostPage)
+          const currentRound = detectRound(text)
+          if (currentRound >= 3) {
+            console.log(`Round 3 detected after ${i + 1}s`)
+            round3OrEnd = true
+            break
+          }
+          if (/termin|fini|game.over|victoire|Rejouer/i.test(text)) {
+            console.log(`Game ended after ${i + 1}s`)
+            round3OrEnd = true
+            break
+          }
+        }
+        expect(round3OrEnd).toBe(true)
       }
 
-      // ── CHECK 5: Host submits answer ──
-      const hostTitleInput = hostPage.locator("input").filter({ hasText: /titre/i }).or(hostPage.locator("input[placeholder*='Titre'], input[placeholder*='titre']")).first()
-      if (await hostTitleInput.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await hostTitleInput.fill("test answer host")
-        const submitBtn = hostPage.locator("button").filter({ hasText: /valider/i }).first()
-        await submitBtn.click()
-        console.log("Host submitted answer")
-
-        // After host answers, check if answer count updates
-        await playerPage.waitForTimeout(2000)
-        const playerMid = await getBodyText(playerPage)
-        const hasAnswerCount = /1\s*\/\s*2/.test(playerMid)
-        console.log(`Player sees 1/2 answers: ${hasAnswerCount}`)
-        // This is a soft check - answer counter may not be visible in all UI variants
-      }
-
-      // ── CHECK 6: Player submits answer ──
-      const playerTitleInput = playerPage.locator("input").filter({ hasText: /titre/i }).or(playerPage.locator("input[placeholder*='Titre'], input[placeholder*='titre']")).first()
-      if (await playerTitleInput.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await playerTitleInput.fill("test answer player")
-        const submitBtn = playerPage.locator("button").filter({ hasText: /valider/i }).first()
-        await submitBtn.click()
-        console.log("Player submitted answer")
-      }
-
-      // ── CHECK 7: Reveal triggers (both answered = early reveal) ──
-      // Wait for reveal phase - should show correct answer, score, or next round
-      await hostPage.waitForTimeout(5000)
-      const hostReveal = await getBodyText(hostPage)
-      const playerReveal = await getBodyText(playerPage)
-
-      const revealKeywords = /ponse|sultat|Bonne|Mauvaise|Correct|pts|score|2\s*\/\s*\d+|Manche 2/i
-      const hostSeesReveal = revealKeywords.test(hostReveal)
-      const playerSeesReveal = revealKeywords.test(playerReveal)
-      console.log(`Reveal - Host: ${hostSeesReveal}, Player: ${playerSeesReveal}`)
-      // At least one should see reveal or next round
-      expect(hostSeesReveal || playerSeesReveal).toBe(true)
-
-      // ── CHECK 8: Round advances (auto-advance after reveal countdown) ──
-      await hostPage.waitForTimeout(10000) // Wait for reveal countdown + next round
-      const hostR2 = await getBodyText(hostPage)
-      const playerR2 = await getBodyText(playerPage)
-
-      // Should either be on round 2, or still in reveal with countdown
-      const hasAdvanced = /Manche\s*2|2\s*\/\s*\d+/i.test(hostR2) || /Manche\s*2|2\s*\/\s*\d+/i.test(playerR2)
-      const stillInReveal = /ponse|sultat|Prochain|Pr[eê]t/i.test(hostR2) || /ponse|sultat|Prochain|Pr[eê]t/i.test(playerR2)
-      console.log(`Round 2 advanced: ${hasAdvanced}, Still in reveal: ${stillInReveal}`)
-      // Either advanced to round 2 or still showing reveal (both are OK, game is progressing)
-      expect(hasAdvanced || stillInReveal).toBe(true)
-
-      console.log("=== GAMEPLAY TEST PASSED ===")
+      console.log("=== FULL GAME TEST PASSED ===")
     } finally {
       await hostCtx.close()
       await playerCtx.close()

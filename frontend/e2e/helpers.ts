@@ -32,7 +32,7 @@ export async function goToLobbyAsHost(page: Page, base: string, nickname: string
       await skipMusic.click()
       await page.waitForTimeout(500)
     }
-    const createBtn = page.locator("text=Créer une partie").first()
+    const createBtn = page.locator("text=/Cr[eé]er une partie/").first()
     if (await createBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
       await createBtn.click()
       await page.waitForTimeout(3000)

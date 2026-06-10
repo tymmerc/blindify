@@ -18,7 +18,13 @@ export function normalize(text: string): string {
   return replaced.replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim()
 }
 
-const STOP_WORDS = new Set(["feat", "featuring", "feat.", "ft", "ft.", "with", "and", "x", "feat,", "featuring,"])
+const STOP_WORDS = new Set([
+  "feat", "featuring", "feat.", "ft", "ft.", "with", "and", "x", "feat,", "featuring,",
+  // Track title suffixes that listeners don't type
+  "remaster", "remastered", "remix", "remixed", "live", "acoustic", "version",
+  "deluxe", "edition", "bonus", "track", "radio", "edit", "mix", "original",
+  "extended", "single", "demo", "instrumental", "unplugged",
+])
 
 export function tokenize(text: string): string[] {
   return normalize(text)

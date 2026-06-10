@@ -5,22 +5,36 @@ import { usePathname, useRouter } from "next/navigation"
 import type { Mode } from "@/contexts/ModeContext"
 import { useMode } from "@/contexts/ModeContext"
 
+const VALID_MODES: Mode[] = ["friends", "event", "streamer"]
+
 type ModeGateProps = {
   allowedModes?: Mode[]
   redirectTo?: string
+  /** Pass mode from URL search params to bypass localStorage dependency */
+  urlMode?: string | null
   children: React.ReactNode
 }
 
-export function ModeGate({ allowedModes, redirectTo = "/modes", children }: ModeGateProps) {
-  const { mode } = useMode()
+export function ModeGate({ allowedModes, redirectTo = "/modes", urlMode, children }: ModeGateProps) {
+  const { mode, setMode } = useMode()
   const router = useRouter()
   const pathname = usePathname()
   const [ready, setReady] = useState(false)
 
+  // If mode is passed via URL, auto-set it in context
+  const parsedUrlMode = urlMode && VALID_MODES.includes(urlMode as Mode) ? (urlMode as Mode) : null
+  const effectiveMode = mode ?? parsedUrlMode
+
+  useEffect(() => {
+    if (parsedUrlMode && parsedUrlMode !== mode) {
+      setMode(parsedUrlMode)
+    }
+  }, [parsedUrlMode, mode, setMode])
+
   const isAllowed = useMemo(() => {
-    if (!allowedModes || allowedModes.length === 0) return Boolean(mode)
-    return Boolean(mode && allowedModes.includes(mode))
-  }, [mode, allowedModes])
+    if (!allowedModes || allowedModes.length === 0) return Boolean(effectiveMode)
+    return Boolean(effectiveMode && allowedModes.includes(effectiveMode))
+  }, [effectiveMode, allowedModes])
 
   useEffect(() => {
     setReady(true)
@@ -28,12 +42,12 @@ export function ModeGate({ allowedModes, redirectTo = "/modes", children }: Mode
 
   useEffect(() => {
     if (!ready) return
-    if (!mode || !isAllowed) {
+    if (!effectiveMode || !isAllowed) {
       router.replace(`${redirectTo}?from=${encodeURIComponent(pathname || "/")}`)
     }
-  }, [ready, mode, isAllowed, router, redirectTo, pathname])
+  }, [ready, effectiveMode, isAllowed, router, redirectTo, pathname])
 
   if (!ready) return null
-  if (!mode || !isAllowed) return null
+  if (!effectiveMode || !isAllowed) return null
   return <>{children}</>
 }

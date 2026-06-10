@@ -64,11 +64,12 @@ export const api = {
     maxPlayers?: number
     questionCount?: number
     autoAdvance?: boolean
+    nickname?: string
   }): Promise<{ room: MultiplayerRoom }> {
     return clientApi.createRoom(options)
   },
-  async joinRoom(code: string): Promise<{ room: MultiplayerRoom }> {
-    return clientApi.joinRoom(code)
+  async joinRoom(code: string, nickname?: string): Promise<{ room: MultiplayerRoom }> {
+    return clientApi.joinRoom(code, nickname)
   },
   async roomDetails(code: string): Promise<{ room: MultiplayerRoom; participants: MultiplayerParticipant[]; selfPreference: RoomSelfPreference }> {
     return clientApi.roomDetails(code)
@@ -200,16 +201,41 @@ export const api = {
   async gameHistory() {
     return clientApi.gameHistory()
   },
+  async gameHistoryDetailed() {
+    return clientApi.gameHistoryDetailed()
+  },
   async importPlaylists(url: string) {
     return clientApi.importPlaylists(url)
   },
   async importSync(provider: string, playlistId: string) {
     return clientApi.importSync(provider, playlistId)
   },
-  async importSyncAll(provider: string, playlistIds: string[]) {
-    return clientApi.importSyncAll(provider, playlistIds)
+  async importSyncAll(provider: string, playlistIds: string[], maxTracksPerPlaylist?: number) {
+    return clientApi.importSyncAll(provider, playlistIds, maxTracksPerPlaylist)
   },
   async quickPlay(url: string, count?: number) {
     return clientApi.quickPlay(url, count)
+  },
+  async createChallenge(data: {
+    tracks: SoloTrack[]
+    creatorName: string
+    score: number
+    correct: number
+    total: number
+    bestStreak: number
+  }) {
+    return clientApi.createChallenge(data)
+  },
+  async getChallenge(code: string) {
+    return clientApi.getChallenge(code)
+  },
+  async completeChallenge(code: string, data: {
+    playerName: string
+    score: number
+    correct: number
+    total: number
+    bestStreak: number
+  }) {
+    return clientApi.completeChallenge(code, data)
   },
 }

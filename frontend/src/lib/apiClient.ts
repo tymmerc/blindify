@@ -1,5 +1,6 @@
 import { API_BASE_URL } from "./config"
 import type {
+  GameHistoryEntry,
   GameSessionSummary,
   MultiplayerParticipant,
   MultiplayerRoom,
@@ -192,6 +193,7 @@ export const clientApi = {
     maxPlayers?: number
     questionCount?: number
     autoAdvance?: boolean
+    nickname?: string
   } = {}): Promise<{ room: MultiplayerRoom }> {
     return request<{ room: MultiplayerRoom }>("/api/rooms/create", {
       method: "POST",
@@ -199,10 +201,11 @@ export const clientApi = {
       body: JSON.stringify(options),
     })
   },
-  async joinRoom(code: string): Promise<{ room: MultiplayerRoom }> {
+  async joinRoom(code: string, nickname?: string): Promise<{ room: MultiplayerRoom }> {
     return request<{ room: MultiplayerRoom }>(`/api/rooms/${code}/join`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nickname }),
     })
   },
   async roomDetails(code: string): Promise<{ room: MultiplayerRoom; participants: MultiplayerParticipant[]; selfPreference: RoomSelfPreference }> {
@@ -384,6 +387,9 @@ export const clientApi = {
   async gameHistory(): Promise<{ sessions: GameSessionSummary[] }> {
     return request("/api/games/history")
   },
+  async gameHistoryDetailed(): Promise<{ games: GameHistoryEntry[] }> {
+    return request("/api/games/history")
+  },
   async importPlaylists(url: string): Promise<{
     provider: "spotify" | "deezer"
     type: "user" | "playlist"
@@ -403,11 +409,76 @@ export const clientApi = {
       body: JSON.stringify({ provider, playlistId }),
     })
   },
-  async importSyncAll(provider: string, playlistIds: string[]): Promise<{ synced: number; failed: number; total: number }> {
+  async importSyncAll(provider: string, playlistIds: string[], maxTracksPerPlaylist?: number): Promise<{ synced: number; failed: number; total: number }> {
     return request("/api/import/sync-all", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ provider, playlistIds }),
+      body: JSON.stringify({ provider, playlistIds, maxTracksPerPlaylist }),
+    })
+  },
+  async createChallenge(data: {
+    tracks: import("./types").SoloTrack[]
+    creatorName: string
+    score: number
+    correct: number
+    total: number
+    bestStreak: number
+  }): Promise<{ code: string }> {
+    return request("/api/challenges", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    })
+  },
+  async getChallenge(code: string): Promise<{
+    code: string
+    creatorName: string
+    creatorScore: number
+    creatorCorrect: number
+    creatorTotal: number
+    creatorBestStreak: number
+    trackCount: number
+    tracks: Array<{
+      title: string
+      artist: string
+      album_cover: string | null
+      audio_url: string | null
+      audioSourceId: string | null
+      track_id: string | null
+      type: string
+    }>
+    createdAt: string
+    attempts: Array<{
+      playerName: string
+      score: number
+      correct: number
+      total: number
+      bestStreak: number
+      completedAt: string
+    }>
+  }> {
+    return request(`/api/challenges/${encodeURIComponent(code)}`)
+  },
+  async completeChallenge(code: string, data: {
+    playerName: string
+    score: number
+    correct: number
+    total: number
+    bestStreak: number
+  }): Promise<{
+    leaderboard: Array<{
+      playerName: string
+      score: number
+      correct: number
+      total: number
+      bestStreak: number
+      completedAt: string
+    }>
+  }> {
+    return request(`/api/challenges/${encodeURIComponent(code)}/complete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
     })
   },
   async quickPlay(url: string, count?: number): Promise<{

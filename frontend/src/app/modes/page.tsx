@@ -4,6 +4,7 @@ import { Suspense, useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import type { Mode } from "@/contexts/ModeContext"
 import { useMode } from "@/contexts/ModeContext"
+import { MangaSpeakers } from "@/components/ui/MangaSpeakers"
 
 
 type ModeCard = {
@@ -101,24 +102,33 @@ function ModeSelectionContent() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#050505] px-6 py-14 text-white">
-      <div className="w-full max-w-5xl space-y-8">
+    <div className="flex min-h-screen items-center justify-center px-6 py-14 text-white">
+      <MangaSpeakers />
+      <div className="relative z-10 w-full max-w-5xl space-y-10">
         <header className="flex flex-col gap-3 text-center">
-          <p className="text-xs uppercase tracking-[0.3em] text-white/60">Orientation</p>
-          <h1 className="text-4xl font-semibold tracking-[-0.04em] sm:text-5xl">Comment tu veux jouer ?</h1>
-          <p className="text-sm text-white/60">Choisis un mode, je m’occupe du reste.</p>
+          <p className="font-mono text-xs uppercase tracking-[0.4em] text-[#00f7ff] text-glow-cyan">
+            &gt; Select_Mode
+          </p>
+          <h1
+            className="font-display text-5xl uppercase tracking-[0.06em] text-[#ff2ec8] text-glow-pink sm:text-6xl"
+            style={{ fontFamily: "var(--font-display)" }}
+          >
+            Comment tu veux jouer ?
+          </h1>
+          <p className="text-sm text-white/70">Choisis un mode, le reste suit.</p>
         </header>
 
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-5 md:grid-cols-3">
           {MODE_CARDS.map(card => {
             const isActive = selection === card.key
             const isHover = !isActive && hovered === card.key
             const borderColor = isActive
               ? card.accent
               : isHover
-                ? hexToRgba(card.accent, 0.38)
-                : hexToRgba(card.accent, 0.2)
-            const dotColor = isActive ? card.accent : hexToRgba(card.accent, isHover ? 0.35 : 0.18)
+                ? hexToRgba(card.accent, 0.55)
+                : hexToRgba(card.accent, 0.28)
+            const dotColor = isActive ? card.accent : hexToRgba(card.accent, isHover ? 0.5 : 0.22)
+            const glowIntensity = isActive ? 0.6 : isHover ? 0.35 : 0.12
             return (
               <button
                 key={card.key}
@@ -126,35 +136,76 @@ function ModeSelectionContent() {
                 onDoubleClick={() => handleConfirm(card.key)}
                 onMouseEnter={() => setHovered(card.key)}
                 onMouseLeave={() => setHovered(current => (current === card.key ? null : current))}
-                className="flex h-full flex-col justify-between rounded-2xl border bg-[#0c0c0c] p-5 text-left transition-colors"
-                style={{ borderColor }}
+                className="group relative flex h-full flex-col justify-between rounded-xl border bg-[rgba(15,5,30,0.85)] p-6 text-left backdrop-blur-md transition-all duration-200 hover:-translate-y-1"
+                style={{
+                  borderColor,
+                  boxShadow: `0 0 24px ${hexToRgba(card.accent, glowIntensity)}, inset 0 0 18px ${hexToRgba(card.accent, glowIntensity * 0.25)}`,
+                }}
               >
+                {/* Corner brackets - arcade frame feel */}
+                <span
+                  aria-hidden
+                  className="absolute left-2 top-2 h-3 w-3 border-l-2 border-t-2"
+                  style={{ borderColor: card.accent }}
+                />
+                <span
+                  aria-hidden
+                  className="absolute right-2 top-2 h-3 w-3 border-r-2 border-t-2"
+                  style={{ borderColor: card.accent }}
+                />
+                <span
+                  aria-hidden
+                  className="absolute bottom-2 left-2 h-3 w-3 border-b-2 border-l-2"
+                  style={{ borderColor: card.accent }}
+                />
+                <span
+                  aria-hidden
+                  className="absolute bottom-2 right-2 h-3 w-3 border-b-2 border-r-2"
+                  style={{ borderColor: card.accent }}
+                />
+
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <div className="text-xs uppercase tracking-[0.25em] text-white/60">Mode</div>
+                    <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-white/50">[ Mode ]</div>
                     <div className="flex items-center gap-2">
                       {card.wip && (
-                        <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.15em] text-white/50">
-                          Bientôt
+                        <span className="rounded-sm bg-white/[0.08] px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.15em] text-white/60">
+                          Bientot
                         </span>
                       )}
                       <span
                         aria-hidden
-                        className="h-2.5 w-2.5 rounded-full transition-colors"
-                        style={{ background: dotColor }}
+                        className="h-2.5 w-2.5 rounded-full transition-all"
+                        style={{
+                          background: dotColor,
+                          boxShadow: isActive ? `0 0 12px ${card.accent}, 0 0 4px ${card.accent}` : `0 0 6px ${dotColor}`,
+                        }}
                       />
                     </div>
                   </div>
-                  <div className="space-y-1">
-                    <h2 className="text-xl font-semibold">{card.title}</h2>
+                  <div className="space-y-2">
+                    <h2
+                      className="font-display text-xl uppercase tracking-[0.04em]"
+                      style={{
+                        color: card.accent,
+                        textShadow: `0 0 8px ${hexToRgba(card.accent, 0.7)}, 0 0 16px ${hexToRgba(card.accent, 0.4)}`,
+                        fontFamily: "var(--font-display)",
+                      }}
+                    >
+                      {card.title}
+                    </h2>
                     <p className="text-sm text-white/70">{card.subtitle}</p>
                   </div>
                 </div>
                 <div className="mt-4 flex items-center justify-between">
-                  <span className="text-[11px] uppercase tracking-[0.3em] text-white/50">Posture</span>
+                  <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-white/50">// posture</span>
                   <span
-                    className="rounded-full px-3 py-1 text-[12px] font-semibold text-white"
-                    style={{ background: isActive ? card.accent : hexToRgba(card.accent, isHover ? 0.35 : 0.2) }}
+                    className="rounded-sm px-3 py-1 font-mono text-[11px] uppercase tracking-[0.12em] text-white"
+                    style={{
+                      background: hexToRgba(card.accent, isActive ? 0.25 : 0.12),
+                      border: `1px solid ${card.accent}`,
+                      boxShadow: `inset 0 0 8px ${hexToRgba(card.accent, 0.3)}`,
+                    }}
                   >
                     {card.posture}
                   </span>
@@ -170,30 +221,36 @@ function ModeSelectionContent() {
             type="button"
             onClick={() => handleConfirm()}
             disabled={!selection}
-            className="inline-flex items-center gap-2 rounded-full border px-5 py-2 text-sm font-semibold transition-colors disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-md border-2 px-6 py-2.5 font-display text-sm uppercase tracking-[0.15em] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
             style={{
               borderColor: activeCard ? activeCard.accent : "rgba(255,255,255,0.2)",
               color: activeCard ? activeCard.accent : "rgba(255,255,255,0.8)",
+              boxShadow: activeCard ? `0 0 18px ${hexToRgba(activeCard.accent, 0.45)}, inset 0 0 12px ${hexToRgba(activeCard.accent, 0.15)}` : "none",
+              textShadow: activeCard ? `0 0 6px ${hexToRgba(activeCard.accent, 0.7)}` : "none",
+              fontFamily: "var(--font-display)",
             }}
           >
-            Valider ce mode
+            &gt; Valider
           </button>
         </div>
 
-        <button
-          type="button"
-          onClick={() => router.push("/solo")}
-          className="fixed bottom-6 right-6 z-40 rounded-full border-2 border-white/20 bg-white/10 px-5 py-2.5 text-sm font-semibold text-white/90 backdrop-blur transition hover:border-white/30 hover:bg-white/15"
-          aria-label="Jouer en solo"
-        >
-          Jouer en solo
-        </button>
+        <div className="fixed bottom-6 right-6 z-40">
+          <button
+            type="button"
+            onClick={() => router.push("/solo")}
+            className="btn-neon font-display text-sm"
+            style={{ fontFamily: "var(--font-display)" }}
+            aria-label="Jouer en solo"
+          >
+            Solo
+          </button>
+        </div>
         <button
           type="button"
           onClick={() => setShowHelp(h => !h)}
-          className="fixed bottom-6 left-6 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-xs font-semibold text-white hover:bg-white/10"
+          className="fixed bottom-6 left-6 rounded-sm border border-white/20 bg-[rgba(15,5,30,0.7)] px-4 py-2 font-mono text-[11px] uppercase tracking-[0.15em] text-white/80 backdrop-blur transition hover:border-[#00f7ff] hover:text-[#00f7ff]"
         >
-          {showHelp ? "Fermer" : "Comment ça marche ?"}
+          {showHelp ? "[ X ] Fermer" : "[ ? ] Aide"}
         </button>
         {showHelp && (
           <div className="fixed inset-0 z-50 flex items-end justify-start p-6" onClick={() => setShowHelp(false)}>

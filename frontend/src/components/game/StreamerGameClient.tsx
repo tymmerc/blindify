@@ -81,7 +81,6 @@ export function StreamerGameClient({
       return
     }
 
-    audioManager.unlock()
     audioManager.setVolume(PLAYBACK_VOLUME, "streamer")
     audioManager.setMuted(muted, "streamer")
     audioManager.play({ src: previewUrl, loop: true, volume: PLAYBACK_VOLUME, owner: "streamer" })
@@ -110,7 +109,6 @@ export function StreamerGameClient({
     const previewUrl = state?.currentTrack?.previewUrl
     if (!previewUrl) return
     try {
-      await audioManager.unlock()
       await audioManager.play({ src: previewUrl, loop: true, volume: PLAYBACK_VOLUME, owner: "streamer" })
       audioManager.setMuted(muted, "streamer")
       setManualPlayRequired(false)

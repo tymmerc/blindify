@@ -10,6 +10,7 @@ import {
   removePlayer,
   upsertPlayer,
   markDisconnected,
+  markReconnected,
   getGameMode,
 } from "./services/realtimeGame";
 import {
@@ -163,19 +164,28 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
   io.use(async (socket, next) => {
     try {
       const token = extractSessionToken(socket);
-      if (!token) return next(new Error("unauthorized"));
+      if (!token) {
+        logger.debug(`socket middleware: no token for ${socket.id}`);
+        return next(new Error("unauthorized"));
+      }
       const context = await getSessionContextFromToken(token, { autoExtend: true });
-      if (!context) return next(new Error("unauthorized"));
+      if (!context) {
+        logger.debug(`socket middleware: invalid token for ${socket.id}`);
+        return next(new Error("unauthorized"));
+      }
       (socket.data as { auth?: SessionContext }).auth = context;
       return next();
     } catch (err) {
+      logger.debug(`socket middleware: error for ${socket.id}: ${err}`);
       return next(new Error("unauthorized"));
     }
   });
 
   io.on("connection", socket => {
+    logger.debug(`socket connected: ${socket.id}`);
     const auth = (socket.data as { auth?: SessionContext }).auth;
     if (!auth?.user) {
+      logger.debug(`socket ${socket.id} rejected: no auth`);
       socket.emit("room:error", {
         code: "unauthorized",
         message: "Authentification requise",
@@ -186,6 +196,7 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
     }
 
     const currentUser = auth.user;
+    logger.debug(`socket ${socket.id} authenticated as user ${currentUser.id} (${currentUser.username})`);
     lastKnownUsername.set(currentUser.id, currentUser.username ?? null);
 
     const beforePresence = getPresence(currentUser.id);
@@ -235,6 +246,8 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
       }
       socket.join(roomCode);
       logger.debug(`user ${currentUser.id} joined socket room ${roomCode}, rooms now: ${Array.from(socket.rooms).join(", ")}`);
+      // Clear disconnected flag when player reconnects
+      markReconnected(roomCode, currentUser.id);
       // In event mode, the host is a spectator/presenter — don't add them as a player
       const roomGameMode = getGameMode(roomCode);
       const roomGameState = getRealtimeState(roomCode);
@@ -298,6 +311,8 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
           logger.debug(`game:answer socket ${socket.id} not in room ${roomCode}, re-joining`);
           socket.join(roomCode);
         }
+        // If this player was marked disconnected, clear it since they're clearly online
+        markReconnected(roomCode, currentUser.id);
         const state = getRealtimeState(roomCode);
         // Block host from answering in event mode (host is spectator/presenter)
         const gameMode = getGameMode(roomCode);
@@ -355,6 +370,7 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
 
     socket.on("game:ready", async ({ roomCode }: { roomCode: string }) => {
       if (!roomCode) return;
+      logger.debug(`game:ready from user ${currentUser.id} for room ${roomCode}`);
       const access = await requireRoomAccess(roomCode, currentUser.id);
       if (!access) {
         emitRoomError(socket, roomCode, "Accès refusé à cette salle.");
@@ -364,15 +380,23 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
       if (!socket.rooms.has(roomCode)) {
         socket.join(roomCode);
       }
+      markReconnected(roomCode, currentUser.id);
       const existing = getRealtimeState(roomCode);
       if (!existing) {
         emitRoomError(socket, roomCode, "Aucune partie en cours.");
         return;
       }
-      const before = getRealtimeState(roomCode);
+      logger.debug(`game:ready phase before markReady: ${existing.phase}, round: ${existing.currentRound}`);
+      const beforeRound = existing.currentRound;
       const state = markReadyState(roomCode, currentUser.id);
       if (!state) return;
-      if (state.phase === "GUESSING" && state.currentTrack && state.timing.revealAt && state.currentRound !== before?.currentRound) {
+      logger.debug(`game:ready phase after markReady: ${state.phase}, round: ${state.currentRound}`);
+      if (state.phase === "GUESSING" && state.currentTrack && state.timing.revealAt && state.currentRound !== beforeRound) {
+        logger.debug(`game:ready advancing to round ${state.currentRound} for ${roomCode}`);
+        // Broadcast full state FIRST so clients have the new round before
+        // the round:start trigger fires. Avoids the frontend needing to
+        // reconstruct a minimal state from the round:start payload.
+        broadcastState(io, roomCode);
         io.to(roomCode).emit("game:round:start", {
           roomCode,
           round: state.currentRound,
@@ -381,10 +405,14 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
         });
         scheduleReveal(io, roomCode, state.timing.revealAt);
       } else if (state.phase === "FINISHED") {
+        logger.debug(`game:ready game finished for ${roomCode}`);
+        broadcastState(io, roomCode);
         broadcastGameOver(io, roomCode);
         clearRevealTimer(roomCode);
+      } else {
+        // Just a partial ready (player marked ready but not all yet) — broadcast updated state.
+        broadcastState(io, roomCode);
       }
-      broadcastState(io, roomCode);
     });
 
     socket.on("game:sync", async ({ roomCode }: { roomCode: string }) => {

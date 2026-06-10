@@ -6,39 +6,51 @@ import { Button } from "@/components/ui/button"
 
 type ImportState = "idle" | "loading" | "syncing" | "done"
 
-export function ProfileImportBlock({ accent = "#a855f7" }: { accent?: string }) {
-  const [url, setUrl] = useState("")
+type ProfileImportBlockProps = {
+  accent?: string
+  onImportingChange?: (importing: boolean) => void
+  initialUrl?: string
+}
+
+export function ProfileImportBlock({ accent = "#a855f7", onImportingChange, initialUrl }: ProfileImportBlockProps) {
+  const [url, setUrl] = useState(initialUrl ?? "")
   const [state, setState] = useState<ImportState>("idle")
   const [error, setError] = useState<string | null>(null)
   const [syncedCount, setSyncedCount] = useState(0)
   const [playlistCount, setPlaylistCount] = useState(0)
+
+  const updateState = (s: ImportState) => {
+    setState(s)
+    onImportingChange?.(s === "loading" || s === "syncing")
+  }
 
   const handleImportAll = async (e: React.FormEvent) => {
     e.preventDefault()
     const trimmed = url.trim()
     if (!trimmed) return
 
-    setState("loading")
+    updateState("loading")
     setError(null)
 
     try {
       const result = await api.importPlaylists(trimmed)
       if (result.playlists.length === 0) {
         setError("Aucune playlist publique trouvee.")
-        setState("idle")
+        updateState("idle")
         return
       }
 
       setPlaylistCount(result.playlists.length)
-      setState("syncing")
+      updateState("syncing")
 
       const ids = result.playlists.map(p => p.id)
-      const syncResult = await api.importSyncAll(result.provider, ids)
+      // Quick import: 10 tracks per playlist (enough for a game)
+      const syncResult = await api.importSyncAll(result.provider, ids, 10)
       setSyncedCount(syncResult.synced)
-      setState("done")
+      updateState("done")
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erreur lors de l'import.")
-      setState("idle")
+      updateState("idle")
     }
   }
 

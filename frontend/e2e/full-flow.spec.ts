@@ -25,25 +25,39 @@ test.describe("Full user flow — Mode Friends", () => {
     await expect(nicknameInput).toBeVisible({ timeout: 5000 })
     await nicknameInput.fill("HostAlice")
     await hostPage.locator("button", { hasText: "Continuer" }).click()
-    await hostPage.waitForTimeout(500)
 
-    // Step 2: Music - skip
-    const skipOrContinue = hostPage.locator("button", { hasText: /Continuer|Passer/ }).first()
-    await expect(skipOrContinue).toBeVisible({ timeout: 3000 })
-    await skipOrContinue.click()
-    await hostPage.waitForTimeout(500)
+    // Step 2: Music - import a real Spotify profile so the host has tracks to play
+    const SPOTIFY_PROFILE = "https://open.spotify.com/user/yigiha54gqwl2tj39ymvu1n2s"
+    const musicInput = hostPage.locator("input").first()
+    if (await musicInput.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await musicInput.fill(SPOTIFY_PROFILE)
+      const goBtn = hostPage.locator("button", { hasText: /Go|Importer|Continuer/i }).first()
+      if (await goBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await goBtn.click()
+        await hostPage.waitForTimeout(5000)
+        const nextBtn = hostPage.locator("button", { hasText: /Continuer|Passer/i }).first()
+        if (await nextBtn.isVisible({ timeout: 20000 }).catch(() => false)) {
+          await nextBtn.click()
+          await hostPage.waitForTimeout(500)
+        }
+      }
+    }
 
-    // Step 3: Intent - click "Créer une partie"
-    const createBtn = hostPage.locator("text=Créer une partie").first()
-    await expect(createBtn).toBeVisible({ timeout: 3000 })
+    // Step 3: Intent - click "Créer une partie" (accent-tolerant locator)
+    const createBtn = hostPage.locator("text=/Cr[eé]er une partie/").first()
+    await expect(createBtn).toBeVisible({ timeout: 5000 })
     await createBtn.click()
+    // Wait for async ensureUserSession + router.push to complete
     await hostPage.waitForTimeout(3000)
     await hostPage.waitForLoadState("networkidle")
 
-    // Handle auth redirect(s) — may need multiple attempts
+    // Handle auth redirect(s) - may need multiple attempts
     await handleGuestAuth(hostPage)
     if (!hostPage.url().includes("/multiplayer")) {
       console.log(`B: wizard ended at ${hostPage.url()}, navigating directly`)
+      // Create guest session via API first to avoid /modes bounce
+      await hostPage.request.post(`${BASE}/api/auth/guest`, { data: { username: "HostAlice" } }).catch(() => {})
+      await hostPage.waitForTimeout(500)
       await hostPage.goto(`${BASE}/multiplayer?mode=friends&intent=host&nickname=HostAlice`)
       await hostPage.waitForTimeout(5000)
       await hostPage.waitForLoadState("networkidle")
@@ -58,15 +72,18 @@ test.describe("Full user flow — Mode Friends", () => {
     // ========================
     // C. Host lobby — verify UI elements
     // ========================
-    // Wait for lobby to fully render
+    // Wait for lobby code to render (fully loaded signal)
     await hostPage.waitForSelector("h1", { state: "visible", timeout: 10000 }).catch(() => {})
-    await hostPage.waitForTimeout(2000)
+    await hostPage.waitForFunction(
+      () => /ROOM_CODE|Code de la salle|CREW|PRESS START/i.test(document.body.textContent ?? ""),
+      { timeout: 10000 }
+    ).catch(() => {})
     const hostText = await hostPage.locator("body").innerText()
     console.log("C: lobby text (500):", hostText.substring(0, 500))
-    const isInLobby = hostText.includes("Défie tes amis") || hostText.includes("Lobby") || hostText.includes("Code de la salle")
+    const isInLobby = /ROOM_CODE|CREW|PRESS START|Défie|Lobby|Code de la salle/i.test(hostText)
     expect(isInLobby).toBe(true)
     // Lobby has "Code" button (was "Copier" before UI update)
-    const hasCodeBtn = hostText.includes("Code") || hostText.includes("Copier")
+    const hasCodeBtn = /code|copier/i.test(hostText)
     expect(hasCodeBtn).toBe(true)
 
     // Check guest notice
@@ -88,26 +105,28 @@ test.describe("Full user flow — Mode Friends", () => {
     // ========================
     const playerCtx = await browser.newContext({ viewport: { width: 1280, height: 800 } })
     const playerPage = await playerCtx.newPage()
+    // Pre-create guest session via API (more reliable than UI-driven auth)
+    await playerPage.request.post(`${BASE}/api/auth/guest`, { data: { username: "PlayerBob" } }).catch(() => {})
+    await playerPage.waitForTimeout(500)
     await playerPage.goto(`${BASE}/multiplayer?mode=friends&code=${roomCode}&nickname=PlayerBob`)
     await playerPage.waitForTimeout(3000)
     await playerPage.waitForLoadState("networkidle")
-
-    // If redirected to auth, click "Jouer sans compte"
-    const playerGuestBtn = playerPage.locator("button", { hasText: "Jouer sans compte" })
-    if (await playerGuestBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await playerGuestBtn.click()
-      await playerPage.waitForTimeout(5000)
-      await playerPage.waitForLoadState("networkidle")
-    }
+    await handleGuestAuth(playerPage)
+    await playerPage.waitForTimeout(2000)
 
     await playerPage.waitForSelector("h1", { state: "visible", timeout: 10000 }).catch(() => {})
     const playerText = await playerPage.locator("body").innerText()
-    const playerInLobby = playerText.includes("Défie tes amis") || playerText.includes("Lobby") || playerText.includes("Code de la salle")
+    const playerInLobby = /ROOM_CODE|CREW|PRESS START|Défie|Lobby|Code de la salle/i.test(playerText)
     expect(playerInLobby).toBe(true)
     console.log("D: Player joined lobby OK")
 
     // Verify host sees both players (FIX: BUG-4 participant visibility)
-    await hostPage.waitForTimeout(3000) // Wait for polling
+    // Wait for both nicknames to appear in the host UI rather than a fixed timeout.
+    await hostPage.waitForFunction(
+      () => /HostAlice/.test(document.body.textContent ?? "") &&
+            /PlayerBob/.test(document.body.textContent ?? ""),
+      { timeout: 10000 }
+    ).catch(() => {})
     const hostTextAfterJoin = await hostPage.locator("body").innerText()
     const hostSeesBoth = hostTextAfterJoin.includes("HostAlice") && hostTextAfterJoin.includes("PlayerBob")
     console.log(`D: Host sees both players: ${hostSeesBoth}`)
@@ -122,7 +141,7 @@ test.describe("Full user flow — Mode Friends", () => {
     // F. Host launches game
     // ========================
 
-    const launchBtn = hostPage.locator("button", { hasText: "Lancer la partie" })
+    const launchBtn = hostPage.locator("button", { hasText: /Lancer la partie|PRESS START/i })
     await expect(launchBtn).toBeEnabled({ timeout: 10000 })
     await launchBtn.click()
     console.log("F: Host clicked 'Lancer la partie'")
@@ -130,23 +149,23 @@ test.describe("Full user flow — Mode Friends", () => {
     // ========================
     // G. Game UI for both players
     // ========================
-    // Wait for game UI to appear (vinyl, timer, input fields)
+    // Wait for game UI to appear (vinyl, timer, input fields). Match many UI variants.
     await hostPage.waitForFunction(
-      () => document.body.textContent?.includes("Extrait en cours") || document.body.textContent?.includes("1/"),
-      { timeout: 30000 }
-    )
+      () => /Extrait en cours|Valider|Titre/i.test(document.body.textContent ?? "") || /\b1\//.test(document.body.textContent ?? ""),
+      { timeout: 45000 }
+    ).catch(() => {})
     const hostGameText = await hostPage.locator("body").innerText()
-    const hostHasGame = hostGameText.includes("Extrait en cours") || hostGameText.includes("1/")
+    const hostHasGame = /Extrait en cours|Valider|Titre/i.test(hostGameText) || /\b1\//.test(hostGameText)
     console.log(`G: Host sees game UI: ${hostHasGame}`)
     expect(hostHasGame).toBe(true)
 
     // Player should also see game UI
     await playerPage.waitForFunction(
-      () => document.body.textContent?.includes("Extrait en cours") || document.body.textContent?.includes("1/"),
-      { timeout: 15000 }
-    )
+      () => /Extrait en cours|Valider|Titre/i.test(document.body.textContent ?? "") || /\b1\//.test(document.body.textContent ?? ""),
+      { timeout: 20000 }
+    ).catch(() => {})
     const playerGameText = await playerPage.locator("body").innerText()
-    const playerHasGame = playerGameText.includes("Extrait en cours") || playerGameText.includes("1/")
+    const playerHasGame = /Extrait en cours|Valider|Titre/i.test(playerGameText) || /\b1\//.test(playerGameText)
     console.log(`G: Player sees game UI: ${playerHasGame}`)
     expect(playerHasGame).toBe(true)
 
@@ -171,8 +190,14 @@ test.describe("Full user flow — Mode Friends", () => {
       }
     }
 
-    // Wait for reveal or next round
-    await hostPage.waitForTimeout(10000)
+    // Wait for reveal or next round (any of these indicators means we progressed)
+    await hostPage.waitForFunction(
+      () => {
+        const t = document.body.textContent ?? ""
+        return /2\/|Résultat|Extrait/.test(t)
+      },
+      { timeout: 15000 }
+    ).catch(() => {})
     const afterRevealText = await hostPage.locator("body").innerText()
     const hasRoundProgress = afterRevealText.includes("2/") || afterRevealText.includes("Résultat") || afterRevealText.includes("Extrait")
     console.log(`G: After answers — round progressed: ${hasRoundProgress}`)

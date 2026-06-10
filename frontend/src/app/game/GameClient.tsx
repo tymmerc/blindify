@@ -44,6 +44,7 @@ export default function GameClient() {
   const source = normalizeSource(searchParams.get("source"))
   const playlistId = searchParams.get("playlistId")
   const quickUrl = searchParams.get("quickUrl")
+  const progressive = searchParams.get("progressive") === "true"
   const isQuickPlay = source === "quickplay" && Boolean(quickUrl)
   const roundsCount = (() => {
     const raw = searchParams.get("count")
@@ -180,6 +181,7 @@ export default function GameClient() {
         mode="solo"
         difficulty={difficulty}
         source={source}
+        progressive={progressive}
         onGameComplete={handleGameComplete}
       />
     </main>

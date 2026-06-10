@@ -5,6 +5,13 @@ import type { LobbyStatus } from "./lobbyMachine"
 
 export type LobbyViewState = "landing" | "hosting" | "waiting" | "playing" | "results"
 
+export type LobbyChatMessage = {
+  userId: number
+  username: string
+  message: string
+  timestamp: number
+}
+
 export type LobbyRendererProps = {
   mode: GameMode
   modeConfig: GameModeConfig
@@ -30,7 +37,11 @@ export type LobbyRendererProps = {
   canStart: boolean
   isHost: boolean
   isGuest: boolean
+  importing: boolean
+  onImportingChange: (importing: boolean) => void
   currentUserId: number
   room: MultiplayerRoom | null
   hostUser?: { user_id: number; username: string | null } | null
+  chatMessages?: LobbyChatMessage[]
+  onSendChat?: (message: string) => void
 }

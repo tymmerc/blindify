@@ -41,7 +41,7 @@ async function createRoom(page: any, entryUrl: string) {
       await page.waitForTimeout(500)
     }
     // Wizard step 3: Intent - create
-    const createParty = page.locator("text=Créer une partie").first()
+    const createParty = page.locator("text=/Cr[eé]er une partie/").first()
     if (await createParty.isVisible({ timeout: 2000 }).catch(() => false)) {
       await createParty.click()
       await page.waitForTimeout(8_000)
@@ -82,8 +82,8 @@ test.describe("Friends — full game with import and audio", () => {
     console.log("Spotify import no longer in lobby, skipping")
     await page.screenshot({ path: "e2e/screenshots/game-friends-lobby-ready.png" })
 
-    // Click "Lancer la partie"
-    const launchBtn = page.locator("button").filter({ hasText: /lancer la partie/i })
+    // Click "Lancer la partie" / "PRESS START"
+    const launchBtn = page.locator("button").filter({ hasText: /lancer la partie|press start/i })
     if (await launchBtn.count() > 0 && await launchBtn.first().isEnabled()) {
       console.log("Launching game...")
       await launchBtn.first().click()

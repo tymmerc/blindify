@@ -76,11 +76,12 @@ export type ScoreInput = {
   reactionMs: number | null
   maxDurationMs: number
   streak: number
+  hintsUsed?: number
 }
 
-export type ScoreBreakdown = { title: number; artist: number; speed: number; penalty: number }
+export type ScoreBreakdown = { title: number; artist: number; speed: number; penalty: number; hint: number }
 
-export function computeScore({ matchedTitle, matchedArtist, guessProvided, reactionMs, maxDurationMs, streak }: ScoreInput): {
+export function computeScore({ matchedTitle, matchedArtist, guessProvided, reactionMs, maxDurationMs, streak, hintsUsed = 0 }: ScoreInput): {
   gained: number
   nextStreak: number
   breakdown: ScoreBreakdown
@@ -100,8 +101,10 @@ export function computeScore({ matchedTitle, matchedArtist, guessProvided, react
   // Penalty only when a guess was provided but nothing matched
   const penalty = guessProvided && !matchedTitle && !matchedArtist ? 10 : 0
 
-  const gained = Math.max(0, title + artist + speed - penalty)
-  return { gained, nextStreak, breakdown: { title, artist, speed, penalty } }
+  const hint = hintsUsed * 15
+
+  const gained = Math.max(0, title + artist + speed - penalty - hint)
+  return { gained, nextStreak, breakdown: { title, artist, speed, penalty, hint } }
 }
 
 export type ModeFlags = {

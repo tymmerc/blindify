@@ -23,3 +23,8 @@ frontend/test-build.mjs
 # Node.js local install (headers cause GitHub to detect C)
 frontend/.node/
 e2e-dashboard/node_modules/
+
+# Test artifacts
+frontend/playwright-report/
+frontend/test-results/
+frontend/e2e/*.zip

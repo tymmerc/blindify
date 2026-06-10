@@ -17,10 +17,10 @@ test.describe("Friends Wizard Flow", () => {
     console.log(`Step 1 (300): ${body1.substring(0, 300)}`)
 
     // Should show wizard step 1: "Comment tu t'appelles ?"
-    expect(body1).toContain("Comment tu t'appelles")
+    expect(body1.toLowerCase()).toContain("comment tu t'appelles")
 
-    // Check "Mode amis" label
-    await expect(page.locator("text=Mode amis")).toBeVisible({ timeout: 3000 })
+    // Check friends-mode label (case-insensitive due to uppercase CSS)
+    await expect(page.locator("text=/Friends_Mode/i").first()).toBeVisible({ timeout: 3000 })
 
     // Type nickname
     const nicknameInput = page.locator("input[placeholder='Ton pseudo']")
@@ -38,8 +38,8 @@ test.describe("Friends Wizard Flow", () => {
     // ─── Step 2: Music (optional) ───
     const body2 = await page.locator("body").innerText()
     console.log(`Step 2 (200): ${body2.substring(0, 200)}`)
-    expect(body2).toContain("Ta musique")
-    expect(body2).toContain("Passer cette étape")
+    expect(body2.toLowerCase()).toContain("ta musique")
+    expect(body2.toLowerCase()).toMatch(/passer cette [eé]tape/)
 
     // Skip music step
     const skipMusic = page.locator("button", { hasText: /Continuer|Passer/ }).first()
@@ -51,12 +51,12 @@ test.describe("Friends Wizard Flow", () => {
     // ─── Step 3: Intent ───
     const body3 = await page.locator("body").innerText()
     console.log(`Step 3 (200): ${body3.substring(0, 200)}`)
-    expect(body3).toContain("Qu'est-ce que tu veux faire")
-    expect(body3).toContain("Créer une partie")
-    expect(body3).toContain("Rejoindre une partie")
+    expect(body3.toLowerCase()).toContain("qu'est-ce que tu veux faire")
+    expect(body3).toMatch(/cr[eé]er une partie/i)
+    expect(body3.toLowerCase()).toContain("rejoindre une partie")
 
-    // Click "Créer une partie" — this navigates to multiplayer (may redirect to auth first)
-    const createBtn = page.locator("text=Créer une partie").first()
+    // Click "Creer une partie" - this navigates to multiplayer (may redirect to auth first)
+    const createBtn = page.locator("text=/Cr[eé]er une partie/").first()
     await createBtn.click()
     await page.waitForTimeout(3000)
     await page.waitForLoadState("networkidle")
@@ -80,7 +80,7 @@ test.describe("Friends Wizard Flow", () => {
     console.log(`Lobby (300): ${lobbyText.substring(0, 300)}`)
 
     // Lobby should show lobby content
-    const hasLobbyContent = lobbyText.includes("Code de la salle") || lobbyText.includes("Défie tes amis") || lobbyText.includes("Lobby") || lobbyText.includes("Lancer la partie")
+    const hasLobbyContent = /Code de la salle|Défie tes amis|Lobby|Lancer la partie|PRESS START|ROOM_CODE|CREW/i.test(lobbyText)
     expect(hasLobbyContent).toBe(true)
     // Should NOT have the old "Rivalité active" / "Prêts / pas prêts" header
     expect(lobbyText).not.toContain("Rivalité active")
@@ -114,7 +114,7 @@ test.describe("Friends Wizard Flow", () => {
     await hostPage.waitForTimeout(500)
 
     // Wizard step 3: Intent — create
-    const createBtn = hostPage.locator("text=Créer une partie").first()
+    const createBtn = hostPage.locator("text=/Cr[eé]er une partie/").first()
     await expect(createBtn).toBeVisible({ timeout: 3000 })
     await createBtn.click()
     await hostPage.waitForTimeout(5000)
@@ -177,14 +177,17 @@ test.describe("Friends Wizard Flow", () => {
 
     // Step 4: Code
     const body4 = await page.locator("body").innerText()
-    expect(body4).toContain("Code de la salle")
+    expect(body4.toLowerCase()).toContain("code de la salle")
     const codeInput = page.locator("input[placeholder*='EX']")
     await expect(codeInput).toBeVisible({ timeout: 3000 })
     await codeInput.fill(roomCode)
     const joinGoBtn = page.locator("button", { hasText: "Rejoindre" }).first()
     await expect(joinGoBtn).toBeVisible({ timeout: 3000 })
     await joinGoBtn.click()
-    await page.waitForTimeout(5000)
+    await page.waitForTimeout(3000)
+    await page.waitForLoadState("networkidle").catch(() => {})
+    await handleGuestAuth(page)
+    await page.waitForTimeout(3000)
     console.log(`Join step 4: entered code ${roomCode} and clicked Rejoindre`)
 
     // Should be in lobby
@@ -192,10 +195,13 @@ test.describe("Friends Wizard Flow", () => {
     console.log(`Join lobby URL: ${url}`)
     expect(url).toContain("/multiplayer")
 
-    await page.waitForSelector("body", { state: "visible" })
+    await page.waitForFunction(
+      () => /ROOM_CODE|CREW|PRESS START|Lobby|Défie/i.test(document.body.textContent ?? ""),
+      { timeout: 15000 }
+    ).catch(() => {})
     const joinLobbyText = await page.locator("body").innerText()
     console.log(`Join lobby (300): ${joinLobbyText.substring(0, 300)}`)
-    const hasLobbyContent = joinLobbyText.includes("Code de la salle") || joinLobbyText.includes("Défie tes amis") || joinLobbyText.includes("Lobby") || joinLobbyText.includes("Lancer la partie")
+    const hasLobbyContent = /Code de la salle|Défie tes amis|Lobby|Lancer la partie|PRESS START|ROOM_CODE|CREW/i.test(joinLobbyText)
     expect(hasLobbyContent).toBe(true)
     expect(joinLobbyText).toContain("JoinTestPlayer")
 

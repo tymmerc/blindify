@@ -1,12 +1,14 @@
 "use client"
 
-import { useState, type FormEvent } from "react"
-import { useRouter } from "next/navigation"
+import { useState, type FormEvent, Suspense } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { api } from "@/lib/api"
 import { Logo } from "@/components/Logo"
 
-export default function AuthLoginPage() {
+function LoginForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const returnTo = searchParams.get("returnTo")
   const [mode, setMode] = useState<"login" | "register">("login")
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
@@ -27,7 +29,7 @@ export default function AuthLoginPage() {
       } else {
         await api.login(trimmedUsername, password)
       }
-      router.replace("/modes")
+      router.replace(returnTo || "/modes")
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Une erreur est survenue"
@@ -131,7 +133,7 @@ export default function AuthLoginPage() {
             </div>
 
             <button
-              onClick={() => router.push("/solo")}
+              onClick={() => router.push(returnTo || "/solo")}
               className="mt-4 w-full rounded-xl border border-white/10 bg-white/5 px-6 py-3 text-sm font-medium text-white/70 transition hover:bg-white/10"
             >
               Jouer sans compte
@@ -140,5 +142,13 @@ export default function AuthLoginPage() {
         </div>
       </div>
     </main>
+  )
+}
+
+export default function AuthLoginPage() {
+  return (
+    <Suspense fallback={<div className="grid min-h-screen place-items-center bg-[#050505] text-white/50">Chargement...</div>}>
+      <LoginForm />
+    </Suspense>
   )
 }

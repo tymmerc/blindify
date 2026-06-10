@@ -253,12 +253,19 @@ test.describe("4. Pattern async : creer une session guest puis une room (polling
     })
 
     try {
-      // === ETAPE 1 : Creer une session guest ===
-      const guestResponse = await apiContext.post("/blindify/api/auth/guest", {
-        data: { username: `test_integ_${Date.now()}` },
-      })
-      expect(guestResponse.status()).toBe(200)
-      const guestData = await guestResponse.json()
+      // === ETAPE 1 : Creer une session guest (with retry for rate limiting) ===
+      let guestResponse
+      for (let attempt = 0; attempt < 5; attempt++) {
+        guestResponse = await apiContext.post("/blindify/api/auth/guest", {
+          data: { username: `test_integ_${Date.now()}` },
+        })
+        if (guestResponse.status() !== 429) break
+        const wait = 3000 * (attempt + 1)
+        console.log(`Rate limited (429), retrying in ${wait}ms (attempt ${attempt + 1}/5)`)
+        await new Promise(r => setTimeout(r, wait))
+      }
+      expect(guestResponse!.status()).toBe(200)
+      const guestData = await guestResponse!.json()
       expect(guestData.success).toBe(true)
       console.log(`Session guest creee : ${guestData.data.user.username}`)
       // Les cookies de session sont automatiquement stockes dans apiContext

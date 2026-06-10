@@ -18,6 +18,8 @@ export function MultiplayerRouter() {
   const intent = searchParams.get("intent")
   const autojoin = searchParams.get("autojoin")
   const initialJoinCode = searchParams.get("code")
+  const profileUrl = searchParams.get("profileUrl")
+  const nickname = searchParams.get("nickname")
 
   useEffect(() => {
     if (modeParam && modeParam !== mode) {
@@ -46,6 +48,8 @@ export function MultiplayerRouter() {
       intent={intent}
       initialJoinCode={initialJoinCode}
       autojoin={autojoin}
+      initialProfileUrl={profileUrl}
+      initialNickname={nickname}
     />
   )
 }

@@ -56,6 +56,7 @@ services:
         condition: service_healthy
     environment:
       NODE_ENV: production
+      LOG_LEVEL: debug
       PORT: 3000
       DATABASE_URL: postgres://blindify:${DB_PASSWORD:-blindify_pass}@postgres:5432/blindify
       REDIS_URL: redis://:${REDIS_PASSWORD:-}@redis:6379

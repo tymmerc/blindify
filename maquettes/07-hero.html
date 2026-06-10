@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blindify</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --bg:#09090b;
+    --surface:#111113;
+    --border:rgba(255,255,255,.06);
+    --border-hover:rgba(255,255,255,.12);
+    --text:#fafafa;
+    --muted:#71717a;
+    --purple:#a855f7;
+    --pink:#ec4899;
+    --font:'Space Grotesk',system-ui,-apple-system,sans-serif;
+    --mono:'JetBrains Mono',monospace;
+  }
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--text);font-family:var(--font);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+
+  /* ===== NAV - ultra minimal ===== */
+  nav{
+    position:fixed;top:0;left:0;right:0;z-index:100;
+    border-bottom:1px solid var(--border);
+    background:rgba(9,9,11,.8);
+    backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  }
+  .nav-inner{
+    max-width:1280px;margin:0 auto;
+    height:56px;padding:0 32px;
+    display:flex;align-items:center;justify-content:space-between;
+  }
+  .logo{
+    font-weight:600;font-size:17px;letter-spacing:-.02em;
+    display:flex;align-items:center;gap:8px;color:var(--text);
+  }
+  .logo-mark{
+    width:7px;height:7px;border-radius:50%;
+    background:var(--purple);
+    box-shadow:0 0 10px rgba(168,85,247,.5);
+  }
+  .nav-center{display:flex;gap:32px}
+  .nav-center a{
+    font-size:13px;color:var(--muted);text-decoration:none;
+    transition:color .2s;letter-spacing:-.01em;
+  }
+  .nav-center a:hover{color:var(--text)}
+  .nav-right{display:flex;align-items:center;gap:16px}
+  .nav-btn{
+    font-size:13px;font-weight:500;padding:7px 18px;
+    border-radius:8px;text-decoration:none;transition:all .2s;
+  }
+  .nav-btn.ghost{color:var(--muted)}
+  .nav-btn.ghost:hover{color:var(--text)}
+  .nav-btn.primary{
+    background:#fff;color:#000;
+    border:1px solid rgba(255,255,255,.1);
+  }
+  .nav-btn.primary:hover{background:#e4e4e7}
+
+  /* ===== HERO ===== */
+  .hero{
+    min-height:100vh;
+    display:flex;flex-direction:column;
+    align-items:center;justify-content:center;
+    position:relative;
+    padding:120px 32px 80px;
+    text-align:center;
+    overflow:hidden;
+  }
+
+  /* Single subtle gradient - not busy */
+  .hero::before{
+    content:'';position:absolute;
+    top:-200px;left:50%;transform:translateX(-50%);
+    width:900px;height:600px;
+    background:radial-gradient(ellipse,rgba(168,85,247,.08) 0%,transparent 60%);
+    pointer-events:none;
+  }
+
+  /* Content */
+  .hero-content{
+    position:relative;z-index:1;
+    max-width:720px;
+    display:flex;flex-direction:column;align-items:center;gap:0;
+  }
+
+  .hero-tag{
+    font-family:var(--mono);font-size:12px;
+    color:var(--muted);letter-spacing:.02em;
+    margin-bottom:28px;
+    display:flex;align-items:center;gap:8px;
+    opacity:0;animation:fadeIn .6s .1s forwards;
+  }
+  .hero-tag .dot{
+    width:5px;height:5px;border-radius:50%;
+    background:#22c55e;box-shadow:0 0 6px #22c55e;
+    animation:blink 2.5s ease-in-out infinite;
+  }
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+  .hero-h1{
+    font-size:clamp(56px,8vw,96px);
+    font-weight:700;line-height:.95;letter-spacing:-.05em;
+    margin-bottom:24px;
+  }
+  .hero-h1 .line{
+    display:block;overflow:hidden;
+  }
+  .hero-h1 .line span{
+    display:inline-block;
+    transform:translateY(110%);
+    animation:revealLine .8s cubic-bezier(.16,1,.3,1) forwards;
+  }
+  .hero-h1 .line:nth-child(1) span{animation-delay:.2s}
+  .hero-h1 .line:nth-child(2) span{animation-delay:.35s}
+  @keyframes revealLine{to{transform:translateY(0)}}
+
+  .hero-h1 .accent{
+    background:linear-gradient(90deg,var(--purple),var(--pink));
+    -webkit-background-clip:text;color:transparent;
+  }
+
+  .hero-p{
+    font-size:17px;line-height:1.6;
+    color:var(--muted);max-width:480px;
+    margin-bottom:40px;
+    opacity:0;animation:fadeIn .6s .5s forwards;
+  }
+
+  .hero-actions{
+    display:flex;gap:12px;align-items:center;
+    margin-bottom:56px;
+    opacity:0;animation:fadeIn .6s .65s forwards;
+  }
+  .btn-main{
+    display:inline-flex;align-items:center;gap:8px;
+    padding:13px 28px;border-radius:10px;
+    font-size:14px;font-weight:600;
+    background:#fff;color:#000;
+    text-decoration:none;border:none;cursor:pointer;
+    transition:all .2s;
+  }
+  .btn-main:hover{background:#e4e4e7;transform:translateY(-1px)}
+  .btn-main svg{width:14px;height:14px}
+  .btn-sec{
+    display:inline-flex;align-items:center;gap:8px;
+    padding:13px 24px;border-radius:10px;
+    font-size:14px;font-weight:500;
+    color:var(--muted);text-decoration:none;
+    border:1px solid var(--border);
+    transition:all .2s;
+  }
+  .btn-sec:hover{color:var(--text);border-color:var(--border-hover);background:var(--surface)}
+
+  @keyframes fadeIn{to{opacity:1}}
+
+  /* ===== VISUAL: Product showcase ===== */
+  .hero-showcase{
+    position:relative;
+    width:100%;max-width:1080px;
+    opacity:0;animation:fadeInUp 1s .8s forwards;
+    transform:translateY(40px);
+  }
+  @keyframes fadeInUp{to{opacity:1;transform:translateY(0)}}
+
+  /* Main product frame */
+  .showcase-frame{
+    position:relative;
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:16px;
+    overflow:hidden;
+    aspect-ratio:16/9;
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,.03),
+      0 20px 80px rgba(0,0,0,.5),
+      0 0 120px rgba(168,85,247,.04);
+  }
+
+  /* Inner: game simulation */
+  .showcase-inner{
+    position:absolute;inset:0;
+    display:flex;
+    background:linear-gradient(135deg,#0c0e1a 0%,#10121f 50%,#0e0f1b 100%);
+  }
+
+  /* Game main area */
+  .game-area{
+    flex:1;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;
+    padding:32px;position:relative;
+  }
+
+  /* Top bar inside game */
+  .game-top{
+    position:absolute;top:0;left:0;right:0;
+    display:flex;align-items:center;gap:16px;
+    padding:16px 24px;
+  }
+  .game-round{
+    font-family:var(--mono);font-size:11px;font-weight:500;
+    color:var(--purple);background:rgba(168,85,247,.1);
+    border:1px solid rgba(168,85,247,.15);
+    border-radius:6px;padding:4px 10px;
+  }
+  .game-timer{
+    flex:1;height:3px;background:rgba(255,255,255,.06);border-radius:2px;overflow:hidden;
+  }
+  .game-timer-fill{
+    height:100%;width:65%;border-radius:2px;
+    background:linear-gradient(90deg,var(--purple),var(--pink));
+    box-shadow:0 0 8px rgba(168,85,247,.3);
+    animation:timerShrink 10s linear infinite;
+  }
+  @keyframes timerShrink{0%{width:100%}100%{width:0%}}
+  .game-pts{font-family:var(--mono);font-size:12px;color:var(--muted)}
+
+  /* Vinyl in game */
+  .game-vinyl-wrap{position:relative;margin-bottom:20px}
+  .game-vinyl{
+    width:180px;height:180px;border-radius:50%;
+    background:
+      radial-gradient(circle,transparent 18px,rgba(12,10,18,.97) 19px,transparent 20px),
+      radial-gradient(circle,transparent 35px,rgba(50,45,65,.12) 36px,transparent 37px),
+      radial-gradient(circle,transparent 52px,rgba(50,45,65,.15) 53px,transparent 54px),
+      radial-gradient(circle,transparent 68px,rgba(50,45,65,.1) 69px,transparent 70px),
+      radial-gradient(circle,transparent 82px,rgba(50,45,65,.18) 83px,transparent 85px),
+      conic-gradient(from 0deg,rgba(18,16,26,.96),rgba(22,20,32,.92),rgba(18,16,26,.96),rgba(24,20,36,.9),rgba(18,16,26,.96));
+    box-shadow:0 0 0 3px rgba(30,25,45,1),0 0 40px rgba(0,0,0,.5),0 0 80px rgba(168,85,247,.05);
+    animation:spin 6s linear infinite;
+  }
+  .game-vinyl-cover{
+    position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    width:72px;height:72px;border-radius:50%;overflow:hidden;
+    border:2px solid rgba(50,45,65,.4);
+  }
+  .game-vinyl-cover img{width:100%;height:100%;object-fit:cover;filter:brightness(.75);animation:spin 6s linear infinite reverse}
+  .game-vinyl-hole{
+    position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    width:10px;height:10px;border-radius:50%;background:#0c0e1a;
+    border:1.5px solid rgba(50,45,65,.5);z-index:2;
+  }
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .game-vinyl-cover img{animation:none} /* counter-rotate would be confusing at small size */
+
+  /* Mini eq */
+  .game-eq{display:flex;align-items:flex-end;gap:3px;height:32px;margin-bottom:12px}
+  .game-eq .b{width:3px;border-radius:1.5px;background:linear-gradient(to top,var(--purple),var(--pink));opacity:.7;animation:eqB var(--d) ease-in-out infinite alternate}
+  @keyframes eqB{0%{height:var(--a)}100%{height:var(--b)}}
+
+  /* Countdown */
+  .game-cd{font-family:var(--mono);font-size:28px;font-weight:600;letter-spacing:.04em;color:var(--text);text-shadow:0 0 20px rgba(168,85,247,.15)}
+
+  /* Game inputs mockup */
+  .game-inputs{
+    position:absolute;bottom:20px;left:24px;right:24px;
+    display:flex;gap:10px;
+  }
+  .game-inp{
+    flex:1;height:36px;border-radius:8px;
+    background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);
+    padding:0 12px;font-size:12px;color:var(--muted);
+    display:flex;align-items:center;
+  }
+  .game-inp-btn{
+    height:36px;padding:0 20px;border-radius:8px;
+    background:linear-gradient(135deg,var(--purple),var(--pink));
+    font-size:12px;font-weight:600;color:#fff;
+    display:flex;align-items:center;
+    border:none;white-space:nowrap;
+  }
+
+  /* Sidebar inside game */
+  .game-sidebar{
+    width:200px;
+    border-left:1px solid rgba(255,255,255,.04);
+    padding:16px;display:flex;flex-direction:column;gap:12px;
+  }
+  .gs-title{font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
+  .gs-player{display:flex;align-items:center;gap:8px;padding:6px 0}
+  .gs-rank{font-family:var(--mono);font-size:11px;color:var(--muted);width:14px}
+  .gs-rank.gold{color:#fbbf24}
+  .gs-av{width:20px;height:20px;border-radius:50%;object-fit:cover}
+  .gs-name{font-size:12px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .gs-name.me{color:var(--purple)}
+  .gs-sc{font-family:var(--mono);font-size:11px;color:var(--muted)}
+
+  /* Gradient fade at top of showcase */
+  .showcase-glow{
+    position:absolute;top:-1px;left:10%;right:10%;height:1px;
+    background:linear-gradient(90deg,transparent,rgba(168,85,247,.3),rgba(236,72,153,.2),transparent);
+    z-index:2;
+  }
+
+  /* ===== Bottom social proof ===== */
+  .hero-proof{
+    margin-top:40px;
+    display:flex;align-items:center;justify-content:center;gap:40px;
+    opacity:0;animation:fadeIn .6s 1.2s forwards;
+  }
+  .proof-item{display:flex;flex-direction:column;align-items:center;gap:4px}
+  .proof-val{font-family:var(--mono);font-size:20px;font-weight:600}
+  .proof-lbl{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+
+  .proof-sep{width:1px;height:32px;background:var(--border)}
+
+  /* ===== Scroll indicator ===== */
+  .scroll-ind{
+    position:absolute;bottom:28px;left:50%;transform:translateX(-50%);z-index:5;
+    display:flex;flex-direction:column;align-items:center;gap:6px;
+    opacity:0;animation:fadeIn .6s 1.5s forwards;
+  }
+  .scroll-ind span{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted)}
+  .scroll-arrow{
+    width:16px;height:16px;border-right:1.5px solid var(--muted);border-bottom:1.5px solid var(--muted);
+    transform:rotate(45deg);
+    animation:scrollBounce 2s ease-in-out infinite;
+  }
+  @keyframes scrollBounce{0%,100%{transform:rotate(45deg) translate(0,0);opacity:.3}50%{transform:rotate(45deg) translate(3px,3px);opacity:1}}
+
+  /* ===== RESPONSIVE ===== */
+  @media(max-width:900px){
+    .nav-center{display:none}
+    .nav-btn.ghost{display:none}
+    .game-sidebar{display:none}
+    .showcase-frame{aspect-ratio:4/3}
+    .hero-proof{flex-wrap:wrap;gap:24px}
+    .proof-sep{display:none}
+  }
+  @media(max-width:600px){
+    .hero{padding:100px 20px 60px}
+    .hero-h1{letter-spacing:-.04em}
+    .hero-actions{flex-direction:column;width:100%}
+    .btn-main,.btn-sec{width:100%;justify-content:center}
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <div class="logo"><span class="logo-mark"></span>blindify</div>
+    <div class="nav-center">
+      <a href="#">Fonctionnalites</a>
+      <a href="#">Comment ca marche</a>
+      <a href="#">A propos</a>
+    </div>
+    <div class="nav-right">
+      <a href="#" class="nav-btn ghost">Se connecter</a>
+      <a href="#" class="nav-btn primary">Jouer gratuitement</a>
+    </div>
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="hero-content">
+    <div class="hero-tag">
+      <span class="dot"></span>
+      3 200+ parties cette semaine
+    </div>
+
+    <h1 class="hero-h1">
+      <span class="line"><span>Le blind test qui</span></span>
+      <span class="line"><span>change <span class="accent">tout.</span></span></span>
+    </h1>
+
+    <p class="hero-p">
+      Connecte ta musique. Invite tes amis. Devine en temps reel.
+      Spotify, Deezer, pas de compte requis.
+    </p>
+
+    <div class="hero-actions">
+      <a href="#" class="btn-main">
+        <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21"/></svg>
+        Commencer maintenant
+      </a>
+      <a href="#" class="btn-sec">Voir comment ca marche</a>
+    </div>
+  </div>
+
+  <!-- Product showcase -->
+  <div class="hero-showcase">
+    <div class="showcase-frame">
+      <div class="showcase-glow"></div>
+      <div class="showcase-inner">
+        <!-- Game area -->
+        <div class="game-area">
+          <div class="game-top">
+            <span class="game-round">Round 3/10</span>
+            <div class="game-timer"><div class="game-timer-fill"></div></div>
+            <span class="game-pts">420 pts</span>
+          </div>
+
+          <div class="game-vinyl-wrap">
+            <div class="game-vinyl">
+              <div class="game-vinyl-cover">
+                <img src="https://picsum.photos/200/200?random=7" alt="">
+              </div>
+              <div class="game-vinyl-hole"></div>
+            </div>
+          </div>
+
+          <div class="game-eq">
+            <div class="b" style="--a:4px;--b:24px;--d:.5s"></div>
+            <div class="b" style="--a:8px;--b:30px;--d:.4s"></div>
+            <div class="b" style="--a:6px;--b:28px;--d:.55s"></div>
+            <div class="b" style="--a:10px;--b:32px;--d:.45s"></div>
+            <div class="b" style="--a:5px;--b:26px;--d:.5s"></div>
+            <div class="b" style="--a:9px;--b:30px;--d:.38s"></div>
+            <div class="b" style="--a:7px;--b:28px;--d:.52s"></div>
+            <div class="b" style="--a:4px;--b:22px;--d:.6s"></div>
+            <div class="b" style="--a:8px;--b:32px;--d:.42s"></div>
+            <div class="b" style="--a:6px;--b:26px;--d:.48s"></div>
+          </div>
+
+          <div class="game-cd">0:18</div>
+
+          <div class="game-inputs">
+            <div class="game-inp">Titre...</div>
+            <div class="game-inp">Artiste...</div>
+            <div class="game-inp-btn">Valider</div>
+          </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="game-sidebar">
+          <div class="gs-title">Classement</div>
+          <div class="gs-player">
+            <span class="gs-rank gold">1</span>
+            <img class="gs-av" src="https://i.pravatar.cc/40?img=3" alt="">
+            <span class="gs-name">DJ_Korsika</span>
+            <span class="gs-sc">680</span>
+          </div>
+          <div class="gs-player">
+            <span class="gs-rank">2</span>
+            <img class="gs-av" src="https://i.pravatar.cc/40?img=8" alt="">
+            <span class="gs-name me">Toi</span>
+            <span class="gs-sc">420</span>
+          </div>
+          <div class="gs-player">
+            <span class="gs-rank">3</span>
+            <img class="gs-av" src="https://i.pravatar.cc/40?img=12" alt="">
+            <span class="gs-name">MeloManiac</span>
+            <span class="gs-sc">385</span>
+          </div>
+          <div class="gs-player">
+            <span class="gs-rank">4</span>
+            <img class="gs-av" src="https://i.pravatar.cc/40?img=20" alt="">
+            <span class="gs-name">BassHunter42</span>
+            <span class="gs-sc">310</span>
+          </div>
+          <div class="gs-player">
+            <span class="gs-rank">5</span>
+            <img class="gs-av" src="https://i.pravatar.cc/40?img=25" alt="">
+            <span class="gs-name">Vinyl_addict</span>
+            <span class="gs-sc">245</span>
+          </div>
+
+          <div style="margin-top:auto">
+            <div class="gs-title">Chat</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5">
+              <span style="color:#fbbf24;font-weight:600">DJ_K</span> trop facile<br>
+              <span style="color:#ec4899;font-weight:600">Melo</span> reconnu en 2s<br>
+              <span style="color:var(--purple);font-weight:600">Toi</span> je connais!
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Social proof -->
+  <div class="hero-proof">
+    <div class="proof-item">
+      <span class="proof-val">12K+</span>
+      <span class="proof-lbl">Parties jouees</span>
+    </div>
+    <div class="proof-sep"></div>
+    <div class="proof-item">
+      <span class="proof-val">3.2K</span>
+      <span class="proof-lbl">Joueurs</span>
+    </div>
+    <div class="proof-sep"></div>
+    <div class="proof-item">
+      <span class="proof-val">4.9</span>
+      <span class="proof-lbl">Note moyenne</span>
+    </div>
+  </div>
+
+  <div class="scroll-ind">
+    <span>Explorer</span>
+    <div class="scroll-arrow"></div>
+  </div>
+</section>
+
+</body>
+</html>

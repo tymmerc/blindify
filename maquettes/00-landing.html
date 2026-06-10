@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blindify - Landing</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f1629;
+    --surface: rgba(22, 30, 55, 0.85);
+    --border: rgba(148, 163, 184, 0.12);
+    --border-hover: rgba(148, 163, 184, 0.25);
+    --text: #E0E8F0;
+    --muted: #7b8ba3;
+    --purple: #a855f7;
+    --pink: #ec4899;
+    --green: #22c55e;
+    --font: 'Space Grotesk', system-ui, sans-serif;
+    --mono: 'JetBrains Mono', monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ===== NAV ===== */
+  nav {
+    position: fixed; top: 0; width: 100%; z-index: 100;
+    background: rgba(12, 18, 32, 0.85);
+    backdrop-filter: blur(24px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 clamp(1rem, 4vw, 3rem);
+  }
+  nav .inner {
+    max-width: 1320px; margin: 0 auto;
+    display: flex; align-items: center; justify-content: space-between;
+    height: 64px;
+  }
+  .logo {
+    font-weight: 700; font-size: 20px; letter-spacing: -0.03em;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .logo .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--purple);
+    box-shadow: 0 0 12px var(--purple);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  .nav-links { display: flex; gap: 32px; }
+  .nav-links a {
+    font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.1em; color: var(--muted); text-decoration: none;
+    transition: color 0.2s;
+  }
+  .nav-links a:hover { color: var(--purple); }
+  .nav-cta {
+    font-size: 13px; font-weight: 600; padding: 8px 20px;
+    border-radius: 10px; border: 1px solid rgba(168,85,247,0.4);
+    background: rgba(168,85,247,0.12); color: #fff;
+    cursor: pointer; transition: all 0.2s; text-decoration: none;
+  }
+  .nav-cta:hover {
+    background: rgba(168,85,247,0.2);
+    box-shadow: 0 0 20px rgba(168,85,247,0.15);
+  }
+
+  /* ===== HERO ===== */
+  .hero {
+    min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+    padding: 120px 24px 80px;
+  }
+
+  /* Ambient background */
+  .hero::before {
+    content: '';
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse 600px 500px at 25% 30%, rgba(168,85,247,0.08), transparent),
+      radial-gradient(ellipse 500px 400px at 75% 60%, rgba(236,72,153,0.06), transparent);
+    pointer-events: none;
+  }
+
+  /* Grid overlay */
+  .hero::after {
+    content: '';
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(148,163,184,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(148,163,184,0.03) 1px, transparent 1px);
+    background-size: 64px 64px;
+    mask-image: radial-gradient(ellipse at center, rgba(0,0,0,0.3), transparent 70%);
+    pointer-events: none;
+  }
+
+  .hero-content {
+    position: relative; z-index: 1;
+    max-width: 900px; text-align: center;
+  }
+
+  .hero-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.12em; color: var(--purple);
+    padding: 6px 16px; border-radius: 20px;
+    border: 1px solid rgba(168,85,247,0.2);
+    background: rgba(168,85,247,0.06);
+    margin-bottom: 32px;
+  }
+  .hero-badge .live-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+
+  .hero h1 {
+    font-size: clamp(48px, 7vw, 80px);
+    font-weight: 700; letter-spacing: -0.04em;
+    line-height: 1.05; margin-bottom: 24px;
+  }
+  .hero h1 .gradient {
+    background: linear-gradient(135deg, var(--purple), var(--pink));
+    -webkit-background-clip: text; color: transparent;
+  }
+
+  .hero p {
+    font-size: 18px; color: var(--muted);
+    max-width: 520px; margin: 0 auto 40px;
+    line-height: 1.6;
+  }
+
+  .hero-actions {
+    display: flex; gap: 16px; justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .btn-play {
+    display: inline-flex; align-items: center; gap: 10px;
+    padding: 14px 32px; border-radius: 12px;
+    background: linear-gradient(135deg, var(--purple), var(--pink));
+    color: #fff; font-weight: 600; font-size: 15px;
+    border: none; cursor: pointer;
+    transition: all 0.25s;
+    text-decoration: none;
+    box-shadow: 0 4px 24px rgba(168,85,247,0.25);
+  }
+  .btn-play:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 32px rgba(168,85,247,0.35);
+  }
+  .btn-play svg { width: 18px; height: 18px; }
+
+  .btn-secondary {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 14px 28px; border-radius: 12px;
+    background: rgba(22,30,55,0.85); color: var(--text);
+    font-weight: 500; font-size: 15px;
+    border: 1px solid rgba(148,163,184,0.15);
+    cursor: pointer; transition: all 0.2s;
+    text-decoration: none;
+  }
+  .btn-secondary:hover {
+    background: rgba(22,30,55,1);
+    border-color: rgba(148,163,184,0.3);
+  }
+
+  /* ===== VISUALIZER BAR ===== */
+  .visualizer {
+    display: flex; align-items: flex-end; justify-content: center;
+    gap: 3px; height: 60px; margin: 48px auto 0;
+    max-width: 500px;
+    opacity: 0.4;
+  }
+  @media (min-width: 1024px) {
+    .visualizer {
+      max-width: 700px;
+      height: 72px;
+      gap: 4px;
+    }
+  }
+  .visualizer .bar {
+    width: 3px; border-radius: 2px;
+    background: linear-gradient(to top, var(--purple), var(--pink));
+    animation: eq var(--d) ease-in-out infinite alternate;
+  }
+
+  /* ===== SOCIAL PROOF ===== */
+  .social-proof {
+    padding: 0 24px;
+    position: relative;
+  }
+  .social-proof .inner {
+    max-width: 800px; margin: 0 auto;
+    display: flex; align-items: center; justify-content: center;
+    gap: 48px; padding: 40px 0;
+    border-top: 1px solid var(--border);
+  }
+  .proof-stat {
+    text-align: center;
+  }
+  .proof-stat .number {
+    font-family: var(--mono); font-size: 28px; font-weight: 700;
+    background: linear-gradient(135deg, var(--purple), var(--pink));
+    -webkit-background-clip: text; color: transparent;
+  }
+  .proof-stat .label {
+    font-family: var(--mono); font-size: 10px; text-transform: uppercase;
+    letter-spacing: 0.1em; color: var(--muted); margin-top: 4px;
+  }
+
+  /* ===== HOW IT WORKS ===== */
+  .how {
+    padding: 120px 24px;
+    position: relative;
+  }
+  .how .inner { max-width: 1320px; margin: 0 auto; }
+
+  .section-label {
+    font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.15em; color: var(--purple); margin-bottom: 16px;
+    text-align: center;
+  }
+  .section-title {
+    font-size: clamp(32px, 4vw, 48px); font-weight: 700;
+    letter-spacing: -0.03em; text-align: center; margin-bottom: 64px;
+  }
+
+  .steps {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px;
+    position: relative;
+  }
+
+  /* Connection line between steps */
+  .steps::before {
+    content: '';
+    position: absolute;
+    top: 40px; left: 15%; right: 15%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--border-hover), var(--border-hover), transparent);
+    z-index: 0;
+  }
+
+  .step-card {
+    position: relative; z-index: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 40px 28px;
+    text-align: center;
+    transition: all 0.3s;
+    backdrop-filter: blur(12px);
+  }
+  .step-card:hover {
+    border-color: var(--border-hover);
+    transform: translateY(-4px);
+    box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+  }
+
+  .step-number {
+    width: 48px; height: 48px; border-radius: 14px;
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 20px;
+    font-family: var(--mono); font-weight: 700; font-size: 18px;
+    border: 1px solid rgba(168,85,247,0.25);
+    background: rgba(168,85,247,0.08);
+    color: var(--purple);
+  }
+  .step-card h3 {
+    font-size: 18px; font-weight: 600; margin-bottom: 12px;
+    letter-spacing: -0.02em;
+  }
+  .step-card p {
+    font-size: 14px; color: var(--muted); line-height: 1.6;
+  }
+
+  /* ===== FEATURES (bento) ===== */
+  .features {
+    padding: 0 24px 120px;
+  }
+  .features .inner { max-width: 1320px; margin: 0 auto; }
+
+  .bento {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: auto auto;
+    gap: 28px;
+  }
+
+  .bento-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 32px;
+    backdrop-filter: blur(12px);
+    transition: all 0.3s;
+    overflow: hidden;
+    position: relative;
+  }
+  .bento-card:hover {
+    border-color: var(--border-hover);
+  }
+
+  .bento-card.wide { grid-column: span 2; }
+  .bento-card.tall { grid-row: span 2; }
+
+  .bento-icon {
+    width: 44px; height: 44px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; margin-bottom: 20px;
+    border: 1px solid rgba(168,85,247,0.15);
+    background: rgba(168,85,247,0.06);
+  }
+  .bento-card h3 {
+    font-size: 17px; font-weight: 600; margin-bottom: 8px;
+    letter-spacing: -0.01em;
+  }
+  .bento-card p {
+    font-size: 13px; color: var(--muted); line-height: 1.6;
+  }
+
+  /* Feature-specific colors */
+  .bento-card.pink .bento-icon {
+    border-color: rgba(236,72,153,0.2);
+    background: rgba(236,72,153,0.06);
+  }
+  .bento-card.green .bento-icon {
+    border-color: rgba(34,197,94,0.2);
+    background: rgba(34,197,94,0.06);
+  }
+  .bento-card.orange .bento-icon {
+    border-color: rgba(249,115,22,0.2);
+    background: rgba(249,115,22,0.06);
+  }
+
+  /* Mini visualizer inside a bento card */
+  .bento-viz {
+    display: flex; align-items: flex-end; gap: 2px;
+    height: 40px; margin-top: 20px; opacity: 0.5;
+  }
+  .bento-viz .bar {
+    flex: 1; border-radius: 2px;
+    background: linear-gradient(to top, var(--purple), var(--pink));
+    animation: eq var(--d) ease-in-out infinite alternate;
+  }
+
+  /* ===== CTA ===== */
+  .cta-section {
+    padding: 80px 24px 120px;
+    text-align: center;
+  }
+  .cta-box {
+    max-width: 800px; margin: 0 auto;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 24px;
+    padding: 64px 48px;
+    backdrop-filter: blur(16px);
+    position: relative;
+    overflow: hidden;
+  }
+  .cta-box::before {
+    content: '';
+    position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
+    background: radial-gradient(circle at 50% 100%, rgba(168,85,247,0.06), transparent 50%);
+    pointer-events: none;
+  }
+  .cta-box h2 {
+    font-size: clamp(28px, 3.5vw, 40px); font-weight: 700;
+    letter-spacing: -0.03em; margin-bottom: 16px;
+    position: relative;
+  }
+  .cta-box p {
+    color: var(--muted); font-size: 16px; margin-bottom: 32px;
+    position: relative;
+  }
+
+  /* ===== FOOTER ===== */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 48px 24px;
+  }
+  footer .inner {
+    max-width: 1320px; margin: 0 auto;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  footer .left {
+    font-family: var(--mono); font-size: 11px;
+    color: var(--muted); letter-spacing: 0.05em;
+  }
+  footer .right {
+    display: flex; gap: 24px;
+  }
+  footer .right a {
+    font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--muted); text-decoration: none;
+    transition: color 0.2s;
+  }
+  footer .right a:hover { color: var(--text); }
+
+  /* ===== ANIMATIONS ===== */
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+  @keyframes eq {
+    0% { height: var(--h1); }
+    100% { height: var(--h2); }
+  }
+
+  /* ===== RESPONSIVE ===== */
+  @media (max-width: 768px) {
+    .nav-links { display: none; }
+    .steps { grid-template-columns: 1fr; }
+    .steps::before { display: none; }
+    .bento { grid-template-columns: 1fr; }
+    .bento-card.wide { grid-column: span 1; }
+    .social-proof .inner { flex-direction: column; gap: 24px; }
+    footer .inner { flex-direction: column; gap: 16px; text-align: center; }
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="inner">
+    <div class="logo"><div class="dot"></div> blindify</div>
+    <div class="nav-links">
+      <a href="#how">comment ca marche</a>
+      <a href="#features">fonctionnalites</a>
+    </div>
+    <a href="#" class="nav-cta">Jouer</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-content">
+    <div class="hero-badge">
+      <span class="live-dot"></span>
+      2 341 joueurs en ligne
+    </div>
+    <h1>Ecoute.<br><span class="gradient">Devine.</span><br>Domine.</h1>
+    <p>Blind test multijoueur en temps reel. Ta musique, tes amis, ton classement.</p>
+    <div class="hero-actions">
+      <a href="#" class="btn-play">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3" fill="currentColor"/></svg>
+        Lancer une partie
+      </a>
+      <a href="#how" class="btn-secondary">Comment ca marche</a>
+    </div>
+
+    <!-- Audio visualizer -->
+    <div class="visualizer">
+      <div class="bar" style="--h1:8px;--h2:45px;--d:0.4s"></div>
+      <div class="bar" style="--h1:15px;--h2:30px;--d:0.6s"></div>
+      <div class="bar" style="--h1:10px;--h2:55px;--d:0.35s"></div>
+      <div class="bar" style="--h1:20px;--h2:38px;--d:0.5s"></div>
+      <div class="bar" style="--h1:5px;--h2:48px;--d:0.45s"></div>
+      <div class="bar" style="--h1:18px;--h2:25px;--d:0.55s"></div>
+      <div class="bar" style="--h1:12px;--h2:50px;--d:0.38s"></div>
+      <div class="bar" style="--h1:8px;--h2:35px;--d:0.62s"></div>
+      <div class="bar" style="--h1:22px;--h2:42px;--d:0.42s"></div>
+      <div class="bar" style="--h1:6px;--h2:55px;--d:0.3s"></div>
+      <div class="bar" style="--h1:16px;--h2:28px;--d:0.58s"></div>
+      <div class="bar" style="--h1:10px;--h2:46px;--d:0.48s"></div>
+      <div class="bar" style="--h1:14px;--h2:32px;--d:0.52s"></div>
+      <div class="bar" style="--h1:7px;--h2:52px;--d:0.36s"></div>
+      <div class="bar" style="--h1:20px;--h2:40px;--d:0.44s"></div>
+      <div class="bar" style="--h1:12px;--h2:48px;--d:0.33s"></div>
+      <div class="bar" style="--h1:18px;--h2:30px;--d:0.56s"></div>
+      <div class="bar" style="--h1:9px;--h2:44px;--d:0.4s"></div>
+      <div class="bar" style="--h1:15px;--h2:36px;--d:0.65s"></div>
+      <div class="bar" style="--h1:11px;--h2:50px;--d:0.38s"></div>
+      <div class="bar" style="--h1:8px;--h2:45px;--d:0.4s"></div>
+      <div class="bar" style="--h1:15px;--h2:30px;--d:0.6s"></div>
+      <div class="bar" style="--h1:10px;--h2:55px;--d:0.35s"></div>
+      <div class="bar" style="--h1:20px;--h2:38px;--d:0.5s"></div>
+      <div class="bar" style="--h1:5px;--h2:48px;--d:0.45s"></div>
+      <div class="bar" style="--h1:18px;--h2:25px;--d:0.55s"></div>
+    </div>
+  </div>
+</section>
+
+<!-- SOCIAL PROOF -->
+<div class="social-proof">
+  <div class="inner">
+    <div class="proof-stat">
+      <div class="number">12K+</div>
+      <div class="label">Parties jouees</div>
+    </div>
+    <div class="proof-stat">
+      <div class="number">3.2K</div>
+      <div class="label">Joueurs actifs</div>
+    </div>
+    <div class="proof-stat">
+      <div class="number">98%</div>
+      <div class="label">Taux de fun</div>
+    </div>
+    <div class="proof-stat">
+      <div class="number">0.3s</div>
+      <div class="label">Temps de reponse moyen</div>
+    </div>
+  </div>
+</div>
+
+<!-- HOW IT WORKS -->
+<section class="how" id="how">
+  <div class="inner">
+    <div class="section-label">Le parcours</div>
+    <h2 class="section-title">3 etapes. 30 secondes.</h2>
+    <div class="steps">
+      <div class="step-card">
+        <div class="step-number">1</div>
+        <h3>Colle un lien</h3>
+        <p>Profil Spotify, playlist Deezer, peu importe. On s'occupe du reste.</p>
+      </div>
+      <div class="step-card">
+        <div class="step-number">2</div>
+        <h3>Invite ou joue</h3>
+        <p>Solo, entre amis, en event. Partage un code, c'est tout.</p>
+      </div>
+      <div class="step-card">
+        <div class="step-number">3</div>
+        <h3>Ecoute et devine</h3>
+        <p>30 secondes d'extrait. Titre, artiste, ou les deux. Le plus rapide gagne.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES BENTO -->
+<section class="features" id="features">
+  <div class="inner">
+    <div class="section-label">Fonctionnalites</div>
+    <h2 class="section-title">Tout ce qu'il faut pour jouer.</h2>
+    <div class="bento">
+      <div class="bento-card wide">
+        <div class="bento-icon">&#9835;</div>
+        <h3>Ta musique, tes regles</h3>
+        <p>Spotify, Deezer, playlists publiques ou privees. Blindify pioche dans ce que tu ecoutes vraiment.</p>
+        <div class="bento-viz">
+          <div class="bar" style="--h1:5px;--h2:35px;--d:0.4s"></div>
+          <div class="bar" style="--h1:10px;--h2:25px;--d:0.5s"></div>
+          <div class="bar" style="--h1:8px;--h2:40px;--d:0.35s"></div>
+          <div class="bar" style="--h1:15px;--h2:20px;--d:0.6s"></div>
+          <div class="bar" style="--h1:6px;--h2:38px;--d:0.45s"></div>
+          <div class="bar" style="--h1:12px;--h2:30px;--d:0.55s"></div>
+          <div class="bar" style="--h1:4px;--h2:35px;--d:0.38s"></div>
+          <div class="bar" style="--h1:18px;--h2:22px;--d:0.48s"></div>
+        </div>
+      </div>
+      <div class="bento-card pink">
+        <div class="bento-icon">&#9829;</div>
+        <h3>Multijoueur instant</h3>
+        <p>Un code, pas de compte. Tes potes rejoignent en 5 secondes.</p>
+      </div>
+      <div class="bento-card green">
+        <div class="bento-icon">&#9889;</div>
+        <h3>Temps reel</h3>
+        <p>Scoring live, classement qui bouge, chat integre.</p>
+      </div>
+      <div class="bento-card orange">
+        <div class="bento-icon">&#9733;</div>
+        <h3>Mode Chrono</h3>
+        <p>Contre la montre. Les titres s'enchainent, chaque seconde compte.</p>
+      </div>
+      <div class="bento-card wide">
+        <div class="bento-icon">&#9776;</div>
+        <h3>Stats detaillees</h3>
+        <p>Historique, precision, temps de reaction, streaks. Tout est mesure, rien n'est perdu. Partage ta carte de score.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section">
+  <div class="cta-box">
+    <h2>Pret a jouer ?</h2>
+    <p>Aucun compte requis. Colle un lien, lance la musique.</p>
+    <a href="#" class="btn-play" style="display: inline-flex;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px"><polygon points="5 3 19 12 5 21 5 3" fill="currentColor"/></svg>
+      C'est parti
+    </a>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="inner">
+    <div class="left">&copy; 2025 Blindify</div>
+    <div class="right">
+      <a href="#">conditions</a>
+      <a href="#">confidentialite</a>
+      <a href="#">discord</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

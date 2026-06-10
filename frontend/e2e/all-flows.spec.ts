@@ -49,7 +49,7 @@ test.describe("All Flows — Smoke Tests", () => {
 
     // Should now show the confirm button or auto-navigate
     // Check if there's a confirm button
-    const confirmBtn = page.locator("button", { hasText: /Valider ce mode/ })
+    const confirmBtn = page.locator("button", { hasText: /Valider/i })
     if (await confirmBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
       await confirmBtn.click()
     }
@@ -65,8 +65,8 @@ test.describe("All Flows — Smoke Tests", () => {
 
     // Should be on /friends page
     expect(url).toContain("/friends")
-    // The friends page wizard shows "Mode amis" in the top bar
-    expect(text.toLowerCase()).toContain("mode amis")
+    // The friends page wizard shows either "Mode amis" (legacy) or "Friends_Mode" (synthwave)
+    expect(text.toLowerCase()).toMatch(/mode amis|friends_mode|friends/)
 
     await ctx.close()
   })
@@ -98,7 +98,7 @@ test.describe("All Flows — Smoke Tests", () => {
     await page.waitForTimeout(500)
 
     // Wizard step 3: Intent - click "Créer une partie"
-    const createBtn = page.locator("text=Créer une partie").first()
+    const createBtn = page.locator("text=/Cr[eé]er une partie/").first()
     await expect(createBtn).toBeVisible({ timeout: 3000 })
     await createBtn.click()
 

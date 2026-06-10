@@ -11,7 +11,8 @@ import type { CurrentUserPayload } from "@/lib/api"
 import { audioManager } from "@/lib/audioManager"
 import type { MultiplayerGameState, MultiplayerParticipant, MultiplayerRoom, SoloTrack, StreamerState, StreamerSubMode } from "@/lib/types"
 import { StreamerGameClient } from "@/components/game/StreamerGameClient"
-import { MultiplayerGameClient, type ChatMessage } from "@/components/game/MultiplayerGameClient"
+import { MultiplayerGameClient } from "@/components/game/MultiplayerGameClient"
+import { useRoomChat } from "./hooks/useRoomChat"
 import { Button } from "@/components/ui/button"
 import { useServerTime } from "@/hooks/useServerTime"
 import { useMode } from "@/contexts/ModeContext"
@@ -117,7 +118,6 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
 
   const [tracks, setTracks] = useState<SoloTrack[]>([])
   const [gameState, setGameState] = useState<MultiplayerGameState | StreamerState | null>(null)
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [starting, setStarting] = useState(false)
   const [joining, setJoining] = useState(false)
   const [importing, setImporting] = useState(false)
@@ -134,6 +134,12 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
 
   const socketRef = useRef<Socket | null>(null)
   const [socketConnected, setSocketConnected] = useState(false)
+
+  // Room chat (listener + send). Hook attaches when socket+roomCode ready.
+  const { messages: chatMessages, sendChat } = useRoomChat(
+    socketConnected ? socketRef.current : null,
+    room?.room_code ?? null
+  )
   const PENDING_EVENT_CODE_KEY = "blindify:pending_event_code"
   const PENDING_AUTH_REDIRECT_KEY = "blindify:post_auth_redirect"
   const handlersRef = useRef<{
@@ -144,7 +150,6 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     roundStart?: (payload: { roomCode: string; round: number; track: MultiplayerGameState["currentTrack"]; timing: { startAt: number | null; revealAt: number | null } }) => void
     roundReveal?: (payload: { roomCode: string; round: number; players: MultiplayerGameState["players"]; timing: { startAt: number | null; revealAt: number | null } }) => void
     gameOver?: (payload: { roomCode: string; players: MultiplayerGameState["players"] }) => void
-    chat?: (payload: ChatMessage) => void
   }>({})
   const roomRef = useRef<MultiplayerRoom | null>(null)
   const userRef = useRef<CurrentUserPayload | null>(null)
@@ -236,7 +241,6 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
           socket.off("game:over", handlersRef.current.gameOver)
           socket.off("game:game:over", handlersRef.current.gameOver)
         }
-        if (handlersRef.current.chat) socket.off("room:chat", handlersRef.current.chat)
       }
       disconnectSocket()
     }
@@ -252,46 +256,12 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     // Guest mode is now explicitly controlled by user choice
   }, [userPayload, setGuest])
 
-  // Fallback: if game is stuck in GUESSING with expired revealAt, request sync
-  const lastSyncRef = useRef<number>(0)
-  useEffect(() => {
-    if (!gameState || !room) return
-    const gs = gameState as MultiplayerGameState
-    if (gs.phase !== "GUESSING" || !gs.timing?.revealAt) return
-    const overdue = serverNow - gs.timing.revealAt
-    if (overdue < 3000) return // wait 3s past expiry before syncing
-    if (Date.now() - lastSyncRef.current < 5000) return // max once per 5s
-    const socket = socketRef.current
-    if (!socket?.connected) return
-    lastSyncRef.current = Date.now()
-    socket.emit("game:sync", { roomCode: room.room_code })
-  }, [gameState, room, serverNow])
-
-  // Safety net: if game is stuck in REVEAL for too long, re-emit game:ready
-  const revealStuckRef = useRef<number | null>(null)
-  useEffect(() => {
-    if (!gameState || !room) {
-      revealStuckRef.current = null
-      return
-    }
-    const gs = gameState as MultiplayerGameState
-    if (gs.phase !== "REVEAL") {
-      revealStuckRef.current = null
-      return
-    }
-    // Record when we first noticed REVEAL phase
-    if (revealStuckRef.current === null) {
-      revealStuckRef.current = Date.now()
-    }
-    const stuckMs = Date.now() - revealStuckRef.current
-    if (stuckMs < 15000) return // wait 15s before considering it stuck
-    if (Date.now() - lastSyncRef.current < 5000) return // max once per 5s
-    const socket = socketRef.current
-    if (!socket?.connected) return
-    lastSyncRef.current = Date.now()
-    // Re-emit ready to unstick the game
-    socket.emit("game:ready", { roomCode: room.room_code })
-  }, [gameState, room, serverNow])
+  // Phase 3 of refactor: stuck-state safety nets removed.
+  // Previously two useEffect hooks polled `serverNow` and re-emitted
+  // game:sync / game:ready when the phase appeared frozen. Those were patches
+  // for socket reliability issues that have since been fixed (autoConnect:false,
+  // markReconnected on every event, disconnected flag persistence).
+  // If a "stuck" state appears now, it's a real bug — fix it server-side.
 
   // Safety net: ensure socket joins the room whenever we have a room and socket is connected
   // Track the last socket ID + room combo to re-emit on reconnect
@@ -324,10 +294,13 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         // Reset join key to force re-join on reconnect
         lastJoinKeyRef.current = null
       })
-      // Check if already connected
-      if (socketRef.current.connected) {
-        setSocketConnected(true)
-      }
+    }
+    // Connect if not already connected (autoConnect is disabled)
+    if (!socketRef.current.connected) {
+      socketRef.current.connect()
+    }
+    if (socketRef.current.connected) {
+      setSocketConnected(true)
     }
     return socketRef.current
   }, [])
@@ -462,7 +435,6 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         socket.off("game:over", handlersRef.current.gameOver)
         socket.off("game:game:over", handlersRef.current.gameOver)
       }
-      if (handlersRef.current.chat) socket.off("room:chat", handlersRef.current.chat)
 
       const presenceHandler = (payload: RoomPresenceEvent) => {
         if (payload.roomCode !== roomCode) return
@@ -526,31 +498,23 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       }) => {
         if (payload.roomCode !== roomCode) return
         if (mode === "streamer") return
+        // The backend now emits `game:state` BEFORE `game:round:start`, so we
+        // can trust that gameState is already set with the correct round data.
+        // This handler only triggers UI transitions (no state reconstruction).
         setGameState(prev => {
-          if (!prev) {
-            // Build a minimal state from the round:start payload so the game can begin
-            // even if game:state hasn't arrived yet (slow connection / mid-game rejoin).
-            return {
-              roomCode,
-              hostUserId: null,
-              mode: mode as MultiplayerGameState["mode"],
-              phase: "GUESSING" as const,
-              currentRound: payload.round,
-              totalRounds: payload.round,
-              currentTrack: payload.track,
-              players: {},
-              timing: payload.timing,
-              config: { autoAdvance: false, roundDurationMs: 20000 },
-            } satisfies MultiplayerGameState
-          }
+          if (!prev) return prev // ignore round:start before game:state arrives
           const multi = prev as MultiplayerGameState
-          return {
-            ...multi,
-            phase: "GUESSING",
-            currentRound: payload.round,
-            currentTrack: payload.track,
-            timing: payload.timing,
+          // Defensive: if state.currentRound is behind, sync from the trigger event.
+          if (multi.currentRound !== payload.round) {
+            return {
+              ...multi,
+              phase: "GUESSING",
+              currentRound: payload.round,
+              currentTrack: payload.track,
+              timing: payload.timing,
+            }
           }
+          return multi
         })
         setView("playing")
         dispatchLobby({ type: "playing" })
@@ -604,9 +568,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         dispatchLobby({ type: "results" })
       }
 
-      const chatHandler = (payload: ChatMessage) => {
-        setChatMessages(prev => [...prev, payload].slice(-100))
-      }
+      // Chat listener is owned by the useRoomChat hook at component top-level.
 
       socket.on("room:presence", presenceHandler)
       socket.on("player-joined", playerJoinedHandler)
@@ -616,7 +578,6 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       socket.on("game:round:reveal", roundRevealHandler)
       socket.on("game:over", gameOverHandler)
       socket.on("game:game:over", gameOverHandler)
-      socket.on("room:chat", chatHandler)
 
       handlersRef.current = {
         connect: undefined,
@@ -626,7 +587,6 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         roundStart: roundStartHandler,
         roundReveal: roundRevealHandler,
         gameOver: gameOverHandler,
-        chat: chatHandler,
       }
 
       const emitJoin = () => {
@@ -801,6 +761,9 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         setStarting(true)
         setError(null)
         dispatchLobby({ type: "starting" })
+        // Pre-warm the audio element during this user interaction (click).
+        // This unlocks autoplay so the round start audio plays without manual click.
+        audioManager.warmup()
         const payload: { source?: string; playlistId?: string; subMode?: string; soloSource?: string } = {
           source: "library",
         }
@@ -972,10 +935,14 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     }
   }, [room, loading, userPayload, handleCreateRoom, joinRoomCode])
 
+  // HTTP polling fallback: only runs when the socket is NOT connected.
+  // With a healthy socket, `game:state` events deliver updates in real time —
+  // polling becomes a network-failure safety net rather than the primary path.
   useEffect(() => {
     if (!room?.room_code) return
     const shouldPoll = view !== "results" && (view !== "playing" || !gameState)
     if (!shouldPoll) return
+    if (socketConnected) return // socket carries state updates; no need to poll
     const interval = setInterval(async () => {
       try {
         const latest = await api.roomState(room.room_code)
@@ -992,7 +959,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       }
     }, 2500)
     return () => clearInterval(interval)
-  }, [room?.room_code, view, gameState, resolveViewFromState, viewToLobbyAction])
+  }, [room?.room_code, view, gameState, socketConnected, resolveViewFromState, viewToLobbyAction])
 
   useEffect(() => {
     if (!gameState) return
@@ -1181,12 +1148,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     importing,
     onImportingChange: setImporting,
     chatMessages,
-    onSendChat: room ? (message: string) => {
-      const socket = socketRef.current
-      if (socket && room) {
-        socket.emit("room:chat", { roomCode: room.room_code, message })
-      }
-    } : undefined,
+    onSendChat: room ? sendChat : undefined,
   }
 
   const streamerModeSelector =
@@ -1317,11 +1279,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
             }
           } : undefined}
           chatMessages={chatMessages}
-          onSendChat={(message) => {
-            const socket = socketRef.current
-            if (!socket || !room) return
-            socket.emit("room:chat", { roomCode: room.room_code, message })
-          }}
+          onSendChat={sendChat}
         />
       )
     ) : view === "results" ? (

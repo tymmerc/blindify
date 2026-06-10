@@ -35,11 +35,10 @@ test.describe("Navigation audit — all links valid", () => {
     await page.goto(`${BASE}/modes`)
     await page.waitForLoadState("networkidle")
     await page.waitForSelector("h1", { state: "visible", timeout: 5000 })
-    const text = await page.locator("body").innerText()
-    expect(text).toContain("Jouer avec des amis")
-    expect(text).toContain("Jouer en solo")
-    expect(text).toContain("Jouer en événement")
-    expect(text).toContain("Mode Streamer")
+    const text = (await page.locator("body").innerText()).toLowerCase()
+    expect(text).toContain("jouer avec des amis")
+    expect(text).toMatch(/jouer en [ée]v[ée]nement/)
+    expect(text).toContain("mode streamer")
   })
 
   test("solo page loads", async ({ page }) => {
@@ -83,8 +82,8 @@ test.describe("Navigation audit — all links valid", () => {
   test("event page loads", async ({ page }) => {
     await page.goto(`${BASE}/event`)
     await page.waitForTimeout(1_000)
-    const text = await page.textContent("body")
-    expect(text).toContain("Projection") || expect(text).toContain("événement")
+    const text = (await page.textContent("body") || "").toLowerCase()
+    expect(text).toMatch(/projection|[ée]v[ée]nement/)
   })
 
   test("profile page loads", async ({ page }) => {

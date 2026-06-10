@@ -73,37 +73,32 @@ function LobbyHeader({
   accent: string
 }) {
   return (
-    <div className="sticky top-6 z-10 flex flex-col gap-4 rounded-2xl border border-white/10 bg-[#0c0c0c] p-7">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="space-y-2">
-          <p className="text-xs uppercase tracking-[0.3em] text-white/60">
-            Multijoueur · {mode} · {stage === "entry" ? "Entrée" : stage === "lobby" ? "Lobby" : stage === "game" ? "Jeu" : "Résultats"}
-          </p>
-          <h1 className="text-3xl font-bold leading-tight text-white">{title}</h1>
-          <p className="text-sm text-white/65">{subtitle}</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {onChangeMode ? (
-            <Button
-              variant="outline"
-              onClick={onChangeMode}
-              className="gap-2 rounded-full border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-white hover:bg-white/10"
-              style={{ borderColor: accent, color: accent }}
-            >
-              <ArrowLeftRight className="h-4 w-4" />
-              Changer de mode
-            </Button>
-          ) : null}
-          <Button
-            variant="outline"
-            onClick={onLeave}
-            className="gap-2 rounded-full border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-white hover:bg-white/10"
-            style={{ borderColor: accent, color: accent }}
+    <div className="flex items-center justify-between gap-4">
+      <div className="min-w-0">
+        <p className="text-[10px] uppercase tracking-[0.3em] text-white/40">
+          {mode} · {stage === "entry" ? "Entrée" : stage === "lobby" ? "Lobby" : stage === "game" ? "Jeu" : "Résultats"}
+        </p>
+        <h1 className="mt-1 text-xl font-semibold text-white truncate">{title}</h1>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        {onChangeMode ? (
+          <button
+            type="button"
+            onClick={onChangeMode}
+            className="flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-2 text-xs font-medium text-white/60 transition hover:bg-white/5 hover:text-white/80"
           >
-            <ArrowLeft className="h-4 w-4" />
-            Quitter
-          </Button>
-        </div>
+            <ArrowLeftRight className="h-3.5 w-3.5" />
+            Mode
+          </button>
+        ) : null}
+        <button
+          type="button"
+          onClick={onLeave}
+          className="flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-2 text-xs font-medium text-white/60 transition hover:bg-white/5 hover:text-white/80"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Quitter
+        </button>
       </div>
     </div>
   )

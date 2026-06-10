@@ -71,6 +71,25 @@ export type GameSessionSummary = {
   state: string
 }
 
+export type GameHistoryTrack = {
+  title: string
+  artist: string
+  album_cover: string | null
+}
+
+export type GameHistoryEntry = {
+  id: number
+  mode: string
+  difficulty: string
+  state: string
+  totalRounds: number
+  createdAt: string
+  score: number
+  correct: number
+  bestStreak: number
+  tracks: GameHistoryTrack[]
+}
+
 export type MultiplayerRoom = {
   id: number
   room_code: string
@@ -133,6 +152,74 @@ export type MultiplayerGameState = {
     roundDurationMs: number
   }
 }
+
+// =============================================================================
+// Canonical game types (mirror of /opt/blindify/shared/src/game.ts).
+// MultiplayerGameState / MultiplayerPlayerState above are legacy aliases — new
+// code should use GameState / PlayerState below.
+// =============================================================================
+
+export type GameMode = "friends" | "event" | "streamer"
+export type GamePhase = "LOBBY" | "GUESSING" | "REVEAL" | "FINISHED"
+export type Verdict = "correct" | "close" | "wrong"
+
+export interface RoundTrack {
+  round: number
+  trackId: string
+  audioSourceId?: string | number
+  title: string
+  artist: string
+  album?: string | null
+  previewUrl: string | null
+  albumCover?: string | null
+  metadata?: Record<string, unknown> | null
+}
+
+export interface PlayerState {
+  userId: number
+  username: string | null
+  avatar?: string | null
+  score: number
+  hasAnswered: boolean
+  isReady: boolean
+  disconnected?: boolean
+  lastGuess?: string
+  lastGuessTitle?: string | null
+  lastGuessArtist?: string | null
+  lastSourceGuess?: number | null
+  lastVerdict?: Verdict
+  answerAt?: number | null
+  accuracy?: number
+  rounds?: number
+  correct?: number
+  streak?: number
+  bestStreak?: number
+}
+
+export interface GameTiming {
+  startAt: number | null
+  revealAt: number | null
+}
+
+export interface GameConfig {
+  autoAdvance: boolean
+  roundDurationMs: number
+}
+
+export interface GameState {
+  roomCode: string
+  hostUserId: number | null
+  mode: GameMode
+  phase: GamePhase
+  currentRound: number
+  totalRounds: number
+  currentTrack: RoundTrack | null
+  players: Record<number, PlayerState>
+  timing: GameTiming
+  config: GameConfig
+}
+
+// =============================================================================
 
 export type StreamerPhase =
   | "LOBBY"
