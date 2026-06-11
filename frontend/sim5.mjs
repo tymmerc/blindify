@@ -91,7 +91,7 @@ async function extractCode(page) {
   const tiles = text.match(/(?:\b[A-HJ-NP-Z2-9][\s ]+){4,7}[A-HJ-NP-Z2-9]\b/)
   if (tiles) {
     const joined = tiles[0].replace(/\s+/g, "")
-    if (/\d/.test(joined) && joined.length >= 5 && joined.length <= 8) return joined
+    if (joined.length === 6) return joined
   }
   return ""
 }

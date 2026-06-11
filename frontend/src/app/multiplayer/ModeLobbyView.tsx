@@ -1333,6 +1333,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       error={error || lobby.message}
       dataAttrs={dataAttrs}
       stage={stage}
+      isGuest={isGuest}
     >
       <div className="flex flex-col gap-4">
         {guestNotice}

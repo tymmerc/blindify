@@ -20,7 +20,7 @@ test.describe("Friends Wizard Flow", () => {
     expect(body1.toLowerCase()).toContain("comment tu t'appelles")
 
     // Check friends-mode label (case-insensitive due to uppercase CSS)
-    await expect(page.locator("text=/Friends_Mode/i").first()).toBeVisible({ timeout: 3000 })
+    await expect(page.locator("text=/Friends.{0,3}Mode/i").first()).toBeVisible({ timeout: 3000 })
 
     // Type nickname
     const nicknameInput = page.locator("input[placeholder='Ton pseudo']")

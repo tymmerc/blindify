@@ -22,6 +22,7 @@ type LobbyShellProps = {
   error?: string | null
   dataAttrs?: Record<string, string>
   stage?: "entry" | "lobby" | "game" | "results"
+  isGuest?: boolean
   children: ReactNode
 }
 
@@ -35,6 +36,7 @@ export function LobbyShell({
   error,
   dataAttrs,
   stage = "entry",
+  isGuest,
   children,
 }: LobbyShellProps) {
   const accent = ANALOG_ACCENTS[mode] ?? "#c65133"
@@ -50,6 +52,7 @@ export function LobbyShell({
             onChangeMode={onChangeMode}
             stage={stage}
             accent={accent}
+            isGuest={isGuest}
           />
         ) : null}
         {error ? (
@@ -69,6 +72,7 @@ function LobbyHeader({
   onChangeMode,
   stage,
   accent,
+  isGuest,
 }: {
   mode: GameMode
   title: string
@@ -77,6 +81,7 @@ function LobbyHeader({
   onChangeMode?: () => void
   stage: LobbyShellProps["stage"]
   accent: string
+  isGuest?: boolean
 }) {
   return (
     <div className="flex items-center justify-between gap-4 border-b-2 border-[#2e2014] pb-4">
@@ -87,6 +92,15 @@ function LobbyHeader({
         <h1 className="mt-1 truncate font-display text-2xl font-semibold text-[#2e2014]">{title}</h1>
       </div>
       <div className="flex shrink-0 items-center gap-2">
+        {isGuest ? (
+          <a
+            href={`/blindify/auth/login?returnTo=${encodeURIComponent(typeof window !== "undefined" ? window.location.pathname + window.location.search : "/blindify/multiplayer")}`}
+            className="flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[#f4ecdb] transition hover:brightness-95"
+            style={{ background: accent, border: "1.5px solid #2e2014" }}
+          >
+            Se connecter
+          </a>
+        ) : null}
         {onChangeMode ? (
           <button
             type="button"

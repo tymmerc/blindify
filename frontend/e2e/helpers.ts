@@ -99,5 +99,18 @@ export async function extractRoomCode(page: Page): Promise<string> {
     if (withDigit.length > 0) return withDigit[0]
   } catch {}
 
+  // Strategy 4: Tile rendering (analog DA) — letters spaced out like "H 4 X L W Z".
+  // The spaced-single-char pattern is distinctive enough that we don't require
+  // a digit (room codes CAN be all letters, e.g. "YKFJMR"); we require exactly
+  // 6 chars (room_code is varchar(6)).
+  try {
+    const text = await page.locator("body").innerText()
+    const tiles = text.match(/(?:\b[A-HJ-NP-Z2-9][ \t\n]+){5}[A-HJ-NP-Z2-9]\b/)
+    if (tiles) {
+      const joined = tiles[0].replace(/\s+/g, "")
+      if (joined.length === 6) return joined
+    }
+  } catch {}
+
   return ""
 }

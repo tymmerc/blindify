@@ -86,7 +86,7 @@ test.describe("Bug fixes verification", () => {
     console.log(`BUG-3 text (400): ${text.substring(0, 400)}`)
 
     // Should show "Se connecter avec Spotify" for guests
-    const hasLogin = text.includes("Se connecter avec Spotify") || text.includes("Connexion")
+    const hasLogin = /Se connecter|Connexion/i.test(text)
     console.log(`BUG-3 login button visible: ${hasLogin}`)
     expect(hasLogin).toBe(true)
 

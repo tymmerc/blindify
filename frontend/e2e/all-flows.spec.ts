@@ -49,7 +49,7 @@ test.describe("All Flows — Smoke Tests", () => {
 
     // Should now show the confirm button or auto-navigate
     // Check if there's a confirm button
-    const confirmBtn = page.locator("button", { hasText: /Valider/i })
+    const confirmBtn = page.locator("button", { hasText: /Valider|Lancer une partie/i })
     if (await confirmBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
       await confirmBtn.click()
     }
@@ -132,7 +132,7 @@ test.describe("All Flows — Smoke Tests", () => {
     await eventCard.click()
     await page.waitForTimeout(500)
 
-    const confirmBtn = page.locator("button", { hasText: /Confirmer|Valider|Go|C'est parti/ })
+    const confirmBtn = page.locator("button", { hasText: /Confirmer|Valider|Go|C'est parti|Lancer une partie/ })
     if (await confirmBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
       await confirmBtn.click()
     }
