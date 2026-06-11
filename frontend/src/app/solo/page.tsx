@@ -373,9 +373,9 @@ function SoloSelector() {
 
             <InfoCard label="Score" title="Scoring">
               <ul className="space-y-2 text-sm text-[#6b573f] leading-relaxed list-disc list-inside">
-                <li>Titre correct = 40 pts, Artiste correct = 30 pts</li>
-                <li>Bonus vitesse selon ta rapidite</li>
-                <li>Enchaine les bonnes reponses pour le streak bonus</li>
+                <li>Titre correct = 1 pt, Artiste correct = 1 pt</li>
+                <li>Pas de bonus : le score = tes bonnes reponses</li>
+                <li>Enchaine les bonnes reponses pour la serie (pour le style)</li>
               </ul>
             </InfoCard>
           </div>

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { api } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 
@@ -10,9 +10,12 @@ type ProfileImportBlockProps = {
   accent?: string
   onImportingChange?: (importing: boolean) => void
   initialUrl?: string
+  /** Lance l'import automatiquement au montage si initialUrl est fournie
+      (cas du wizard : l'URL collee doit etre consommee, pas perdue). */
+  autoStart?: boolean
 }
 
-export function ProfileImportBlock({ accent = "#c65133", onImportingChange, initialUrl }: ProfileImportBlockProps) {
+export function ProfileImportBlock({ accent = "#c65133", onImportingChange, initialUrl, autoStart }: ProfileImportBlockProps) {
   const [url, setUrl] = useState(initialUrl ?? "")
   const [state, setState] = useState<ImportState>("idle")
   const [error, setError] = useState<string | null>(null)
@@ -24,9 +27,8 @@ export function ProfileImportBlock({ accent = "#c65133", onImportingChange, init
     onImportingChange?.(s === "loading" || s === "syncing")
   }
 
-  const handleImportAll = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const trimmed = url.trim()
+  const runImport = async (raw: string) => {
+    const trimmed = raw.trim()
     if (!trimmed) return
 
     updateState("loading")
@@ -53,6 +55,19 @@ export function ProfileImportBlock({ accent = "#c65133", onImportingChange, init
       updateState("idle")
     }
   }
+
+  const handleImportAll = async (e: React.FormEvent) => {
+    e.preventDefault()
+    await runImport(url)
+  }
+
+  const autoStarted = useRef(false)
+  useEffect(() => {
+    if (!autoStart || !initialUrl?.trim() || autoStarted.current) return
+    autoStarted.current = true
+    void runImport(initialUrl)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoStart, initialUrl])
 
   if (state === "done") {
     return (

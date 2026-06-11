@@ -116,6 +116,18 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   const [room, setRoom] = useState<MultiplayerRoom | null>(null)
   const [participants, setParticipants] = useState<MultiplayerParticipant[]>([])
 
+  // Debloque l'autoplay des le lobby : le premier clic (pseudo, chat, copier
+  // le code...) suffit. Sans ca, les non-hosts devaient cliquer sur "play"
+  // au round 1 parce que le navigateur bloquait l'audio sans geste prealable.
+  useEffect(() => {
+    const unlock = () => {
+      audioManager.warmup()
+      document.removeEventListener("pointerdown", unlock)
+    }
+    document.addEventListener("pointerdown", unlock)
+    return () => document.removeEventListener("pointerdown", unlock)
+  }, [])
+
   const [tracks, setTracks] = useState<SoloTrack[]>([])
   const [gameState, setGameState] = useState<MultiplayerGameState | StreamerState | null>(null)
   const [starting, setStarting] = useState(false)
@@ -1144,6 +1156,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     canStart: canStartGame,
     isHost,
     isGuest,
+    initialProfileUrl,
     currentUserId,
     importing,
     onImportingChange: setImporting,

@@ -343,10 +343,12 @@ export function MultiplayerGameClient({
         isReady: p.isReady,
         streak: p.streak ?? 0,
         bestStreak: p.bestStreak ?? 0,
+        totalReactionMs: p.totalReactionMs,
       }))
       .sort((a, b) => {
         if (b.score !== a.score) return b.score - a.score
-        return (b.accuracy ?? 0) - (a.accuracy ?? 0)
+        // Egalite de points : le plus rapide (cumul des temps de reponse) devant
+        return (a.totalReactionMs ?? Infinity) - (b.totalReactionMs ?? Infinity)
       })
   }, [state?.players, mode, state?.hostUserId])
 

@@ -193,22 +193,21 @@ describe("revealRound - scoring", () => {
     const state = revealRound(ROOM);
     expect(state?.players[2].lastVerdict).toBe("correct");
     // title(40) + artist(30) + speed(<=30) + source(0) - penalty(0)
-    expect(state?.players[2].score).toBeGreaterThanOrEqual(70);
-    expect(state?.players[2].score).toBeLessThanOrEqual(100);
+    expect(state?.players[2].score).toBe(2); // 1 titre + 1 artiste
   });
 
   it("awards partial for title only", () => {
     recordAnswer(ROOM, 2, "", null, "Bohemian Rhapsody", "Wrong Artist");
     const state = revealRound(ROOM);
     expect(state?.players[2].lastVerdict).toBe("close");
-    expect(state?.players[2].score).toBeGreaterThanOrEqual(40);
+    expect(state?.players[2].score).toBe(1); // titre seul
   });
 
   it("awards partial for artist only", () => {
     recordAnswer(ROOM, 2, "", null, "Wrong Title", "Queen");
     const state = revealRound(ROOM);
     expect(state?.players[2].lastVerdict).toBe("close");
-    expect(state?.players[2].score).toBeGreaterThanOrEqual(30);
+    expect(state?.players[2].score).toBe(1); // artiste seul
   });
 
   it("awards zero for completely wrong answer", () => {
@@ -275,7 +274,7 @@ describe("revealRound - scoring", () => {
     recordAnswer(ROOM, 2, "", 3, "Song 1", "Artist 1");
     const state = revealRound(ROOM);
     // title(40) + artist(30) + speed + source(10)
-    expect(state?.players[2].score).toBeGreaterThanOrEqual(80);
+    expect(state?.players[2].score).toBe(3); // titre + artiste + bonne source
   });
 });
 

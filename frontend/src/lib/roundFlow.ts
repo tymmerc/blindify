@@ -81,7 +81,7 @@ export type ScoreInput = {
 
 export type ScoreBreakdown = { title: number; artist: number; speed: number; penalty: number; hint: number }
 
-export function computeScore({ matchedTitle, matchedArtist, guessProvided, reactionMs, maxDurationMs, streak, hintsUsed = 0 }: ScoreInput): {
+export function computeScore({ matchedTitle, matchedArtist, streak }: ScoreInput): {
   gained: number
   nextStreak: number
   breakdown: ScoreBreakdown
@@ -89,22 +89,14 @@ export function computeScore({ matchedTitle, matchedArtist, guessProvided, react
   const correctBoth = matchedTitle && matchedArtist
   const nextStreak = correctBoth ? Math.min(streak + 1, 5) : 0
 
-  const title = matchedTitle ? 40 : 0
-  const artist = matchedArtist ? 30 : 0
+  // Scoring lisible : 1 point par bonne reponse (titre, artiste).
+  // Pas de bonus vitesse, pas de penalite, pas de malus indice - le score
+  // se lit direct (12 pts = 12 bonnes reponses). Aligne sur le backend multi.
+  const title = matchedTitle ? 1 : 0
+  const artist = matchedArtist ? 1 : 0
 
-  let speed = 0
-  if ((matchedTitle || matchedArtist) && reactionMs !== null && maxDurationMs > 0) {
-    const ratio = 1 - Math.min(Math.max(reactionMs / maxDurationMs, 0), 1)
-    speed = Math.round(30 * ratio)
-  }
-
-  // Penalty only when a guess was provided but nothing matched
-  const penalty = guessProvided && !matchedTitle && !matchedArtist ? 10 : 0
-
-  const hint = hintsUsed * 15
-
-  const gained = Math.max(0, title + artist + speed - penalty - hint)
-  return { gained, nextStreak, breakdown: { title, artist, speed, penalty, hint } }
+  const gained = title + artist
+  return { gained, nextStreak, breakdown: { title, artist, speed: 0, penalty: 0, hint: 0 } }
 }
 
 export type ModeFlags = {

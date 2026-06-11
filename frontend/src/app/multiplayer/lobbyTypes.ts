@@ -37,6 +37,8 @@ export type LobbyRendererProps = {
   canStart: boolean
   isHost: boolean
   isGuest: boolean
+  /** URL de profil musical collee dans le wizard - a consommer (auto-import) en arrivant au lobby */
+  initialProfileUrl?: string | null
   importing: boolean
   onImportingChange: (importing: boolean) => void
   currentUserId: number

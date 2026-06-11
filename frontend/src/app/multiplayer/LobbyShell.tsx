@@ -84,14 +84,14 @@ function LobbyHeader({
   isGuest?: boolean
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 border-b-2 border-[#2e2014] pb-4">
+    <div className="flex flex-col gap-3 border-b-2 border-[#2e2014] pb-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
       <div className="min-w-0">
         <p className="text-[11px] font-bold uppercase tracking-[0.32em]" style={{ color: accent }}>
           {mode} · {stage === "entry" ? "Entrée" : stage === "lobby" ? "Lobby" : stage === "game" ? "Jeu" : "Résultats"}
         </p>
         <h1 className="mt-1 truncate font-display text-2xl font-semibold text-[#2e2014]">{title}</h1>
       </div>
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
         {isGuest ? (
           <a
             href={`/blindify/auth/login?returnTo=${encodeURIComponent(typeof window !== "undefined" ? window.location.pathname + window.location.search : "/blindify/multiplayer")}`}

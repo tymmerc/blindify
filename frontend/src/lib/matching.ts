@@ -109,21 +109,24 @@ export function evaluateGuessSeparate(
   const titleWords = tokenize(track.title)
   const artistWords = tokenize(track.artist)
 
-  let matchedTitle = false
-  if (titleInput.length > 0) {
-    const inputWords = tokenize(titleInput)
-    matchedTitle =
-      normalize(track.title) === normalize(titleInput) ||
-      (inputWords.length > 0 && titleWords.length > 0 && titleWords.every(w => isWordMatch(w, inputWords)))
+  // Matching croise (aligne sur le backend) : chaque champ est teste contre
+  // le titre ET l'artiste - taper l'artiste dans le champ titre doit valider.
+  const inputMatches = (input: string, target: string, targetWords: string[]): boolean => {
+    if (!input) return false
+    const inputWords = tokenize(input)
+    return (
+      normalize(target) === normalize(input) ||
+      (inputWords.length > 0 && targetWords.length > 0 && targetWords.every(w => isWordMatch(w, inputWords)))
+    )
   }
 
-  let matchedArtist = false
-  if (artistInput.length > 0) {
-    const inputWords = tokenize(artistInput)
-    matchedArtist =
-      normalize(track.artist) === normalize(artistInput) ||
-      (inputWords.length > 0 && artistWords.length > 0 && artistWords.every(w => isWordMatch(w, inputWords)))
-  }
+  const titleByTitle = inputMatches(titleInput, track.title, titleWords)
+  const titleByArtistField = inputMatches(artistInput, track.title, titleWords)
+  const artistByArtist = inputMatches(artistInput, track.artist, artistWords)
+  const artistByTitleField = inputMatches(titleInput, track.artist, artistWords)
+
+  const matchedTitle = titleByTitle || (titleByArtistField && !artistByArtist)
+  const matchedArtist = artistByArtist || (artistByTitleField && !titleByTitle)
 
   let verdict: Verdict = "wrong"
   if (matchedTitle && matchedArtist) verdict = "correct"

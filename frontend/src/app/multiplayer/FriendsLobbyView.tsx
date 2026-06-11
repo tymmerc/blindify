@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { modeAccent } from "@/lib/uiTokens"
 import type { LobbyRendererProps, LobbyChatMessage } from "./lobbyTypes"
+import { ProfileImportBlock } from "@/components/import/ProfileImportBlock"
 
 /* Component-scoped animations matching the analog mockup. */
 const lobbyAnimations = `
@@ -502,6 +503,8 @@ function FriendsLobby({
   currentUserId,
   chatMessages = [],
   onSendChat,
+  initialProfileUrl,
+  onImportingChange,
 }: LobbyRendererProps) {
   const accent = modeAccent("friends")
   const roomCode = room?.room_code ?? ""
@@ -584,9 +587,10 @@ function FriendsLobby({
               {roomCode.split("").map((char, i) => (
                 <span
                   key={`${char}-${i}`}
-                  className="inline-flex items-center justify-center rounded-md border-2 border-[#2e2014] bg-[#efe5d0] px-3 py-1 font-display font-bold leading-none text-[#2e2014] shadow-[3px_3px_0_rgba(46,32,20,.18)]"
+                  className="inline-flex items-center justify-center rounded-md border-2 border-[#2e2014] bg-[#efe5d0] px-2 py-1 font-display font-bold leading-none text-[#2e2014] shadow-[3px_3px_0_rgba(46,32,20,.18)] sm:px-3"
                   style={{
-                    fontSize: "clamp(2.2rem, 6vw, 4rem)",
+                    // 8.5vw sur mobile : les 6 tuiles doivent tenir sur UNE ligne en 390px
+                    fontSize: "clamp(1.5rem, 8.5vw, 4rem)",
                     animation: "lobby-char-rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) backwards",
                     animationDelay: `${0.05 + i * 0.1}s`,
                   }}
@@ -615,6 +619,27 @@ function FriendsLobby({
                 {copiedLink ? "Copie !" : "Copier le lien"}
               </button>
             </div>
+          </section>
+
+          {/* Ta musique : import (consomme l'URL du wizard via autoStart) */}
+          <section className="relative rounded-md border-2 border-[#2e2014] bg-[#ece1c8] px-6 py-5 shadow-[4px_4px_0_rgba(46,32,20,.18)]">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <p className="m-0 text-[11px] font-bold uppercase tracking-[0.22em] text-[#c65133]">
+                Ta musique
+              </p>
+              <span className="rounded-full border-[1.5px] border-[#2e2014] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#2e2014]">
+                Tes titres dans la partie
+              </span>
+            </div>
+            <p className="mb-3 text-sm text-[#6b573f]">
+              Importe ton profil Spotify ou Deezer : la partie piochera dans les morceaux de tout l'equipage.
+            </p>
+            <ProfileImportBlock
+              accent="#c65133"
+              initialUrl={initialProfileUrl ?? undefined}
+              autoStart={Boolean(initialProfileUrl)}
+              onImportingChange={onImportingChange}
+            />
           </section>
 
           {/* Vinyl + Players grid */}

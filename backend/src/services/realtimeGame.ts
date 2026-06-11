@@ -31,6 +31,8 @@ export type PlayerState = {
   lastVerdict?: Verdict;
   answerAt?: number | null;
   lastGained?: number;
+  /** Cumul des temps de réponse (ms) — sert UNIQUEMENT au départage d'égalité. */
+  totalReactionMs?: number;
 };
 
 export type GameState = {
@@ -399,7 +401,9 @@ function evaluateGuessDetail(
   const hasSeparateFields = (separateTitle && separateTitle.trim().length > 0) || (separateArtist && separateArtist.trim().length > 0);
 
   if (hasSeparateFields) {
-    // Structured matching: check each field independently
+    // Structured matching, CROSS-FIELD : chaque champ est teste contre le titre
+    // ET l'artiste. Taper "damso" dans le champ titre doit valider l'artiste -
+    // c'est un comportement humain courant (vu en test reel avec des joueurs).
     const titleInput = separateTitle?.trim() ?? "";
     const artistInput = separateArtist?.trim() ?? "";
     const guessProvided = titleInput.length > 0 || artistInput.length > 0;
@@ -407,19 +411,22 @@ function evaluateGuessDetail(
     const titleTokens = tokenize(track.title);
     const artistTokens = tokenize(track.artist);
 
-    let matchedTitle = false;
-    if (titleInput.length > 0) {
-      const inputTokens = tokenize(titleInput);
-      matchedTitle = normalize(track.title) === normalize(titleInput) ||
-        (inputTokens.length > 0 && titleTokens.length > 0 && titleTokens.every(tok => isWordMatch(tok, inputTokens)));
-    }
+    const inputMatches = (input: string, target: string, targetTokens: string[]): boolean => {
+      if (!input) return false;
+      const inputTokens = tokenize(input);
+      return normalize(target) === normalize(input) ||
+        (inputTokens.length > 0 && targetTokens.length > 0 && targetTokens.every(tok => isWordMatch(tok, inputTokens)));
+    };
 
-    let matchedArtist = false;
-    if (artistInput.length > 0) {
-      const inputTokens = tokenize(artistInput);
-      matchedArtist = normalize(track.artist) === normalize(artistInput) ||
-        (inputTokens.length > 0 && artistTokens.length > 0 && artistTokens.every(tok => isWordMatch(tok, inputTokens)));
-    }
+    const titleByTitle = inputMatches(titleInput, track.title, titleTokens);
+    const titleByArtistField = inputMatches(artistInput, track.title, titleTokens);
+    const artistByArtist = inputMatches(artistInput, track.artist, artistTokens);
+    const artistByTitleField = inputMatches(titleInput, track.artist, artistTokens);
+
+    // Chaque champ ne credite qu'un seul element (pas de double comptage si
+    // l'utilisateur tape la meme chose dans les deux champs).
+    const matchedTitle = titleByTitle || (titleByArtistField && !artistByArtist);
+    const matchedArtist = artistByArtist || (artistByTitleField && !titleByTitle);
 
     let verdict: Verdict = "wrong";
     if (matchedTitle && matchedArtist) verdict = "correct";
@@ -469,27 +476,14 @@ function computeScore(params: {
   const correctArtist = detail.matchedArtist;
   const correctBoth = correctTitle && correctArtist;
 
-  const titlePoints = correctTitle ? 40 : 0;
-  const artistPoints = correctArtist ? 30 : 0;
+  // Scoring lisible : 1 point par bonne réponse (titre, artiste, "qui a ajouté").
+  // Pas de bonus vitesse ni de multiplicateur streak — le score se lit direct.
+  // La vitesse (totalReactionMs cumulé) sert uniquement de départage d'égalité.
+  const titlePoints = correctTitle ? 1 : 0;
+  const artistPoints = correctArtist ? 1 : 0;
+  const sourceBonus = sourceOwnerId && sourceGuess && sourceOwnerId === sourceGuess ? 1 : 0;
 
-  let speedPoints = 0;
-  const maxMs = maxDuration ?? DEFAULT_LISTENING_MS;
-  if (reactionMs !== null && detail.guessProvided && (correctTitle || correctArtist)) {
-    const timeRatio = 1 - Math.min(Math.max(reactionMs / maxMs, 0), 1);
-    speedPoints = Math.round(30 * timeRatio);
-  }
-
-  const sourceBonus = sourceOwnerId && sourceGuess && sourceOwnerId === sourceGuess ? 10 : 0;
-
-  const penalty =
-    detail.guessProvided && (!correctTitle || !correctArtist) && (correctTitle || correctArtist)
-      ? 0
-      : detail.guessProvided && (!correctTitle || !correctArtist)
-        ? 10
-        : 0;
-
-  const rawPoints = titlePoints + artistPoints + speedPoints + sourceBonus - penalty;
-  const gainedPoints = Math.max(0, rawPoints);
+  const gainedPoints = titlePoints + artistPoints + sourceBonus;
 
   const rounds = previous.rounds + 1;
   const correctCount = previous.correct + (correctBoth ? 1 : 0);
@@ -503,6 +497,8 @@ function computeScore(params: {
     score: previous.score + gainedPoints,
     accuracy: rounds > 0 ? Math.round((correctCount / rounds) * 100) : 0,
     lastVerdict: verdict,
+    // Pas de réponse = temps plein du round (ne pas avantager l'inactif au départage)
+    totalReactionMs: (previous.totalReactionMs ?? 0) + (reactionMs ?? maxDuration ?? DEFAULT_LISTENING_MS),
   };
   return { next, gained: gainedPoints, verdict };
 }

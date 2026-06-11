@@ -117,6 +117,8 @@ export type MultiplayerPlayerState = {
   lastGuess?: string
   lastVerdict?: "correct" | "close" | "wrong"
   answerAt?: number | null
+  lastGained?: number
+  totalReactionMs?: number
   accuracy?: number
   rounds?: number
   correct?: number
@@ -189,6 +191,8 @@ export interface PlayerState {
   lastSourceGuess?: number | null
   lastVerdict?: Verdict
   answerAt?: number | null
+  lastGained?: number
+  totalReactionMs?: number
   accuracy?: number
   rounds?: number
   correct?: number

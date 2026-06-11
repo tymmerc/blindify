@@ -127,12 +127,40 @@ export function ResultsView({
 
   return (
     <section className="flex flex-col gap-5 rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-7 text-center shadow-[4px_4px_0_rgba(46,32,20,.18)]">
-      <div className="flex flex-col items-center gap-1 text-center">
-        <div className="flex items-center gap-2 text-sm text-[#6b573f]">
-          <PartyPopper className="h-5 w-5" style={{ color: accent }} />
-          <span>Bravo ! Voici le podium</span>
-        </div>
-        <h2 className="font-display text-2xl font-semibold text-[#2e2014]">Résumé de la manche</h2>
+      <style>{`
+        @keyframes res-rise { from { opacity: 0; transform: translateY(18px) } to { opacity: 1; transform: translateY(0) } }
+        @keyframes res-pop { from { opacity: 0; transform: scale(.4) rotate(-90deg) } to { opacity: 1; transform: scale(1) rotate(0) } }
+        .res-rise { animation: res-rise .55s cubic-bezier(.22,1,.36,1) backwards }
+        .res-pop { animation: res-pop .6s cubic-bezier(.22,1,.36,1) backwards }
+      `}</style>
+      <div className="flex flex-col items-center gap-2 text-center">
+        <p className="res-rise flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.3em]" style={{ color: accent, animationDelay: "0.05s" }}>
+          <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full" style={{ background: accent }} />
+          Fin de la face · Résultats
+        </p>
+        {podium[0] && (
+          <>
+            <div
+              className="res-pop relative grid h-28 w-28 place-items-center rounded-full border-[3px] border-[#2e2014] shadow-[5px_5px_0_rgba(46,32,20,.18)]"
+              style={{
+                background: "repeating-radial-gradient(circle at 50% 50%, #241a10 0 2.5px, #3a2a1a 2.5px 5px)",
+                animation: "res-pop .6s cubic-bezier(.22,1,.36,1) backwards, vinyl-spin 9s linear 0.6s infinite",
+                animationDelay: "0.2s",
+              }}
+            >
+              <span className="absolute inset-[30%] grid place-items-center rounded-full border-[3px] border-[#2e2014] bg-[#e0a32e] font-display text-2xl font-bold text-[#2e2014]">
+                {initials(podium[0].username, podium[0].userId)}
+              </span>
+              <span className="absolute inset-[46%] z-10 rounded-full border-2 border-[#2e2014] bg-[#f4ecdb]" />
+            </div>
+            <h2 className="res-rise font-display text-4xl font-bold leading-tight text-[#2e2014]" style={{ animationDelay: "0.45s" }}>
+              {podium[0].username || `Joueur ${podium[0].userId}`}
+            </h2>
+            <p className="res-rise text-sm text-[#6b573f]" style={{ animationDelay: "0.6s" }}>
+              {podium[0].score} {podium[0].score > 1 ? "bonnes réponses" : "bonne réponse"} · {podium[0].accuracy}% de précision · disque d'or de la session
+            </p>
+          </>
+        )}
       </div>
 
       <div className="flex flex-col items-center">
@@ -143,11 +171,18 @@ export function ResultsView({
             const colOrder = rank === 1 ? "md:col-start-2" : rank === 2 ? "md:col-start-1" : "md:col-start-3"
             const borderColor = rank === 1 ? accent : "#2e2014"
             return (
-              <div key={entry!.userId} className={`flex flex-col items-center gap-3 ${colOrder}`}>
+              <div key={entry!.userId} className={`res-rise flex flex-col items-center gap-3 ${colOrder}`} style={{ animationDelay: `${0.75 + idx * 0.15}s` }}>
                 <div
                   className={`relative flex items-center justify-center overflow-hidden rounded-full border-2 border-[#2e2014] bg-[#f4ecdb] text-xl font-bold text-[#2e2014] ${rank === 1 ? "h-24 w-24" : "h-20 w-20"}`}
                 >
-                  {rank === 1 && <span className="absolute -top-5 text-2xl">👑</span>}
+                  {rank === 1 && (
+                    <span
+                      aria-hidden
+                      className="absolute -top-2 -right-2 z-10 grid h-7 w-7 place-items-center rounded-full border-2 border-[#2e2014] bg-[#e0a32e] text-[9px] font-bold text-[#2e2014]"
+                    >
+                      N°1
+                    </span>
+                  )}
                   {entry!.avatar ? (
                     <img src={entry!.avatar ?? ""} alt={entry!.username ?? `Joueur ${entry!.userId}`} className="h-full w-full object-cover" />
                   ) : (

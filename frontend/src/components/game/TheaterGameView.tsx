@@ -24,6 +24,7 @@ type PlayerRow = {
   isReady: boolean
   streak?: number
   bestStreak?: number
+  totalReactionMs?: number
 }
 
 type UiPhase = "guessing" | "locked" | "reveal"
@@ -296,7 +297,7 @@ export function TheaterGameView(props: Props) {
             <div className="theater-field">
               <label className="theater-flabel">
                 Qui a ajoute ?
-                <span className="tag">+30 pts</span>
+                <span className="tag">+1 pt</span>
               </label>
               <div className="theater-picker">
                 {sortedPlayers.map((p, idx) => {
@@ -336,14 +337,12 @@ export function TheaterGameView(props: Props) {
         ) : null}
 
         {isFinished && (
-          <div className="theater-finished">
-            <Trophy className="w-5 h-5" style={{ color: GOLD }} />
-            <span>Partie terminée</span>
-            <div className="flex gap-2 ml-auto">
-              {onRematch && <button className="theater-quit" onClick={onRematch}>Rejouer</button>}
-              {onExit && <button className="theater-quit" onClick={onExit}>Lobby</button>}
-            </div>
-          </div>
+          <TheaterFinale
+            players={sortedPlayers}
+            meId={me}
+            onRematch={onRematch}
+            onExit={onExit}
+          />
         )}
       </div>
 
@@ -550,6 +549,105 @@ function RevealStage({
       {isFinished && onRematch && (
         <button className="theater-ready" onClick={onRematch}>Rejouer</button>
       )}
+    </motion.div>
+  )
+}
+
+/* ===================== FINALE (fin de partie) ===================== */
+
+function TheaterFinale({
+  players,
+  meId,
+  onRematch,
+  onExit,
+}: {
+  players: PlayerRow[]
+  meId: number
+  onRematch?: () => void
+  onExit?: () => void
+}) {
+  // Classement : points, puis vitesse cumulee en departage.
+  const ranked = [...players].sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score
+    return (a.totalReactionMs ?? Infinity) - (b.totalReactionMs ?? Infinity)
+  })
+  const winner = ranked[0]
+  const meWins = winner?.userId === meId
+  const initial = (winner?.username || "?").charAt(0).toUpperCase()
+
+  return (
+    <motion.div
+      className="finale-overlay"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.45 }}
+    >
+      <motion.p
+        className="finale-label"
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2 }}
+      >
+        <span className="bullet" /> Fin de la face · Resultats
+      </motion.p>
+
+      <motion.div
+        className="finale-vinyl"
+        initial={{ scale: 0.4, opacity: 0, rotate: -120 }}
+        animate={{ scale: 1, opacity: 1, rotate: 0 }}
+        transition={{ delay: 0.35, type: "spring", stiffness: 120, damping: 14 }}
+      >
+        <div className="finale-disc">
+          <span className="finale-disc-label">{initial}</span>
+          <span className="finale-disc-hole" />
+        </div>
+      </motion.div>
+
+      <motion.h2
+        className="finale-winner"
+        initial={{ opacity: 0, y: 18 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.7, duration: 0.5 }}
+      >
+        {winner?.username || "Mystere"}
+      </motion.h2>
+      <motion.p
+        className="finale-sub"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.95 }}
+      >
+        {winner ? `${winner.score} ${winner.score > 1 ? "bonnes reponses" : "bonne reponse"} · disque d'or de la session` : ""}
+        {meWins ? " - et c'est toi." : ""}
+      </motion.p>
+
+      <div className="finale-board">
+        {ranked.map((p, i) => (
+          <motion.div
+            key={p.userId}
+            className={`finale-row ${i === 0 ? "gold" : ""} ${p.userId === meId ? "me" : ""}`}
+            initial={{ opacity: 0, x: -16 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 1.1 + i * 0.14 }}
+          >
+            <span className="frank">{String(i + 1).padStart(2, "0")}</span>
+            <span className="fname">{p.username || `Joueur ${p.userId}`}{p.userId === meId ? " (toi)" : ""}</span>
+            <span className="fdots" />
+            {Boolean(p.bestStreak && p.bestStreak >= 3) && <span className="fstreak">serie x{p.bestStreak}</span>}
+            <span className="fscore">{p.score} {p.score > 1 ? "pts" : "pt"}</span>
+          </motion.div>
+        ))}
+      </div>
+
+      <motion.div
+        className="finale-actions"
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 1.2 + ranked.length * 0.14 }}
+      >
+        {onRematch && <button className="finale-btn primary" onClick={onRematch}>Remettre un disque</button>}
+        {onExit && <button className="finale-btn" onClick={onExit}>Retour au lobby</button>}
+      </motion.div>
     </motion.div>
   )
 }
@@ -1069,6 +1167,72 @@ const theaterStyles = `
     .theater-stage{padding:14px 16px 16px}
     .theater-stage > div:nth-child(2){grid-template-columns:1fr 260px !important; gap:20px !important}
   }
+  /* ---------- Finale ---------- */
+  .finale-overlay{
+    position:fixed; inset:0; z-index:80;
+    background:${PAPER};
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:10px; padding:28px 20px; overflow-y:auto;
+  }
+  .finale-label{
+    display:flex; align-items:center; gap:10px;
+    font-family:var(--font-sans,'Karla'),sans-serif; font-weight:700;
+    font-size:11px; letter-spacing:.3em; text-transform:uppercase; color:${TERRA};
+  }
+  .finale-label .bullet{width:6px; height:6px; border-radius:50%; background:${TERRA}; animation:rec 1.2s ease-in-out infinite}
+  .finale-vinyl{margin-top:6px}
+  .finale-disc{
+    position:relative; width:128px; height:128px; border-radius:50%;
+    background:repeating-radial-gradient(circle at 50% 50%, #241a10 0 2.5px, #3a2a1a 2.5px 5px);
+    border:3px solid ${INK}; box-shadow:6px 6px 0 rgba(46,32,20,.18);
+    animation:vinyl-spin 8s linear infinite;
+    display:grid; place-items:center;
+  }
+  .finale-disc-label{
+    position:absolute; inset:30%; border-radius:50%;
+    background:${GOLD}; border:3px solid ${INK};
+    display:grid; place-items:center;
+    font-family:var(--font-display,'Fraunces'),serif; font-weight:700; font-size:28px; color:${INK};
+  }
+  .finale-disc-hole{position:absolute; inset:46%; border-radius:50%; background:${PAPER}; border:2px solid ${INK}; z-index:2}
+  .finale-winner{
+    margin:8px 0 0;
+    font-family:var(--font-display,'Fraunces'),serif; font-weight:700;
+    font-size:clamp(2rem, 7vw, 3.4rem); line-height:1.05; color:${INK};
+    text-align:center; max-width:90vw; overflow-wrap:anywhere;
+  }
+  .finale-sub{
+    margin:0; font-size:14px; color:#6b573f; text-align:center;
+  }
+  .finale-board{
+    margin-top:18px; width:100%; max-width:460px;
+    display:flex; flex-direction:column; gap:8px;
+  }
+  .finale-row{
+    display:flex; align-items:baseline; gap:10px;
+    padding:9px 14px; border-radius:6px;
+    border:1.5px solid var(--line); background:var(--paper-deep);
+  }
+  .finale-row.gold{border:2px solid ${INK}; background:${GOLD}22; box-shadow:4px 4px 0 rgba(46,32,20,.16)}
+  .finale-row.me .fname{color:${TERRA}}
+  .finale-row .frank{font-family:var(--font-sans,'Karla'),sans-serif; font-weight:700; font-size:11px; color:var(--muted); min-width:22px}
+  .finale-row .fname{font-family:var(--font-display,'Fraunces'),serif; font-weight:600; font-size:17px; color:${INK}; overflow-wrap:anywhere}
+  .finale-row .fdots{flex:1; border-bottom:2px dotted rgba(46,32,20,.4); transform:translateY(-4px); min-width:18px}
+  .finale-row .fstreak{font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.1em; color:${TERRA}}
+  .finale-row .fscore{font-family:var(--font-display,'Fraunces'),serif; font-weight:700; font-size:17px; color:${INK}}
+  .finale-actions{display:flex; gap:10px; margin-top:20px; flex-wrap:wrap; justify-content:center}
+  .finale-btn{
+    font-family:var(--font-sans,'Karla'),sans-serif; font-weight:700; font-size:13px;
+    padding:13px 24px; border-radius:6px; cursor:pointer;
+    border:2px solid ${INK}; background:transparent; color:${INK};
+    transition:transform .12s, box-shadow .12s;
+  }
+  .finale-btn.primary{
+    background:${TERRA}; color:${PAPER}; box-shadow:4px 4px 0 ${INK};
+  }
+  .finale-btn.primary:hover{transform:translate(2px,2px); box-shadow:2px 2px 0 ${INK}}
+  .finale-btn:not(.primary):hover{background:${INK}; color:${PAPER}}
+
   @media (max-width:900px){
     .theater-stage > div:nth-child(2){grid-template-columns:1fr !important}
     .theater-score-col{display:none}
