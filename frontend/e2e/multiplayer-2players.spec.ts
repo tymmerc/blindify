@@ -96,7 +96,7 @@ async function joinRoom(page: Page, roomCode: string, nickname: string): Promise
 
 /** Submit an answer on a game page (fill title input + click Valider) */
 async function submitAnswer(page: Page, answer: string, label: string): Promise<boolean> {
-  const titleInput = page.locator("input[placeholder*='Titre'], input[placeholder*='titre']").first()
+  const titleInput = page.locator("input[aria-label*='Titre'], input[placeholder*='Titre'], input[placeholder*='titre']").first()
   if (!await titleInput.isVisible({ timeout: 5000 }).catch(() => false)) {
     console.log(`${label}: title input not visible`)
     return false

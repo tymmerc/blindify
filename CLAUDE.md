@@ -4,7 +4,7 @@ Music blind test multijoueur (Spotify/Deezer) avec modes solo, friends, event, s
 
 ## Stack
 
-- **Frontend** : Next.js 15 (static export `output: "export"`), React 19, Tailwind, socket.io-client, Space Grotesk + JetBrains Mono
+- **Frontend** : Next.js 15 (static export `output: "export"`), React 19, Tailwind, socket.io-client, Fraunces (display serif) + Karla (UI)
 - **Backend** : Node 20 + Express + TypeScript + socket.io 4.8 (Docker)
 - **DB** : PostgreSQL 15 + Redis (Docker)
 - **Reverse proxy** : nginx host (pas Docker) -> proxy vers conteneur backend
@@ -118,18 +118,24 @@ Phase REVEAL → next GUESSING : declenche par `markReady` quand TOUS les joueur
 ## Modes de jeu
 
 - `solo` : joueur seul, tracks chargees client-side
-- `friends` (`#ec4899`) : multijoueur avec code, host cree la room
-- `event` (`#8b5cf6`) : 1 ecran principal (presentateur), participants rejoignent
-- `streamer` (`#f97316`) : 3 sub-modes (chat/streamer/both), encore en dev
+- `friends` (terracotta `#c65133`) : multijoueur avec code, host cree la room
+- `event` (or `#e0a32e`) : 1 ecran principal (presentateur), participants rejoignent
+- `streamer` (sauge `#7d9471`) : 3 sub-modes (chat/streamer/both), encore en dev
 
-## DA (Design)
+Les accents de mode sont centralises dans `lib/uiTokens.ts` + `contexts/ModeContext.tsx`.
 
-- Fond : `#09090b` (noir pur, PAS bleu - voir memoire `blindify_design_decisions.md`)
-- Surfaces L1 (cartes) : `rgba(22,30,55,0.85)` border `rgba(255,255,255,0.06)`
-- Surfaces L2 (inputs) : `rgba(12,18,35,0.9)` border `rgba(255,255,255,0.08)`
-- Texte : `#fafafa` primary, `#71717a` muted
-- Fonts : Space Grotesk (body) + JetBrains Mono (labels)
-- Page `/modes` : design preserve + enceintes manga animees (composant `MangaSpeakers`)
+## DA (Design) — "Club analogique" (choisie 2026-06-10)
+
+Reference canonique : `maquettes/explore-analog.html` · Guide complet : `maquettes/ANALOG-STYLE-GUIDE.md`
+
+- Fond : papier creme `#f4ecdb` (theme CLAIR), grain papier global (body::after dans globals.css)
+- Surfaces : cartes `#ece1c8` border encre `#2e2014`, puits/inputs `#efe5d0`
+- Texte : encre `#2e2014` primary, `#6b573f` secondary, `#8a7558` muted
+- Accents : terracotta `#c65133` (primaire), or `#e0a32e`, sauge `#7d9471`, erreur `#9c2f1d`
+- Ombres : dures decalees (`4px 4px 0 rgba(46,32,20,.18)`), pas de glow
+- Fonts : Fraunces (display serif, italiques pour accents) + Karla (UI)
+- Motifs signature : modes = pochettes de vinyles (disque qui sort), platine `AnalogVinyl` en jeu, classement = tracklist a pointilles ("Face B · Classement")
+- INTERDITS : fonds sombres, hex neon, glows, gradient text, glassmorphism (voir le guide)
 
 ## E2E tests
 
@@ -156,7 +162,7 @@ PATH="./.node/bin:$PATH" npx playwright test --reporter=line
 3. **Cache nginx** : 5 min sur les fichiers, hard refresh `Ctrl+Shift+R` pour voir les changements
 4. **Cookie cross-domain** : ne pas changer `cookie domain` ou `sameSite` sans verifier les 2 endpoints (api + socket)
 5. **Socket singleton** : `getSocket()` lazy avec `autoConnect: false`, connect explicite seulement quand `userPayload?.user` existe
-6. **Page `/modes`** : NE PAS toucher au design, c'est valide. Juste ajouter le composant `MangaSpeakers`.
+6. **DA Club analogique** : toute nouvelle UI suit `maquettes/ANALOG-STYLE-GUIDE.md`. `MangaSpeakers` est mort (plus utilise).
 7. **NODE_ENV=production** : tailwind/typescript doivent etre en `dependencies` pas `devDependencies` sinon le build container echoue
 
 ## Commandes utiles

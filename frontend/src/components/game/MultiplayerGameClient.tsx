@@ -993,6 +993,7 @@ export function MultiplayerGameClient({
                                 onChange={e => setGuessTitle(e.target.value)}
                                 disabled={localHasAnswered || disabled}
                                 autoComplete="off"
+                                aria-label="Titre du morceau"
                                 className="w-full border-0 border-b-2 border-[#2e2014] bg-transparent px-1 py-2 font-display text-lg text-[var(--ink)] outline-none transition placeholder:italic placeholder:text-[#b3a182] focus:border-[var(--accent)]"
                                 placeholder="Le morceau qui tourne…"
                               />
@@ -1004,6 +1005,7 @@ export function MultiplayerGameClient({
                                 onChange={e => setGuessArtist(e.target.value)}
                                 disabled={localHasAnswered || disabled}
                                 autoComplete="off"
+                                aria-label="Artiste"
                                 className="w-full border-0 border-b-2 border-[#2e2014] bg-transparent px-1 py-2 font-display text-lg text-[var(--ink)] outline-none transition placeholder:italic placeholder:text-[#b3a182] focus:border-[var(--accent)]"
                                 placeholder="Qui chante ?"
                               />

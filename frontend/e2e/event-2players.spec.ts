@@ -132,7 +132,7 @@ test.describe("Event (presentation) — host + participant full game", () => {
         console.log(`Participant audio: ${participantAudio.length}`)
 
         // Participant answers
-        const partTitleInput = participantPage.locator("input[placeholder*='Titre'], input[placeholder*='titre']").first()
+        const partTitleInput = participantPage.locator("input[aria-label*='Titre'], input[placeholder*='Titre'], input[placeholder*='titre']").first()
         if (await partTitleInput.isVisible()) {
           await partTitleInput.fill("test event guess")
           await participantPage.locator("button").filter({ hasText: /valider/i }).first().click()
