@@ -190,6 +190,10 @@ const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, error: { code: "rate_limited", message: "Trop de requêtes. Réessaye dans 1 minute." } },
+  // nginx pose X-Local-Client=1 UNIQUEMENT pour les requêtes émises depuis la
+  // machine elle-même (E2E, healthchecks) et l'écrase pour tout client externe.
+  // Sans ça, la suite E2E sérielle épuise les 15/min et cascade en 429.
+  skip: req => req.headers["x-local-client"] === "1",
 });
 app.use("/api/auth", authLimiter);
 
