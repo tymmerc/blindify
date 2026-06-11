@@ -44,11 +44,11 @@ export function ShareImageButton({ stats, roundStates, tracks }: ShareImageButto
   return (
     <Button
       variant="outline"
-      className="border-2 border-[#a855f7] bg-transparent text-[#a855f7] hover:bg-[#a855f7]/10"
+      className="rounded-md border-2 border-[#2e2014] bg-[#ece1c8] font-bold text-[#2e2014] shadow-[3px_3px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:bg-[#ece1c8] hover:text-[#2e2014] hover:shadow-[1px_1px_0_#2e2014]"
       onClick={handleClick}
       disabled={loading}
     >
-      {loading ? "⏳" : "📸"} Image
+      {loading ? "Génération..." : "Partager l'image"}
     </Button>
   )
 }

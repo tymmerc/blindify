@@ -7,18 +7,7 @@ import { useMode } from "@/contexts/ModeContext"
 import { FriendsGameModal } from "@/components/modals/FriendsGameModal"
 import { api } from "@/lib/api"
 
-const ACCENT = "#a855f7"
-
-function CornerFrame({ color }: { color: string }) {
-  return (
-    <>
-      <span aria-hidden className="absolute left-2 top-2 h-3 w-3 border-l-2 border-t-2" style={{ borderColor: color }} />
-      <span aria-hidden className="absolute right-2 top-2 h-3 w-3 border-r-2 border-t-2" style={{ borderColor: color }} />
-      <span aria-hidden className="absolute bottom-2 left-2 h-3 w-3 border-b-2 border-l-2" style={{ borderColor: color }} />
-      <span aria-hidden className="absolute bottom-2 right-2 h-3 w-3 border-b-2 border-r-2" style={{ borderColor: color }} />
-    </>
-  )
-}
+const ACCENT = "#e0a32e"
 
 export default function EventEntryPage() {
   const router = useRouter()
@@ -64,104 +53,80 @@ export default function EventEntryPage() {
 
   return (
     <>
-      <div className="min-h-screen px-6 py-10 text-[#f8f0ff]">
+      <div className="min-h-screen px-6 py-10 text-[#2e2014]">
         <div className="mx-auto flex max-w-5xl flex-col gap-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="space-y-2">
-              <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#a855f7] text-glow">
-                [ Event Mode ]
+              <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-[#a87714]">
+                Event · Mode
               </p>
-              <h1 className="font-display text-4xl md:text-5xl uppercase tracking-[0.04em] leading-tight" style={{ color: ACCENT, textShadow: "0 0 12px rgba(168,85,247,0.7)" }}>
-                Projection collective
+              <h1 className="font-display text-4xl font-semibold leading-tight md:text-5xl">
+                Projection <em className="font-medium italic text-[#a87714]">collective</em>
               </h1>
-              <p className="text-sm text-[#9b7fb8]">
+              <p className="text-sm text-[#6b573f]">
                 Un ecran principal, un tempo clair, tout le monde suit sans se perdre.
               </p>
             </div>
             <Button
               variant="outline"
               onClick={() => router.push("/modes")}
-              className="rounded-sm border-[#00f7ff]/30 bg-[rgba(15,5,30,0.6)] px-4 py-2 font-mono text-[10px] uppercase tracking-[0.2em] text-[#00f7ff] hover:bg-[#00f7ff]/10 hover:border-[#00f7ff]/60 hover:shadow-glow-cyan"
+              className="rounded-full border-[1.5px] border-[#2e2014] bg-[#ece1c8] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
             >
               Retour menu
             </Button>
           </div>
 
-          <div
-            className="relative flex flex-col gap-4 rounded-2xl border bg-[rgba(15,5,30,0.6)] backdrop-blur-[16px] p-7"
-            style={{
-              borderColor: "rgba(168,85,247,0.4)",
-              boxShadow: "0 0 24px rgba(168,85,247,0.18), inset 0 0 14px rgba(168,85,247,0.06)",
-            }}
-          >
-            <CornerFrame color={ACCENT} />
+          <div className="relative flex flex-col gap-4 rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-7 shadow-[4px_4px_0_rgba(46,32,20,.18)]">
             <div className="space-y-2">
-              <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#00f7ff]">
-                [ Host control ]
+              <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">
+                Host control
               </p>
-              <h2 className="font-display text-2xl uppercase tracking-[0.04em] text-[#f8f0ff]">
+              <h2 className="font-display text-2xl font-semibold text-[#2e2014]">
                 Demarrer l&apos;evenement maintenant
               </h2>
-              <p className="text-sm text-[#9b7fb8]">
+              <p className="text-sm text-[#6b573f]">
                 Lisible a distance, cadence stable, un seul hote garde le rythme.
               </p>
             </div>
             <button
               type="button"
               onClick={() => setChooserOpen(true)}
-              className="btn-neon-pink font-display w-full justify-center text-sm"
-              style={{
-                color: ACCENT,
-                borderColor: ACCENT,
-                background: "rgba(168, 85, 247, 0.06)",
-                boxShadow: "0 0 14px rgba(168, 85, 247, 0.45), inset 0 0 10px rgba(168, 85, 247, 0.2)",
-                textShadow: "0 0 8px rgba(168, 85, 247, 0.7)",
-              }}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-md border-2 border-[#2e2014] px-6 py-3 font-bold text-[#2e2014] shadow-[4px_4px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#2e2014]"
+              style={{ background: ACCENT }}
             >
               Lancer l&apos;ecran principal
             </button>
-            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#9b7fb8]">
+            <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">
               Les participants rejoignent via l&apos;ecran, tu peux changer de mode quand tu veux.
             </p>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
-            <div
-              className="relative h-full space-y-3 rounded-2xl border bg-[rgba(15,5,30,0.6)] backdrop-blur-[16px] p-6"
-              style={{
-                borderColor: "rgba(168,85,247,0.3)",
-                boxShadow: "0 0 16px rgba(168,85,247,0.1), inset 0 0 8px rgba(168,85,247,0.04)",
-              }}
-            >
-              <CornerFrame color={ACCENT} />
+            <div className="relative h-full space-y-3 rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-6 shadow-[4px_4px_0_rgba(46,32,20,.18)]">
               <div className="flex items-center justify-between">
-                <h3 className="font-display text-lg uppercase tracking-[0.03em] text-[#f8f0ff]">Tempo</h3>
-                <span className="rounded-sm border border-[#a855f7]/50 bg-[#a855f7]/10 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.2em] text-[#a855f7]">
+                <h3 className="font-display text-lg font-semibold text-[#2e2014]">Tempo</h3>
+                <span
+                  className="rounded-full border-[1.5px] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#2e2014]"
+                  style={{ background: ACCENT, borderColor: ACCENT }}
+                >
                   Cadence
                 </span>
               </div>
-              <ul className="space-y-2 text-sm text-[#9b7fb8]">
+              <ul className="space-y-2 text-sm text-[#6b573f]">
                 <li>Un seul ecran pilote, tout le monde suit la projection.</li>
                 <li>Les joueurs repondent sur leur telephone, sans friction.</li>
                 <li>Le host controle le rythme et les lancers de manches.</li>
               </ul>
             </div>
 
-            <div
-              className="relative h-full space-y-3 rounded-2xl border bg-[rgba(15,5,30,0.6)] backdrop-blur-[16px] p-6"
-              style={{
-                borderColor: "rgba(0,247,255,0.3)",
-                boxShadow: "0 0 16px rgba(0,247,255,0.1), inset 0 0 8px rgba(0,247,255,0.04)",
-              }}
-            >
-              <CornerFrame color="#00f7ff" />
+            <div className="relative h-full space-y-3 rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-6 shadow-[4px_4px_0_rgba(46,32,20,.18)]">
               <div className="flex items-center justify-between">
-                <h3 className="font-display text-lg uppercase tracking-[0.03em] text-[#f8f0ff]">Collectif</h3>
-                <span className="rounded-sm border border-[#00f7ff]/50 bg-[#00f7ff]/10 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.2em] text-[#00f7ff]">
+                <h3 className="font-display text-lg font-semibold text-[#2e2014]">Collectif</h3>
+                <span className="rounded-full border-[1.5px] border-[#a8b8c8] bg-[#a8b8c8] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#2e2014]">
                   Groupe
                 </span>
               </div>
-              <ul className="space-y-2 text-sm text-[#9b7fb8]">
+              <ul className="space-y-2 text-sm text-[#6b573f]">
                 <li>Mettre le groupe au meme rythme avec un affichage lisible.</li>
                 <li>Projeter un score total qui motive toute la salle.</li>
                 <li>Garder une cadence stable pour enchainer les titres.</li>

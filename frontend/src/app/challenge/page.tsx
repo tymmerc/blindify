@@ -122,10 +122,11 @@ function ChallengeContent() {
 
   if (phase === "no-code") {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#050505] px-6 text-white">
+      <div className="flex min-h-screen items-center justify-center px-6 text-[#2e2014]">
         <div className="w-full max-w-md space-y-6 text-center">
-          <h1 className="text-3xl font-semibold">Rejoindre un defi</h1>
-          <p className="text-sm text-white/60">Entre le code du defi pour commencer</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-[#c65133]">Defi</p>
+          <h1 className="font-display text-3xl font-semibold">Rejoindre un defi</h1>
+          <p className="text-sm text-[#6b573f]">Entre le code du defi pour commencer</p>
           <div className="flex gap-3">
             <input
               type="text"
@@ -133,7 +134,7 @@ function ChallengeContent() {
               onChange={(e) => setCodeInput(e.target.value.toUpperCase())}
               placeholder="CODE DU DEFI"
               maxLength={12}
-              className="flex-1 rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-center text-lg font-mono tracking-widest text-white placeholder-white/30 focus:border-[#a855f7]/50 focus:outline-none"
+              className="flex-1 rounded-md border-[1.5px] border-[rgba(46,32,20,.35)] bg-[#efe5d0] px-4 py-3 text-center font-display text-lg font-semibold tracking-[0.3em] text-[#2e2014] outline-none transition placeholder:font-sans placeholder:text-sm placeholder:italic placeholder:tracking-[0.15em] placeholder:text-[#b3a182] focus:border-[#c65133]"
               onKeyDown={(e) => e.key === "Enter" && handleCodeSubmit()}
             />
           </div>
@@ -141,7 +142,7 @@ function ChallengeContent() {
             type="button"
             onClick={handleCodeSubmit}
             disabled={codeInput.trim().length < 4}
-            className="w-full rounded-xl border-2 border-[#a855f7] bg-transparent px-6 py-3 text-sm font-semibold text-[#a855f7] transition hover:bg-[#a855f7]/10 disabled:opacity-40"
+            className="btn-neon w-full justify-center text-sm disabled:cursor-not-allowed disabled:opacity-40"
           >
             Rejoindre
           </button>
@@ -152,21 +153,21 @@ function ChallengeContent() {
 
   if (phase === "loading") {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#050505] text-white">
-        <Loader2 className="h-8 w-8 animate-spin text-[#a855f7]" />
+      <div className="flex min-h-screen items-center justify-center text-[#2e2014]">
+        <Loader2 className="h-8 w-8 animate-spin text-[#c65133]" />
       </div>
     )
   }
 
   if (phase === "error") {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#050505] px-6 text-white">
-        <div className="w-full max-w-md space-y-4 text-center">
-          <h1 className="text-2xl font-semibold text-red-400">Defi introuvable</h1>
-          <p className="text-sm text-white/60">{error}</p>
+      <div className="flex min-h-screen items-center justify-center px-6 text-[#2e2014]">
+        <div className="w-full max-w-md space-y-4 border-2 border-[#2e2014] bg-[#ece1c8] p-8 text-center shadow-[4px_4px_0_rgba(46,32,20,.18)]">
+          <h1 className="font-display text-2xl font-semibold text-[#9c2f1d]">Defi introuvable</h1>
+          <p className="text-sm text-[#6b573f]">{error}</p>
           <a
             href="/blindify/challenge/"
-            className="inline-block rounded-xl border border-white/15 px-6 py-2.5 text-sm text-white/80 transition hover:bg-white/5"
+            className="inline-block rounded-full border-[1.5px] border-[#2e2014] px-6 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
           >
             Entrer un code
           </a>
@@ -177,29 +178,29 @@ function ChallengeContent() {
 
   if (phase === "intro" && challenge) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#050505] px-6 text-white">
+      <div className="flex min-h-screen items-center justify-center px-6 text-[#2e2014]">
         <div className="w-full max-w-md space-y-6">
           <div className="space-y-2 text-center">
-            <p className="text-xs uppercase tracking-[0.3em] text-[#a855f7]">Defi</p>
-            <h1 className="text-3xl font-semibold">
-              Defi de {challenge.creatorName}
+            <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-[#c65133]">Defi</p>
+            <h1 className="font-display text-3xl font-semibold">
+              Defi de <em className="font-medium italic text-[#c65133]">{challenge.creatorName}</em>
             </h1>
-            <p className="text-sm text-white/60">
+            <p className="text-sm text-[#6b573f]">
               {challenge.trackCount} titre{challenge.trackCount > 1 ? "s" : ""}
             </p>
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-[#0c0c0c] p-6 space-y-4">
+          <div className="space-y-4 rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-6 shadow-[4px_4px_0_rgba(46,32,20,.18)]">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-white/60">Score a battre</span>
-              <span className="text-2xl font-bold text-[#a855f7]">{challenge.creatorScore} pts</span>
+              <span className="text-sm text-[#6b573f]">Score a battre</span>
+              <span className="font-display text-2xl font-bold text-[#c65133]">{challenge.creatorScore} pts</span>
             </div>
-            <div className="flex items-center justify-between text-sm text-white/50">
+            <div className="flex items-center justify-between text-sm text-[#6b573f]">
               <span>{challenge.creatorCorrect}/{challenge.creatorTotal} correct</span>
               <span>Serie max : {challenge.creatorBestStreak}</span>
             </div>
             {challenge.attempts.length > 0 && (
-              <div className="border-t border-white/10 pt-3 text-xs text-white/40">
+              <div className="border-t-2 border-dotted border-[rgba(46,32,20,.45)] pt-3 text-xs text-[#8a7558]">
                 {challenge.attempts.length} joueur{challenge.attempts.length > 1 ? "s" : ""} ont deja releve le defi
               </div>
             )}
@@ -212,13 +213,13 @@ function ChallengeContent() {
               onChange={(e) => setPlayerName(e.target.value)}
               placeholder="Ton pseudo"
               maxLength={120}
-              className="w-full rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-sm text-white placeholder-white/30 focus:border-[#a855f7]/50 focus:outline-none"
+              className="w-full border-0 border-b-2 border-[#2e2014] bg-transparent px-1 py-2 font-display text-lg text-[#2e2014] outline-none transition placeholder:italic placeholder:text-[#b3a182] focus:border-[#c65133]"
             />
             <button
               type="button"
               onClick={handleStart}
               disabled={!user}
-              className="w-full rounded-xl border-2 border-[#a855f7] bg-[#a855f7]/10 px-6 py-3.5 text-sm font-semibold text-[#a855f7] transition hover:bg-[#a855f7]/20 disabled:opacity-40"
+              className="btn-neon w-full justify-center text-sm disabled:cursor-not-allowed disabled:opacity-40"
             >
               {user ? "Relever le defi" : "Chargement..."}
             </button>
@@ -230,7 +231,7 @@ function ChallengeContent() {
 
   if (phase === "playing" && user && soloTracks.length > 0) {
     return (
-      <div className="min-h-screen bg-[#050505]">
+      <div className="min-h-screen">
         <SoloGameClient
           user={user}
           tracks={soloTracks}
@@ -262,50 +263,46 @@ function ChallengeContent() {
     ].sort((a, b) => b.score - a.score)
 
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#050505] px-6 text-white">
+      <div className="flex min-h-screen items-center justify-center px-6 text-[#2e2014]">
         <div className="w-full max-w-lg space-y-6">
           <div className="text-center space-y-2">
-            <p className="text-xs uppercase tracking-[0.3em] text-[#a855f7]">Classement</p>
-            <h1 className="text-3xl font-semibold">Resultats du defi</h1>
+            <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-[#c65133]">Face B · Classement</p>
+            <h1 className="font-display text-3xl font-semibold">Resultats du defi</h1>
           </div>
 
-          <div className="space-y-2">
+          <div className="rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-6 shadow-[4px_4px_0_rgba(46,32,20,.18)]">
             {allEntries.map((entry, idx) => {
               const isHighlighted = entry.isCurrent
-              const medalColors = ["text-yellow-400", "text-gray-300", "text-orange-400"]
               return (
                 <div
                   key={`${entry.playerName}-${idx}`}
-                  className={`flex items-center justify-between rounded-xl border p-4 transition ${
-                    isHighlighted
-                      ? "border-[#a855f7]/50 bg-[#a855f7]/10"
-                      : "border-white/10 bg-[#0c0c0c]"
-                  }`}
+                  className="flex items-baseline gap-3 py-2.5"
                 >
-                  <div className="flex items-center gap-3">
-                    <span className={`text-lg font-bold ${idx < 3 ? medalColors[idx] : "text-white/40"}`}>
-                      #{idx + 1}
+                  <span className="w-8 shrink-0 text-xs font-bold text-[#8a7558]">
+                    A{idx + 1}
+                  </span>
+                  <div className="flex min-w-0 items-baseline gap-2">
+                    <span className={`truncate font-display text-base font-semibold ${isHighlighted ? "text-[#c65133]" : "text-[#2e2014]"}`}>
+                      {entry.playerName}
                     </span>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold">{entry.playerName}</span>
-                        {entry.isCreator && (
-                          <span className="rounded-full bg-[#a855f7]/20 px-2 py-0.5 text-[10px] uppercase tracking-wider text-[#a855f7]">
-                            Createur
-                          </span>
-                        )}
-                        {isHighlighted && (
-                          <span className="rounded-full bg-green-500/20 px-2 py-0.5 text-[10px] uppercase tracking-wider text-green-400">
-                            Toi
-                          </span>
-                        )}
-                      </div>
-                      <span className="text-xs text-white/40">
-                        {entry.correct}/{entry.total} correct · Serie {entry.bestStreak}
+                    {entry.isCreator && (
+                      <span className="shrink-0 rounded-full border-[1.5px] border-[#e0a32e] bg-[#e0a32e] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[#2e2014]">
+                        Createur
                       </span>
-                    </div>
+                    )}
+                    {isHighlighted && (
+                      <span className="shrink-0 rounded-full border-[1.5px] border-[#7d9471] bg-[#7d9471] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[#f4ecdb]">
+                        Toi
+                      </span>
+                    )}
                   </div>
-                  <span className="text-lg font-bold text-[#a855f7]">{entry.score} pts</span>
+                  <span className="flex-1 -translate-y-1 border-b-2 border-dotted border-[rgba(46,32,20,.45)]" />
+                  <span className="shrink-0 text-right">
+                    <span className="font-display text-base font-bold text-[#2e2014]">{entry.score} pts</span>
+                    <span className="block text-[10px] text-[#8a7558]">
+                      {entry.correct}/{entry.total} · serie {entry.bestStreak}
+                    </span>
+                  </span>
                 </div>
               )
             })}
@@ -314,7 +311,7 @@ function ChallengeContent() {
           <div className="flex flex-wrap justify-center gap-3 pt-2">
             <a
               href="/blindify/solo/"
-              className="rounded-xl border border-white/15 px-5 py-2.5 text-sm text-white/80 transition hover:bg-white/5"
+              className="rounded-full border-[1.5px] border-[#2e2014] px-5 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
             >
               Retour
             </a>
@@ -324,7 +321,7 @@ function ChallengeContent() {
                 const challengeUrl = `https://tymmerc.eu/blindify/challenge/?code=${code}`
                 navigator.clipboard.writeText(challengeUrl).catch(() => {})
               }}
-              className="rounded-xl border-2 border-[#a855f7] bg-transparent px-5 py-2.5 text-sm font-semibold text-[#a855f7] transition hover:bg-[#a855f7]/10"
+              className="btn-neon text-sm"
             >
               Copier le lien du defi
             </button>
@@ -335,15 +332,15 @@ function ChallengeContent() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#050505] text-white">
-      <Loader2 className="h-8 w-8 animate-spin text-[#a855f7]" />
+    <div className="flex min-h-screen items-center justify-center text-[#2e2014]">
+      <Loader2 className="h-8 w-8 animate-spin text-[#c65133]" />
     </div>
   )
 }
 
 export default function ChallengePage() {
   return (
-    <Suspense fallback={<div className="grid min-h-screen place-items-center bg-[#050505] text-sm text-white/70">Chargement...</div>}>
+    <Suspense fallback={<div className="grid min-h-screen place-items-center text-sm text-[#6b573f]">Chargement...</div>}>
       <ChallengeContent />
     </Suspense>
   )

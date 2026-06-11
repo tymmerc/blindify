@@ -1,27 +1,27 @@
 import type { GameMode } from "@/lib/gameModes"
 
 export const surfaces = {
-  background: "#050505",
-  card: "#0b0b0b",
-  border: "rgba(255,255,255,0.08)",
-  text: "#ffffff",
-  muted: "rgba(255,255,255,0.65)",
+  background: "#f4ecdb",
+  card: "#ece1c8",
+  border: "rgba(46,32,20,0.22)",
+  text: "#2e2014",
+  muted: "#6b573f",
 }
 
 export const accents: Record<GameMode, string> = {
-  friends: "#ec4899",
-  event: "#8b5cf6",
-  streamer: "#f97316",
+  friends: "#c65133",
+  event: "#e0a32e",
+  streamer: "#7d9471",
 }
 
 export const glow = {
   none: "0 0 0 0 transparent",
-  subtle: "0 10px 35px rgba(0,0,0,0.35)",
+  subtle: "4px 4px 0 rgba(46,32,20,0.18)",
   focus: (accent: string) => `0 0 0 2px ${accent}`,
 }
 
 export const radii = {
-  card: "24px",
+  card: "10px",
   pill: "9999px",
 }
 

@@ -1086,15 +1086,15 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   if (loading) {
     return (
       <div className="grid min-h-screen place-items-center">
-        <Loader2 className="h-8 w-8 animate-spin text-neon" />
+        <Loader2 className="h-8 w-8 animate-spin text-[#c65133]" />
       </div>
     )
   }
 
   if (!userPayload) {
     return (
-      <div className="grid min-h-screen place-items-center bg-[#050505]">
-        <Loader2 className="h-8 w-8 animate-spin text-white/50" />
+      <div className="grid min-h-screen place-items-center">
+        <Loader2 className="h-8 w-8 animate-spin text-[#8a7558]" />
       </div>
     )
   }
@@ -1108,11 +1108,11 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
 
   if (isPendingIntent) {
     return (
-      <div className="grid min-h-screen place-items-center bg-[#050505] px-6 text-white/80">
+      <div className="grid min-h-screen place-items-center px-6 text-[#6b573f]">
         <div className="space-y-3 text-center">
-          <Loader2 className="mx-auto h-8 w-8 animate-spin text-white/70" />
+          <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#c65133]" />
           <p className="text-sm">Préparation du lobby…</p>
-          <p className="text-xs text-white/50">Si l’attente dure, reviens au menu et relance.</p>
+          <p className="text-xs text-[#8a7558]">Si l’attente dure, reviens au menu et relance.</p>
         </div>
       </div>
     )
@@ -1153,9 +1153,9 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
 
   const streamerModeSelector =
     mode === "streamer" && view !== "playing" && view !== "results" ? (
-      <div className="rounded-2xl border border-white/10 bg-[#0b0b0b] p-4 text-white">
-        <p className="text-xs uppercase tracking-[0.32em] text-white/60">Gameplay</p>
-        <h3 className="text-lg font-semibold">Choisis le format</h3>
+      <div className="rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-4 text-[#2e2014] shadow-[4px_4px_0_rgba(46,32,20,.18)]">
+        <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#7d9471]">Gameplay</p>
+        <h3 className="font-display text-lg font-semibold">Choisis le format</h3>
         <div className="mt-3 grid gap-2 md:grid-cols-3">
           {[
             { key: "viewers_only", title: "Chat avec ta musique", desc: "Le chat joue avec tes musiques", value: "viewers_only" as StreamerSubMode },
@@ -1166,10 +1166,10 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
               key={opt.key}
               type="button"
               onClick={() => setStreamerMode(opt.value)}
-              className={`rounded-xl border px-3 py-3 text-left transition ${streamerMode === opt.value ? "border-white/60 bg-white/10" : "border-white/15 bg-[#0f0f0f]"}`}
+              className={`rounded-md border-2 px-3 py-3 text-left transition ${streamerMode === opt.value ? "border-[#2e2014] bg-[#7d9471] text-[#f4ecdb] shadow-[3px_3px_0_#2e2014]" : "border-[rgba(46,32,20,.35)] bg-[#efe5d0] text-[#2e2014] hover:border-[#2e2014]"}`}
             >
-              <p className="text-sm font-semibold">{opt.title}</p>
-              <p className="text-xs text-white/60">{opt.desc}</p>
+              <p className="text-sm font-bold">{opt.title}</p>
+              <p className="text-xs opacity-80">{opt.desc}</p>
             </button>
           ))}
         </div>
@@ -1193,18 +1193,19 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     view === "playing" ? "game" : view === "results" ? "results" : view === "landing" ? "entry" : "lobby"
 
   const spotifyPrompt = requireSpotify ? (
-    <div className="fixed inset-0 z-30 grid place-items-center bg-black/80 px-6 text-center">
-      <div className="max-w-md rounded-3xl border border-white/10 bg-[var(--ma-surface,#0b0b0b)] p-8 shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
-        <p className="text-xs uppercase tracking-[0.35em] text-[var(--ma-muted)]">Spotify requis</p>
-        <h3 className="mt-3 text-2xl font-semibold text-white">Connecte ton Spotify</h3>
-        <p className="mt-2 text-sm text-[var(--ma-muted)]">
-          Les musiques sont tirées des comptes des joueurs. Connecte-toi pour rejoindre la salle {joinCode || "(code)"}.
+    <div className="fixed inset-0 z-30 grid place-items-center bg-[#2e2014]/40 px-6 text-center">
+      <div className="max-w-md rounded-md border-2 border-[#2e2014] bg-[#f4ecdb] p-8 shadow-[6px_6px_0_rgba(46,32,20,.25)]">
+        <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">Spotify requis</p>
+        <h3 className="mt-3 font-display text-2xl font-semibold text-[#2e2014]">Connecte ton Spotify</h3>
+        <p className="mt-2 text-sm text-[#6b573f]">
+          Les musiques sont tirées des comptes des joueurs. Connecte-toi pour rejoindre la salle{" "}
+          <span className="font-display font-bold text-[#c65133]">{joinCode || "(code)"}</span>.
         </p>
-        <p className="mt-2 text-xs text-[var(--ma-muted)]">Après connexion, tu entres directement dans la room.</p>
+        <p className="mt-2 text-xs text-[#8a7558]">Après connexion, tu entres directement dans la room.</p>
         <Button onClick={() => {
           handleSpotifyConnect()
           setRequireSpotify(false)
-        }} className="mt-6 w-full justify-center rounded-xl">
+        }} className="mt-6 w-full justify-center rounded-md border-2 border-[#2e2014] bg-[#c65133] font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] backdrop-blur-none transition hover:translate-x-[2px] hover:translate-y-[2px] hover:border-[#2e2014] hover:bg-[#c65133] hover:shadow-[2px_2px_0_#2e2014]">
           Se connecter à Spotify
         </Button>
       </div>
@@ -1216,11 +1217,11 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
 
   const loadingGame =
     view === "playing" && room && !gameState ? (
-      <div className="grid min-h-[50vh] place-items-center text-center text-sm text-white/70">
+      <div className="grid min-h-[50vh] place-items-center text-center text-sm text-[#6b573f]">
         <div className="space-y-3">
-          <Loader2 className="mx-auto h-8 w-8 animate-spin" />
+          <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#c65133]" />
           <p>Synchronisation de la partie…</p>
-          <p className="text-xs text-white/50">Si rien ne se passe, reste sur cette page quelques secondes.</p>
+          <p className="text-xs text-[#8a7558]">Si rien ne se passe, reste sur cette page quelques secondes.</p>
         </div>
       </div>
     ) : null

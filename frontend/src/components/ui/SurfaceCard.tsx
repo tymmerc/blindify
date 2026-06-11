@@ -12,11 +12,10 @@ export function SurfaceCard({ children, className, style, glow = false }: Surfac
   return (
     <div
       className={cn(
-        "rounded-2xl border border-white/[0.06] bg-[rgba(22,30,55,0.85)] p-6 text-[#fafafa]",
-        "backdrop-blur-[16px] shadow-glass",
+        "rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-6 text-[#2e2014]",
+        "shadow-[4px_4px_0_rgba(46,32,20,.18)]",
         "transition-all duration-200",
-        "hover:border-white/[0.12]",
-        glow && "hover:shadow-glow",
+        glow && "hover:border-[#c65133] hover:shadow-[4px_4px_0_#c65133]",
         className
       )}
       style={style}

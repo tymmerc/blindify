@@ -23,12 +23,12 @@ export function Button({
 
   const variants: Record<NonNullable<ButtonProps["variant"]>, string> = {
     default:
-      "rounded-xl border border-white/[0.06] bg-[rgba(22,30,55,0.85)] text-[#fafafa] backdrop-blur-[16px] hover:border-white/[0.12] hover:bg-[rgba(22,30,55,0.95)]",
+      "rounded-md border-2 border-[#2e2014] bg-[#c65133] text-[#f4ecdb] font-bold shadow-[4px_4px_0_#2e2014] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#2e2014] hover:bg-[#b8492d]",
     outline:
-      "rounded-xl border border-white/[0.08] bg-transparent text-[#fafafa] hover:border-white/[0.15] hover:bg-[rgba(22,30,55,0.5)]",
-    ghost: "rounded-xl text-[#fafafa] hover:bg-[rgba(22,30,55,0.5)]",
-    link: "rounded-none border-none bg-transparent text-[#a855f7] underline-offset-8 hover:underline",
-    glow: "rounded-xl border border-[rgba(168,85,247,0.25)] bg-[rgba(168,85,247,0.12)] text-white hover:bg-[rgba(168,85,247,0.2)] hover:border-[rgba(168,85,247,0.4)] hover:shadow-glow",
+      "rounded-md border-2 border-[#2e2014] bg-transparent text-[#2e2014] hover:bg-[rgba(46,32,20,0.07)]",
+    ghost: "rounded-md text-[#2e2014] hover:bg-[rgba(46,32,20,0.07)]",
+    link: "rounded-none border-none bg-transparent text-[#c65133] underline-offset-8 hover:underline",
+    glow: "rounded-md border-2 border-[#2e2014] bg-[#2e2014] text-[#f4ecdb] font-bold shadow-[4px_4px_0_rgba(46,32,20,0.3)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgba(46,32,20,0.3)] hover:bg-[#1d140b]",
   }
 
   const sizes: Record<NonNullable<ButtonProps["size"]>, string> = {
@@ -42,7 +42,7 @@ export function Button({
     <Comp
       className={cn(
         "relative inline-flex items-center justify-center gap-2 font-semibold transition-all duration-200",
-        "focus:outline-none focus-visible:ring-2 focus-visible:ring-[#a855f7]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#09090b]",
+        "focus:outline-none focus-visible:ring-2 focus-visible:ring-[#c65133]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#f4ecdb]",
         "disabled:cursor-not-allowed disabled:opacity-50",
         variants[variant],
         sizes[size],

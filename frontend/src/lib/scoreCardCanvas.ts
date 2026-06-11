@@ -1,17 +1,19 @@
-const BG_COLOR = "#050505"
-const PURPLE = "#a855f7"
-const WHITE = "#ffffff"
-const MUTED = "#94a3b8"
-const GREEN = "#22c55e"
-const YELLOW = "#eab308"
-const RED = "#ef4444"
+const BG_COLOR = "#f4ecdb"
+const CARD_COLOR = "#ece1c8"
+const INK = "#2e2014"
+const ACCENT = "#c65133"
+const GOLD = "#e0a32e"
+const MUTED = "#6b573f"
+const FADED = "#8a7558"
+const GREEN = "#7d9471"
+const RED = "#9c2f1d"
 
 const WIDTH = 1200
 const HEIGHT = 630
 
 const VERDICT_COLOR: Record<string, string> = {
   correct: GREEN,
-  close: YELLOW,
+  close: GOLD,
   wrong: RED,
 }
 
@@ -25,26 +27,33 @@ function createCanvas(): HTMLCanvasElement {
 }
 
 function drawBackground(ctx: CanvasRenderingContext2D): void {
+  // Fond papier
   ctx.fillStyle = BG_COLOR
   ctx.fillRect(0, 0, WIDTH, HEIGHT)
+
+  // Carte papier avec ombre dure et bordure encre
+  const margin = 28
+  ctx.fillStyle = "rgba(46,32,20,0.18)"
+  ctx.fillRect(margin + 8, margin + 8, WIDTH - margin * 2, HEIGHT - margin * 2)
+  ctx.fillStyle = CARD_COLOR
+  ctx.fillRect(margin, margin, WIDTH - margin * 2, HEIGHT - margin * 2)
+  ctx.strokeStyle = INK
+  ctx.lineWidth = 4
+  ctx.strokeRect(margin, margin, WIDTH - margin * 2, HEIGHT - margin * 2)
 }
 
 function drawTitle(ctx: CanvasRenderingContext2D): number {
-  const y = 70
+  const y = 90
 
-  // Purple glow
-  ctx.save()
-  ctx.shadowColor = PURPLE
-  ctx.shadowBlur = 30
+  // Titre encre sur papier
   ctx.font = `bold 52px ${FONT}`
-  ctx.fillStyle = WHITE
+  ctx.fillStyle = INK
   ctx.textAlign = "center"
   ctx.fillText("BLINDIFY", WIDTH / 2, y)
-  ctx.restore()
 
   // Subtitle
   ctx.font = `500 22px ${FONT}`
-  ctx.fillStyle = PURPLE
+  ctx.fillStyle = ACCENT
   ctx.textAlign = "center"
   ctx.fillText("Blind Test", WIDTH / 2, y + 34)
 
@@ -60,7 +69,7 @@ function drawScore(
 
   // Points
   ctx.font = `bold 64px ${FONT}`
-  ctx.fillStyle = WHITE
+  ctx.fillStyle = INK
   ctx.textAlign = "center"
   ctx.fillText(`${stats.points} pts`, WIDTH / 2, y)
   y += 36
@@ -74,7 +83,7 @@ function drawScore(
   // Best streak
   const streakSuffix = stats.bestStreak >= 3 ? " 🔥" : ""
   ctx.font = `500 20px ${FONT}`
-  ctx.fillStyle = PURPLE
+  ctx.fillStyle = ACCENT
   ctx.fillText(`Série max: ${stats.bestStreak}${streakSuffix}`, WIDTH / 2, y)
 
   return y
@@ -97,7 +106,7 @@ function drawRoundDots(
   for (const state of filtered) {
     ctx.beginPath()
     ctx.arc(x, y, dotRadius, 0, Math.PI * 2)
-    ctx.fillStyle = VERDICT_COLOR[state] ?? "#6b7280"
+    ctx.fillStyle = VERDICT_COLOR[state] ?? FADED
     ctx.fill()
     x += dotRadius * 2 + gap
   }
@@ -121,7 +130,7 @@ function drawTrackList(
   for (const track of displayed) {
     const titleText = truncate(track.title, 35)
     const artistText = truncate(track.artist, 25)
-    const line = `${titleText}  —  ${artistText}`
+    const line = `${titleText}  ·  ${artistText}`
 
     ctx.font = `400 17px ${FONT}`
     ctx.fillStyle = MUTED
@@ -132,7 +141,7 @@ function drawTrackList(
   if (tracks.length > maxDisplay) {
     const remaining = tracks.length - maxDisplay
     ctx.font = `italic 16px ${FONT}`
-    ctx.fillStyle = "#64748b"
+    ctx.fillStyle = FADED
     ctx.fillText(`... et ${remaining} autre${remaining > 1 ? "s" : ""}`, WIDTH / 2, y)
     y += 26
   }
@@ -142,9 +151,9 @@ function drawTrackList(
 
 function drawWatermark(ctx: CanvasRenderingContext2D): void {
   ctx.font = `400 15px ${FONT}`
-  ctx.fillStyle = "#475569"
+  ctx.fillStyle = FADED
   ctx.textAlign = "center"
-  ctx.fillText("tymmerc.eu/blindify", WIDTH / 2, HEIGHT - 24)
+  ctx.fillText("tymmerc.eu/blindify", WIDTH / 2, HEIGHT - 48)
 }
 
 function truncate(text: string, maxLen: number): string {

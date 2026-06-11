@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useRef } from "react"
-import { Button } from "@/components/ui/button"
 
 type FriendsGameModalProps = {
   open: boolean
@@ -51,17 +50,17 @@ export function FriendsGameModal({
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-40 grid place-items-center bg-black/70 px-6 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-40 grid place-items-center bg-[#2e2014]/25 px-6" onClick={onClose}>
       <div
-        className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#0b0b0b] p-6 shadow-[0_20px_50px_rgba(0,0,0,0.5)]"
+        className="w-full max-w-lg rounded-md border-2 border-[#2e2014] bg-[#f4ecdb] p-6 text-[#2e2014] shadow-[6px_6px_0_rgba(46,32,20,.25)]"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-white">Créer ou rejoindre</h3>
+          <h3 className="font-display text-xl font-semibold">Créer ou rejoindre</h3>
           <button
             type="button"
             onClick={onClose}
-            className="text-sm text-white/60 hover:text-white"
+            className="text-sm text-[#8a7558] transition hover:text-[#2e2014]"
             aria-label="Fermer"
           >
             ✕
@@ -69,48 +68,48 @@ export function FriendsGameModal({
         </div>
 
         <div className="mt-5 space-y-4">
-          <div className="space-y-3 rounded-2xl border border-white/10 bg-[#0f0f0f] p-4">
+          <div className="space-y-3 rounded-md border-[1.5px] border-[rgba(46,32,20,.22)] bg-[#ece1c8] p-4">
             <div className="space-y-1">
-              <p className="text-sm font-semibold text-white">Créer une partie</p>
-              <p className="text-xs text-white/60">Invite et lance immédiatement une nouvelle partie.</p>
+              <p className="font-display text-sm font-semibold">Créer une partie</p>
+              <p className="text-xs text-[#6b573f]">Invite et lance immédiatement une nouvelle partie.</p>
             </div>
             <button
               ref={createRef}
               onClick={onCreate}
               disabled={creating}
-              className="w-full justify-center rounded-xl border px-4 py-3 text-sm font-semibold text-white transition hover:border-white/30 hover:bg-white/10 disabled:opacity-60"
-              style={{ borderColor: accentColor, color: accentColor, opacity: creating ? 0.7 : 1 }}
+              className="w-full justify-center rounded-md border-2 border-[#2e2014] px-4 py-3 text-sm font-bold text-[#f4ecdb] shadow-[3px_3px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[1px_1px_0_#2e2014] disabled:opacity-60"
+              style={{ background: accentColor, opacity: creating ? 0.7 : 1 }}
             >
               {creating ? "Création..." : "Créer une salle"}
             </button>
           </div>
 
-          <div className="space-y-3 rounded-2xl border border-white/10 bg-[#0f0f0f] p-4">
+          <div className="space-y-3 rounded-md border-[1.5px] border-[rgba(46,32,20,.22)] bg-[#ece1c8] p-4">
             <div className="space-y-1">
-              <p className="text-sm font-semibold text-white">Rejoindre une partie</p>
-              <p className="text-xs text-white/60">Entre le code reçu pour rejoindre un lobby existant.</p>
+              <p className="font-display text-sm font-semibold">Rejoindre une partie</p>
+              <p className="text-xs text-[#6b573f]">Entre le code reçu pour rejoindre un lobby existant.</p>
             </div>
             <div className="space-y-2">
-              <label className="text-xs uppercase tracking-[0.25em] text-white/60">Code de la partie</label>
+              <label className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">Code de la partie</label>
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                 <input
                   value={joinCode}
                   onChange={e => setJoinCode(e.target.value.toUpperCase())}
                   placeholder="CODE"
-                  className="w-full rounded-lg border border-white/15 bg-[#0c0c0c] px-3 py-2 text-sm uppercase tracking-[0.25em] text-white outline-none focus:border-white/30"
+                  className="w-full rounded-md border-[1.5px] border-[rgba(46,32,20,.35)] bg-[#efe5d0] px-3 py-2 font-display text-sm uppercase tracking-[0.25em] text-[#2e2014] outline-none placeholder:text-[#b3a182] focus:border-[#2e2014]"
                   maxLength={12}
                 />
                 <button
                   type="button"
                   onClick={onJoin}
                   disabled={joining}
-                  className="rounded-lg border px-3 py-2 text-sm font-semibold text-white transition hover:border-white/30 hover:bg-white/10 disabled:opacity-50"
-                  style={{ borderColor: accentColor, color: accentColor }}
+                  className="rounded-md border-2 border-[#2e2014] px-3 py-2 text-sm font-bold text-[#f4ecdb] shadow-[3px_3px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[1px_1px_0_#2e2014] disabled:opacity-50"
+                  style={{ background: accentColor }}
                 >
                   {joining ? "Connexion..." : "Rejoindre"}
                 </button>
               </div>
-              {joinError ? <p className="text-xs text-red-300">{joinError}</p> : null}
+              {joinError ? <p className="text-xs font-bold text-[#9c2f1d]">{joinError}</p> : null}
             </div>
           </div>
         </div>

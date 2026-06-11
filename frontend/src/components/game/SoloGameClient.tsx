@@ -6,10 +6,8 @@ import Link from "next/link"
 import { api } from "@/lib/api"
 import { clientApi } from "@/lib/apiClient"
 import type { SoloTrack, UserSummary } from "@/lib/types"
-import { Button } from "@/components/ui/button"
-import { ArrowRight, Check, Flame, Heart, Loader2, Play, Share2, Sparkles, Timer, Volume2, VolumeX } from "lucide-react"
-import { VinylDisc } from "./VinylDisc"
-import { StreakEffects, useStreakCardStyle } from "./StreakEffects"
+import { ArrowRight, Heart, Loader2, Play, Share2, Sparkles, Volume2, VolumeX } from "lucide-react"
+import { StreakEffects } from "./StreakEffects"
 import { buildShareText } from "@/lib/shareText"
 import { ShareImageButton } from "./ShareImageButton"
 import { getSocket } from "@/lib/socket"
@@ -67,13 +65,60 @@ const COUNTDOWN_DURATION = 3
 const LISTENING_DURATION_MS = LISTENING_DURATION * 1000
 const AUDIO_OWNER = "solo"
 
-function ListeningSurface({ active }: { active: boolean }) {
+// Remap des anciens accents néon vers la palette "Club analogique".
+const ANALOG_ACCENTS: Record<string, string> = {
+  "#ec4899": "#c65133", // friends → terracotta
+  "#8b5cf6": "#e0a32e", // event → or
+  "#f97316": "#7d9471", // streamer → sauge
+  "#a855f7": "#a8b8c8", // solo / défaut → bleu-gris
+  "#22d3ee": "#7d9471",
+}
+
+const VINYL_GROOVES = "repeating-radial-gradient(circle at 50% 50%, #241a10 0 2.5px, #3a2a1a 2.5px 5px)"
+
+function AnalogVinyl({
+  size,
+  spinning,
+  accent,
+  coverUrl,
+  blurred,
+}: {
+  size: number
+  spinning: boolean
+  accent: string
+  coverUrl?: string | null
+  blurred?: boolean
+}) {
   return (
-    <div className="absolute inset-0">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_30%,rgba(168,85,247,0.18),transparent_55%),radial-gradient(circle_at_20%_80%,rgba(34,197,94,0.12),transparent_55%)]" />
-      {active ? (
-        <div className="absolute inset-0 animate-pulse bg-[radial-gradient(circle_at_50%_50%,rgba(168,85,247,0.12),transparent_55%)]" />
-      ) : null}
+    <div
+      className="relative rounded-full border-[3px] border-[#2e2014]"
+      style={{
+        width: size,
+        height: size,
+        maxWidth: "80vw",
+        maxHeight: "80vw",
+        background: VINYL_GROOVES,
+        animation: "vinyl-spin 7s linear infinite",
+        animationPlayState: spinning ? "running" : "paused",
+      }}
+    >
+      {coverUrl ? (
+        <div className="absolute inset-[28%] overflow-hidden rounded-full border-[3px] border-[#2e2014]">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={coverUrl}
+            alt="Pochette d'album"
+            className="h-full w-full object-cover transition-[filter] duration-700"
+            style={{ filter: blurred ? "blur(5px) saturate(0.85)" : "none" }}
+          />
+        </div>
+      ) : (
+        <div
+          className="absolute inset-[32%] rounded-full border-[3px] border-[#2e2014]"
+          style={{ background: accent }}
+        />
+      )}
+      <div className="absolute inset-[47%] rounded-full border-2 border-[#2e2014] bg-[#f4ecdb]" />
     </div>
   )
 }
@@ -101,7 +146,8 @@ export function SoloGameClient({
   challengeCode,
   onChallengeComplete,
 }: SoloGameClientProps) {
-  const { accentColor } = useMode()
+  const { accentColor: modeAccent } = useMode()
+  const accentColor = ANALOG_ACCENTS[modeAccent.toLowerCase()] ?? modeAccent
   const modeFlags = resolveModeFlags(undefined, accentColor)
   const [trackList, setTrackList] = useState<SoloTrack[]>(tracks)
   const [index, setIndex] = useState(0)
@@ -194,17 +240,6 @@ export function SoloGameClient({
   const isArmed = uiState === RoundUiState.Armed
   const isLocked = uiState === RoundUiState.Locked
   const isRevealed = uiState === RoundUiState.Revealed
-  const accentTint = useCallback(
-    (alpha: number) => {
-      const hex = accentColor.startsWith("#") ? accentColor.slice(1) : accentColor
-      if (hex.length !== 6) return accentColor
-      const clamped = Math.min(255, Math.max(0, Math.round(alpha * 255)))
-      const channel = clamped.toString(16).padStart(2, "0")
-      return `#${hex}${channel}`
-    },
-    [accentColor]
-  )
-
   useEffect(() => {
     return audioManager.subscribe(snapshot => {
       setMuted(snapshot.muted)
@@ -245,7 +280,6 @@ export function SoloGameClient({
   const [shareLabel, setShareLabel] = useState("Partager")
   const [challengeLabel, setChallengeLabel] = useState("Defier un ami")
   const [challengeLoading, setChallengeLoading] = useState(false)
-  const streakCardStyle = useStreakCardStyle(stats.streak)
 
   const history = useMemo(
     () =>
@@ -1142,57 +1176,66 @@ export function SoloGameClient({
 
   if (!current) {
     return (
-      <div className="surface flex min-h-[40vh] flex-col items-center justify-center gap-4 rounded-3xl border border-white/10 p-10 text-center">
-        <Sparkles className="h-10 w-10 text-neon" />
-        <p className="text-sm text-slate-300">No tracks available — try syncing another provider.</p>
-        <Button variant="outline" asChild>
-          <Link href="/solo">Retour</Link>
-        </Button>
+      <div className="flex min-h-[40vh] flex-col items-center justify-center gap-4 rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-10 text-center shadow-[4px_4px_0_rgba(46,32,20,.18)]">
+        <Sparkles className="h-10 w-10 text-[#c65133]" />
+        <p className="text-sm text-[#6b573f]">No tracks available — try syncing another provider.</p>
+        <Link
+          href="/solo"
+          className="rounded-md border-2 border-[#2e2014] px-5 py-2.5 text-sm font-bold text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+        >
+          Retour
+        </Link>
       </div>
     )
   }
 
   if (gameFinished && !resultDialog) {
     return (
-      <div className="surface flex flex-col items-center gap-6 rounded-3xl border border-white/10 p-10 text-center">
-        <Sparkles className="h-12 w-12 text-neon" />
-        <h2 className="text-3xl font-semibold text-white">Partie terminée !</h2>
-        <p className="text-sm text-slate-300">
+      <div className="flex flex-col items-center gap-6 rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-10 text-center shadow-[4px_4px_0_rgba(46,32,20,.18)]">
+        <Sparkles className="h-12 w-12 text-[#c65133]" />
+        <h2 className="font-display text-3xl font-semibold text-[#2e2014]">Partie terminée !</h2>
+        <p className="text-sm text-[#6b573f]">
           {stats.correct} / {stats.rounds} correct · {stats.points} pts · Série max : {stats.bestStreak} · Précision {accuracy}%
         </p>
         <div className="flex flex-wrap justify-center gap-3">
-          <Button asChild variant="outline">
-            <Link href="/modes">Retour aux modes</Link>
-          </Button>
-          <Button asChild variant="outline">
-            <Link href="/solo">Changer de playlist</Link>
-          </Button>
-          <Button
-            variant="outline"
-            className="border-2 border-[#a855f7] bg-transparent text-[#a855f7] hover:bg-[#a855f7]/10"
+          <Link
+            href="/modes"
+            className="inline-flex items-center rounded-md border-2 border-[#2e2014] px-5 py-2.5 text-sm font-bold text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+          >
+            Retour aux modes
+          </Link>
+          <Link
+            href="/solo"
+            className="inline-flex items-center rounded-md border-2 border-[#2e2014] px-5 py-2.5 text-sm font-bold text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+          >
+            Changer de playlist
+          </Link>
+          <button
+            type="button"
+            className="inline-flex items-center rounded-md border-2 border-[#2e2014] px-5 py-2.5 text-sm font-bold text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
             onClick={handleShare}
           >
             {shareLabel}
-          </Button>
+          </button>
           <ShareImageButton
             stats={stats}
             roundStates={roundStates}
             tracks={trackList.map((t) => ({ title: t.title, artist: t.artist }))}
           />
           {!challengeCode && (
-            <Button
-              variant="outline"
-              className="border-2 border-[#a855f7] bg-transparent text-[#a855f7] hover:bg-[#a855f7]/10"
+            <button
+              type="button"
+              className="inline-flex items-center rounded-md border-2 border-[#2e2014] bg-[#2e2014] px-5 py-2.5 text-sm font-bold text-[#f4ecdb] shadow-[4px_4px_0_rgba(46,32,20,.3)] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgba(46,32,20,.3)] disabled:cursor-not-allowed disabled:opacity-50"
               onClick={handleChallenge}
               disabled={challengeLoading}
             >
               {challengeLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Share2 className="mr-2 h-4 w-4" />}
               {challengeLabel}
-            </Button>
+            </button>
           )}
-          <Button onClick={handleReplay}>
+          <button type="button" className="btn-neon" onClick={handleReplay}>
             Rejouer
-          </Button>
+          </button>
         </div>
       </div>
     )
@@ -1209,51 +1252,46 @@ export function SoloGameClient({
 
   return (
     <>
-      <div className="min-h-screen bg-black text-white grid lg:grid-cols-[1fr_320px] relative" {...containerData}>
+      <div className="min-h-screen text-[#2e2014] grid lg:grid-cols-[1fr_320px] relative" {...containerData}>
       <div className="px-6 pb-10 pt-6">
         <div className="flex items-center justify-between mb-6">
           <Link
             href="/solo"
-            className="rounded-md border border-[#1b1b1b] bg-transparent px-4 py-2 text-sm text-white hover:bg-[#151515]"
+            className="rounded-md border-[1.5px] border-[#2e2014] bg-transparent px-4 py-2 text-sm font-bold text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
           >
             ← Quitter
           </Link>
           <div
-            className="rounded-lg border px-4 py-2 text-sm font-semibold shadow flex flex-col sm:flex-row sm:items-center sm:gap-3"
-            style={{
-              borderColor: accentTint(0.55),
-              backgroundColor: accentTint(0.18),
-              color: accentColor,
-            }}
+            className="rounded-md border-2 border-[#2e2014] bg-[#ece1c8] px-4 py-2 text-sm font-semibold shadow-[3px_3px_0_rgba(46,32,20,.18)] flex flex-col sm:flex-row sm:items-center sm:gap-3"
+            style={{ color: "#2e2014" }}
           >
-            <span className="inline-flex items-center gap-2">
+            <span className="inline-flex items-center gap-2 font-display">
               Score: {stats.points} pts
               <StreakEffects streak={stats.streak} />
             </span>
-            <span className="text-[11px] text-white/80">({stats.correct}/{total} correct)</span>
+            <span className="text-[11px] text-[#8a7558]">({stats.correct}/{total} correct)</span>
           </div>
         </div>
 
         <div
-          className="rounded-xl border bg-[#0f0f0f] p-6 shadow-[0_10px_30px_rgba(0,0,0,0.35)]"
+          className="rounded-md border-2 bg-[#ece1c8] p-6"
           style={{
-            borderColor: feedbackSignal ? accentColor : "#1b1b1b",
-            boxShadow: feedbackSignal ? `0 0 0 2px ${accentTint(0.45)}` : "0 10px 30px rgba(0,0,0,0.35)",
+            borderColor: feedbackSignal ? accentColor : "#2e2014",
+            boxShadow: feedbackSignal ? `4px 4px 0 ${accentColor}` : "4px 4px 0 rgba(46,32,20,.18)",
             transition: `box-shadow ${ROUND_FEEDBACK_MS}ms ease, border-color ${ROUND_FEEDBACK_MS}ms ease`,
-            ...streakCardStyle,
           }}
         >
           <div className="mb-6 flex flex-col gap-2">
-            <div className="flex items-center justify-between text-sm text-[#8a8a8a]">
+            <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">
               <span>Question {index + 1} sur {total}</span>
               <span>{percent}%</span>
             </div>
-            <div className="h-1.5 w-full rounded-full bg-[#161616]">
+            <div className="h-1.5 w-full rounded-full border border-[rgba(46,32,20,.35)] bg-[#efe5d0]">
               <div
                 className="h-full rounded-full"
                 style={{
                   width: `${percent}%`,
-                  backgroundImage: `linear-gradient(90deg, ${accentColor}, ${accentTint(0.6)})`,
+                  background: accentColor,
                   transition: "width 200ms linear",
                 }}
               />
@@ -1261,44 +1299,38 @@ export function SoloGameClient({
           </div>
 
           <div className="relative mx-auto mb-6 flex items-center justify-center">
-            <VinylDisc size={220} spinning={isPlaying && !isLocked && !isRevealed} accentColor={accentColor} coverUrl={current?.album_cover} blurred={!isRevealed} />
+            <AnalogVinyl size={220} spinning={isPlaying && !isLocked && !isRevealed} accent={accentColor} coverUrl={current?.album_cover} blurred={!isRevealed} />
             {manualPlayRequired && !isPlaying && !isRevealed && (
               <button
                 type="button"
                 onClick={handleManualPlay}
                 className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-full"
               >
-                <div className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-white/30 bg-black/60 text-white backdrop-blur transition hover:border-white/50 hover:bg-black/80">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-[#2e2014] bg-[#f4ecdb] text-[#2e2014] shadow-[3px_3px_0_rgba(46,32,20,.3)] transition hover:bg-[#c65133] hover:text-[#f4ecdb]">
                   <Play className="h-6 w-6 ml-0.5" />
                 </div>
-                <span className="rounded-full border border-white/15 bg-black/60 px-3 py-1 text-xs text-white/70 backdrop-blur">
+                <span className="rounded-full border-[1.5px] border-[#2e2014] bg-[#f4ecdb] px-3 py-1 text-xs font-bold text-[#2e2014]">
                   Appuie pour lancer le son
                 </span>
               </button>
             )}
             {noAudioAvailable && !isRevealed && (
-              <div className="absolute bottom-2 flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-400 backdrop-blur">
+              <div className="absolute bottom-2 flex items-center gap-2 rounded-full border-[1.5px] border-[#9c2f1d] bg-[#f4ecdb] px-3 py-1.5 text-xs font-bold text-[#9c2f1d]">
                 <span>⚠ Pas d'aperçu audio disponible</span>
               </div>
             )}
             {isPlaying && !isLocked && !isRevealed && !noAudioAvailable && (
-              <div className="absolute bottom-2 flex items-center gap-2 rounded-full border border-white/20 bg-black/60 px-3 py-1.5 text-xs text-white/80 backdrop-blur">
+              <div className="absolute bottom-2 flex items-center gap-2 rounded-full border-[1.5px] border-[#2e2014] bg-[#f4ecdb] px-3 py-1.5 text-xs text-[#6b573f]">
                 <span className="h-2 w-2 rounded-full animate-pulse" style={{ backgroundColor: accentColor }} />
                 <span>Extrait en cours</span>
               </div>
             )}
           </div>
 
-          <div
-            className="text-center text-5xl font-bold mb-2 transition-all"
-            style={{
-              color: accentColor,
-              filter: isLocked || isRevealed ? "drop-shadow(0 0 12px rgba(0,0,0,0.35))" : undefined,
-            }}
-          >
+          <div className="text-center font-display text-6xl font-bold text-[#2e2014] mb-2 transition-all">
             {isArmed ? countdown.toString().padStart(2, "0") : timer.toString().padStart(2, "0")}
           </div>
-          <div className="mb-6 text-center text-sm text-[#8a8a8a]">secondes restantes</div>
+          <div className="mb-6 text-center text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">secondes restantes</div>
 
           <form className="flex flex-col gap-3" onSubmit={handleGuessSubmit}>
             <input
@@ -1309,8 +1341,8 @@ export function SoloGameClient({
                 setGuess(`${value} ${guessArtist}`.trim())
               }}
               disabled={isLocked || isRevealed || isArmed}
-              placeholder="Titre du morceau"
-              className="w-full rounded-md border border-[#1f1f1f] bg-[#0f0f0f] px-3 py-3 text-sm text-white outline-none focus:border-[#343434]"
+              placeholder="Le morceau qui tourne…"
+              className="w-full border-0 border-b-2 border-[#2e2014] bg-transparent px-1 py-2 font-display text-lg text-[#2e2014] outline-none placeholder:italic placeholder:text-[#b3a182] focus:border-[#c65133] disabled:opacity-50"
             />
             <div className="flex gap-3">
               <input
@@ -1321,13 +1353,13 @@ export function SoloGameClient({
                   setGuess(`${guessTitle} ${value}`.trim())
                 }}
                 disabled={isLocked || isRevealed || isArmed}
-                placeholder="Artiste"
-                className="w-full rounded-md border border-[#1f1f1f] bg-[#0f0f0f] px-3 py-3 text-sm text-white outline-none focus:border-[#343434]"
+                placeholder="Qui chante ?"
+                className="w-full border-0 border-b-2 border-[#2e2014] bg-transparent px-1 py-2 font-display text-lg text-[#2e2014] outline-none placeholder:italic placeholder:text-[#b3a182] focus:border-[#c65133] disabled:opacity-50"
               />
               <button
                 type="submit"
                 disabled={isLocked || isRevealed || isArmed}
-                className="min-w-[110px] rounded-lg border-2 border-[#a855f7] bg-transparent px-4 py-3 text-sm font-semibold text-[#a855f7] transition hover:-translate-y-0.5 hover:shadow-[0_8px_20px_rgba(0,0,0,0.25)] disabled:opacity-40 disabled:hover:translate-y-0"
+                className="min-w-[110px] rounded-md border-2 border-[#2e2014] bg-[#c65133] px-4 py-3 text-sm font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#2e2014] disabled:opacity-40 disabled:hover:translate-x-0 disabled:hover:translate-y-0 disabled:hover:shadow-[4px_4px_0_#2e2014]"
               >
                 Valider
               </button>
@@ -1352,7 +1384,7 @@ export function SoloGameClient({
 
           {progressive && (
             <div className="mt-2 text-center">
-              <span className="rounded-full border border-[#a855f7]/30 bg-[#a855f7]/10 px-2.5 py-0.5 text-[11px] font-medium text-[#a855f7]">
+              <span className="rounded-full border-[1.5px] border-[#2e2014] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[#2e2014]">
                 {currentListeningDuration}s
               </span>
             </div>
@@ -1377,9 +1409,9 @@ export function SoloGameClient({
                 width: 48px;
                 height: 48px;
                 border-radius: 50%;
-                border: 1px solid #1f1f1f;
-                background: #121212;
-                color: #f1f1f1;
+                border: 2px solid #2e2014;
+                background: #f4ecdb;
+                color: #2e2014;
                 display: grid;
                 place-items: center;
                 cursor: pointer;
@@ -1387,13 +1419,13 @@ export function SoloGameClient({
               }
               .circle-btn:hover { transform: translateY(-1px); }
               .play-toggle {
-                --color: #a855f7;
+                --color: #c65133;
                 width: 64px;
                 height: 64px;
                 border-radius: 50%;
-                background: transparent;
-                border: 2px solid #a855f7;
-                box-shadow: none;
+                background: #f4ecdb;
+                border: 2px solid #2e2014;
+                box-shadow: 3px 3px 0 rgba(46, 32, 20, 0.3);
                 display: flex;
                 align-items: center;
                 justify-content: center;
@@ -1437,7 +1469,7 @@ export function SoloGameClient({
                 {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
               </button>
               <div
-                className={`absolute left-full top-1/2 flex -translate-y-1/2 items-center gap-2 rounded-full bg-[#0f0f0f] px-2 py-1.5 shadow transition-all duration-200 ${
+                className={`absolute left-full top-1/2 flex -translate-y-1/2 items-center gap-2 rounded-full border-[1.5px] border-[#2e2014] bg-[#efe5d0] px-2 py-1.5 shadow-[2px_2px_0_rgba(46,32,20,.25)] transition-all duration-200 ${
                   showVolume ? "opacity-100 scale-100 translate-x-2" : "pointer-events-none opacity-0 scale-95 translate-x-0"
                 }`}
                 onMouseEnter={showVolumePanel}
@@ -1458,18 +1490,18 @@ export function SoloGameClient({
                     <path d="M15.53 16.53a.999.999 0 0 1-.703-1.711C15.572 14.082 16 13.054 16 12s-.428-2.082-1.173-2.819a1 1 0 1 1 1.406-1.422A6 6 0 0 1 18 12a6 6 0 0 1-1.767 4.241.996.996 0 0 1-.703.289zM12 22a1 1 0 0 1-.707-.293L6.586 17H4c-1.103 0-2-.897-2-2V9c0-1.103.897-2 2-2h2.586l4.707-4.707A.998.998 0 0 1 13 3v18a1 1 0 0 1-1 1z" fill="currentColor"></path>
                   </svg>
                 </label>
-                <span className="text-[11px] text-[#cfcfcf] min-w-[36px] text-right">{Math.round(volume * 100)}%</span>
+                <span className="text-[11px] font-bold text-[#6b573f] min-w-[36px] text-right">{Math.round(volume * 100)}%</span>
               </div>
             </div>
           </div>
-          <div className="mt-3 text-center text-sm text-[#8a8a8a]">
-            <button onClick={handleSkipQuestion}>Passer cette question →</button>
+          <div className="mt-3 text-center text-sm text-[#8a7558]">
+            <button className="italic underline-offset-4 transition hover:text-[#c65133] hover:underline" onClick={handleSkipQuestion}>Passer cette question →</button>
           </div>
         </div>
       </div>
 
-      <aside className="hidden h-full border-l border-[#1b1b1b] bg-black px-4 py-5 lg:block">
-        <div className="mb-3 text-xs uppercase tracking-[0.08em] text-[#9b9b9b]">Historique</div>
+      <aside className="hidden h-full border-l-2 border-[#2e2014] bg-[#ece1c8] px-4 py-5 lg:block">
+        <div className="mb-3 text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">Face B · Historique</div>
         <div
           ref={historyContainerRef}
           className="flex max-h-[calc(100vh-3rem)] flex-col gap-2 overflow-y-auto pr-1"
@@ -1479,17 +1511,16 @@ export function SoloGameClient({
               const showAnswer = item.state !== "pending" && item.state !== "current"
               const displayTitle = showAnswer ? item.title : "???"
               const displayArtist = showAnswer ? item.artist : "???"
-              const bgAlpha =
+              const stateColor =
                 item.state === "correct"
-                  ? 0.18
+                  ? "#7d9471"
                   : item.state === "close"
-                    ? 0.14
+                    ? "#e0a32e"
                     : item.state === "wrong"
-                      ? 0.1
+                      ? "#9c2f1d"
                       : item.state === "current"
-                        ? 0.16
-                        : 0.08
-              const borderAlpha = item.state === "current" ? 0.6 : 0.35
+                        ? accentColor
+                        : "rgba(46,32,20,.35)"
               const badgeLabel =
                 item.state === "correct"
                   ? "Validé"
@@ -1506,28 +1537,26 @@ export function SoloGameClient({
               ref={el => {
                 historyItemRefs.current[item.round] = el
               }}
-              className="rounded-lg border px-3 py-3"
+              className="rounded-md border-[1.5px] bg-[#efe5d0] px-3 py-3"
               style={{
-                borderColor: accentTint(borderAlpha),
-                backgroundColor: accentTint(bgAlpha),
+                borderColor: item.state === "current" ? accentColor : "rgba(46,32,20,.22)",
                 transition: `border-color ${ROUND_FEEDBACK_MS}ms ease, background-color ${ROUND_FEEDBACK_MS}ms ease`,
               }}
               >
-                <div className="mb-1 flex items-center justify-between text-[12px] text-[#9b9b9b]">
+                <div className="mb-1 flex items-center justify-between text-[11px] font-bold uppercase tracking-[0.14em] text-[#8a7558]">
                   <span>Manche {item.round}</span>
                   <span
-                    className="rounded-full border px-2 py-[2px] text-[11px] font-medium"
+                    className="rounded-full border-[1.5px] px-2 py-[2px] text-[10px] font-bold uppercase tracking-[0.14em]"
                     style={{
-                      borderColor: accentTint(0.55),
-                      backgroundColor: accentTint(0.18),
-                      color: accentColor,
+                      borderColor: stateColor,
+                      color: item.state === "pending" ? "#8a7558" : stateColor,
                     }}
                   >
                     {badgeLabel}
                   </span>
                 </div>
-                <div className="text-sm font-semibold text-white">{displayTitle}</div>
-                <div className="text-xs text-[#b5b5b5]">{displayArtist}</div>
+                <div className="font-display text-sm font-semibold text-[#2e2014]">{displayTitle}</div>
+                <div className="text-xs text-[#6b573f]">{displayArtist}</div>
               </div>
               )
             })()
@@ -1537,26 +1566,26 @@ export function SoloGameClient({
     </div>
     <SliderStyles />
     {resultDialog ? (
-      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 px-4">
-        <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-[var(--ma-surface,#0f0f0f)] p-6 shadow-2xl">
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-[#2e2014]/30 px-4">
+        <div className="w-full max-w-lg rounded-md border-2 border-[#2e2014] bg-[#f4ecdb] p-6 shadow-[6px_6px_0_rgba(46,32,20,.25)]">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <span
-                className="flex h-10 w-10 items-center justify-center rounded-full border text-sm font-semibold"
+                className="flex h-10 w-10 items-center justify-center rounded-full border-2 text-sm font-bold text-[#f4ecdb]"
                 style={{
-                  borderColor: accentTint(0.55),
-                  backgroundColor: accentTint(0.2),
-                  color: accentColor,
+                  borderColor: "#2e2014",
+                  backgroundColor:
+                    resultDialog.verdict === "correct" ? "#7d9471" : resultDialog.verdict === "close" ? "#e0a32e" : "#9c2f1d",
                   transition: `border-color ${ROUND_FEEDBACK_MS}ms ease, background-color ${ROUND_FEEDBACK_MS}ms ease`,
                 }}
               >
                 {resultDialog.verdict === "correct" ? "OK" : resultDialog.verdict === "close" ? "PART" : "X"}
               </span>
               <div>
-                <p className="text-xs uppercase tracking-[0.3em] text-[var(--ma-muted,#9b9b9b)]">
+                <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">
                   Résultat manche {resultDialog.round} / {total}
                 </p>
-                <h3 className="text-xl font-semibold text-white">
+                <h3 className="font-display text-xl font-semibold text-[#2e2014]">
                   {resultDialog.verdict === "correct"
                     ? "Bonne réponse !"
                     : resultDialog.verdict === "close"
@@ -1566,55 +1595,55 @@ export function SoloGameClient({
               </div>
             </div>
             <button
-              className="text-sm text-[var(--ma-muted,#9b9b9b)] hover:text-white"
+              className="text-sm text-[#8a7558] hover:text-[#2e2014]"
               onClick={() => hideCorrectAnswerPopup(resultDialog.round)}
             >
               ✕
             </button>
           </div>
 
-          <div className="mt-5 flex gap-4 rounded-xl border border-white/10 bg-white/5 p-4">
+          <div className="mt-5 flex gap-4 rounded-md border-[1.5px] border-[rgba(46,32,20,.22)] bg-[#ece1c8] p-4">
             {resultDialog.track.album_cover ? (
               <Image
                 src={resultDialog.track.album_cover}
                 alt={`${resultDialog.track.title} — ${resultDialog.track.artist}`}
                 width={80}
                 height={80}
-                className="h-20 w-20 shrink-0 rounded-lg object-cover"
+                className="h-20 w-20 shrink-0 rounded-md border-2 border-[#2e2014] object-cover"
                 unoptimized
               />
             ) : null}
             <div className="flex flex-col justify-center gap-0.5 min-w-0">
-              <div className="text-lg font-semibold text-white truncate">{resultDialog.track.title}</div>
-              <div className="text-sm text-[var(--ma-muted,#9b9b9b)] truncate">{resultDialog.track.artist}</div>
+              <div className="font-display text-lg font-semibold text-[#2e2014] truncate">{resultDialog.track.title}</div>
+              <div className="text-sm text-[#6b573f] truncate">{resultDialog.track.artist}</div>
               {(resultDialog.track.metadata as Record<string, unknown>)?.album ? (
-                <div className="text-xs text-white/50 truncate">
+                <div className="text-xs text-[#8a7558] truncate">
                   Album : {String((resultDialog.track.metadata as Record<string, unknown>).album)}
                 </div>
               ) : null}
             </div>
           </div>
 
-          <div className="mt-3 rounded-xl border border-white/5 bg-black/40 p-3 text-sm text-[var(--ma-muted,#9b9b9b)] space-y-1">
-            <div className="text-xs uppercase tracking-[0.3em]">Ta réponse</div>
+          <div className="mt-3 rounded-md border-[1.5px] border-[rgba(46,32,20,.22)] bg-[#efe5d0] p-3 text-sm text-[#6b573f] space-y-1">
+            <div className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">Ta réponse</div>
             {resultDialog.guessTitle || resultDialog.guessArtist ? (
               <>
                 <div>
-                  <span className="text-[var(--ma-muted,#9b9b9b)]">Titre : </span>
-                  <span className="text-white">{resultDialog.guessTitle || "—"}</span>
+                  <span className="text-[#8a7558]">Titre : </span>
+                  <span className="text-[#2e2014]">{resultDialog.guessTitle || "—"}</span>
                 </div>
                 <div>
-                  <span className="text-[var(--ma-muted,#9b9b9b)]">Artiste : </span>
-                  <span className="text-white">{resultDialog.guessArtist || "—"}</span>
+                  <span className="text-[#8a7558]">Artiste : </span>
+                  <span className="text-[#2e2014]">{resultDialog.guessArtist || "—"}</span>
                 </div>
               </>
             ) : (
-              <div className="text-[var(--ma-muted,#9b9b9b)]">Aucune réponse saisie.</div>
+              <div className="text-[#8a7558] italic">Aucune réponse saisie.</div>
             )}
           </div>
-          <div className="mt-3 rounded-xl border border-white/10 bg-black/30 p-3 text-sm text-white flex flex-col gap-1">
-            <div className="font-semibold text-base">+{resultDialog.points} pts</div>
-            <div className="text-[12px] text-[var(--ma-muted,#9b9b9b)]">
+          <div className="mt-3 rounded-md border-[1.5px] border-[rgba(46,32,20,.22)] bg-[#efe5d0] p-3 text-sm text-[#2e2014] flex flex-col gap-1">
+            <div className="font-display text-base font-bold text-[#c65133]">+{resultDialog.points} pts</div>
+            <div className="text-[12px] text-[#8a7558]">
               Titre {resultDialog.breakdown.title} · Artiste {resultDialog.breakdown.artist} · Vitesse {resultDialog.breakdown.speed}{resultDialog.breakdown.penalty > 0 ? ` · Pénalité -${resultDialog.breakdown.penalty}` : ""}{resultDialog.breakdown.hint > 0 ? ` · Indices -${resultDialog.breakdown.hint}` : ""}
             </div>
           </div>
@@ -1626,23 +1655,22 @@ export function SoloGameClient({
                 (UUID_LIKE_REGEX.test(resultDialog.track.track_id) ? resultDialog.track.track_id : null)
               const alreadyLiked = candidateId ? likedTrackIds[String(candidateId)] : false
               return (
-            <Button
+            <button
               type="button"
-              variant="outline"
               onClick={() => handleLike(resultDialog.track)}
               disabled={liking || !candidateId || alreadyLiked}
-              className="gap-2"
+              className="inline-flex items-center gap-2 rounded-md border-2 border-[#2e2014] bg-transparent px-5 py-2.5 text-sm font-bold text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {liking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Heart className="h-4 w-4" />}
               {alreadyLiked ? "Ajouté aux titres likés" : "Ajouter aux titres likés"}
-            </Button>
+            </button>
               )
             })()}
             <button
               type="button"
               onClick={() => handleNext(true)}
               disabled={isMultiplayer && !isHost}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/10 px-6 py-3 text-sm font-semibold text-white transition hover:bg-white/15 disabled:opacity-50"
+              className="inline-flex items-center justify-center gap-2 rounded-md border-2 border-[#2e2014] bg-[#c65133] px-6 py-3 text-sm font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#2e2014] disabled:opacity-50 disabled:hover:translate-x-0 disabled:hover:translate-y-0 disabled:hover:shadow-[4px_4px_0_#2e2014]"
             >
               <ArrowRight className="h-4 w-4" />
               {resultDialog.round >= total ? "Terminer" : "Manche suivante"}
@@ -1651,31 +1679,28 @@ export function SoloGameClient({
           {likeStatus ? (
             <div
               className="mt-2 text-sm"
-              style={{ color: accentColor }}
+              style={{ color: likeStatus.type === "error" ? "#9c2f1d" : "#7d9471" }}
             >
               {likeStatus.message}
             </div>
           ) : null}
           {mode === "multiplayer" && leaderboard && leaderboard.length ? (
-            <div className="mt-6 rounded-xl border border-white/10 bg-white/5 p-4">
-              <div className="mb-2 text-xs uppercase tracking-[0.3em] text-[var(--ma-muted,#9b9b9b)]">
-                Classement live
+            <div className="mt-6 rounded-md border-[1.5px] border-[rgba(46,32,20,.22)] bg-[#ece1c8] p-4">
+              <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.22em] text-[#c65133]">
+                Face B · Classement live
               </div>
-              <div className="flex flex-col gap-2 text-sm text-white">
+              <div className="flex flex-col gap-1 text-sm text-[#2e2014]">
                 {leaderboard.map((entry, idx) => (
                   <div
                     key={entry.userId}
-                    className="flex items-center justify-between rounded-lg bg-black/30 px-3 py-2 text-[var(--ma-muted,#cfcfcf)]"
+                    className="flex items-baseline gap-2 px-1 py-1.5"
                   >
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] text-[var(--ma-muted,#8a8a8a)] w-5 text-center">
-                        #{idx + 1}
-                      </span>
-                      <span className="text-white">{entry.username || `Joueur ${entry.userId}`}</span>
-                    </div>
-                    <div className="text-xs text-[var(--ma-muted,#cfcfcf)]">
+                    <span className="w-6 text-[11px] text-[#8a7558]">A{idx + 1}</span>
+                    <span className="font-display font-semibold text-[#2e2014]">{entry.username || `Joueur ${entry.userId}`}</span>
+                    <span className="flex-1 -translate-y-1 border-b-2 border-dotted border-[rgba(46,32,20,.45)]" />
+                    <span className="text-xs font-bold text-[#2e2014]">
                       {entry.score} pts · {entry.accuracy}%
-                    </div>
+                    </span>
                   </div>
                 ))}
               </div>
@@ -1694,9 +1719,9 @@ const SliderStyles = () => (
     .solo-slider {
       --slider-width: 110px;
       --slider-height: 6px;
-      --slider-bg: #3a3a3a;
+      --slider-bg: #d8cbb0;
       --slider-border-radius: 999px;
-      --level-color: #a855f7;
+      --level-color: #c65133;
       --level-transition-duration: 0.1s;
       --icon-margin: 10px;
       --icon-size: 18px;
@@ -1707,7 +1732,7 @@ const SliderStyles = () => (
       gap: 8px;
     }
     .solo-slider .solo-volume-icon {
-      color: #8c8c8c;
+      color: #8a7558;
       width: var(--icon-size);
       height: auto;
       margin-right: var(--icon-margin);

@@ -4,7 +4,13 @@ import type { ReactNode } from "react"
 import { ArrowLeft, ArrowLeftRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import type { GameMode } from "@/lib/gameModes"
-import { modeAccent } from "@/lib/uiTokens"
+
+// Accents "Club analogique" : friends terracotta, event or, streamer sauge.
+const ANALOG_ACCENTS: Record<GameMode, string> = {
+  friends: "#c65133",
+  event: "#e0a32e",
+  streamer: "#7d9471",
+}
 
 type LobbyShellProps = {
   mode: GameMode
@@ -31,9 +37,9 @@ export function LobbyShell({
   stage = "entry",
   children,
 }: LobbyShellProps) {
-  const accent = modeAccent(mode)
+  const accent = ANALOG_ACCENTS[mode] ?? "#c65133"
   return (
-    <main className="min-h-screen bg-[#050505] text-white" {...(dataAttrs ?? {})}>
+    <main className="min-h-screen text-[#2e2014]" {...(dataAttrs ?? {})}>
       <div className={`relative mx-auto flex w-full flex-col ${stage === "game" ? "gap-0" : "max-w-6xl gap-6 px-6 py-8"}`}>
         {!hideHeader ? (
           <LobbyHeader
@@ -47,7 +53,7 @@ export function LobbyShell({
           />
         ) : null}
         {error ? (
-          <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-6 py-4 text-sm text-red-200">{error}</div>
+          <div className="rounded-md border-2 border-[#9c2f1d] bg-[#efe5d0] px-6 py-4 text-sm font-semibold text-[#9c2f1d] shadow-[4px_4px_0_rgba(46,32,20,.18)]">{error}</div>
         ) : null}
         {children}
       </div>
@@ -73,19 +79,19 @@ function LobbyHeader({
   accent: string
 }) {
   return (
-    <div className="flex items-center justify-between gap-4">
+    <div className="flex items-center justify-between gap-4 border-b-2 border-[#2e2014] pb-4">
       <div className="min-w-0">
-        <p className="text-[10px] uppercase tracking-[0.3em] text-white/40">
+        <p className="text-[11px] font-bold uppercase tracking-[0.32em]" style={{ color: accent }}>
           {mode} · {stage === "entry" ? "Entrée" : stage === "lobby" ? "Lobby" : stage === "game" ? "Jeu" : "Résultats"}
         </p>
-        <h1 className="mt-1 text-xl font-semibold text-white truncate">{title}</h1>
+        <h1 className="mt-1 truncate font-display text-2xl font-semibold text-[#2e2014]">{title}</h1>
       </div>
       <div className="flex shrink-0 items-center gap-2">
         {onChangeMode ? (
           <button
             type="button"
             onClick={onChangeMode}
-            className="flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-2 text-xs font-medium text-white/60 transition hover:bg-white/5 hover:text-white/80"
+            className="flex items-center gap-1.5 rounded-full border-[1.5px] border-[#2e2014] bg-transparent px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
           >
             <ArrowLeftRight className="h-3.5 w-3.5" />
             Mode
@@ -94,7 +100,7 @@ function LobbyHeader({
         <button
           type="button"
           onClick={onLeave}
-          className="flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-2 text-xs font-medium text-white/60 transition hover:bg-white/5 hover:text-white/80"
+          className="flex items-center gap-1.5 rounded-full border-[1.5px] border-[#2e2014] bg-transparent px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Quitter

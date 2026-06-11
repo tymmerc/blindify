@@ -2,13 +2,9 @@
 
 import { Suspense, useState, type FormEvent } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { SurfaceCard } from "@/components/ui/SurfaceCard"
 import ChronoGameLoader from "./ChronoGameLoader"
 
 export const dynamic = "force-dynamic"
-
-const ACCENT = "#a855f7"
 
 const durationOptions = [
   { label: "1 min", value: 60 },
@@ -33,41 +29,38 @@ function ChronoSelector() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--bg-primary)] px-4 py-10 text-[var(--text-primary)] sm:px-6 lg:px-8">
+    <div className="min-h-screen px-4 py-10 text-[#2e2014] sm:px-6 lg:px-8">
       <div className="mx-auto flex max-w-6xl flex-col gap-10">
 
         {/* Header */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1">
-            <p className="text-xs uppercase tracking-[0.35em]" style={{ color: ACCENT }}>
-              MODE CHRONO
+            <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-[#c65133]">
+              Mode · Chrono
             </p>
-            <h1 className="mt-2 text-4xl font-semibold leading-tight tracking-[-0.04em]">
-              Devine un max de titres avant la fin du chrono
+            <h1 className="mt-2 font-display text-4xl font-semibold leading-[1.05]">
+              Devine un max de titres avant la fin du <em className="font-medium italic text-[#c65133]">chrono</em>
             </h1>
           </div>
-          <Button
-            variant="outline"
+          <button
+            type="button"
             onClick={() => router.push("/modes")}
-            className="rounded-full border-[var(--border-subtle)] bg-[var(--bg-card)] px-3 py-2 text-[11px] font-semibold text-[var(--text-secondary)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-primary)]"
+            className="rounded-full border-[1.5px] border-[#2e2014] bg-[#ece1c8] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
           >
             Retour au menu
-          </Button>
+          </button>
         </div>
 
         {/* Main card */}
-        <SurfaceCard className="flex flex-col gap-5 rounded-2xl border-[var(--border-subtle)] bg-[var(--bg-surface)] p-7">
+        <div className="flex flex-col gap-5 rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-7 shadow-[4px_4px_0_rgba(46,32,20,.18)]">
           <div className="space-y-1">
             <div className="flex items-center gap-3">
-              <h2 className="text-2xl font-semibold text-[var(--text-primary)]">Colle un lien</h2>
-              <span
-                className="rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.28em]"
-                style={{ color: ACCENT, borderColor: ACCENT }}
-              >
+              <h2 className="font-display text-2xl font-semibold text-[#2e2014]">Colle un lien</h2>
+              <span className="rounded-full border-[1.5px] border-[#c65133] bg-[#c65133] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#f4ecdb]">
                 Contre la montre
               </span>
             </div>
-            <p className="text-sm text-[var(--text-muted)]">
+            <p className="text-sm text-[#6b573f]">
               Profil ou playlist Spotify / Deezer.
               Les titres s'enchainent, devine-les avant que le temps ne s'ecoule !
             </p>
@@ -76,7 +69,7 @@ function ChronoSelector() {
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* URL input */}
             <div className="space-y-1.5">
-              <label htmlFor="playlist-url" className="text-xs uppercase tracking-[0.25em] text-[var(--text-muted)]">
+              <label htmlFor="playlist-url" className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">
                 Lien de playlist ou profil
               </label>
               <input
@@ -85,13 +78,13 @@ function ChronoSelector() {
                 value={quickUrl}
                 onChange={e => setQuickUrl(e.target.value)}
                 placeholder="https://open.spotify.com/user/... ou deezer.com/profile/..."
-                className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-input)] px-4 py-3 text-sm text-[var(--text-primary)] outline-none transition placeholder:text-[var(--text-faint)] focus:border-[var(--border-focus)]"
+                className="w-full rounded-md border-[1.5px] border-[rgba(46,32,20,.35)] bg-[#efe5d0] px-4 py-3 text-sm text-[#2e2014] outline-none transition placeholder:italic placeholder:text-[#b3a182] focus:border-[#c65133]"
               />
             </div>
 
             {/* Duration selector */}
             <div className="space-y-1.5">
-              <label className="text-xs uppercase tracking-[0.25em] text-[var(--text-muted)]">
+              <label className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">
                 Duree du chrono
               </label>
               <div className="flex gap-2">
@@ -100,10 +93,10 @@ function ChronoSelector() {
                     key={opt.value}
                     type="button"
                     onClick={() => setDuration(opt.value)}
-                    className={`flex-1 rounded-lg border py-2.5 text-sm font-semibold transition ${
+                    className={`flex-1 rounded-md border-[1.5px] py-2.5 font-display text-sm font-semibold transition ${
                       duration === opt.value
-                        ? "border-[var(--border-focus)] bg-[var(--bg-surface)] text-[var(--text-primary)]"
-                        : "border-[var(--border-subtle)] bg-[var(--bg-card)] text-[var(--text-faint)] hover:border-[var(--border-input)] hover:text-[var(--text-muted)]"
+                        ? "border-[#2e2014] bg-[#c65133] text-[#f4ecdb] shadow-[2px_2px_0_#2e2014]"
+                        : "border-[rgba(46,32,20,.35)] bg-[#efe5d0] text-[#6b573f] hover:border-[#2e2014]"
                     }`}
                   >
                     {opt.label}
@@ -112,63 +105,55 @@ function ChronoSelector() {
               </div>
             </div>
 
-            {quickError && <p className="text-xs text-red-300">{quickError}</p>}
+            {quickError && <p className="text-xs font-bold text-[#9c2f1d]">{quickError}</p>}
 
-            <Button
+            <button
               type="submit"
-              variant="outline"
               disabled={!quickUrl.trim()}
-              className="w-full justify-center rounded-xl border-2 px-5 py-3 text-sm font-semibold transition duration-150 hover:-translate-y-0.5 hover:shadow-[0_8px_20px_rgba(0,0,0,0.25)] disabled:opacity-40 disabled:hover:translate-y-0 disabled:hover:shadow-none"
-              style={{ borderColor: ACCENT, color: ACCENT, backgroundColor: "transparent" }}
+              className="btn-neon w-full justify-center text-sm disabled:cursor-not-allowed disabled:opacity-40"
             >
               Lancer le chrono
-            </Button>
+            </button>
           </form>
 
           {/* Supported URLs */}
-          <div className="flex flex-wrap gap-2 text-[10px] text-[var(--text-faint)]">
-            <span className="rounded-full border border-[var(--border-subtle)] px-2.5 py-0.5">spotify.com/user/...</span>
-            <span className="rounded-full border border-[var(--border-subtle)] px-2.5 py-0.5">spotify.com/playlist/...</span>
-            <span className="rounded-full border border-[var(--border-subtle)] px-2.5 py-0.5">deezer.com/profile/...</span>
-            <span className="rounded-full border border-[var(--border-subtle)] px-2.5 py-0.5">deezer.com/playlist/...</span>
+          <div className="flex flex-wrap gap-2 text-[10px] text-[#8a7558]">
+            <span className="rounded-full border-[1.5px] border-[rgba(46,32,20,.22)] px-2.5 py-0.5">spotify.com/user/...</span>
+            <span className="rounded-full border-[1.5px] border-[rgba(46,32,20,.22)] px-2.5 py-0.5">spotify.com/playlist/...</span>
+            <span className="rounded-full border-[1.5px] border-[rgba(46,32,20,.22)] px-2.5 py-0.5">deezer.com/profile/...</span>
+            <span className="rounded-full border-[1.5px] border-[rgba(46,32,20,.22)] px-2.5 py-0.5">deezer.com/playlist/...</span>
           </div>
-        </SurfaceCard>
+        </div>
 
         {/* Info cards */}
         <div className="flex flex-col gap-6 lg:flex-row">
-          <SurfaceCard className="flex-1 space-y-3 text-left">
+          <div className="flex-1 space-y-3 rounded-md border-[1.5px] border-[rgba(46,32,20,.22)] bg-[#ece1c8] p-6 text-left shadow-[4px_4px_0_rgba(46,32,20,.12)]">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-[var(--text-primary)]">Comment ca marche</h3>
-              <span
-                className="rounded-full border border-[var(--border-subtle)] px-3 py-1 text-[11px] uppercase tracking-[0.28em]"
-                style={{ color: ACCENT, borderColor: ACCENT }}
-              >
+              <h3 className="font-display text-lg font-semibold text-[#2e2014]">Comment ca marche</h3>
+              <span className="rounded-full border-[1.5px] border-[#2e2014] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#2e2014]">
                 Rapide
               </span>
             </div>
-            <ul className="space-y-2 text-sm text-[var(--text-secondary)] leading-relaxed list-disc list-inside">
+            <ul className="space-y-2 text-sm text-[#6b573f] leading-relaxed list-disc list-inside">
               <li>Le chrono demarre, les titres s'enchainent automatiquement</li>
               <li>Devine le titre et/ou l'artiste le plus vite possible</li>
               <li>Pas de pause entre les titres -- chaque seconde compte</li>
             </ul>
-          </SurfaceCard>
+          </div>
 
-          <SurfaceCard className="flex-1 space-y-3 text-left">
+          <div className="flex-1 space-y-3 rounded-md border-[1.5px] border-[rgba(46,32,20,.22)] bg-[#ece1c8] p-6 text-left shadow-[4px_4px_0_rgba(46,32,20,.12)]">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-[var(--text-primary)]">Scoring</h3>
-              <span
-                className="rounded-full border border-[var(--border-subtle)] px-3 py-1 text-[11px] uppercase tracking-[0.28em]"
-                style={{ color: ACCENT, borderColor: ACCENT }}
-              >
+              <h3 className="font-display text-lg font-semibold text-[#2e2014]">Scoring</h3>
+              <span className="rounded-full border-[1.5px] border-[#2e2014] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#2e2014]">
                 Points
               </span>
             </div>
-            <ul className="space-y-2 text-sm text-[var(--text-secondary)] leading-relaxed list-disc list-inside">
+            <ul className="space-y-2 text-sm text-[#6b573f] leading-relaxed list-disc list-inside">
               <li>Titre correct = 40 pts, Artiste correct = 30 pts</li>
               <li>Bonus vitesse selon ta rapidite</li>
               <li>Enchaine les bonnes reponses pour le streak bonus</li>
             </ul>
-          </SurfaceCard>
+          </div>
         </div>
 
       </div>
@@ -191,7 +176,7 @@ export default function ChronoPage() {
   return (
     <Suspense
       fallback={
-        <div className="grid min-h-screen place-items-center bg-[var(--bg-primary)] text-sm text-[var(--text-muted)]">
+        <div className="grid min-h-screen place-items-center text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">
           Chargement...
         </div>
       }

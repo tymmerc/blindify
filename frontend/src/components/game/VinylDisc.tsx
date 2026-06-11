@@ -10,7 +10,9 @@ interface VinylDiscProps {
   blurred?: boolean
 }
 
-export function VinylDisc({ size = 280, spinning = true, accentColor = "#ff4fa5", coverUrl, blurred = false }: VinylDiscProps) {
+const GROOVES = "repeating-radial-gradient(circle at 50% 50%, #241a10 0 2.5px, #3a2a1a 2.5px 5px)"
+
+export function VinylDisc({ size = 280, spinning = true, accentColor = "#c65133", coverUrl, blurred = false }: VinylDiscProps) {
   const dimension = `${size}px`
 
   return (
@@ -18,54 +20,36 @@ export function VinylDisc({ size = 280, spinning = true, accentColor = "#ff4fa5"
       className="relative flex items-center justify-center"
       style={{ width: dimension, height: dimension, maxWidth: "80vw", maxHeight: "80vw" }}
     >
-      {/* Main vinyl disc */}
+      {/* Disque : sillons espresso, esprit platine du Club analogique */}
       <motion.div
-        className="absolute inset-0 rounded-full border border-white/20 shadow-[0_28px_90px_rgba(0,0,0,0.55)]"
-        style={{
-          backgroundImage:
-            "radial-gradient(circle at center,#1b1324 0%,#0f0c14 55%,#05030a 100%), repeating-radial-gradient(circle at center,rgba(255,255,255,0.05) 0px, rgba(255,255,255,0.05) 1px, transparent 1px, transparent 8px)",
-          backgroundBlendMode: "screen",
-        }}
+        className="absolute inset-0 rounded-full border-[3px] border-[#2e2014]"
+        style={{ background: GROOVES }}
         animate={spinning ? { rotate: 360 } : {}}
         transition={spinning ? { repeat: Infinity, duration: 16, ease: "linear" } : {}}
       >
-        {/* Grooves ring */}
-        <div className="absolute inset-[14%] rounded-full border border-white/20 bg-[radial-gradient(circle_at_center,#0a070f_0%,#0f0a15_65%,#0a070f_100%)]">
-          <div className="absolute inset-1 rounded-full border border-white/20 bg-[conic-gradient(from_45deg,rgba(255,255,255,0.1),rgba(255,255,255,0)_18%)] opacity-60" />
-        </div>
-        {/* Label / Cover */}
+        {/* Label / Pochette */}
         {coverUrl ? (
-          <div className="absolute inset-[22%] overflow-hidden rounded-full border-2 border-white/20 shadow-inner">
+          <div className="absolute inset-[24%] overflow-hidden rounded-full border-[3px] border-[#2e2014]">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={coverUrl} alt="Pochette d'album" className="h-full w-full object-cover transition-[filter] duration-700" style={{ filter: blurred ? "blur(4px) saturate(0.8)" : "none" }} />
-            <div className="absolute inset-0 rounded-full shadow-[inset_0_0_20px_rgba(0,0,0,0.5)]" />
-            <div className="absolute inset-[42%] rounded-full bg-[#0b0710] border border-white/20" />
+            <div className="absolute inset-[44%] rounded-full border-2 border-[#2e2014] bg-[#f4ecdb]" />
           </div>
         ) : (
           <>
             <div
-              className="absolute inset-[32%] rounded-full border border-white/20"
+              className="absolute inset-[32%] rounded-full border-[3px] border-[#2e2014]"
               style={{ background: accentColor }}
-            >
-              <div className="absolute inset-1 rounded-full bg-[#100d17]" />
-            </div>
-            <div className="absolute inset-[46%] rounded-full bg-[#0b0710]" />
+            />
+            <div className="absolute inset-[46%] rounded-full border-2 border-[#2e2014] bg-[#f4ecdb]" />
           </>
         )}
       </motion.div>
 
-      {/* Glow effects */}
-      <motion.div
-        className="absolute h-[120%] w-[120%] rounded-full border"
-        style={{ borderColor: `${accentColor}36` }}
-        animate={{ scale: [1, 1.08, 1], opacity: [0.3, 0.12, 0.3] }}
-        transition={{ repeat: Infinity, duration: 6, ease: "easeInOut" }}
-      />
-      <motion.div
-        className="absolute h-[140%] w-[140%] rounded-full"
-        style={{ background: `radial-gradient(circle, ${accentColor}28 0%, transparent 55%)` }}
-        animate={{ scale: [0.9, 1.05, 0.9], opacity: [0.2, 0.38, 0.2] }}
-        transition={{ repeat: Infinity, duration: 8, ease: "easeInOut" }}
+      {/* Cercle de platine autour du disque (trait fin, pas de glow) */}
+      <div
+        aria-hidden
+        className="absolute h-[114%] w-[114%] rounded-full border-2"
+        style={{ borderColor: "rgba(46, 32, 20, 0.3)" }}
       />
     </div>
   )

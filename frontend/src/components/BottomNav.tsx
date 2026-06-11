@@ -20,7 +20,7 @@ export function BottomNav({ active }: { active: NavActive }) {
             className={`ma-nav-item ${active === item.key ? "active" : ""}`}
           >
             <span className="text-lg">{item.icon}</span>
-            <span className="font-mono text-[10px] font-medium uppercase tracking-[0.08em]">
+            <span className="text-[10px] font-bold uppercase tracking-[0.14em]">
               {item.label}
             </span>
           </Link>

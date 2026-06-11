@@ -103,19 +103,19 @@ export default function ImportPage() {
   const totalTracks = playlists.reduce((s, p) => s + p.trackCount, 0)
 
   return (
-    <div className="min-h-screen bg-[var(--ma-bg)] text-white">
+    <div className="min-h-screen text-[#2e2014]">
       <div className="ma-container pb-16 pt-10">
         <div className="flex flex-col gap-6 border-b border-[var(--ma-border)] pb-10 md:flex-row md:items-center md:justify-between">
           <div className="flex flex-1 flex-col gap-3 md:flex-row md:items-center md:gap-4">
             <Link
               href="/modes"
-              className="inline-flex w-fit items-center gap-2 rounded-lg border border-[var(--ma-border-strong)] px-4 py-2 text-sm font-medium text-white/80 transition hover:bg-white/5"
+              className="inline-flex w-fit items-center gap-2 rounded-full border-[1.5px] border-[#2e2014] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
             >
               &larr; Retour
             </Link>
             <div className="space-y-1">
-              <h1 className="text-3xl font-bold tracking-[-0.03em] sm:text-4xl">Importer ta musique</h1>
-              <p className="text-[15px] text-[var(--ma-muted)]">Colle ton lien de profil pour retrouver tes playlists.</p>
+              <h1 className="font-display text-3xl font-semibold sm:text-4xl">Importer ta <em className="font-medium italic text-[#c65133]">musique</em></h1>
+              <p className="text-[15px] text-[#6b573f]">Colle ton lien de profil pour retrouver tes playlists.</p>
             </div>
           </div>
         </div>
@@ -123,8 +123,8 @@ export default function ImportPage() {
         <div className="mt-8 space-y-6">
           <SurfaceCard className="space-y-4">
             <div className="space-y-2">
-              <h2 className="text-xl font-semibold">Lien de profil ou de playlist</h2>
-              <p className="text-sm text-white/60">
+              <h2 className="font-display text-xl font-semibold">Lien de profil ou de playlist</h2>
+              <p className="text-sm text-[#6b573f]">
                 Supporte Spotify et Deezer. Seules les playlists <strong>publiques</strong> sont visibles.
               </p>
             </div>
@@ -135,34 +135,34 @@ export default function ImportPage() {
                 value={url}
                 onChange={e => setUrl(e.target.value)}
                 placeholder="https://open.spotify.com/user/... ou https://deezer.com/profile/..."
-                className="flex-1 rounded-xl border border-[var(--ma-border-strong)] bg-[#0f0f0f] px-4 py-3 text-sm text-white placeholder:text-[#606060] outline-none transition focus:border-[rgba(168,85,247,0.5)]"
+                className="flex-1 rounded-md border-[1.5px] border-[rgba(46,32,20,.35)] bg-[#efe5d0] px-4 py-3 text-sm text-[#2e2014] placeholder:italic placeholder:text-[#b3a182] outline-none transition focus:border-[#c65133]"
               />
               <Button
                 type="submit"
-                variant="outline"
+                variant="default"
                 disabled={loading || !url.trim()}
-                className="rounded-xl border-purple-500/40 px-6 py-3 text-sm font-semibold text-purple-400 hover:bg-purple-500/10 disabled:opacity-50"
+                className="px-6 py-3 text-sm"
               >
                 {loading ? "Recherche..." : "Chercher"}
               </Button>
             </form>
 
-            <div className="flex flex-wrap gap-3 text-xs text-white/40">
-              <span className="rounded-full border border-white/10 px-3 py-1">open.spotify.com/user/ton_id</span>
-              <span className="rounded-full border border-white/10 px-3 py-1">deezer.com/profile/ton_id</span>
-              <span className="rounded-full border border-white/10 px-3 py-1">open.spotify.com/playlist/...</span>
-              <span className="rounded-full border border-white/10 px-3 py-1">deezer.com/playlist/...</span>
+            <div className="flex flex-wrap gap-3 text-xs text-[#8a7558]">
+              <span className="rounded-full border border-[rgba(46,32,20,.3)] px-3 py-1">open.spotify.com/user/ton_id</span>
+              <span className="rounded-full border border-[rgba(46,32,20,.3)] px-3 py-1">deezer.com/profile/ton_id</span>
+              <span className="rounded-full border border-[rgba(46,32,20,.3)] px-3 py-1">open.spotify.com/playlist/...</span>
+              <span className="rounded-full border border-[rgba(46,32,20,.3)] px-3 py-1">deezer.com/playlist/...</span>
             </div>
           </SurfaceCard>
 
           {error && (
-            <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+            <div className="rounded-md border-[1.5px] border-[#9c2f1d] bg-[rgba(156,47,29,.08)] px-4 py-3 text-sm font-bold text-[#9c2f1d]">
               {error}
             </div>
           )}
 
           {notice && playlists.length > 0 && (
-            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-400">
+            <div className="rounded-md border-[1.5px] border-[#e0a32e] bg-[rgba(224,163,46,.12)] px-4 py-3 text-sm font-bold text-[#8a6a14]">
               {notice}
             </div>
           )}
@@ -170,14 +170,14 @@ export default function ImportPage() {
           {playlists.length > 0 && (
             <section className="space-y-4">
               <div className="flex items-center gap-3">
-                <h2 className="text-2xl font-semibold tracking-[-0.02em]">
+                <h2 className="font-display text-2xl font-semibold">
                   {playlists.length} playlist{playlists.length > 1 ? "s" : ""} trouv{playlists.length > 1 ? "ees" : "ee"}
                 </h2>
                 {provider && (
-                  <span className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] ${
+                  <span className={`rounded-full border-[1.5px] border-[#2e2014] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#f4ecdb] ${
                     provider === "spotify"
-                      ? "bg-green-500/15 text-green-400"
-                      : "bg-purple-500/15 text-purple-400"
+                      ? "bg-[#7d9471]"
+                      : "bg-[#c65133]"
                   }`}>
                     {provider}
                   </span>
@@ -186,43 +186,43 @@ export default function ImportPage() {
 
               {/* Import all banner */}
               {syncAllResult ? (
-                <div className="flex items-center gap-4 rounded-xl border border-green-500/30 bg-green-500/10 px-5 py-4">
+                <div className="flex items-center gap-4 rounded-md border-[1.5px] border-[#7d9471] bg-[rgba(125,148,113,.14)] px-5 py-4">
                   <div className="flex-1">
-                    <p className="text-sm font-semibold text-green-400">
+                    <p className="text-sm font-bold text-[#4f6a45]">
                       {syncAllResult.synced} titre{syncAllResult.synced > 1 ? "s" : ""} importe{syncAllResult.synced > 1 ? "s" : ""} depuis {playlists.length} playlist{playlists.length > 1 ? "s" : ""}
                     </p>
-                    <p className="text-xs text-white/40">Le jeu piochera au hasard dans tous ces titres.</p>
+                    <p className="text-xs text-[#8a7558]">Le jeu piochera au hasard dans tous ces titres.</p>
                   </div>
                   <Button
-                    variant="outline"
+                    variant="default"
                     onClick={() => router.push("/solo?source=library&count=10")}
-                    className="rounded-lg border-green-500/30 px-4 py-2 text-sm font-semibold text-green-400 hover:bg-green-500/10"
+                    className="px-4 py-2 text-sm"
                   >
                     Jouer
                   </Button>
                 </div>
               ) : (
-                <div className="flex flex-col gap-3 rounded-xl border border-purple-500/20 bg-purple-500/5 px-5 py-4 sm:flex-row sm:items-center">
+                <div className="flex flex-col gap-3 rounded-md border-[1.5px] border-[rgba(46,32,20,.35)] bg-[#efe5d0] px-5 py-4 sm:flex-row sm:items-center">
                   <div className="flex-1">
-                    <p className="text-sm font-medium text-white/80">
+                    <p className="text-sm font-bold text-[#2e2014]">
                       Importer toutes les playlists ({totalTracks} titres)
                     </p>
-                    <p className="text-xs text-white/40">Le jeu piochera au hasard dans l'ensemble de ta musique.</p>
+                    <p className="text-xs text-[#8a7558]">Le jeu piochera au hasard dans l'ensemble de ta musique.</p>
                   </div>
                   <div className="flex gap-2">
                     <Button
                       variant="outline"
                       onClick={handleSyncAll}
                       disabled={!!syncing}
-                      className="rounded-lg border-white/15 px-4 py-2 text-sm font-semibold text-white/80 hover:bg-white/10 disabled:opacity-50"
+                      className="px-4 py-2 text-sm"
                     >
                       {syncing === "__all__" ? "Import..." : "Tout importer"}
                     </Button>
                     <Button
-                      variant="outline"
+                      variant="default"
                       onClick={handleSyncAllAndPlay}
                       disabled={!!syncing}
-                      className="rounded-lg border-purple-500/30 px-4 py-2 text-sm font-semibold text-purple-400 hover:bg-purple-500/10 disabled:opacity-50"
+                      className="px-4 py-2 text-sm"
                     >
                       {syncing === "__all__" ? "..." : "Tout importer & Jouer"}
                     </Button>
@@ -238,9 +238,9 @@ export default function ImportPage() {
                   return (
                     <div
                       key={playlist.id}
-                      className="group relative flex flex-col overflow-hidden rounded-xl border border-[var(--ma-border)] bg-[var(--ma-surface)] transition hover:border-purple-500/30"
+                      className="group relative flex flex-col overflow-hidden rounded-md border-[1.5px] border-[rgba(46,32,20,.22)] bg-[#ece1c8] shadow-[4px_4px_0_rgba(46,32,20,.12)] transition hover:border-[#c65133]"
                     >
-                      <div className="relative aspect-[2/1] w-full overflow-hidden bg-gradient-to-br from-purple-500/20 to-pink-500/20">
+                      <div className="relative aspect-[2/1] w-full overflow-hidden border-b-[1.5px] border-[rgba(46,32,20,.22)] bg-[#efe5d0]">
                         {playlist.cover ? (
                           <img
                             src={playlist.cover}
@@ -248,19 +248,19 @@ export default function ImportPage() {
                             className="h-full w-full object-cover"
                           />
                         ) : (
-                          <div className="grid h-full w-full place-items-center text-4xl text-white/20">
+                          <div className="grid h-full w-full place-items-center font-display text-4xl text-[rgba(46,32,20,.25)]">
                             {provider === "spotify" ? "S" : "D"}
                           </div>
                         )}
                       </div>
                       <div className="flex flex-1 flex-col justify-between p-4">
                         <div className="space-y-1">
-                          <h3 className="text-base font-semibold leading-tight">{playlist.name}</h3>
-                          <p className="text-xs text-white/50">{playlist.trackCount} titre{playlist.trackCount > 1 ? "s" : ""}</p>
+                          <h3 className="font-display text-base font-semibold leading-tight">{playlist.name}</h3>
+                          <p className="text-xs text-[#8a7558]">{playlist.trackCount} titre{playlist.trackCount > 1 ? "s" : ""}</p>
                         </div>
                         <div className="mt-3 flex gap-2">
                           {isSynced ? (
-                            <div className="flex w-full items-center justify-center gap-2 rounded-lg bg-green-500/15 px-3 py-2 text-xs font-semibold text-green-400">
+                            <div className="flex w-full items-center justify-center gap-2 rounded-md border-[1.5px] border-[#7d9471] bg-[rgba(125,148,113,.14)] px-3 py-2 text-xs font-bold text-[#4f6a45]">
                               {syncResult.synced} titres importes
                             </div>
                           ) : (
@@ -268,7 +268,7 @@ export default function ImportPage() {
                               variant="outline"
                               onClick={() => handleSync(playlist)}
                               disabled={!!syncing}
-                              className="w-full rounded-lg border-white/15 px-3 py-2 text-xs font-semibold text-white/80 hover:bg-white/10 disabled:opacity-50"
+                              className="w-full px-3 py-2 text-xs"
                             >
                               {isSyncing ? "Import..." : "Importer cette playlist"}
                             </Button>
@@ -284,7 +284,7 @@ export default function ImportPage() {
 
           {!loading && playlists.length === 0 && !error && (
             <SurfaceCard className="space-y-3 text-center">
-              <p className="text-sm text-white/50">
+              <p className="text-sm text-[#6b573f]">
                 Colle le lien de ton profil Spotify ou Deezer ci-dessus pour voir tes playlists publiques.
               </p>
             </SurfaceCard>

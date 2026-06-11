@@ -19,9 +19,9 @@ const ModeContext = createContext<ModeContextValue | undefined>(undefined)
 const STORAGE_KEY = "blindify:mode"
 const GUEST_KEY = "blindify:guest"
 const MODE_ACCENTS: Record<Mode, string> = {
-  friends: "#ec4899", // rose
-  event: "#8b5cf6", // violet froid
-  streamer: "#f97316", // orange
+  friends: "#c65133", // terracotta
+  event: "#e0a32e", // or
+  streamer: "#7d9471", // sauge
 }
 
 const MODE_LABELS: Record<Mode, string> = {
@@ -54,7 +54,7 @@ export function ModeProvider({ children }: { children: React.ReactNode }) {
 
   const applyTheme = useCallback((next: Mode | null) => {
     if (typeof document === "undefined") return
-    const accent = next ? MODE_ACCENTS[next] : "#a855f7"
+    const accent = next ? MODE_ACCENTS[next] : "#c65133"
     document.documentElement.style.setProperty("--app-primary", accent)
     document.documentElement.style.setProperty("--app-accent", accent)
   }, [])
@@ -85,7 +85,7 @@ export function ModeProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const value = useMemo<ModeContextValue>(() => {
-    const accent = mode ? MODE_ACCENTS[mode] : "#a855f7"
+    const accent = mode ? MODE_ACCENTS[mode] : "#c65133"
     const label = mode ? MODE_LABELS[mode] : "Mode non défini"
     return { mode, setMode, resetMode, accentColor: accent, label, isGuest, setGuest }
   }, [mode, setMode, resetMode, isGuest, setGuest])

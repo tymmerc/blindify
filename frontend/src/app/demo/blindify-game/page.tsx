@@ -16,7 +16,7 @@ const theme = {
   "--border": "rgba(255,192,230,0.2)",
   "--ink": "#fff8fd",
   "--muted": "#d9cde1",
-  "--accent": "#ff4fa5",
+  "--accent": "#c65133",
   "--accent-2": "#8fa7ff",
   "--success": "#8df0be",
   "--warn": "#f6c768",

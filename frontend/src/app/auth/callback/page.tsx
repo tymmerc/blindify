@@ -4,5 +4,5 @@ import { useRouter } from "next/navigation"
 export default function AuthCallbackPage() {
   const router = useRouter()
   useEffect(() => { router.replace("/modes") }, [router])
-  return <div className="grid min-h-screen place-items-center bg-[#050505] text-sm text-white/70">Redirection...</div>
+  return <div className="grid min-h-screen place-items-center font-display text-sm italic text-[#6b573f]">Redirection...</div>
 }

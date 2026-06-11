@@ -33,7 +33,7 @@ const steps = [
 
 export function HowItWorks() {
   return (
-    <section id="how-it-works" className="py-28 border-t border-white/[0.06]">
+    <section id="how-it-works" className="py-28 border-t-2 border-[#2e2014] bg-[#ece1c8]">
       <div className="max-w-7xl mx-auto px-6">
         <PageHeader
           title="Comment ca marche"
@@ -49,14 +49,14 @@ export function HowItWorks() {
               transition={{ duration: 0.5, delay: index * 0.1 }}
               viewport={{ once: true }}
             >
-              <SectionCard className="p-8 h-full flex flex-col items-start gap-4 hover:shadow-[0_0_20px_rgba(168,85,247,0.15)] transition-all duration-300">
-                <span className="font-mono text-4xl font-bold text-[#a855f7]">
+              <SectionCard className="p-8 h-full flex flex-col items-start gap-4 bg-[#f4ecdb] transition-all duration-300">
+                <span className="font-display text-4xl font-bold text-[#c65133]">
                   {step.number}
                 </span>
-                <h3 className="text-lg font-bold text-[#fafafa]">
+                <h3 className="font-display text-lg font-semibold text-[#2e2014]">
                   {step.title}
                 </h3>
-                <p className="text-[#71717a] leading-relaxed text-sm">
+                <p className="text-[#6b573f] leading-relaxed text-sm">
                   {step.description}
                 </p>
               </SectionCard>

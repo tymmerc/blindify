@@ -59,10 +59,10 @@ export function Pricing() {
     <section id="pricing" className="py-24 lg:py-32">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center space-y-4 mb-16">
-          <h2 className="text-4xl lg:text-5xl font-bold text-balance bg-gradient-to-r from-[#a855f7] to-[#ec4899] bg-clip-text text-transparent">
-            Choisissez votre formule
+          <h2 className="font-display text-4xl lg:text-5xl font-semibold leading-[1.05] text-balance text-[#2e2014]">
+            Choisissez votre <em className="font-medium italic text-[#c65133]">formule</em>
           </h2>
-          <p className="text-xl text-[#71717a] max-w-2xl mx-auto text-pretty">
+          <p className="text-xl text-[#6b573f] max-w-2xl mx-auto text-pretty">
             Des tarifs transparents adaptes a tous les besoins, sans engagement
           </p>
         </div>
@@ -73,13 +73,13 @@ export function Pricing() {
               key={index}
               className={`p-8 flex flex-col relative ${
                 plan.highlighted
-                  ? "border-[rgba(168,85,247,0.3)] shadow-[0_0_20px_rgba(168,85,247,0.15)] scale-105"
+                  ? "border-2 border-[#c65133] shadow-[6px_6px_0_#c65133] scale-105"
                   : ""
               }`}
             >
               {plan.highlighted && (
                 <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
-                  <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#a855f7] to-[#ec4899] rounded-xl text-white text-sm font-bold shadow-lg">
+                  <div className="inline-flex items-center gap-2 rounded-full border-[1.5px] border-[#2e2014] bg-[#c65133] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#f4ecdb]">
                     <Sparkles className="w-4 h-4" />
                     Le plus populaire
                   </div>
@@ -87,38 +87,36 @@ export function Pricing() {
               )}
 
               <div className="text-center mb-8 mt-4">
-                <h3 className="font-mono text-[11px] uppercase tracking-[0.1em] text-[#71717a] mb-3">
+                <h3 className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558] mb-3">
                   {plan.name}
                 </h3>
                 <div className="mb-2">
                   <span
-                    className={`text-5xl font-bold ${
-                      plan.highlighted
-                        ? "bg-gradient-to-r from-[#a855f7] to-[#ec4899] bg-clip-text text-transparent"
-                        : "text-[#fafafa]"
+                    className={`font-display text-5xl font-bold ${
+                      plan.highlighted ? "text-[#c65133]" : "text-[#2e2014]"
                     }`}
                   >
                     {plan.price}
                   </span>
-                  <span className="text-lg ml-2 text-[#71717a]">
+                  <span className="text-lg ml-2 text-[#8a7558]">
                     {plan.period}
                   </span>
                 </div>
-                <p className="text-[#71717a]">{plan.description}</p>
+                <p className="text-[#6b573f]">{plan.description}</p>
               </div>
 
               <ul className="space-y-4 mb-8 flex-grow">
                 {plan.features.map((feature, featureIndex) => (
                   <li key={featureIndex} className="flex items-start gap-3">
-                    <Check className="w-5 h-5 mt-0.5 flex-shrink-0 text-[#a855f7]" />
-                    <span className="text-[#fafafa]">{feature}</span>
+                    <Check className="w-5 h-5 mt-0.5 flex-shrink-0 text-[#7d9471]" />
+                    <span className="text-[#2e2014]">{feature}</span>
                   </li>
                 ))}
               </ul>
 
               <Button
                 size="lg"
-                variant={plan.highlighted ? "glow" : "outline"}
+                variant={plan.highlighted ? "default" : "outline"}
                 className="w-full"
               >
                 {plan.cta}

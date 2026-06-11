@@ -8,7 +8,7 @@ export default function RootRedirect() {
   }, [])
 
   return (
-    <div className="grid min-h-screen place-items-center bg-[#050505] text-sm text-white/70">
+    <div className="grid min-h-screen place-items-center font-display text-sm italic text-[#6b573f]">
       Redirection...
     </div>
   )

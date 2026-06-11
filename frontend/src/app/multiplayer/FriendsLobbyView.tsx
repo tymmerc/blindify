@@ -7,31 +7,11 @@ import { Button } from "@/components/ui/button"
 import { modeAccent } from "@/lib/uiTokens"
 import type { LobbyRendererProps, LobbyChatMessage } from "./lobbyTypes"
 
-/* Component-scoped animations matching the validated mockup. */
+/* Component-scoped animations matching the analog mockup. */
 const lobbyAnimations = `
 @keyframes lobby-char-rise {
-  from { opacity: 0; transform: translateY(40px); filter: blur(8px); }
-  to { opacity: 1; transform: translateY(0); filter: blur(0); }
-}
-@keyframes lobby-code-flicker {
-  0%, 100%, 92%, 94%, 96% {
-    text-shadow:
-      0 0 18px #ff2ec8,
-      0 0 38px #ff2ec8,
-      0 0 80px rgba(255, 46, 200, 0.7),
-      0 0 120px rgba(255, 46, 200, 0.4);
-  }
-  93%, 95% {
-    text-shadow:
-      0 0 8px #ff2ec8,
-      0 0 18px #ff2ec8,
-      0 0 28px rgba(255, 46, 200, 0.4);
-    opacity: 0.92;
-  }
-}
-@keyframes lobby-pulse-ring {
-  0% { transform: scale(0.95); opacity: 0.9; }
-  100% { transform: scale(1.4); opacity: 0; }
+  from { opacity: 0; transform: translateY(40px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 @keyframes lobby-rpm-pulse {
   from { width: 35%; }
@@ -41,28 +21,6 @@ const lobbyAnimations = `
   from { transform: scaleY(0.4); }
   to { transform: scaleY(1.1); }
 }
-@keyframes lobby-breathe {
-  0%, 100% {
-    box-shadow:
-      0 0 30px rgba(255, 234, 0, 0.4),
-      inset 0 0 30px rgba(255, 234, 0, 0.08),
-      0 0 80px -10px rgba(255, 234, 0, 0.5);
-  }
-  50% {
-    box-shadow:
-      0 0 50px rgba(255, 234, 0, 0.65),
-      inset 0 0 50px rgba(255, 234, 0, 0.15),
-      0 0 120px -10px rgba(255, 234, 0, 0.7);
-  }
-}
-@keyframes lobby-sweep {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
-}
-@keyframes lobby-blink {
-  0%, 60% { opacity: 1; }
-  70%, 100% { opacity: 0.3; }
-}
 @keyframes lobby-caret {
   50% { opacity: 0; }
 }
@@ -70,35 +28,9 @@ const lobbyAnimations = `
   from { opacity: 0; transform: translateX(-12px); }
   to { opacity: 1; transform: translateX(0); }
 }
-@keyframes lobby-scan {
-  0% { top: -30px; }
-  100% { top: 100%; }
-}
-@keyframes lobby-join-pulse {
-  0% { box-shadow: 0 0 0 rgba(255, 46, 200, 0); }
-  30% { box-shadow: 0 0 30px rgba(255, 46, 200, 0.7); }
-  100% { box-shadow: 0 0 20px rgba(255, 46, 200, 0.4); }
-}
 `
 
-/* Reusable corner brackets — wraps the panel in arcade frame markers. */
-function CornerBrackets({ color = "#ff2ec8", size = 22 }: { color?: string; size?: number }) {
-  const common: React.CSSProperties = {
-    position: "absolute",
-    width: size,
-    height: size,
-    pointerEvents: "none",
-    filter: `drop-shadow(0 0 6px ${color})`,
-  }
-  return (
-    <>
-      <span aria-hidden style={{ ...common, top: -2, left: -2, borderTop: `2px solid ${color}`, borderLeft: `2px solid ${color}` }} />
-      <span aria-hidden style={{ ...common, top: -2, right: -2, borderTop: `2px solid ${color}`, borderRight: `2px solid ${color}` }} />
-      <span aria-hidden style={{ ...common, bottom: -2, left: -2, borderBottom: `2px solid ${color}`, borderLeft: `2px solid ${color}` }} />
-      <span aria-hidden style={{ ...common, bottom: -2, right: -2, borderBottom: `2px solid ${color}`, borderRight: `2px solid ${color}` }} />
-    </>
-  )
-}
+const VINYL_GROOVES = "repeating-radial-gradient(circle at 50% 50%, #241a10 0 2.5px, #3a2a1a 2.5px 5px)"
 
 /* ─── Interactive Vinyl: drag to spin ─── */
 function SpinVinyl({ accent }: { accent: string }) {
@@ -206,34 +138,12 @@ function SpinVinyl({ accent }: { accent: string }) {
 
   return (
     <div className="flex flex-col items-center gap-3 w-full">
-      {/* Vinyl stage with pulse rings */}
+      {/* Vinyl stage on its platter */}
       <div className="relative flex items-center justify-center my-2" style={{ width: 300, height: 300 }}>
-        {/* Pulse rings */}
+        {/* Platter outer ring */}
         <div
           aria-hidden
-          className="absolute inset-0 rounded-full pointer-events-none"
-          style={{
-            border: "1px solid rgba(255, 46, 200, 0.4)",
-            animation: "lobby-pulse-ring 3s ease-out infinite",
-          }}
-        />
-        <div
-          aria-hidden
-          className="absolute inset-0 rounded-full pointer-events-none"
-          style={{
-            border: "1px solid rgba(0, 247, 255, 0.35)",
-            animation: "lobby-pulse-ring 3s ease-out infinite",
-            animationDelay: "0.7s",
-          }}
-        />
-        <div
-          aria-hidden
-          className="absolute inset-0 rounded-full pointer-events-none"
-          style={{
-            border: "1px solid rgba(255, 234, 0, 0.3)",
-            animation: "lobby-pulse-ring 3s ease-out infinite",
-            animationDelay: "1.4s",
-          }}
+          className="absolute -inset-3 rounded-full border-2 border-[rgba(46,32,20,.3)] pointer-events-none"
         />
 
         {/* Vinyl disc (interactive) */}
@@ -246,42 +156,24 @@ function SpinVinyl({ accent }: { accent: string }) {
           style={{
             width: 280,
             height: 280,
-            backgroundImage:
-              "radial-gradient(circle at center,#1b1324 0%,#0f0c14 55%,#05030a 100%), repeating-radial-gradient(circle at center,rgba(255,255,255,0.05) 0px, rgba(255,255,255,0.05) 1px, transparent 1px, transparent 8px)",
-            backgroundBlendMode: "screen",
-            boxShadow:
-              "0 0 40px rgba(255, 46, 200, 0.45), 0 0 80px rgba(255, 46, 200, 0.25), inset 0 0 40px rgba(0, 0, 0, 0.6)",
+            background: VINYL_GROOVES,
+            border: "3px solid #2e2014",
             transform: `rotate(${angle}deg)`,
-            border: "1px solid rgba(255,255,255,0.08)",
           }}
           title="Fais tourner le vinyle"
         >
-          {/* Inner grooves */}
-          <div className="absolute inset-[14%] rounded-full border border-white/[0.1] bg-[radial-gradient(circle_at_center,#0a070f_0%,#0f0a15_65%,#0a070f_100%)]">
-            <div className="absolute inset-1 rounded-full border border-[#ff2ec8]/20 bg-[conic-gradient(from_45deg,rgba(255,255,255,0.08),rgba(255,255,255,0)_18%)] opacity-60" />
-          </div>
-          {/* Pink label */}
+          {/* Terracotta label */}
           <div
-            className="absolute inset-[32%] rounded-full flex items-center justify-center"
-            style={{
-              background: "radial-gradient(circle at 30% 30%, #ff2ec8, #7a0d5e 70%, #2a0220)",
-              boxShadow: "0 0 16px rgba(255, 46, 200, 0.8), inset 0 0 12px rgba(0, 0, 0, 0.5)",
-            }}
+            className="absolute inset-[32%] rounded-full flex items-center justify-center border-[3px] border-[#2e2014] bg-[#c65133]"
           >
-            <span
-              className="font-display text-[0.7rem] tracking-[0.1em] text-white"
-              style={{ fontFamily: "var(--font-display)", textShadow: "0 0 6px rgba(0,0,0,0.7)" }}
-            >
+            <span className="font-display text-[0.7rem] font-semibold tracking-[0.1em] text-[#f4ecdb]">
               SIDE A
             </span>
           </div>
           {/* Center hole */}
           <div
-            className="absolute left-1/2 top-1/2 w-3 h-3 rounded-full bg-[#0a0322]"
-            style={{
-              transform: "translate(-50%, -50%)",
-              boxShadow: "0 0 0 2px rgba(255, 234, 0, 0.4)",
-            }}
+            className="absolute left-1/2 top-1/2 w-3 h-3 rounded-full border-2 border-[#2e2014] bg-[#f4ecdb]"
+            style={{ transform: "translate(-50%, -50%)" }}
           />
         </div>
       </div>
@@ -294,8 +186,7 @@ function SpinVinyl({ accent }: { accent: string }) {
             style={{
               width: 5,
               height: `${h}%`,
-              background: "linear-gradient(180deg, #ffea00 0%, #ff2ec8 60%, #00f7ff 100%)",
-              boxShadow: "0 0 6px #ff2ec8",
+              background: i % 2 === 0 ? "#c65133" : "#e0a32e",
               animation: `lobby-bar-bounce 0.6s ease-in-out infinite alternate`,
               animationDelay: `${(i % 6) * 0.1}s`,
               transformOrigin: "bottom",
@@ -305,38 +196,27 @@ function SpinVinyl({ accent }: { accent: string }) {
       </div>
 
       {/* RPM block */}
-      <div className="text-center font-mono w-full max-w-[240px]">
-        <div className="font-mono text-[0.65rem] uppercase tracking-[0.4em] text-[#8b7fb0]">// RPM</div>
-        <div
-          className="font-display text-[2.2rem] leading-none mt-1 text-[#ffea00]"
-          style={{
-            fontFamily: "var(--font-display)",
-            textShadow: "0 0 12px #ffea00, 0 0 28px rgba(255, 234, 0, 0.6)",
-            letterSpacing: "0.05em",
-          }}
-        >
+      <div className="text-center w-full max-w-[240px]">
+        <div className="text-[11px] font-bold uppercase tracking-[0.4em] text-[#8a7558]">RPM</div>
+        <div className="font-display text-[2.2rem] font-bold leading-none mt-1 text-[#2e2014]">
           {displayRpm}
         </div>
-        <div className="w-full h-1 bg-[rgba(255,234,0,0.1)] mt-3 relative overflow-hidden">
+        <div className="w-full h-1 bg-[rgba(46,32,20,0.12)] mt-3 relative overflow-hidden rounded-full">
           <div
             className="absolute inset-0 transition-[width] duration-300"
             style={{
               width: `${barWidth}%`,
-              background: "linear-gradient(90deg, #ff2ec8 0%, #ffea00 100%)",
-              boxShadow: "0 0 12px #ffea00",
+              background: "linear-gradient(90deg, #c65133 0%, #e0a32e 100%)",
               animation: rpm < 1 ? "lobby-rpm-pulse 1.2s ease-in-out infinite alternate" : undefined,
             }}
           />
         </div>
-        <div
-          className="text-[0.62rem] tracking-[0.25em] text-[#00f7ff] mt-2 uppercase opacity-70"
-          style={{ textShadow: "0 0 6px #00f7ff" }}
-        >
-          DRAG_TO_SPIN_FASTER
+        <div className="font-display text-xs italic text-[#8a7558] mt-2">
+          Fais tourner le disque plus vite.
         </div>
         {highScore > 50 && (
-          <p className="text-[10px] text-white/25 mt-1 font-mono tracking-[0.15em]">
-            REC : {Math.round(highScore)} RPM
+          <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#8a7558] mt-1">
+            Record : {Math.round(highScore)} RPM
           </p>
         )}
       </div>
@@ -344,7 +224,7 @@ function SpinVinyl({ accent }: { accent: string }) {
   )
 }
 
-/* ─── Chat component (terminal feel with scanlines and color-coded messages) ─── */
+/* ─── Chat component (paper card with ink dividers) ─── */
 function LobbyChat({
   messages,
   onSend,
@@ -373,10 +253,10 @@ function LobbyChat({
     setInput("")
   }
 
-  // Color-code each non-me sender by hashing user_id to one of [host=yellow, cyan, pink, purple]
+  // Color-code each non-me sender by hashing user_id to one of the analog accents
   const senderColor = (userId: number, isHost: boolean): string => {
-    if (isHost) return "#ffea00"
-    const palette = ["#00f7ff", "#ff2ec8", "#a855f7"]
+    if (isHost) return "#c65133"
+    const palette = ["#5d7252", "#a87714", "#6b573f"]
     return palette[Math.abs(userId) % palette.length]
   }
 
@@ -386,62 +266,27 @@ function LobbyChat({
   }
 
   return (
-    <div
-      className="relative flex flex-col overflow-hidden h-full min-h-[360px]"
-      style={{
-        background: "linear-gradient(180deg, rgba(17, 7, 53, 0.85) 0%, rgba(10, 3, 34, 0.85) 100%)",
-        border: "1px solid rgba(0, 247, 255, 0.3)",
-        backdropFilter: "blur(8px)",
-        boxShadow:
-          "0 0 0 1px rgba(0, 247, 255, 0.05), 0 30px 80px -20px rgba(0, 247, 255, 0.18), inset 0 0 60px rgba(0, 247, 255, 0.04)",
-      }}
-    >
-      <CornerBrackets color="#00f7ff" size={22} />
-
-      {/* Scanline overlays */}
-      <div
-        aria-hidden
-        className="absolute inset-0 pointer-events-none z-[1] mix-blend-screen"
-        style={{
-          background:
-            "repeating-linear-gradient(0deg, rgba(0, 247, 255, 0.04) 0, rgba(0, 247, 255, 0.04) 1px, transparent 1px, transparent 3px)",
-        }}
-      />
-      <div
-        aria-hidden
-        className="absolute left-0 right-0 h-[30px] pointer-events-none z-[2]"
-        style={{
-          background: "linear-gradient(180deg, rgba(0, 247, 255, 0.15) 0%, transparent 100%)",
-          top: "-30px",
-          animation: "lobby-scan 5s linear infinite",
-        }}
-      />
-
+    <div className="relative flex h-full min-h-[360px] flex-col overflow-hidden rounded-md border-2 border-[#2e2014] bg-[#ece1c8] shadow-[4px_4px_0_rgba(46,32,20,.18)]">
       {/* Header */}
-      <div className="px-5 py-4 border-b border-[#00f7ff]/20 flex items-center justify-between relative z-[3]">
-        <p
-          className="font-mono text-[0.7rem] uppercase tracking-[0.3em] text-[#00f7ff] m-0"
-          style={{ textShadow: "0 0 8px rgba(0, 247, 255, 0.6)" }}
-        >
-          <span className="text-[#8b7fb0]">[</span> LOBBY_CHAT <span className="text-[#8b7fb0]">]</span>
+      <div className="flex items-center justify-between border-b-2 border-[#2e2014] px-5 py-4">
+        <p className="m-0 text-[11px] font-bold uppercase tracking-[0.22em] text-[#c65133]">
+          Lobby · Chat
         </p>
-        <span
-          className="font-mono text-[0.62rem] tracking-[0.2em] text-[#ffea00]"
-          style={{ textShadow: "0 0 6px #ffea00" }}
-        >
-          ON
+        <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-[#6b573f]">
+          <span aria-hidden className="h-2 w-2 rounded-full bg-[#7d9471]" />
+          On
         </span>
       </div>
 
       {/* Messages */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-3 relative z-[3] min-h-[280px]"
+        className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-3 min-h-[280px]"
         style={{ scrollbarWidth: "thin" }}
       >
         {messages.length === 0 && (
-          <p className="text-center text-[0.7rem] italic text-[#8b7fb0] py-6 font-mono">
-            // CHANNEL OPEN — waiting for transmission
+          <p className="py-6 text-center font-display text-sm italic text-[#8a7558]">
+            Le canal est ouvert. Lance la discussion !
           </p>
         )}
         {messages.map((msg, i) => {
@@ -450,24 +295,19 @@ function LobbyChat({
           return (
             <div
               key={`${msg.timestamp}-${i}`}
-              className="font-mono text-[0.78rem] leading-[1.4]"
+              className="text-[0.82rem] leading-[1.45]"
               style={{
                 animation: "lobby-msg-in 0.4s ease-out backwards",
                 animationDelay: `${Math.min(i * 0.05, 0.5)}s`,
               }}
             >
-              <span className="text-[#8b7fb0] text-[0.65rem] mr-2 opacity-70">
+              <span className="mr-2 text-[0.65rem] text-[#8a7558]">
                 {formatTime(msg.timestamp)}
               </span>
-              <span
-                className="font-bold tracking-[0.1em] mr-1.5"
-                style={{ color, textShadow: `0 0 6px ${color}` }}
-              >
-                <span className="opacity-50">[</span>
+              <span className="mr-1.5 font-bold tracking-[0.04em]" style={{ color }}>
                 {msg.username || `U${msg.userId}`}
-                <span className="opacity-50">]</span>
               </span>
-              <span className="text-[#ddd2ff]">{msg.message}</span>
+              <span className="text-[#2e2014]">{msg.message}</span>
             </div>
           )
         })}
@@ -476,32 +316,19 @@ function LobbyChat({
       {/* Input row */}
       <form
         onSubmit={handleSubmit}
-        className="flex items-center gap-2 px-4 py-3 border-t border-[#00f7ff]/20 relative z-[3]"
-        style={{ background: "rgba(6, 0, 24, 0.6)" }}
+        className="flex items-center gap-2 border-t-2 border-[#2e2014] bg-[#efe5d0] px-4 py-3"
       >
         <input
           value={input}
           onChange={e => setInput(e.target.value)}
-          placeholder="> dis quelque chose..."
+          placeholder="dis quelque chose..."
           maxLength={200}
-          className="flex-1 outline-none font-mono text-[0.78rem] tracking-[0.05em] py-2.5 px-3 text-[#f5e8ff] placeholder:text-[#8b7fb0] focus:shadow-[0_0_12px_rgba(0,247,255,0.3)]"
-          style={{
-            background: "rgba(0, 247, 255, 0.04)",
-            border: "1px solid rgba(0, 247, 255, 0.25)",
-          }}
+          className="flex-1 rounded-md border-[1.5px] border-[rgba(46,32,20,.35)] bg-[#f4ecdb] px-3 py-2.5 text-[0.82rem] text-[#2e2014] outline-none placeholder:italic placeholder:text-[#b3a182] focus:border-[#c65133]"
         />
         <button
           type="submit"
           disabled={!input.trim()}
-          className="font-display text-[0.78rem] tracking-[0.15em] px-3 py-2.5 cursor-pointer transition-all disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-1"
-          style={{
-            fontFamily: "var(--font-display)",
-            color: "#ff2ec8",
-            background: "rgba(255, 46, 200, 0.1)",
-            border: "1px solid #ff2ec8",
-            textShadow: "0 0 6px #ff2ec8",
-            boxShadow: "0 0 10px rgba(255, 46, 200, 0.3)",
-          }}
+          className="flex items-center justify-center gap-1 rounded-md border-2 border-[#2e2014] bg-[#c65133] px-3 py-2.5 text-[#f4ecdb] shadow-[2px_2px_0_#2e2014] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_#2e2014] disabled:cursor-not-allowed disabled:opacity-30"
           aria-label="Envoyer"
         >
           <Send size={14} />
@@ -525,17 +352,15 @@ function FriendsEntry({
   setJoinCode: LobbyRendererProps["setJoinCode"]
   joining: LobbyRendererProps["joining"]
 }) {
-  const accent = modeAccent("friends")
   return (
     <div className="mx-auto max-w-md space-y-6 py-10 text-center">
-      <h2 className="text-3xl font-semibold text-white">Partie entre amis</h2>
-      <p className="text-sm text-white/50">Cree une room ou rejoins-en une avec un code.</p>
+      <h2 className="font-display text-3xl font-semibold text-[#2e2014]">Partie entre <em className="font-medium italic text-[#c65133]">amis</em></h2>
+      <p className="text-sm text-[#6b573f]">Cree une room ou rejoins-en une avec un code.</p>
       <div className="grid gap-3">
         <Button
           variant="outline"
           onClick={onHost}
-          className="w-full justify-center gap-2 rounded-xl border px-5 py-3.5 text-sm font-semibold"
-          style={{ borderColor: accent, color: accent }}
+          className="w-full justify-center gap-2 rounded-md border-2 border-[#2e2014] bg-[#c65133] px-5 py-3.5 text-sm font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:bg-[#c65133] hover:text-[#f4ecdb] hover:shadow-[2px_2px_0_#2e2014]"
         >
           <Sparkles className="h-4 w-4" />
           Creer une partie
@@ -545,27 +370,26 @@ function FriendsEntry({
             value={joinCode}
             onChange={e => setJoinCode(e.target.value.toUpperCase())}
             placeholder="CODE"
-            className="flex-1 rounded-xl border border-white/[0.08] bg-[rgba(10,0,20,0.9)] px-4 py-3 text-sm uppercase tracking-[0.25em] text-white outline-none focus:border-pink-500/40"
+            className="flex-1 rounded-md border-2 border-[#2e2014] bg-[#efe5d0] px-4 py-3 font-display text-sm font-bold uppercase tracking-[0.25em] text-[#2e2014] outline-none placeholder:text-[#b3a182] focus:border-[#c65133]"
           />
           <Button
             type="submit"
             variant="outline"
             disabled={joining}
-            className="rounded-xl border px-5 py-3 text-sm font-semibold disabled:opacity-50"
-            style={{ borderColor: accent, color: accent }}
+            className="rounded-md border-2 border-[#2e2014] bg-[#2e2014] px-5 py-3 text-sm font-bold text-[#f4ecdb] transition hover:bg-[#1d140b] hover:text-[#f4ecdb] disabled:opacity-50"
           >
             Rejoindre
           </Button>
         </form>
       </div>
-      <Link href="/friends" className="text-xs text-white/40 hover:text-white/60">
+      <Link href="/friends" className="text-xs text-[#8a7558] hover:text-[#2e2014]">
         Retour
       </Link>
     </div>
   )
 }
 
-/* ─── Player slot (fighter-select card) ─── */
+/* ─── Player slot (paper presence card) ─── */
 type SlotVariant = "host" | "joined" | "empty"
 
 function PlayerSlot({
@@ -581,45 +405,34 @@ function PlayerSlot({
   const isEmpty = variant === "empty"
   const isJoined = variant === "joined"
 
-  const accentColor = isHost ? "#ffea00" : isJoined ? "#ff2ec8" : "rgba(168, 85, 247, 0.4)"
   const tagText = isHost
-    ? `P${index} // ADMIN`
+    ? `P${index} · Hote`
     : isJoined
-      ? `P${index} // JOINED`
-      : `P${index} // OPEN`
-  const badgeText = isEmpty ? "--/--" : "READY"
-  const displayName = isEmpty ? "WAITING" : username || `Player ${index}`
+      ? `P${index} · Connecte`
+      : `P${index} · Libre`
+  const displayName = isEmpty ? "En attente" : username || `Joueur ${index}`
 
   const slotStyle: React.CSSProperties = {
-    background: isHost
-      ? "linear-gradient(135deg, rgba(255, 234, 0, 0.12) 0%, rgba(10, 3, 34, 0.7) 60%)"
-      : isJoined
-        ? "linear-gradient(135deg, rgba(255, 46, 200, 0.1) 0%, rgba(10, 3, 34, 0.6) 60%)"
-        : "rgba(168, 85, 247, 0.04)",
+    background: isEmpty ? "transparent" : "#f4ecdb",
     border: isEmpty
-      ? "1px dashed rgba(168, 85, 247, 0.35)"
-      : `1px solid ${accentColor}`,
-    boxShadow: isHost
-      ? "0 0 20px rgba(255, 234, 0, 0.25), inset 0 0 30px rgba(255, 234, 0, 0.06)"
-      : isJoined
-        ? "0 0 20px rgba(255, 46, 200, 0.45)"
-        : "none",
-    clipPath: "polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px))",
-    animation: isJoined ? "lobby-join-pulse 2s ease-out" : undefined,
+      ? "2px dashed rgba(46,32,20,.35)"
+      : isHost
+        ? "2px solid #c65133"
+        : "2px solid #2e2014",
+    boxShadow: isEmpty ? "none" : "3px 3px 0 rgba(46,32,20,.18)",
+    borderRadius: 6,
   }
 
   const avatarStyle: React.CSSProperties = isEmpty
     ? {
-        border: "2px dashed rgba(168, 85, 247, 0.4)",
-        background: "rgba(168, 85, 247, 0.06)",
+        border: "2px dashed rgba(46,32,20,.35)",
+        background: "transparent",
+        color: "#b3a182",
       }
     : {
-        border: `2px solid ${accentColor}`,
-        boxShadow: isHost
-          ? "0 0 18px rgba(255, 234, 0, 0.65), inset 0 0 8px rgba(0, 0, 0, 0.6)"
-          : isJoined
-            ? "0 0 18px rgba(255, 46, 200, 0.7)"
-            : "0 0 14px rgba(0, 247, 255, 0.6), inset 0 0 8px rgba(0, 0, 0, 0.6)",
+        border: "2px solid #2e2014",
+        background: isHost ? "#c65133" : "#f4ecdb",
+        color: isHost ? "#f4ecdb" : "#2e2014",
       }
 
   const initial = isEmpty ? "?" : (username?.charAt(0).toUpperCase() || "P")
@@ -630,28 +443,15 @@ function PlayerSlot({
       style={slotStyle}
     >
       {isHost && (
-        <span
-          className="absolute -top-2.5 left-2.5 font-display text-[0.62rem] tracking-[0.2em] px-2 py-0.5 text-[#1a0838]"
-          style={{
-            fontFamily: "var(--font-display)",
-            background: "#ffea00",
-            boxShadow: "0 0 12px rgba(255, 234, 0, 0.7)",
-            clipPath: "polygon(4px 0, 100% 0, calc(100% - 4px) 100%, 0 100%)",
-          }}
-        >
-          HOST
+        <span className="absolute -top-2.5 left-2.5 rounded-full border-[1.5px] border-[#2e2014] bg-[#c65133] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[#f4ecdb]">
+          Hote
         </span>
       )}
 
-      {/* Avatar with neon ring */}
+      {/* Avatar */}
       <div
-        className="relative w-[54px] h-[54px] rounded-full flex-shrink-0 overflow-hidden flex items-center justify-center font-display text-xl"
-        style={{
-          ...avatarStyle,
-          background: isEmpty ? avatarStyle.background : "#1a0838",
-          color: isEmpty ? "rgba(168, 85, 247, 0.5)" : "#fff",
-          fontFamily: "var(--font-display)",
-        }}
+        className="relative flex h-[54px] w-[54px] shrink-0 items-center justify-center overflow-hidden rounded-full font-display text-xl font-semibold"
+        style={avatarStyle}
       >
         {initial}
       </div>
@@ -659,28 +459,21 @@ function PlayerSlot({
       {/* Info */}
       <div className="flex-1 min-w-0">
         <div
-          className="font-mono text-[0.6rem] uppercase tracking-[0.3em] mb-1"
-          style={{
-            color: isEmpty ? "rgba(168, 85, 247, 0.7)" : accentColor,
-            textShadow: isEmpty ? "none" : `0 0 6px ${accentColor}`,
-          }}
+          className="mb-1 text-[10px] font-bold uppercase tracking-[0.22em]"
+          style={{ color: isEmpty ? "#b3a182" : isHost ? "#c65133" : "#8a7558" }}
         >
           {tagText}
         </div>
         <div
-          className="font-display text-base tracking-[0.04em] whitespace-nowrap overflow-hidden text-ellipsis"
-          style={{
-            fontFamily: "var(--font-display)",
-            color: isEmpty ? "rgba(168, 85, 247, 0.55)" : "#f5e8ff",
-            textShadow: isEmpty ? "none" : "0 0 6px rgba(255, 255, 255, 0.25)",
-          }}
+          className="overflow-hidden text-ellipsis whitespace-nowrap font-display text-base font-semibold"
+          style={{ color: isEmpty ? "#b3a182" : "#2e2014" }}
         >
           {displayName}
           {isEmpty && (
             <span
               className="inline-block w-2 h-[14px] ml-0.5 align-middle"
               style={{
-                background: "rgba(168, 85, 247, 0.6)",
+                background: "rgba(46,32,20,.35)",
                 animation: "lobby-caret 1s steps(2) infinite",
               }}
             />
@@ -688,20 +481,10 @@ function PlayerSlot({
         </div>
       </div>
 
-      {/* Badge */}
-      <div
-        className="font-mono text-[0.62rem] tracking-[0.2em] px-2 py-1 flex-shrink-0"
-        style={{
-          border: `1px solid ${isEmpty ? "rgba(168, 85, 247, 0.6)" : accentColor}`,
-          color: isEmpty ? "rgba(168, 85, 247, 0.6)" : accentColor,
-          background: isHost
-            ? "rgba(255, 234, 0, 0.08)"
-            : isJoined
-              ? "rgba(255, 46, 200, 0.08)"
-              : "transparent",
-        }}
-      >
-        {badgeText}
+      {/* Status pill */}
+      <div className="flex shrink-0 items-center gap-1.5 rounded-full border-[1.5px] border-[rgba(46,32,20,.35)] px-2 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#6b573f]">
+        {!isEmpty && <span aria-hidden className="h-2 w-2 rounded-full bg-[#7d9471]" />}
+        {isEmpty ? "Libre" : "En ligne"}
       </div>
     </div>
   )
@@ -749,15 +532,15 @@ function FriendsLobby({
 
   // Press Start label preserves existing logic semantics
   const pressStartLabel = !isHost
-    ? "// EN ATTENTE..."
+    ? "En attente du host..."
     : importing
-      ? "// IMPORT..."
+      ? "Import..."
       : starting
-        ? "// BOOT..."
-        : "> PRESS START"
+        ? "Lancement..."
+        : "Lancer la partie"
 
   return (
-    <section className="mx-auto max-w-[1480px] px-4 sm:px-6 pb-16">
+    <section className="mx-auto max-w-[1480px] px-4 sm:px-6 pb-16 text-[#2e2014]">
       {/* Inline keyframes used by this component */}
       <style jsx global>{lobbyAnimations}</style>
 
@@ -765,20 +548,13 @@ function FriendsLobby({
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1
-            className="font-display leading-none uppercase"
-            style={{
-              fontFamily: "var(--font-display)",
-              fontSize: "clamp(1.6rem, 4vw, 2.6rem)",
-              letterSpacing: "0.04em",
-              color: "#f5e8ff",
-              textShadow: "0 0 12px rgba(255, 46, 200, 0.8), 0 0 32px rgba(255, 46, 200, 0.4)",
-            }}
+            className="font-display font-semibold leading-none text-[#2e2014]"
+            style={{ fontSize: "clamp(1.6rem, 4vw, 2.6rem)", letterSpacing: "-0.01em" }}
           >
-            SELECT <span style={{ color: "#00f7ff", textShadow: "0 0 12px #00f7ff" }}>/</span> YOUR{" "}
-            <span style={{ color: "#00f7ff", textShadow: "0 0 12px #00f7ff" }}>/</span> CREW
+            Rassemble ton <em className="font-medium italic text-[#c65133]">equipage</em>
           </h1>
-          <p className="mt-2 font-mono text-[0.7rem] uppercase tracking-[0.3em] text-[#8b7fb0]">
-            // WAITING FOR HOST INPUT _
+          <p className="mt-2 text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">
+            En attente des joueurs
           </p>
         </div>
       </div>
@@ -789,57 +565,28 @@ function FriendsLobby({
         <div className="space-y-6">
 
           {/* ROOM CODE hero panel */}
-          <section
-            className="relative px-7 py-7"
-            style={{
-              background:
-                "radial-gradient(ellipse 80% 100% at 50% 0%, rgba(255, 46, 200, 0.22) 0%, transparent 60%), linear-gradient(180deg, rgba(17, 7, 53, 0.88) 0%, rgba(10, 3, 34, 0.92) 100%)",
-              border: "1px solid rgba(255, 46, 200, 0.45)",
-              backdropFilter: "blur(8px)",
-              boxShadow:
-                "0 0 50px -10px rgba(255, 46, 200, 0.35), inset 0 0 80px rgba(255, 46, 200, 0.08)",
-            }}
-          >
-            <CornerBrackets color="#ff2ec8" size={28} />
-
+          <section className="relative rounded-md border-2 border-[#2e2014] bg-[#ece1c8] px-7 py-7 shadow-[4px_4px_0_rgba(46,32,20,.18)]">
             {/* Head */}
             <div className="flex items-center justify-between mb-3">
-              <p
-                className="font-mono text-[0.7rem] uppercase tracking-[0.3em] text-[#ff2ec8] m-0"
-                style={{ textShadow: "0 0 8px #ff2ec8" }}
-              >
-                <span className="text-[#8b7fb0]">[</span> ROOM_CODE <span className="text-[#8b7fb0]">]</span>
+              <p className="m-0 text-[11px] font-bold uppercase tracking-[0.22em] text-[#c65133]">
+                Salle · Code
               </p>
-              <span
-                className="font-mono text-[0.62rem] tracking-[0.25em] text-[#00f7ff] px-2.5 py-1"
-                style={{
-                  border: "1px solid rgba(0, 247, 255, 0.4)",
-                  background: "rgba(0, 247, 255, 0.06)",
-                  animation: "lobby-blink 1.6s steps(2) infinite",
-                }}
-              >
-                SHARE_TO_INVITE
+              <span className="rounded-full border-[1.5px] border-[#2e2014] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#2e2014]">
+                Partage pour inviter
               </span>
             </div>
 
-            {/* Massive flickering room code */}
+            {/* Big framed room code */}
             <div
-              className="font-display text-center my-2"
+              className="my-4 flex flex-wrap items-center justify-center gap-2"
               aria-label={`Room code ${roomCode}`}
-              style={{
-                fontFamily: "var(--font-display)",
-                fontSize: "clamp(2.8rem, 8vw, 5.5rem)",
-                letterSpacing: "0.18em",
-                lineHeight: 1,
-                color: "#ffe7f8",
-                animation: "lobby-code-flicker 4.5s infinite",
-              }}
             >
               {roomCode.split("").map((char, i) => (
                 <span
                   key={`${char}-${i}`}
-                  className="inline-block"
+                  className="inline-flex items-center justify-center rounded-md border-2 border-[#2e2014] bg-[#efe5d0] px-3 py-1 font-display font-bold leading-none text-[#2e2014] shadow-[3px_3px_0_rgba(46,32,20,.18)]"
                   style={{
+                    fontSize: "clamp(2.2rem, 6vw, 4rem)",
                     animation: "lobby-char-rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) backwards",
                     animationDelay: `${0.05 + i * 0.1}s`,
                   }}
@@ -854,42 +601,18 @@ function FriendsLobby({
               <button
                 type="button"
                 onClick={copyCode}
-                className="relative font-display tracking-[0.16em] uppercase cursor-pointer transition-all hover:-translate-y-px"
-                style={{
-                  fontFamily: "var(--font-display)",
-                  fontSize: "0.85rem",
-                  padding: "12px 24px",
-                  background: "rgba(255, 46, 200, 0.06)",
-                  border: "1px solid #ff2ec8",
-                  color: "#ff2ec8",
-                  textShadow: "0 0 8px #ff2ec8",
-                  boxShadow:
-                    "0 0 0 1px rgba(255, 46, 200, 0.15) inset, 0 0 14px rgba(255, 46, 200, 0.25)",
-                  clipPath: "polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%)",
-                }}
+                className="flex items-center gap-2 rounded-md border-2 border-[#2e2014] bg-[#c65133] px-6 py-3 text-sm font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#2e2014]"
               >
-                <Copy size={13} className="inline mr-2 -mt-0.5" />
-                {copiedCode ? "[ OK ]" : "CODE"}
+                <Copy size={13} />
+                {copiedCode ? "Copie !" : "Copier le code"}
               </button>
               <button
                 type="button"
                 onClick={copyLink}
-                className="relative font-display tracking-[0.16em] uppercase cursor-pointer transition-all hover:-translate-y-px"
-                style={{
-                  fontFamily: "var(--font-display)",
-                  fontSize: "0.85rem",
-                  padding: "12px 24px",
-                  background: "rgba(0, 247, 255, 0.05)",
-                  border: "1px solid #00f7ff",
-                  color: "#00f7ff",
-                  textShadow: "0 0 8px #00f7ff",
-                  boxShadow:
-                    "0 0 0 1px rgba(0, 247, 255, 0.1) inset, 0 0 14px rgba(0, 247, 255, 0.2)",
-                  clipPath: "polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%)",
-                }}
+                className="flex items-center gap-2 rounded-md border-2 border-[#2e2014] bg-[#2e2014] px-6 py-3 text-sm font-bold text-[#f4ecdb] shadow-[4px_4px_0_rgba(46,32,20,.35)] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgba(46,32,20,.35)]"
               >
-                <Link2 size={13} className="inline mr-2 -mt-0.5" />
-                {copiedLink ? "[ OK ]" : "LIEN"}
+                <Link2 size={13} />
+                {copiedLink ? "Copie !" : "Copier le lien"}
               </button>
             </div>
           </section>
@@ -898,63 +621,26 @@ function FriendsLobby({
           <div className="grid gap-6 md:grid-cols-[340px_1fr] items-stretch">
 
             {/* Vinyl panel */}
-            <section
-              className="relative flex flex-col items-center justify-between px-6 py-6"
-              style={{
-                background:
-                  "linear-gradient(180deg, rgba(17, 7, 53, 0.85) 0%, rgba(10, 3, 34, 0.85) 100%)",
-                border: "1px solid rgba(255, 46, 200, 0.25)",
-                backdropFilter: "blur(8px)",
-                boxShadow:
-                  "0 0 0 1px rgba(0, 247, 255, 0.05), 0 30px 80px -20px rgba(255, 46, 200, 0.25), inset 0 0 60px rgba(255, 46, 200, 0.05)",
-              }}
-            >
-              <CornerBrackets color="#ff2ec8" size={22} />
-
-              <div
-                className="self-start font-mono text-[0.7rem] uppercase tracking-[0.3em] text-[#00f7ff] mb-2"
-                style={{ textShadow: "0 0 8px rgba(0, 247, 255, 0.6)" }}
-              >
-                <span className="text-[#8b7fb0]">[</span> FIDGET_DECK <span className="text-[#8b7fb0]">]</span>
+            <section className="relative flex flex-col items-center justify-between rounded-md border-2 border-[#2e2014] bg-[#ece1c8] px-6 py-6 shadow-[4px_4px_0_rgba(46,32,20,.18)]">
+              <div className="self-start mb-2 text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">
+                Platine · Fidget
               </div>
 
               <SpinVinyl accent={accent} />
             </section>
 
             {/* Players panel */}
-            <section
-              className="relative px-6 py-6"
-              style={{
-                background:
-                  "linear-gradient(180deg, rgba(17, 7, 53, 0.85) 0%, rgba(10, 3, 34, 0.85) 100%)",
-                border: "1px solid rgba(255, 46, 200, 0.25)",
-                backdropFilter: "blur(8px)",
-                boxShadow:
-                  "0 0 0 1px rgba(0, 247, 255, 0.05), 0 30px 80px -20px rgba(255, 46, 200, 0.25), inset 0 0 60px rgba(255, 46, 200, 0.05)",
-              }}
-            >
-              <CornerBrackets color="#ff2ec8" size={22} />
-
+            <section className="relative rounded-md border-2 border-[#2e2014] bg-[#ece1c8] px-6 py-6 shadow-[4px_4px_0_rgba(46,32,20,.18)]">
               {/* Players head */}
               <div className="flex items-center justify-between mb-5">
-                <p
-                  className="font-mono text-[0.7rem] uppercase tracking-[0.3em] text-[#00f7ff] m-0"
-                  style={{ textShadow: "0 0 8px rgba(0, 247, 255, 0.6)" }}
-                >
-                  <span className="text-[#8b7fb0]">[</span> ROSTER <span className="text-[#8b7fb0]">]</span>
+                <p className="m-0 text-[11px] font-bold uppercase tracking-[0.22em] text-[#c65133]">
+                  Equipage
                 </p>
-                <span
-                  className="font-mono text-[0.7rem] tracking-[0.25em] text-[#ff2ec8]"
-                  style={{ textShadow: "0 0 6px #ff2ec8" }}
-                >
-                  CREW{" "}
-                  <strong
-                    className="font-display text-base text-[#f5e8ff] mx-1"
-                    style={{ fontFamily: "var(--font-display)" }}
-                  >
+                <span className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#6b573f]">
+                  <strong className="mx-1 font-display text-base font-bold text-[#2e2014]">
                     {playerCount.toString().padStart(2, "0")}
                   </strong>
-                  /04
+                  / 04
                 </span>
               </div>
 
@@ -988,51 +674,25 @@ function FriendsLobby({
               type="button"
               onClick={onStart}
               disabled={starting || !canStart}
-              className="relative w-full max-w-[720px] overflow-hidden font-display uppercase text-center cursor-pointer transition-transform disabled:opacity-30 disabled:cursor-not-allowed"
+              className="relative w-full max-w-[720px] rounded-md border-2 border-[#2e2014] bg-[#c65133] text-center font-display font-bold text-[#f4ecdb] shadow-[6px_6px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[4px_4px_0_#2e2014] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-x-0 disabled:hover:translate-y-0 disabled:hover:shadow-[6px_6px_0_#2e2014]"
               style={{
-                fontFamily: "var(--font-display)",
                 fontSize: "clamp(1.2rem, 2.6vw, 2rem)",
-                letterSpacing: "0.18em",
+                letterSpacing: "0.02em",
                 padding: "22px 40px",
-                background:
-                  "linear-gradient(180deg, rgba(255, 234, 0, 0.08) 0%, rgba(255, 234, 0, 0.02) 100%)",
-                border: "2px solid #ffea00",
-                color: "#ffea00",
-                textShadow: "0 0 14px #ffea00, 0 0 30px rgba(255, 234, 0, 0.7)",
-                animation: canStart && !starting ? "lobby-breathe 2s ease-in-out infinite" : undefined,
-                clipPath: "polygon(20px 0, 100% 0, calc(100% - 20px) 100%, 0 100%)",
               }}
             >
-              {/* Sweep overlay */}
-              {canStart && !starting && (
-                <span
-                  aria-hidden
-                  className="absolute inset-0 pointer-events-none"
-                  style={{
-                    background:
-                      "linear-gradient(90deg, transparent 0%, rgba(255, 234, 0, 0.18) 50%, transparent 100%)",
-                    transform: "translateX(-100%)",
-                    animation: "lobby-sweep 3s ease-in-out infinite",
-                  }}
-                />
-              )}
-              <span className="relative z-[1]">{pressStartLabel}</span>
+              {pressStartLabel}
             </button>
 
-            <div className="font-mono text-[0.72rem] tracking-[0.3em] uppercase text-[#8b7fb0]">
-              //{" "}
-              <span
-                className="text-[#00f7ff]"
-                style={{ textShadow: "0 0 6px #00f7ff" }}
-              >
-                {readyCount} PLAYERS READY
-              </span>{" "}
-              — {isHost ? "HOST CAN LAUNCH _" : "WAITING FOR HOST _"}
+            <div className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">
+              <span className="text-[#5d7252]">{readyCount} joueurs prets</span>
+              {" · "}
+              {isHost ? "a toi de lancer" : "en attente du host"}
             </div>
 
             {!canStart && isHost && playerCount < 2 && (
-              <p className="text-center font-mono text-[0.7rem] tracking-[0.15em] text-white/30">
-                // BESOIN DE 2 JOUEURS MINIMUM
+              <p className="text-center font-display text-xs italic text-[#8a7558]">
+                Il faut au moins 2 joueurs pour lancer.
               </p>
             )}
           </div>
@@ -1048,15 +708,8 @@ function FriendsLobby({
               accent={accent}
             />
           ) : (
-            <div
-              className="relative px-6 py-12 text-center font-mono text-[0.78rem] tracking-[0.15em] text-white/20"
-              style={{
-                background: "rgba(15, 5, 30, 0.85)",
-                border: "1px solid rgba(0, 247, 255, 0.2)",
-              }}
-            >
-              <CornerBrackets color="#00f7ff" size={22} />
-              CHAT INDISPONIBLE
+            <div className="relative rounded-md border-[1.5px] border-[rgba(46,32,20,.22)] bg-[#ece1c8] px-6 py-12 text-center text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">
+              Chat indisponible
             </div>
           )}
         </aside>

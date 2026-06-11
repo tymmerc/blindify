@@ -23,21 +23,21 @@ export function GameShell({ mode, header, main, side, participationStrip, varian
     : "grid"
 
   return (
-    <div className="flex flex-col gap-4" data-mode={mode}>
-      <div className="sticky top-0 z-10 flex items-center justify-end gap-3 bg-[#050505] px-4 py-2 text-sm text-white/60">
+    <div className="flex flex-col gap-4 text-[#2e2014]" data-mode={mode}>
+      <div className="sticky top-0 z-10 flex items-center justify-end gap-3 bg-[#f4ecdb] px-4 py-2 text-sm text-[#6b573f]">
         {header}
       </div>
 
       <div className={gridClass} style={{ gap: gapSize }}>
         <div
-          className="rounded-2xl border border-white/10 bg-[#0c0c0c]"
+          className="border-2 border-[#2e2014] bg-[#ece1c8] shadow-[4px_4px_0_rgba(46,32,20,.18)]"
           style={{ borderRadius: radii.card, padding: padding }}
         >
           {main}
         </div>
         {side ? (
           <aside
-            className="rounded-2xl border border-white/10 bg-[#0c0c0c]"
+            className="border-2 border-[#2e2014] bg-[#ece1c8] shadow-[4px_4px_0_rgba(46,32,20,.18)]"
             style={{ borderRadius: radii.card, padding: padding }}
           >
             {side}
@@ -47,7 +47,7 @@ export function GameShell({ mode, header, main, side, participationStrip, varian
 
       {participationStrip ? (
         <div
-          className="rounded-2xl border border-white/10 bg-[#0c0c0c]"
+          className="border-[1.5px] border-[rgba(46,32,20,.22)] bg-[#ece1c8]"
           style={{ borderRadius: radii.card, padding: mode === "streamer" ? "12px" : "14px" }}
         >
           {participationStrip}

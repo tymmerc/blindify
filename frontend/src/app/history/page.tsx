@@ -8,17 +8,6 @@ import { api } from "@/lib/api"
 import type { GameHistoryEntry } from "@/lib/types"
 import { BottomNav } from "@/components/BottomNav"
 
-function CornerFrame({ color }: { color: string }) {
-  return (
-    <>
-      <span aria-hidden className="absolute left-2 top-2 h-3 w-3 border-l-2 border-t-2" style={{ borderColor: color }} />
-      <span aria-hidden className="absolute right-2 top-2 h-3 w-3 border-r-2 border-t-2" style={{ borderColor: color }} />
-      <span aria-hidden className="absolute bottom-2 left-2 h-3 w-3 border-b-2 border-l-2" style={{ borderColor: color }} />
-      <span aria-hidden className="absolute bottom-2 right-2 h-3 w-3 border-b-2 border-r-2" style={{ borderColor: color }} />
-    </>
-  )
-}
-
 function formatDateFr(dateString: string): string {
   const date = new Date(dateString)
   if (Number.isNaN(date.getTime())) return "-"
@@ -36,21 +25,21 @@ function modeBadgeLabel(mode: string): string {
 
 function SkeletonCard() {
   return (
-    <div className="rounded-2xl border border-[#ff2ec8]/15 bg-[rgba(15,5,30,0.6)] backdrop-blur-[16px] p-5 animate-pulse">
+    <div className="animate-pulse rounded-md border-[1.5px] border-[rgba(46,32,20,.22)] bg-[#ece1c8] p-5">
       <div className="flex items-center justify-between mb-3">
-        <div className="h-4 w-28 rounded bg-[#ff2ec8]/10" />
-        <div className="h-5 w-14 rounded-full bg-[#00f7ff]/10" />
+        <div className="h-4 w-28 rounded bg-[rgba(46,32,20,.12)]" />
+        <div className="h-5 w-14 rounded-full bg-[rgba(46,32,20,.12)]" />
       </div>
       <div className="flex gap-4 mb-3">
-        <div className="h-4 w-16 rounded bg-[#ff2ec8]/10" />
-        <div className="h-4 w-20 rounded bg-[#ff2ec8]/10" />
-        <div className="h-4 w-24 rounded bg-[#ff2ec8]/10" />
+        <div className="h-4 w-16 rounded bg-[rgba(46,32,20,.12)]" />
+        <div className="h-4 w-20 rounded bg-[rgba(46,32,20,.12)]" />
+        <div className="h-4 w-24 rounded bg-[rgba(46,32,20,.12)]" />
       </div>
       <div className="flex gap-0">
         {Array.from({ length: 4 }).map((_, i) => (
           <div
             key={i}
-            className="h-8 w-8 rounded-md bg-[#ff2ec8]/10 border-2 border-[#0a0014]"
+            className="h-8 w-8 rounded-md border-2 border-[#ece1c8] bg-[rgba(46,32,20,.12)]"
             style={{ marginLeft: i > 0 ? "-8px" : 0 }}
           />
         ))}
@@ -71,7 +60,7 @@ function TrackThumbnails({ tracks }: { tracks: GameHistoryEntry["tracks"] }) {
       {visible.map((track, i) => (
         <div
           key={`${track.title}-${track.artist}-${i}`}
-          className="relative h-8 w-8 shrink-0 overflow-hidden rounded-md border-2 border-[#0a0014]"
+          className="relative h-8 w-8 shrink-0 overflow-hidden rounded-md border-2 border-[#2e2014]"
           style={{ marginLeft: i > 0 ? "-8px" : 0, zIndex: maxVisible - i }}
         >
           {track.album_cover ? (
@@ -84,7 +73,7 @@ function TrackThumbnails({ tracks }: { tracks: GameHistoryEntry["tracks"] }) {
               unoptimized
             />
           ) : (
-            <div className="flex h-full w-full items-center justify-center bg-[#ff2ec8]/10 text-[10px] text-[#9b7fb8]">
+            <div className="flex h-full w-full items-center justify-center bg-[#efe5d0] text-[10px] text-[#8a7558]">
               ?
             </div>
           )}
@@ -92,7 +81,7 @@ function TrackThumbnails({ tracks }: { tracks: GameHistoryEntry["tracks"] }) {
       ))}
       {remaining > 0 && (
         <div
-          className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-md border-2 border-[#0a0014] bg-[#00f7ff]/10 font-mono text-[10px] font-semibold text-[#00f7ff]"
+          className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-md border-2 border-[#2e2014] bg-[#e0a32e] text-[10px] font-bold text-[#2e2014]"
           style={{ marginLeft: "-8px", zIndex: 0 }}
         >
           +{remaining}
@@ -104,14 +93,15 @@ function TrackThumbnails({ tracks }: { tracks: GameHistoryEntry["tracks"] }) {
 
 function TrackList({ tracks }: { tracks: GameHistoryEntry["tracks"] }) {
   if (tracks.length === 0) {
-    return <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#9b7fb8]/60">Aucun titre enregistre.</p>
+    return <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#8a7558]">Aucun titre enregistre.</p>
   }
 
   return (
-    <div className="mt-3 space-y-1.5 border-t border-[#ff2ec8]/10 pt-3">
+    <div className="mt-3 space-y-1.5 border-t-2 border-dotted border-[rgba(46,32,20,.45)] pt-3">
       {tracks.map((track, i) => (
         <div key={`${track.title}-${track.artist}-${i}`} className="flex items-center gap-2.5">
-          <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-md">
+          <span className="w-6 shrink-0 text-[10px] font-bold text-[#8a7558]">A{i + 1}</span>
+          <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-md border-[1.5px] border-[rgba(46,32,20,.35)]">
             {track.album_cover ? (
               <Image
                 src={track.album_cover}
@@ -122,14 +112,14 @@ function TrackList({ tracks }: { tracks: GameHistoryEntry["tracks"] }) {
                 unoptimized
               />
             ) : (
-              <div className="flex h-full w-full items-center justify-center bg-[#ff2ec8]/10 text-[10px] text-[#9b7fb8]">
+              <div className="flex h-full w-full items-center justify-center bg-[#efe5d0] text-[10px] text-[#8a7558]">
                 ?
               </div>
             )}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium text-[#f8f0ff]">{track.title}</p>
-            <p className="truncate font-mono text-[10px] uppercase tracking-[0.15em] text-[#9b7fb8]">{track.artist}</p>
+            <p className="truncate font-display text-sm font-semibold text-[#2e2014]">{track.title}</p>
+            <p className="truncate text-[10px] font-bold uppercase tracking-[0.12em] text-[#8a7558]">{track.artist}</p>
           </div>
         </div>
       ))}
@@ -139,44 +129,39 @@ function TrackList({ tracks }: { tracks: GameHistoryEntry["tracks"] }) {
 
 function GameCard({ game }: { game: GameHistoryEntry }) {
   const [expanded, setExpanded] = useState(false)
-  const accent = game.mode === "solo" ? "#ff2ec8" : "#00f7ff"
+  const accent = game.mode === "solo" ? "#a8b8c8" : "#c65133"
 
   return (
     <button
       type="button"
       onClick={() => setExpanded(prev => !prev)}
-      className="relative w-full rounded-2xl border bg-[rgba(15,5,30,0.6)] backdrop-blur-[16px] p-5 text-left transition-all hover:-translate-y-0.5"
-      style={{
-        borderColor: `${accent}55`,
-        boxShadow: `0 0 14px ${accent}1a, inset 0 0 8px ${accent}0a`,
-      }}
+      className="w-full rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-5 text-left shadow-[4px_4px_0_rgba(46,32,20,.18)] transition-all hover:-translate-y-0.5"
+      style={{ borderLeft: `6px solid ${accent}` }}
     >
-      <CornerFrame color={accent} />
       <div className="flex items-center justify-between mb-2">
-        <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-[#9b7fb8]">{formatDateFr(game.createdAt)}</p>
+        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#8a7558]">{formatDateFr(game.createdAt)}</p>
         <span
-          className="rounded-sm border px-2.5 py-0.5 font-display text-[10px] uppercase tracking-[0.15em]"
+          className="rounded-full border-[1.5px] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em]"
           style={{
-            background: `${accent}14`,
-            borderColor: `${accent}66`,
-            color: accent,
-            textShadow: `0 0 6px ${accent}99`,
+            background: accent,
+            borderColor: "#2e2014",
+            color: game.mode === "solo" ? "#2e2014" : "#f4ecdb",
           }}
         >
           {modeBadgeLabel(game.mode)}
         </span>
       </div>
 
-      <div className="flex flex-wrap gap-x-5 gap-y-1 mb-3 text-sm">
-        <span className="font-display text-lg" style={{ color: "#ffea00", textShadow: "0 0 8px rgba(255,234,0,0.6)" }}>
-          {game.score} <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#9b7fb8]">pts</span>
+      <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1 mb-3 text-sm">
+        <span className="font-display text-2xl font-bold text-[#2e2014]">
+          {game.score} <span className="font-sans text-[10px] font-bold uppercase tracking-[0.15em] text-[#8a7558]">pts</span>
         </span>
-        <span className="font-mono text-sm text-[#f8f0ff]/80">
-          {game.correct}/{game.totalRounds} <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#9b7fb8]">correct</span>
+        <span className="text-sm font-semibold text-[#6b573f]">
+          {game.correct}/{game.totalRounds} <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#8a7558]">correct</span>
         </span>
         {game.bestStreak > 0 && (
-          <span className="font-mono text-sm text-[#f8f0ff]/80">
-            {game.bestStreak} <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#9b7fb8]">serie max</span>
+          <span className="text-sm font-semibold text-[#6b573f]">
+            {game.bestStreak} <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#8a7558]">serie max</span>
           </span>
         )}
       </div>
@@ -185,8 +170,8 @@ function GameCard({ game }: { game: GameHistoryEntry }) {
 
       {expanded && <TrackList tracks={game.tracks} />}
 
-      <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.25em] text-[#9b7fb8]/50 text-center">
-        {expanded ? "Click to collapse" : "Click to expand"}
+      <p className="mt-2 text-center font-display text-xs italic text-[#8a7558]">
+        {expanded ? "— replier la pochette" : "— sortir le disque"}
       </p>
     </button>
   )
@@ -223,11 +208,11 @@ export default function HistoryPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen text-[#f8f0ff] pb-24">
+      <div className="min-h-screen text-[#2e2014] pb-24">
         <div className="mx-auto max-w-3xl px-5 pt-10">
           <div className="mb-6 space-y-2">
-            <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#00f7ff] text-glow-cyan">[ Replay log ]</p>
-            <h1 className="font-display text-3xl uppercase tracking-[0.04em] text-glow-pink">Historique</h1>
+            <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-[#c65133]">Face B · Archives</p>
+            <h1 className="font-display text-3xl font-semibold">Historique</h1>
           </div>
           <div className="space-y-4">
             {Array.from({ length: 4 }).map((_, i) => (
@@ -242,19 +227,18 @@ export default function HistoryPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen text-[#f8f0ff] pb-24">
+      <div className="min-h-screen text-[#2e2014] pb-24">
         <div className="mx-auto max-w-3xl px-5 pt-10">
-          <h1 className="mb-6 font-display text-3xl uppercase tracking-[0.04em] text-glow-pink">Historique</h1>
-          <div className="relative rounded-2xl border border-[#ff3868]/40 bg-[rgba(15,5,30,0.6)] backdrop-blur-[16px] p-6 text-center" style={{ boxShadow: "0 0 16px rgba(255,56,104,0.18)" }}>
-            <CornerFrame color="#ff3868" />
-            <p className="font-display text-base uppercase tracking-[0.04em] text-[#ff3868] mb-2" style={{ textShadow: "0 0 10px rgba(255,56,104,0.6)" }}>Error</p>
-            <p className="text-sm text-[#9b7fb8] mb-4">{error}</p>
+          <h1 className="mb-6 font-display text-3xl font-semibold">Historique</h1>
+          <div className="rounded-md border-2 border-[#9c2f1d] bg-[#ece1c8] p-6 text-center shadow-[4px_4px_0_rgba(46,32,20,.18)]">
+            <p className="mb-2 font-display text-base font-semibold text-[#9c2f1d]">Erreur</p>
+            <p className="mb-4 text-sm text-[#6b573f]">{error}</p>
             <button
               type="button"
               onClick={loadHistory}
-              className="btn-neon-pink font-display text-sm"
+              className="btn-neon text-sm"
             >
-              Retry
+              Reessayer
             </button>
           </div>
         </div>
@@ -265,20 +249,25 @@ export default function HistoryPage() {
 
   if (games.length === 0) {
     return (
-      <div className="min-h-screen text-[#f8f0ff] pb-24">
+      <div className="min-h-screen text-[#2e2014] pb-24">
         <div className="grid min-h-[70vh] place-items-center">
           <div className="text-center space-y-4 px-6">
-            <div className="relative mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-[#ff2ec8]/40 bg-[rgba(15,5,30,0.6)] backdrop-blur-[16px]" style={{ boxShadow: "0 0 18px rgba(255,46,200,0.3)" }}>
-              <span className="font-display text-xl text-[#ff2ec8]" style={{ textShadow: "0 0 10px rgba(255,46,200,0.7)" }}>0</span>
+            <div
+              className="relative mx-auto h-16 w-16 rounded-full border-2 border-[#2e2014]"
+              style={{ background: "repeating-radial-gradient(circle at 50% 50%, #241a10 0 2px, #38291a 2px 4px)" }}
+            >
+              <span className="absolute inset-[32%] grid place-items-center rounded-full border-2 border-[#2e2014] bg-[#c65133] font-display text-xs font-bold text-[#f4ecdb]">
+                0
+              </span>
             </div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#00f7ff]">[ No data ]</p>
-            <h1 className="font-display text-2xl uppercase tracking-[0.04em] text-[#f8f0ff]">Aucune partie jouee</h1>
-            <p className="text-sm text-[#9b7fb8] max-w-sm">
+            <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-[#c65133]">Etagere vide</p>
+            <h1 className="font-display text-2xl font-semibold text-[#2e2014]">Aucune partie jouee</h1>
+            <p className="max-w-sm text-sm text-[#6b573f]">
               Lance ta premiere partie pour voir ton historique ici.
             </p>
             <Link
               href="/solo"
-              className="btn-neon-pink font-display text-sm inline-flex"
+              className="btn-neon inline-flex text-sm"
             >
               Jouer en solo
             </Link>
@@ -290,16 +279,18 @@ export default function HistoryPage() {
   }
 
   return (
-    <div className="min-h-screen text-[#f8f0ff] pb-24">
+    <div className="min-h-screen text-[#2e2014] pb-24">
       <div className="mx-auto max-w-3xl px-5 pt-10">
         <div className="mb-6 flex items-center justify-between">
           <div className="space-y-2">
-            <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#00f7ff] text-glow-cyan">[ Replay log ]</p>
-            <h1 className="font-display text-3xl uppercase tracking-[0.04em] text-glow-pink">Historique</h1>
+            <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-[#c65133]">Face B · Archives</p>
+            <h1 className="font-display text-3xl font-semibold">
+              Histo<em className="font-medium italic text-[#c65133]">rique</em>
+            </h1>
           </div>
           <Link
             href="/modes"
-            className="inline-flex items-center gap-2 rounded-sm border border-[#00f7ff]/30 bg-[rgba(15,5,30,0.6)] backdrop-blur-[16px] px-4 py-2 font-mono text-[10px] uppercase tracking-[0.2em] text-[#00f7ff] transition hover:bg-[#00f7ff]/10 hover:shadow-glow-cyan"
+            className="inline-flex items-center gap-2 rounded-full border-[1.5px] border-[#2e2014] bg-[#ece1c8] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
           >
             Retour
           </Link>

@@ -12,7 +12,7 @@ export default function SectionCard({ children, className }: SectionCardProps) {
   return (
     <div
       className={cn(
-        "p-6 rounded-2xl bg-[rgba(22,30,55,0.45)] backdrop-blur-[16px] border border-white/[0.08] hover:border-white/[0.15] transition-all duration-300",
+        "p-6 rounded-md bg-[#ece1c8] border-[1.5px] border-[rgba(46,32,20,.22)] hover:border-[rgba(46,32,20,.55)] transition-all duration-300",
         className
       )}
     >

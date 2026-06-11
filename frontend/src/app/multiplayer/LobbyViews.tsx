@@ -24,28 +24,29 @@ export function ParticipantPanel({
 }) {
   const showScores = modeConfig.game.scoring
   return (
-    <div className={`rounded-2xl border border-white/10 bg-[#0c0c0c] ${compact ? "p-5" : "p-7"} text-left`}>
-      <h3 className={`font-semibold uppercase tracking-[0.3em] text-white/60 ${variant === "large" ? "text-base" : "text-sm"}`}>
+    <div className={`rounded-md border-2 border-[#2e2014] bg-[#ece1c8] shadow-[4px_4px_0_rgba(46,32,20,.18)] ${compact ? "p-5" : "p-7"} text-left`}>
+      <h3 className={`font-bold uppercase tracking-[0.22em] text-[#8a7558] ${variant === "large" ? "text-sm" : "text-[11px]"}`}>
         {title}
       </h3>
-      <ul className={`mt-4 space-y-3 text-white/85 ${variant === "large" ? "text-base" : "text-sm"}`}>
+      <ul className={`mt-4 space-y-3 text-[#2e2014] ${variant === "large" ? "text-base" : "text-sm"}`}>
         {participants.map(participant => (
           <li
             key={participant.user_id}
-            className="flex items-center justify-between rounded-xl border border-white/10 bg-[#0f0f0f] px-4 py-3"
+            className="flex items-baseline gap-2 px-1 py-1"
           >
-            <span>{participant.username || `Player #${participant.user_id}`}</span>
+            <span className="font-semibold">{participant.username || `Player #${participant.user_id}`}</span>
+            <span aria-hidden className="flex-1 border-b-2 border-dotted border-[rgba(46,32,20,.45)]" />
             {showScores ? (
-              <span className="text-xs uppercase tracking-[0.28em] text-white/60">
+              <span className="text-xs font-bold uppercase tracking-[0.14em] text-[#6b573f]">
                 {scores[participant.user_id]?.score ?? 0} pts · {scores[participant.user_id]?.accuracy ?? 0}%
               </span>
             ) : (
-              <span className="text-xs uppercase tracking-[0.28em] text-white/60">Présent</span>
+              <span className="text-xs font-bold uppercase tracking-[0.14em] text-[#7d9471]">Présent</span>
             )}
           </li>
         ))}
         {participants.length === 0 && (
-          <li className="rounded-xl border border-white/10 bg-[#0f0f0f] px-4 py-3 text-xs uppercase tracking-[0.28em] text-white/60">
+          <li className="rounded-md border-[1.5px] border-[rgba(46,32,20,.22)] bg-[#efe5d0] px-4 py-3 text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">
             On arrive…
           </li>
         )}
@@ -85,7 +86,7 @@ export function ResultsView({
     return map
   }, [leaderboard])
 
-  const accent = accentColor ?? "#8b5cf6"
+  const accent = accentColor ?? "#c65133"
 
   const resolveContributor = useCallback(
     (track: SoloTrack) => {
@@ -125,13 +126,13 @@ export function ResultsView({
   }
 
   return (
-    <section className="flex flex-col gap-5 rounded-2xl border border-white/10 bg-[#0c0c0c] p-7 text-center">
+    <section className="flex flex-col gap-5 rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-7 text-center shadow-[4px_4px_0_rgba(46,32,20,.18)]">
       <div className="flex flex-col items-center gap-1 text-center">
-        <div className="flex items-center gap-2 text-sm text-white/70">
+        <div className="flex items-center gap-2 text-sm text-[#6b573f]">
           <PartyPopper className="h-5 w-5" style={{ color: accent }} />
           <span>Bravo ! Voici le podium</span>
         </div>
-        <h2 className="text-2xl font-semibold text-white">Résumé de la manche</h2>
+        <h2 className="font-display text-2xl font-semibold text-[#2e2014]">Résumé de la manche</h2>
       </div>
 
       <div className="flex flex-col items-center">
@@ -140,11 +141,11 @@ export function ResultsView({
             const rank = idx === 1 ? 1 : idx === 0 ? 2 : 3
             const height = rank === 1 ? "min-h-[13rem]" : rank === 2 ? "min-h-[11rem]" : "min-h-[10rem]"
             const colOrder = rank === 1 ? "md:col-start-2" : rank === 2 ? "md:col-start-1" : "md:col-start-3"
-            const borderColor = rank === 1 ? accent : "rgba(255,255,255,0.2)"
+            const borderColor = rank === 1 ? accent : "#2e2014"
             return (
               <div key={entry!.userId} className={`flex flex-col items-center gap-3 ${colOrder}`}>
                 <div
-                  className={`relative flex items-center justify-center overflow-hidden rounded-full border-2 border-white/20 bg-[#0f0f0f] text-xl font-bold text-white ${rank === 1 ? "h-24 w-24" : "h-20 w-20"}`}
+                  className={`relative flex items-center justify-center overflow-hidden rounded-full border-2 border-[#2e2014] bg-[#f4ecdb] text-xl font-bold text-[#2e2014] ${rank === 1 ? "h-24 w-24" : "h-20 w-20"}`}
                 >
                   {rank === 1 && <span className="absolute -top-5 text-2xl">👑</span>}
                   {entry!.avatar ? (
@@ -154,26 +155,26 @@ export function ResultsView({
                   )}
                 </div>
                 <div
-                  className={`flex w-48 flex-col items-center justify-end rounded-2xl border px-4 pb-4 pt-5 text-white ${height}`}
-                  style={{ borderColor, backgroundColor: "#0f0f0f" }}
+                  className={`flex w-48 flex-col items-center justify-end rounded-md border-2 px-4 pb-4 pt-5 text-[#2e2014] ${height}`}
+                  style={{ borderColor, backgroundColor: "#f4ecdb", boxShadow: rank === 1 ? `4px 4px 0 ${accent}` : "4px 4px 0 rgba(46,32,20,.18)" }}
                 >
-                  <div className="text-4xl font-black" style={{ color: borderColor }}>
+                  <div className="font-display text-4xl font-black" style={{ color: rank === 1 ? accent : "#8a7558" }}>
                     {rank}
                   </div>
-                  <div className="mt-1 text-base font-semibold text-white">{entry!.username || `Joueur ${entry!.userId}`}</div>
-                  <div className="text-sm text-white/70">{entry!.score} pts • {entry!.accuracy}%</div>
+                  <div className="mt-1 text-base font-semibold text-[#2e2014]">{entry!.username || `Joueur ${entry!.userId}`}</div>
+                  <div className="text-sm text-[#6b573f]">{entry!.score} pts • {entry!.accuracy}%</div>
                 </div>
               </div>
             )
           })}
         </div>
-        {podium.length === 0 && <div className="text-sm text-white/60">Aucun score.</div>}
+        {podium.length === 0 && <div className="text-sm text-[#8a7558]">Aucun score.</div>}
       </div>
 
       {rest.length ? (
-        <div className="rounded-2xl border border-white/10 bg-[#0f0f0f]">
-          <table className="w-full text-left text-sm text-white/80">
-            <thead className="text-xs uppercase tracking-[0.28em] text-white/60">
+        <div className="rounded-md border-[1.5px] border-[rgba(46,32,20,.22)] bg-[#efe5d0]">
+          <table className="w-full text-left text-sm text-[#2e2014]">
+            <thead className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">
               <tr>
                 <th className="px-6 py-3">Rank</th>
                 <th className="px-6 py-3">Player</th>
@@ -183,11 +184,11 @@ export function ResultsView({
             </thead>
             <tbody>
               {rest.map((entry, index) => (
-                <tr key={entry.userId} className="border-t border-white/10">
+                <tr key={entry.userId} className="border-t border-dotted border-[rgba(46,32,20,.45)]">
                   <td className="px-6 py-3">{index + 4}</td>
                   <td className="px-6 py-3">{entry.username || `Player #${entry.userId}`}</td>
-                  <td className="px-6 py-3 text-right font-semibold text-white">{entry.score}</td>
-                  <td className="px-6 py-3 text-right text-white/70">{entry.accuracy}%</td>
+                  <td className="px-6 py-3 text-right font-semibold text-[#2e2014]">{entry.score}</td>
+                  <td className="px-6 py-3 text-right text-[#6b573f]">{entry.accuracy}%</td>
                 </tr>
               ))}
             </tbody>
@@ -195,17 +196,17 @@ export function ResultsView({
         </div>
       ) : null}
 
-      <div className="rounded-2xl border border-white/10 bg-[#0f0f0f] p-5 text-left">
+      <div className="rounded-md border-[1.5px] border-[rgba(46,32,20,.22)] bg-[#efe5d0] p-5 text-left">
         <div className="mb-3 flex items-center justify-between">
           <div>
-            <h3 className="text-lg font-semibold text-white">Titres joués</h3>
-            <p className="text-xs uppercase tracking-[0.28em] text-white/60">Joueur source affiché et ajout aux likes</p>
+            <h3 className="font-display text-lg font-semibold text-[#2e2014]">Titres joués</h3>
+            <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">Joueur source affiché et ajout aux likes</p>
           </div>
-          <span className="text-xs uppercase tracking-[0.28em] text-white/60">{tracks.length} titres</span>
+          <span className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">{tracks.length} titres</span>
         </div>
         <div className="grid gap-2 sm:grid-cols-2">
           {tracks.length === 0 ? (
-            <p className="text-sm text-white/60">Aucun titre disponible.</p>
+            <p className="text-sm text-[#8a7558]">Aucun titre disponible.</p>
           ) : (
             tracks.map((track, idx) => {
               const owner = resolveContributor(track)
@@ -215,28 +216,28 @@ export function ResultsView({
               return (
                 <div
                   key={`${id}-${idx}`}
-                  className="flex items-center justify-between rounded-xl border border-white/10 bg-[#111] px-4 py-3 text-sm"
+                  className="flex items-center justify-between rounded-md border-[1.5px] border-[rgba(46,32,20,.22)] bg-[#ece1c8] px-4 py-3 text-sm"
                 >
                   <div className="flex flex-col gap-1">
-                    <div className="font-semibold text-white">{track.title}</div>
-                    <div className="text-xs text-white/70">{track.artist}</div>
-                    <div className="flex items-center gap-2 text-[11px] text-white/60">
-                      <span className="rounded-full border border-white/10 bg-white/5 px-2 py-[2px] uppercase tracking-[0.2em] text-[10px] text-white/70">
+                    <div className="font-semibold text-[#2e2014]">{track.title}</div>
+                    <div className="text-xs text-[#6b573f]">{track.artist}</div>
+                    <div className="flex items-center gap-2 text-[11px] text-[#8a7558]">
+                      <span className="rounded-full border-[1.5px] border-[rgba(46,32,20,.35)] bg-[#f4ecdb] px-2 py-[2px] text-[10px] font-bold uppercase tracking-[0.14em] text-[#6b573f]">
                         Joueur
                       </span>
-                      <span className="text-white/80">{owner ?? "Inconnu"}</span>
+                      <span className="text-[#2e2014]">{owner ?? "Inconnu"}</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
                     <button
                       disabled={!id || isLiking}
                       onClick={() => handleLike(track)}
-                      className={`flex h-9 w-9 items-center justify-center rounded-full border border-white/10 transition hover:border-rose-400/60 hover:text-rose-300 ${isLiked ? "bg-rose-500/20 text-rose-200" : "bg-white/5 text-white"}`}
+                      className={`flex h-9 w-9 items-center justify-center rounded-full border-[1.5px] transition ${isLiked ? "border-[#c65133] bg-[#c65133] text-[#f4ecdb]" : "border-[rgba(46,32,20,.35)] bg-[#f4ecdb] text-[#2e2014] hover:border-[#c65133] hover:text-[#c65133]"}`}
                       title="Ajouter aux likes"
                     >
                       <Heart className={`h-4 w-4 ${isLiked ? "fill-current" : ""}`} />
                     </button>
-                    <span className="text-xs text-white/60">#{idx + 1}</span>
+                    <span className="text-xs text-[#8a7558]">#{idx + 1}</span>
                   </div>
                 </div>
               )
@@ -246,14 +247,18 @@ export function ResultsView({
       </div>
 
       <div className="flex justify-center gap-4">
-        <Button variant="outline" onClick={onReturn} className="gap-2 rounded-full border-white/15 px-4 py-2 text-sm text-white">
+        <Button
+          variant="outline"
+          onClick={onReturn}
+          className="gap-2 rounded-full border-[1.5px] border-[#2e2014] bg-transparent px-4 py-2 text-sm font-bold text-[#2e2014] hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+        >
           <ArrowLeft className="h-4 w-4" />
           Retour modes
         </Button>
         <Button
           variant="outline"
           onClick={onReplay}
-          className="gap-2 rounded-full px-4 py-2 text-sm"
+          className="gap-2 rounded-full border-2 bg-transparent px-4 py-2 text-sm font-bold"
           style={{ borderColor: accent, color: accent }}
         >
           <ShieldCheck className="h-4 w-4" />
