@@ -190,10 +190,14 @@ const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, error: { code: "rate_limited", message: "Trop de requêtes. Réessaye dans 1 minute." } },
-  // nginx pose X-Local-Client=1 UNIQUEMENT pour les requêtes émises depuis la
-  // machine elle-même (E2E, healthchecks) et l'écrase pour tout client externe.
-  // Sans ça, la suite E2E sérielle épuise les 15/min et cascade en 429.
-  skip: req => req.headers["x-local-client"] === "1",
+  // Bypass E2E par secret partagé (E2E_BYPASS_KEY) : la suite sérielle crée
+  // >15 sessions invité/min et cascadait en 429. Un header d'origine IP est
+  // impossible ici : sslh (non-transparent) est devant nginx, donc TOUTES les
+  // requêtes arrivent en 127.0.0.1. Le secret n'est connu que des tests locaux.
+  skip: req => {
+    const key = process.env.E2E_BYPASS_KEY;
+    return Boolean(key) && req.headers["x-e2e-key"] === key;
+  },
 });
 app.use("/api/auth", authLimiter);
 

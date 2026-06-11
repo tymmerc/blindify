@@ -4,6 +4,10 @@
 import { chromium } from "@playwright/test"
 import fs from "fs"
 
+// Bypass rate-limits pour les tests (voir playwright.config.ts pour le pourquoi).
+let E2E_KEY = ""
+try { E2E_KEY = fs.readFileSync("/opt/blindify/.e2e-bypass-key", "utf8").trim() } catch {}
+
 const BASE = "https://tymmerc.eu/blindify"
 const API = `${BASE}/api`
 const SPOTIFY_PROFILE = "https://open.spotify.com/user/yigiha54gqwl2tj39ymvu1n2s"
@@ -14,7 +18,10 @@ const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a)
 const results = { friends: {}, event: {}, streamer: {} }
 
 async function newPlayer(browser, nickname) {
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } })
+  const ctx = await browser.newContext({
+    viewport: { width: 1280, height: 800 },
+    extraHTTPHeaders: E2E_KEY ? { "X-E2E-Key": E2E_KEY } : {},
+  })
   const page = await ctx.newPage()
   // authLimiter backend : 15 req/min — retry avec backoff si la fenêtre est pleine.
   for (let attempt = 0; attempt < 5; attempt++) {

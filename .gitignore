@@ -28,3 +28,6 @@ e2e-dashboard/node_modules/
 frontend/playwright-report/
 frontend/test-results/
 frontend/e2e/*.zip
+
+# Secret local de bypass des rate-limits pour E2E
+.e2e-bypass-key
