@@ -185,7 +185,7 @@ test.describe("Friends — 2 players full game", () => {
         await hostPage.waitForTimeout(1000)
         const text = await getBodyText(hostPage)
         // New synthwave lobby: "CREW 02/04". Legacy: "Joueurs · 2".
-        const match = text.match(/CREW\s*0?(\d+)\s*\//i) || text.match(/Joueurs\s*[·:]\s*(\d+)/i)
+        const match = text.match(/(?:CREW|[ÉE]QUIPAGE)\s*0?(\d+)\s*\//i) || text.match(/Joueurs\s*[·:]\s*(\d+)/i)
         playerCount = match ? parseInt(match[1], 10) : 0
         console.log(`Waiting for player 2... count=${playerCount} (${i + 1}s)`)
         if (playerCount >= 2) break

@@ -75,7 +75,7 @@ test.describe("Full user flow — Mode Friends", () => {
     // Wait for lobby code to render (fully loaded signal)
     await hostPage.waitForSelector("h1", { state: "visible", timeout: 10000 }).catch(() => {})
     await hostPage.waitForFunction(
-      () => /ROOM_CODE|Code de la salle|CREW|PRESS START/i.test(document.body.textContent ?? ""),
+      () => /ROOM_CODE|Code de la salle|SALLE|CREW|[ÉE]QUIPAGE|PRESS START|Défie/i.test(document.body.textContent ?? ""),
       { timeout: 10000 }
     ).catch(() => {})
     const hostText = await hostPage.locator("body").innerText()
