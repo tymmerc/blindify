@@ -133,6 +133,20 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   const [starting, setStarting] = useState(false)
   const [joining, setJoining] = useState(false)
   const [importing, setImporting] = useState(false)
+  // Bandeau d'erreur transitoire (room:error socket, resync...) - auto-efface.
+  const [socketNotice, setSocketNotice] = useState<string | null>(null)
+  // Signal incrementiel : un refus serveur d'une reponse doit sortir l'UI de
+  // l'etat optimiste "Envoyee" (sinon le joueur croit avoir repondu).
+  const [answerRejectSignal, setAnswerRejectSignal] = useState(0)
+  // Bootstrap rate-limite (429) : message au lieu d'un spinner infini.
+  const [rateLimited, setRateLimited] = useState(false)
+  const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const showNotice = useCallback((msg: string, isAnswerReject = false) => {
+    setSocketNotice(msg)
+    if (isAnswerReject) setAnswerRejectSignal(x => x + 1)
+    if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current)
+    noticeTimerRef.current = setTimeout(() => setSocketNotice(null), 6000)
+  }, [])
   const [streamerMode, setStreamerMode] = useState<StreamerSubMode>("duo")
   const [soloSource, setSoloSource] = useState<"streamer" | "chat">("streamer")
   const abortFlowRef = useRef(false)
@@ -162,8 +176,10 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     roundStart?: (payload: { roomCode: string; round: number; track: MultiplayerGameState["currentTrack"]; timing: { startAt: number | null; revealAt: number | null } }) => void
     roundReveal?: (payload: { roomCode: string; round: number; players: MultiplayerGameState["players"]; timing: { startAt: number | null; revealAt: number | null } }) => void
     gameOver?: (payload: { roomCode: string; players: MultiplayerGameState["players"] }) => void
+    roomError?: (payload: { code?: string; message?: string }) => void
   }>({})
   const roomRef = useRef<MultiplayerRoom | null>(null)
+  const gameStateRef = useRef<MultiplayerGameState | StreamerState | null>(null)
   const userRef = useRef<CurrentUserPayload | null>(null)
   const currentUserId = userPayload?.user.id ?? 0
 
@@ -197,8 +213,10 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
 
   useEffect(() => {
     let active = true
+    let retryTimer: ReturnType<typeof setTimeout> | null = null
     async function bootstrap() {
       try {
+        setRateLimited(false)
         // Check for existing session
         const existing = await api.checkAuth()
         if (!active) return
@@ -220,13 +238,31 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
               router.replace(`/auth/login?returnTo=${encodeURIComponent(ret)}`)
               return
             }
-          } catch {
+          } catch (guestErr) {
+            const gstatus = (guestErr as { status?: number })?.status
+            if (gstatus === 429) {
+              setRateLimited(true)
+              retryTimer = setTimeout(() => { if (active) bootstrap() }, 4000)
+              return
+            }
             storePostAuthRedirect()
             const ret = window.location.pathname + window.location.search
             router.replace(`/auth/login?returnTo=${encodeURIComponent(ret)}`)
             return
           }
         }
+      } catch (err) {
+        if (!active) return
+        const status = (err as { status?: number })?.status
+        if (status === 429) {
+          // Trop de requetes : message + retry auto (au lieu d'un spinner infini).
+          setRateLimited(true)
+          retryTimer = setTimeout(() => { if (active) bootstrap() }, 4000)
+          return
+        }
+        // Autre erreur reseau : laisser l'utilisateur reessayer manuellement.
+        setRateLimited(false)
+        setError("Connexion impossible pour l'instant. Verifie ta connexion et reessaie.")
       } finally {
         if (active) setLoading(false)
       }
@@ -235,6 +271,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
 
     return () => {
       active = false
+      if (retryTimer) clearTimeout(retryTimer)
       const latestRoom = roomRef.current
       const latestUser = userRef.current
       if (latestRoom && latestUser) {
@@ -253,6 +290,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
           socket.off("game:over", handlersRef.current.gameOver)
           socket.off("game:game:over", handlersRef.current.gameOver)
         }
+        if (handlersRef.current.roomError) socket.off("room:error", handlersRef.current.roomError)
       }
       disconnectSocket()
     }
@@ -261,6 +299,30 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   useEffect(() => {
     roomRef.current = room
   }, [room])
+
+  // Filet anti-gel : si on reste bloque en REVEAL trop longtemps (un game:ready
+  // perdu empeche tout le monde d'avancer), on resynchronise une fois via
+  // game:sync et on previent le joueur. Borne a un seul declenchement par phase.
+  useEffect(() => {
+    const gs = gameState as MultiplayerGameState | null
+    if (!gs || gs.phase !== "REVEAL" || !room) return
+    const round = gs.currentRound
+    const t = setTimeout(() => {
+      const socket = socketRef.current
+      if (!socket?.connected) return
+      const still = gameStateRef.current as MultiplayerGameState | null
+      if (still?.phase === "REVEAL" && still.currentRound === round) {
+        socket.emit("game:sync", { roomCode: room.room_code })
+        socket.emit("game:ready", { roomCode: room.room_code })
+        showNotice("Resynchronisation de la partie…")
+      }
+    }, 25000)
+    return () => clearTimeout(t)
+  }, [gameState, room, showNotice])
+
+  useEffect(() => {
+    gameStateRef.current = gameState
+  }, [gameState])
 
   useEffect(() => {
     userRef.current = userPayload
@@ -447,6 +509,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         socket.off("game:over", handlersRef.current.gameOver)
         socket.off("game:game:over", handlersRef.current.gameOver)
       }
+      if (handlersRef.current.roomError) socket.off("room:error", handlersRef.current.roomError)
 
       const presenceHandler = (payload: RoomPresenceEvent) => {
         if (payload.roomCode !== roomCode) return
@@ -591,6 +654,26 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       socket.on("game:over", gameOverHandler)
       socket.on("game:game:over", gameOverHandler)
 
+      const roomErrorHandler = (payload: { code?: string; message?: string }) => {
+        const msg = payload?.message || "Une action a ete refusee par le serveur."
+        // Un refus d'acces a la salle = on a probablement perdu notre place :
+        // re-emettre room:join pour se reinscrire au lieu de rester muet.
+        if (payload?.code === "forbidden" || /acc[eè]s/i.test(msg)) {
+          socket.emit("room:join", {
+            roomCode,
+            user: userPayload?.user ? { id: userPayload.user.id, username: userPayload.user.username ?? undefined } : undefined,
+          })
+        }
+        // Messages benins (fin de partie / room nettoyee) : l'auto-ready peut
+        // emettre game:ready apres la fin -> "Aucune partie en cours". Ne pas
+        // alarmer le joueur avec ca.
+        if (/aucune partie|introuvable/i.test(msg)) return
+        // Si c'est un refus de reponse, sortir l'UI de l'etat "Envoyee".
+        const isAnswerReject = /r[eé]ponse|acc[eè]s/i.test(msg)
+        showNotice(msg, isAnswerReject)
+      }
+      socket.on("room:error", roomErrorHandler)
+
       handlersRef.current = {
         connect: undefined,
         presence: presenceHandler,
@@ -599,6 +682,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         roundStart: roundStartHandler,
         roundReveal: roundRevealHandler,
         gameOver: gameOverHandler,
+        roomError: roomErrorHandler,
       }
 
       const emitJoin = () => {
@@ -635,7 +719,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         }
       })()
     },
-    [ensureSocket, userPayload, refreshParticipants, resolveViewFromState, viewToLobbyAction, tracks.length, gameState, room?.host_user_id]
+    [ensureSocket, userPayload, refreshParticipants, resolveViewFromState, viewToLobbyAction, tracks.length, gameState, room?.host_user_id, showNotice]
   )
 
   const handleCreateRoom = useCallback(
@@ -1095,18 +1179,29 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     }
   }, [loading, userPayload, router, storePostAuthRedirect, pendingAction, intent, initialJoinCode])
 
-  if (loading) {
+  if (loading || !userPayload) {
     return (
-      <div className="grid min-h-screen place-items-center">
-        <Loader2 className="h-8 w-8 animate-spin text-[#c65133]" />
-      </div>
-    )
-  }
-
-  if (!userPayload) {
-    return (
-      <div className="grid min-h-screen place-items-center">
-        <Loader2 className="h-8 w-8 animate-spin text-[#8a7558]" />
+      <div className="grid min-h-screen place-items-center px-6 text-center">
+        {rateLimited ? (
+          <div className="max-w-sm space-y-3">
+            <p className="font-display text-xl font-semibold text-[#2e2014]">Un instant…</p>
+            <p className="text-sm text-[#6b573f]">Beaucoup de monde se connecte en même temps. On réessaie tout seul dans quelques secondes.</p>
+            <Loader2 className="mx-auto h-6 w-6 animate-spin text-[#c65133]" />
+          </div>
+        ) : error ? (
+          <div className="max-w-sm space-y-3">
+            <p className="text-sm font-semibold text-[#9c2f1d]">{error}</p>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="rounded-md border-2 border-[#2e2014] bg-[#c65133] px-5 py-2.5 text-sm font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014]"
+            >
+              Réessayer
+            </button>
+          </div>
+        ) : (
+          <Loader2 className="h-8 w-8 animate-spin text-[#c65133]" />
+        )}
       </div>
     )
   }
@@ -1269,14 +1364,23 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
           user={userPayload.user}
           state={gameState as MultiplayerGameState}
           serverNow={serverNow}
+          answerRejectSignal={answerRejectSignal}
           onAnswer={(guessTitle, guessArtist, sourceUserId) => {
             const socket = socketRef.current
-            if (!socket) return
+            if (!socket || !socket.connected) {
+              showNotice("Connexion perdue — ta réponse n'est pas partie. Reconnexion…", true)
+              ensureSocket()
+              return
+            }
             socket.emit("game:answer", { roomCode: room.room_code, guessTitle, guessArtist, sourceUserId })
           }}
           onReady={() => {
             const socket = socketRef.current
-            if (!socket) return
+            if (!socket || !socket.connected) {
+              showNotice("Connexion perdue. Reconnexion…")
+              ensureSocket()
+              return
+            }
             socket.emit("game:ready", { roomCode: room.room_code })
           }}
           mode={mode}
@@ -1349,6 +1453,15 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       isGuest={isGuest}
     >
       <div className="flex flex-col gap-4">
+        {socketNotice ? (
+          <div
+            role="alert"
+            className="flex items-center justify-between gap-3 rounded-md border-2 border-[#9c2f1d] bg-[#efe5d0] px-4 py-3 text-sm font-semibold text-[#9c2f1d] shadow-[4px_4px_0_rgba(46,32,20,.18)]"
+          >
+            <span>{socketNotice}</span>
+            <button type="button" onClick={() => setSocketNotice(null)} className="shrink-0 text-xs font-bold uppercase tracking-[0.14em] underline">Fermer</button>
+          </div>
+        ) : null}
         {guestNotice}
         {content}
         {spotifyPrompt}

@@ -82,6 +82,8 @@ type Props = {
   mode: GameMode
   chatMessages?: ChatMessage[]
   onSendChat?: (message: string) => void
+  /** Incremente quand le serveur refuse une reponse -> sortir de l'etat "Envoyee". */
+  answerRejectSignal?: number
 }
 
 type Phase = "guessing" | "locked" | "reveal"
@@ -100,6 +102,7 @@ export function MultiplayerGameClient({
   mode,
   chatMessages = [],
   onSendChat,
+  answerRejectSignal,
 }: Props) {
   const resolvedConfig = modeConfig ?? GAME_MODES[mode] ?? GAME_MODES.friends
   const accent = accentColor ?? (resolvedConfig as { theme?: { accent?: string } }).theme?.accent ?? "#c65133"
@@ -196,6 +199,18 @@ export function MultiplayerGameClient({
       setVolume(snapshot.volume)
     })
   }, [])
+
+  // Le serveur a refuse la reponse : retirer le lock optimiste "Envoyee" pour
+  // que le joueur puisse re-tenter au lieu de croire que c'est parti.
+  const firstRejectSignal = useRef(answerRejectSignal)
+  useEffect(() => {
+    if (answerRejectSignal === undefined) return
+    if (firstRejectSignal.current === undefined) { firstRejectSignal.current = answerRejectSignal; return }
+    if (answerRejectSignal !== firstRejectSignal.current) {
+      firstRejectSignal.current = answerRejectSignal
+      setJustSubmitted(false)
+    }
+  }, [answerRejectSignal])
 
   // Audio should play during both guessing and locked phases (music keeps playing
   // after submit while waiting for other players). Use a stable boolean so the effect
@@ -300,9 +315,11 @@ export function MultiplayerGameClient({
     return () => clearTimeout(timer)
   }, [justSubmitted, hasAnswered, remaining, backendPhase, guessTitle, guessArtist, sourceGuess])
 
-  // Auto-advance countdown during reveal phase
+  // Auto-advance countdown during reveal phase.
+  // Ne PAS tourner quand la partie est FINISHED : sinon on emet un game:ready
+  // fantome apres la fin (room nettoyee -> "Aucune partie en cours").
   useEffect(() => {
-    if (uiPhase !== "reveal" || disabled || player?.isReady) {
+    if (uiPhase !== "reveal" || disabled || player?.isReady || backendPhase === "FINISHED") {
       setRevealCountdown(REVEAL_COUNTDOWN)
       return
     }
@@ -317,7 +334,7 @@ export function MultiplayerGameClient({
       })
     }, 1000)
     return () => clearInterval(interval)
-  }, [uiPhase, disabled, player?.isReady, REVEAL_COUNTDOWN])
+  }, [uiPhase, disabled, player?.isReady, REVEAL_COUNTDOWN, backendPhase])
 
   // Auto-scroll chat
   useEffect(() => {
