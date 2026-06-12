@@ -1240,4 +1240,30 @@ const theaterStyles = `
     .theater-dock > .theater-field:nth-child(3){grid-column:1 / -1}
     .theater-submit{grid-column:1 / -1; width:100%}
   }
+
+  /* ===== Téléphone : le chrono + les 3 champs doivent tenir SANS scroller.
+     On bride la platine pour laisser la place au dock de réponse. ===== */
+  @media (max-width:640px){
+    .theater-stage{padding:8px 12px 12px !important; gap:8px !important}
+    .theater-brand{font-size:14px}
+    .theater-brand small{display:none}
+    .theater-pill{gap:12px; padding:7px 14px}
+    .theater-timer{font-size:24px; min-width:36px}
+    .theater-rdots{display:none}
+    .theater-show{gap:8px}
+    .theater-arena{max-height:30vh; max-width:62vw}
+    .theater-status-row{font-size:11px}
+    .theater-wave{display:none}
+    .theater-dock{grid-template-columns:1fr !important; padding:12px !important; gap:10px !important}
+    .theater-dock > .theater-field{grid-column:1 / -1}
+    .theater-dock-tag-left, .theater-dock-tag-right{display:none}
+    .theater-input{font-size:16px}
+    .theater-picker{gap:6px}
+    .theater-pick{padding:5px 8px}
+    .theater-submit{padding:14px; font-size:14px}
+    .theater-reveal-card{flex-direction:column; text-align:center; gap:14px}
+    .theater-reveal-cover{width:120px; height:120px}
+    .finale-disc{width:104px; height:104px}
+    .finale-board{max-width:100%}
+  }
 `
