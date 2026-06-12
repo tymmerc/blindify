@@ -79,19 +79,24 @@ export async function persistGameResults(state: GameState, sessionId: number | u
          WHERE session_id = $1 AND user_id = $2`,
         [sessionId, player.userId, player.score, player.accuracy, player.bestStreak],
       );
+      // XP gratifiant : avec le scoring 1pt, le score brut (0-N) ferait stagner
+      // les niveaux. On recompense les bonnes reponses + la meilleure serie.
+      const xpGain = player.correct * 10 + player.bestStreak * 5;
       // Aggregate lifetime stats (mirrors the solo persistSoloResult pattern).
+      // total_reaction_ms alimente la carte "Temps de reaction" (sinon = 0 a vie).
       await pool.query(
-        `INSERT INTO user_stats (user_id, total_games, total_correct, total_guesses, total_xp, best_streak, last_played_at, updated_at)
-         VALUES ($1, 1, $2, $3, $4, $5, NOW(), NOW())
+        `INSERT INTO user_stats (user_id, total_games, total_correct, total_guesses, total_xp, total_reaction_ms, best_streak, last_played_at, updated_at)
+         VALUES ($1, 1, $2, $3, $4, $6, $5, NOW(), NOW())
          ON CONFLICT (user_id) DO UPDATE SET
            total_games = user_stats.total_games + 1,
            total_correct = user_stats.total_correct + $2,
            total_guesses = user_stats.total_guesses + $3,
            total_xp = user_stats.total_xp + $4,
+           total_reaction_ms = user_stats.total_reaction_ms + $6,
            best_streak = GREATEST(user_stats.best_streak, $5),
            last_played_at = NOW(),
            updated_at = NOW()`,
-        [player.userId, player.correct, player.rounds, player.score, player.bestStreak],
+        [player.userId, player.correct, player.rounds, xpGain, player.bestStreak, Math.round(player.totalReactionMs ?? 0)],
       );
     }
     await pool.query(

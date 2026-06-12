@@ -126,7 +126,7 @@ function ClassicForm() {
               className="h-4 w-4 rounded border-[#2e2014] bg-[#efe5d0] accent-[#c65133]"
             />
             <span className="text-xs font-bold uppercase tracking-[0.15em] text-[#6b573f]">
-              Mode progressif (30s puis 10s)
+              Mode progressif (30s, 20s, 10s)
             </span>
           </label>
         </div>

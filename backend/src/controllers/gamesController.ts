@@ -653,6 +653,7 @@ export const gamesController = {
          LEFT JOIN game_participants gp
            ON gp.session_id = gs.id AND gp.user_id = $1
          WHERE gs.host_user_id = $1
+            OR EXISTS (SELECT 1 FROM game_participants gp2 WHERE gp2.session_id = gs.id AND gp2.user_id = $1)
          ORDER BY gs.started_at DESC
          LIMIT 20`,
         [context.user.id]

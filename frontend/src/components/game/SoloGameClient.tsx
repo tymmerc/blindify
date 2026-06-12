@@ -1644,7 +1644,7 @@ export function SoloGameClient({
           <div className="mt-3 rounded-md border-[1.5px] border-[rgba(46,32,20,.22)] bg-[#efe5d0] p-3 text-sm text-[#2e2014] flex flex-col gap-1">
             <div className="font-display text-base font-bold text-[#c65133]">+{resultDialog.points} pts</div>
             <div className="text-[12px] text-[#8a7558]">
-              Titre {resultDialog.breakdown.title} · Artiste {resultDialog.breakdown.artist} · Vitesse {resultDialog.breakdown.speed}{resultDialog.breakdown.penalty > 0 ? ` · Pénalité -${resultDialog.breakdown.penalty}` : ""}{resultDialog.breakdown.hint > 0 ? ` · Indices -${resultDialog.breakdown.hint}` : ""}
+              {resultDialog.breakdown.title > 0 ? "Titre trouvé" : "Titre raté"} · {resultDialog.breakdown.artist > 0 ? "Artiste trouvé" : "Artiste raté"}
             </div>
           </div>
 

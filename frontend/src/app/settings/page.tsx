@@ -84,10 +84,10 @@ export default function SettingsPage() {
 
         <Section title="Compte" accent="#c65133">
           <SettingRow label="Nom d'utilisateur" description={displayName}>
-            <GhostButton>Modifier</GhostButton>
+            <GhostButton disabled>Bientot</GhostButton>
           </SettingRow>
           <SettingRow label="Email" description={email}>
-            <GhostButton>Modifier</GhostButton>
+            <GhostButton disabled>Bientot</GhostButton>
           </SettingRow>
         </Section>
 
@@ -134,21 +134,17 @@ export default function SettingsPage() {
         </Section>
 
         <Section title="Zone de danger" accent="#9c2f1d">
-          <SettingRow label="Supprimer les donnees telechargees" description="Liberer l'espace de stockage en supprimant les morceaux telecharges">
-            <DangerButton>Supprimer</DangerButton>
-          </SettingRow>
+          <p className="mb-2 text-[12px] italic text-[#8a7558]">Ces actions arrivent bientot. Pour supprimer ton compte ou tes donnees maintenant, ecris-nous.</p>
           <SettingRow label="Reinitialiser les statistiques" description="Remettre a zero toutes vos statistiques et succes">
-            <DangerButton>Reinitialiser</DangerButton>
+            <DangerButton disabled>Bientot</DangerButton>
           </SettingRow>
           <SettingRow label="Supprimer le compte" description="Supprimer definitivement votre compte et toutes vos donnees">
-            <DangerButton>Supprimer</DangerButton>
+            <DangerButton disabled>Bientot</DangerButton>
           </SettingRow>
         </Section>
 
         <p className="mt-8 text-center text-[10px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">
-          Blindify v1.0.0 ·{" "}
-          <span className="cursor-pointer text-[#6b573f] underline hover:text-[#c65133]">CGU</span>{" "}
-          · <span className="cursor-pointer text-[#6b573f] underline hover:text-[#c65133]">Privacy</span>
+          Blindify v1.0.0
         </p>
       </div>
     </div>
@@ -236,17 +232,25 @@ function Select({ value, onChange, options }: { value: string; onChange: (value:
   )
 }
 
-function GhostButton({ children }: { children: React.ReactNode }) {
+function GhostButton({ children, disabled, onClick }: { children: React.ReactNode; disabled?: boolean; onClick?: () => void }) {
   return (
-    <button className="rounded-full border-[1.5px] border-[#2e2014] bg-transparent px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]">
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="rounded-full border-[1.5px] border-[#2e2014] bg-transparent px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[#2e2014]"
+    >
       {children}
     </button>
   )
 }
 
-function DangerButton({ children }: { children: React.ReactNode }) {
+function DangerButton({ children, disabled, onClick }: { children: React.ReactNode; disabled?: boolean; onClick?: () => void }) {
   return (
-    <button className="rounded-full border-[1.5px] border-[#9c2f1d] bg-transparent px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#9c2f1d] transition hover:bg-[#9c2f1d] hover:text-[#f4ecdb]">
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="rounded-full border-[1.5px] border-[#9c2f1d] bg-transparent px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#9c2f1d] transition hover:bg-[#9c2f1d] hover:text-[#f4ecdb] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[#9c2f1d]"
+    >
       {children}
     </button>
   )
