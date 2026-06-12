@@ -140,6 +140,16 @@ function ClassicForm() {
         >
           Lancer le blind test
         </button>
+        <button
+          type="button"
+          onClick={() => {
+            const progressiveParam = progressive ? "&progressive=true" : ""
+            router.push(`/solo?source=liked&count=${roundCount}${progressiveParam}`)
+          }}
+          className="w-full justify-center rounded-md border-2 border-[#2e2014] bg-transparent px-5 py-3 text-sm font-bold text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+        >
+          ♥ Jouer mes titres likés
+        </button>
       </form>
 
       <div className="flex flex-wrap gap-2 text-[10px] font-bold uppercase tracking-[0.1em] text-[#8a7558]">
