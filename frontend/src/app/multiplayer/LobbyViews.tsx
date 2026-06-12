@@ -4,6 +4,8 @@ import { useCallback, useMemo, useState } from "react"
 import { ArrowLeft, Heart, PartyPopper, ShieldCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import type { GameModeConfig } from "@/lib/gameModes"
+
+const UUID_LIKE_REGEX = /^[0-9a-fA-F-]{10,}$/
 import { api } from "@/lib/api"
 import type { MultiplayerParticipant, SoloTrack } from "@/lib/types"
 
@@ -114,16 +116,20 @@ export function ResultsView({
   }
 
   const handleLike = async (track: SoloTrack) => {
-    const id = track.audioSourceId ?? track.track_id
-    if (!id || liking[id]) return
-    setLiking(prev => ({ ...prev, [id]: true }))
+    // likes.audio_source_id est un UUID FK : ne liker QUE si on a un vrai
+    // audioSourceId (un track_id Spotify ferait planter l'INSERT en 500).
+    const uuid =
+      track.audioSourceId ??
+      (UUID_LIKE_REGEX.test(track.track_id) ? track.track_id : null)
+    if (!uuid || liking[uuid]) return
+    setLiking(prev => ({ ...prev, [uuid]: true }))
     try {
-      await api.addLike(currentUserId, track.audioSourceId ?? track.track_id)
-      setLikedIds(prev => new Set(prev).add(id))
+      await api.addLike(currentUserId, uuid)
+      setLikedIds(prev => new Set(prev).add(uuid))
     } catch (err) {
       console.error("like_track_failed", err)
     } finally {
-      setLiking(prev => ({ ...prev, [id]: false }))
+      setLiking(prev => ({ ...prev, [uuid]: false }))
     }
   }
 
@@ -247,7 +253,8 @@ export function ResultsView({
           ) : (
             tracks.map((track, idx) => {
               const owner = resolveContributor(track)
-              const id = track.audioSourceId ?? track.track_id
+              const id =
+                track.audioSourceId ?? (UUID_LIKE_REGEX.test(track.track_id) ? track.track_id : null)
               const isLiking = liking[id ?? ""] || false
               const isLiked = likedIds.has(id ?? "")
               return (

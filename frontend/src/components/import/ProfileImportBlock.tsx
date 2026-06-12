@@ -70,19 +70,28 @@ export function ProfileImportBlock({ accent = "#c65133", onImportingChange, init
   }, [autoStart, initialUrl])
 
   if (state === "done") {
+    const nothing = syncedCount === 0
     return (
       <div className="space-y-2">
-        <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: accent }}>
-          <span>{syncedCount} titre{syncedCount > 1 ? "s" : ""} importe{syncedCount > 1 ? "s" : ""}</span>
-        </div>
+        {nothing ? (
+          <div className="flex items-center gap-2 text-sm font-semibold text-[#9c2f1d]">
+            <span>Aucun titre jouable trouvé dans ce profil.</span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: accent }}>
+            <span>{syncedCount} titre{syncedCount > 1 ? "s" : ""} importe{syncedCount > 1 ? "s" : ""}</span>
+          </div>
+        )}
         <p className="text-[10px] text-[#8a7558]">
-          depuis {playlistCount} playlist{playlistCount > 1 ? "s" : ""}
+          {nothing
+            ? "Essaie une playlist avec des extraits disponibles (Deezer marche bien)."
+            : `depuis ${playlistCount} playlist${playlistCount > 1 ? "s" : ""}`}
         </p>
         <button
           onClick={() => { setState("idle"); setUrl(""); setSyncedCount(0); setPlaylistCount(0) }}
           className="text-xs text-[#6b573f] underline hover:text-[#2e2014]"
         >
-          Importer un autre profil
+          {nothing ? "Réessayer avec un autre profil" : "Importer un autre profil"}
         </button>
       </div>
     )
