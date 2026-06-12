@@ -340,20 +340,27 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   // Safety net: ensure socket joins the room whenever we have a room and socket is connected
   // Track the last socket ID + room combo to re-emit on reconnect
   const lastJoinKeyRef = useRef<string | null>(null)
+  // Re-join bulletproof : peu importe l'ordre (connect avant que la room
+  // existe — cas HOST qui cree la room — ou room avant connect), on (re)joint
+  // la room COURANTE (via roomRef) a chaque connexion. Sans ca, le socket du
+  // host pouvait connecter avant la creation de la room et ne jamais rejoindre
+  // la io room -> ne recevait aucun broadcast (jamais de reveal). Idempotent
+  // cote backend.
   useEffect(() => {
-    if (!room?.room_code || !userPayload?.user) return
     const socket = socketRef.current
-    if (!socket?.connected || !socket.id) return
-
-    // Re-emit room:join whenever socket ID or room changes (handles reconnections)
-    const joinKey = `${socket.id}:${room.room_code}`
-    if (lastJoinKeyRef.current === joinKey) return
-    lastJoinKeyRef.current = joinKey
-
-    socket.emit("room:join", {
-      roomCode: room.room_code,
-      user: { id: userPayload.user.id, username: userPayload.user.username ?? undefined },
-    })
+    if (!socket || !userPayload?.user) return
+    const user = userPayload.user
+    const joinCurrentRoom = () => {
+      const rc = roomRef.current?.room_code
+      if (!rc) return
+      const joinKey = `${socket.id ?? "?"}:${rc}`
+      if (lastJoinKeyRef.current === joinKey) return
+      lastJoinKeyRef.current = joinKey
+      socket.emit("room:join", { roomCode: rc, user: { id: user.id, username: user.username ?? undefined } })
+    }
+    socket.on("connect", joinCurrentRoom)
+    if (socket.connected) joinCurrentRoom()
+    return () => { socket.off("connect", joinCurrentRoom) }
   }, [room?.room_code, userPayload?.user, socketConnected])
 
   const ensureSocket = useCallback((): Socket => {
