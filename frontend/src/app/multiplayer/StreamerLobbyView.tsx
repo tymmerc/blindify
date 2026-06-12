@@ -91,6 +91,10 @@ function StreamerLobby(props: LobbyRendererProps) {
   const audience = room ? props.participants : props.participants;
   return (
     <SurfaceCard className="space-y-4">
+      <div className="rounded-md border-2 border-[#e0a32e] bg-[#efe5d0] px-4 py-3 text-sm font-semibold text-[#a87714]">
+        Mode Streamer en cours de développement — le lancement de partie n'est pas
+        encore disponible. Reviens bientôt !
+      </div>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="rounded-full bg-white/10 p-3">

@@ -423,9 +423,9 @@ export function ChronoGameClient({ tracks, durationSeconds, onGameComplete }: Ch
 
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-center">
-      <div className="text-[11px] uppercase tracking-[0.2em] text-white/40">{label}</div>
-      <div className="mt-1 text-lg font-bold text-white">{value}</div>
+    <div className="rounded-md border-[1.5px] border-[rgba(46,32,20,.22)] bg-[#efe5d0] p-3 text-center">
+      <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#8a7558]">{label}</div>
+      <div className="mt-1 font-display text-lg font-bold text-[#2e2014]">{value}</div>
     </div>
   )
 }

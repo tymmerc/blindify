@@ -139,7 +139,12 @@ function EventLobby(props: LobbyRendererProps) {
 
       <div className="space-y-4">
       <SurfaceCard className="space-y-3">
-        <ProfileImportBlock accent={accent} />
+        <ProfileImportBlock
+          accent={accent}
+          initialUrl={props.initialProfileUrl ?? undefined}
+          autoStart={Boolean(props.initialProfileUrl)}
+          onImportingChange={props.onImportingChange}
+        />
       </SurfaceCard>
 
       <SurfaceCard className="space-y-3">
