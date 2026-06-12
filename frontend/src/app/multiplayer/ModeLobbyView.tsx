@@ -1406,6 +1406,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         tracks={tracks}
         currentUserId={currentUserId}
         accentColor={accentColor}
+        isHost={isHost}
         onReturn={() => router.replace("/modes")}
         onReplay={async () => {
           if (!room || !isHost) return

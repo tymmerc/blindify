@@ -385,7 +385,22 @@ export const clientApi = {
     return request("/api/stats/detailed")
   },
   async gameHistory(): Promise<{ sessions: GameSessionSummary[] }> {
-    return request("/api/games/history")
+    // Le backend renvoie { games: GameHistoryEntry[] } (camelCase). On adapte
+    // vers GameSessionSummary pour que stats/profil (qui lisent .sessions /
+    // snake_case) reçoivent enfin des données. Bug histo: les deux contrats
+    // pointaient sur le même endpoint, un seul était honoré.
+    const res = await request<{ games?: GameHistoryEntry[] }>("/api/games/history")
+    const sessions: GameSessionSummary[] = (res.games ?? []).map(g => ({
+      id: g.id,
+      mode: g.mode,
+      difficulty: g.difficulty,
+      source_provider: "",
+      total_rounds: g.totalRounds,
+      started_at: g.createdAt,
+      ended_at: g.state === "finished" ? g.createdAt : null,
+      state: g.state,
+    }))
+    return { sessions }
   },
   async gameHistoryDetailed(): Promise<{ games: GameHistoryEntry[] }> {
     return request("/api/games/history")

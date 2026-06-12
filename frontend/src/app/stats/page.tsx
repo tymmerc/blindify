@@ -81,7 +81,7 @@ export default function StatsPage() {
     const level = Math.max(1, Math.floor((stats?.totalXp ?? 0) / 100) + 1)
     return [
       { label: "Precision", value: accuracy, hint: "Progression globale", color: "#c65133" },
-      { label: "Reaction", value: avgTime, hint: "Reponds sous 1s pour bonus", color: "#e0a32e" },
+      { label: "Reaction", value: avgTime, hint: "Ton temps de reponse moyen", color: "#e0a32e" },
       { label: "Serie max", value: `${bestStreak}`, hint: "Enchaine en mode normal", color: "#7d9471" },
       { label: "Parties", value: `${totalGames}`, hint: "Volume total", color: "#a8b8c8" },
       { label: "Niveau", value: `${level}`, hint: "XP cumulee", color: "#c65133" },
@@ -124,8 +124,8 @@ export default function StatsPage() {
     }
     if ((stats?.averageReactionTime ?? 0) > 1200) {
       actions.push({
-        title: "Booster la vitesse",
-        description: "Sprint 10 manches en repondant sous 1s pour debloquer le bonus vitesse.",
+        title: "Affuter l oreille",
+        description: "Enchaine 10 manches : la vitesse departage les egalites au classement.",
         href: "/solo?source=library&count=10",
       })
     }

@@ -513,19 +513,26 @@ function FriendsLobby({
   const [copiedLink, setCopiedLink] = useState(false)
   const playerCount = participants.length
 
-  const copyCode = () => {
-    if (!roomCode) return
-    navigator.clipboard?.writeText(roomCode).catch(() => {})
-    setCopiedCode(true)
-    setTimeout(() => setCopiedCode(false), 2000)
+  // N'affiche "Copié !" QUE si la copie a vraiment réussi (contexte non
+  // sécurisé / permission refusée => on prévient au lieu de mentir).
+  const [copyError, setCopyError] = useState(false)
+  const doCopy = async (text: string, setOk: (v: boolean) => void) => {
+    try {
+      if (!navigator.clipboard) throw new Error("no clipboard")
+      await navigator.clipboard.writeText(text)
+      setOk(true)
+      setCopyError(false)
+      setTimeout(() => setOk(false), 2000)
+    } catch {
+      setCopyError(true)
+      setTimeout(() => setCopyError(false), 3000)
+    }
   }
-
+  const copyCode = () => { if (roomCode) void doCopy(roomCode, setCopiedCode) }
   const copyLink = () => {
     if (!roomCode) return
     const origin = typeof window !== "undefined" ? window.location.origin : ""
-    navigator.clipboard?.writeText(`${origin}/blindify/friends/?join=${roomCode}`).catch(() => {})
-    setCopiedLink(true)
-    setTimeout(() => setCopiedLink(false), 2000)
+    void doCopy(`${origin}/blindify/friends/?join=${roomCode}`, setCopiedLink)
   }
 
   // Build slots: every participant + empty slots to fill up to 4 total (min 2 visible).
@@ -619,6 +626,11 @@ function FriendsLobby({
                 {copiedLink ? "Copie !" : "Copier le lien"}
               </button>
             </div>
+            {copyError ? (
+              <p className="mt-2 text-[11px] font-bold text-[#9c2f1d]">
+                Copie impossible ici — sélectionne le code à la main.
+              </p>
+            ) : null}
           </section>
 
           {/* Ta musique : import (consomme l'URL du wizard via autoStart) */}

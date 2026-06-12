@@ -1,3 +1,4 @@
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import SectionCard from "@/components/ui/SectionCard"
 import { Check, Sparkles } from "lucide-react"
@@ -115,11 +116,12 @@ export function Pricing() {
               </ul>
 
               <Button
+                asChild
                 size="lg"
                 variant={plan.highlighted ? "default" : "outline"}
                 className="w-full"
               >
-                {plan.cta}
+                <Link href="/modes">{plan.cta}</Link>
               </Button>
             </SectionCard>
           ))}

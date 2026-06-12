@@ -62,6 +62,7 @@ export function ResultsView({
   onReturn,
   onReplay,
   accentColor,
+  isHost = true,
 }: {
   leaderboard: Array<{ userId: number; username: string | null; score: number; accuracy: number; avatar?: string | null }>
   tracks: SoloTrack[]
@@ -69,6 +70,7 @@ export function ResultsView({
   onReturn: () => void
   onReplay: () => void
   accentColor?: string
+  isHost?: boolean
 }) {
   const [liking, setLiking] = useState<Record<string, boolean>>({})
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set())
@@ -293,11 +295,12 @@ export function ResultsView({
         <Button
           variant="outline"
           onClick={onReplay}
-          className="gap-2 rounded-full border-2 bg-transparent px-4 py-2 text-sm font-bold"
+          disabled={!isHost}
+          className="gap-2 rounded-full border-2 bg-transparent px-4 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50"
           style={{ borderColor: accent, color: accent }}
         >
           <ShieldCheck className="h-4 w-4" />
-          Rejouer
+          {isHost ? "Rejouer" : "L'hôte peut relancer"}
         </Button>
       </div>
     </section>
