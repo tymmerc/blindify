@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Blindify · Platine (maquette)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,500&family=Karla:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#f4ecdb; --paper-deep:#ece1c8; --well:#efe5d0;
+    --ink:#2e2014; --ink-2:#6b573f; --muted:#8a7558;
+    --terra:#c65133; --gold:#e0a32e; --sage:#7d9471;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; min-height:100vh; background:var(--paper); color:var(--ink);
+    font-family:"Karla",system-ui,sans-serif;
+    display:flex; flex-direction:column; align-items:center; gap:18px; padding:28px 16px 60px;
+  }
+  body::after{ /* grain papier */
+    content:""; position:fixed; inset:0; pointer-events:none; opacity:.05; z-index:50;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  h1{font-family:"Fraunces",serif; font-weight:600; font-size:clamp(1.4rem,4vw,2rem); margin:0}
+  .sub{font-size:12px; font-weight:700; letter-spacing:.22em; text-transform:uppercase; color:var(--muted); margin:0}
+
+  /* ============ PLATINE ============ */
+  .deck{
+    position:relative; width:min(92vw,460px); aspect-ratio:1/1; margin-top:10px;
+    border-radius:14px;
+  }
+  /* socle de la platine */
+  .deck::before{
+    content:""; position:absolute; inset:-6% -6% -10% -6%;
+    background:linear-gradient(160deg,#f0e6cf,#e6d8b8);
+    border:2px solid var(--ink); border-radius:18px;
+    box-shadow:8px 10px 0 rgba(46,32,20,.16);
+  }
+  .platter{
+    position:absolute; inset:4%; border-radius:50%;
+    background:
+      radial-gradient(circle at 50% 50%, #efe5d0 0 30%, #e7d9bd 30% 100%);
+    border:2px solid rgba(46,32,20,.35);
+    display:grid; place-items:center;
+    box-shadow:inset 0 0 30px rgba(46,32,20,.12);
+  }
+  /* le disque (grooves) */
+  .vinyl{
+    position:relative; width:82%; height:82%; border-radius:50%;
+    background:
+      repeating-radial-gradient(circle at 50% 50%, #1c130b 0 1.5px, #2a1d10 1.5px 4px);
+    border:1px solid #000;
+    box-shadow: inset 0 0 40px rgba(0,0,0,.5), 0 6px 16px rgba(46,32,20,.3);
+  }
+  /* reflet qui balaie le disque */
+  .vinyl::before{
+    content:""; position:absolute; inset:0; border-radius:50%;
+    background:linear-gradient(115deg, transparent 38%, rgba(255,247,230,.10) 47%, rgba(255,247,230,.18) 50%, transparent 60%);
+  }
+  .vinyl.spin{ animation:spin 4.5s linear infinite; }
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* label central = pochette + anneau (plus de gros rond plein) */
+  .label{
+    position:absolute; inset:33%; border-radius:50%; overflow:hidden;
+    border:2px solid var(--ink);
+    background:
+      radial-gradient(circle at 35% 30%, #d96a44, var(--terra) 60%, #a83f24);
+    display:grid; place-items:center;
+  }
+  .label .art{ position:absolute; inset:0; background-size:cover; background-position:center; opacity:.0; transition:opacity .5s; filter:saturate(.95) contrast(1.02); }
+  .label.revealed .art{ opacity:1; }
+  .label::after{ /* anneau imprime */
+    content:""; position:absolute; inset:14%; border-radius:50%;
+    border:1px solid rgba(46,32,20,.45);
+  }
+  /* trou de broche */
+  .spindle{
+    position:absolute; left:50%; top:50%; width:14px; height:14px; transform:translate(-50%,-50%);
+    background:var(--paper); border:2px solid var(--ink); border-radius:50%; z-index:4;
+  }
+
+  /* ============ BRAS DE LECTURE ============ */
+  .tonearm{
+    position:absolute; top:-4%; right:-1%; width:50%; height:64%; z-index:6;
+    transform-origin:88% 10%;            /* pivot = coin haut-droit */
+    transform:rotate(-15deg);            /* au repos : juste releve au bord, pas trop ecarte */
+    transition:transform 1.7s cubic-bezier(.34,.02,.2,1);
+  }
+  .deck.playing .tonearm{ transform:rotate(2deg); }  /* pose sur le sillon exterieur du disque */
+  .pivot{
+    position:absolute; top:3%; right:6%; width:30px; height:30px; border-radius:50%;
+    background:radial-gradient(circle at 35% 30%, #5a4326, var(--ink));
+    border:2px solid var(--ink);
+    box-shadow:2px 2px 0 rgba(46,32,20,.25); z-index:2;
+  }
+  /* le bras part du pivot et descend ; la tete est ATTACHEE a son extremite */
+  .arm{
+    position:absolute; top:16px; right:16px;
+    width:6px; height:88%;
+    background:linear-gradient(90deg,#7a6244,#3a2a1a);
+    border-radius:4px;
+    transform-origin:top center; transform:rotate(10deg);
+    box-shadow:1px 0 1px rgba(0,0,0,.2);
+  }
+  .arm .head{
+    position:absolute; left:50%; bottom:-15px; transform:translateX(-50%);
+    width:24px; height:30px;
+    background:var(--gold); border:2px solid var(--ink); border-radius:3px;
+    box-shadow:2px 2px 0 rgba(46,32,20,.2);
+  }
+  .arm .head::after{ content:""; position:absolute; left:50%; bottom:-6px; transform:translateX(-50%);
+    width:3px; height:7px; background:var(--ink); border-radius:0 0 1px 1px; }
+
+  /* ============ statut / overlay ============ */
+  .status{
+    position:absolute; left:50%; bottom:-12%; transform:translateX(-50%);
+    font-size:11px; font-weight:700; letter-spacing:.22em; text-transform:uppercase;
+    color:var(--muted); white-space:nowrap; display:flex; align-items:center; gap:8px;
+  }
+  .status .dot{width:7px;height:7px;border-radius:50%;background:var(--terra);opacity:.4}
+  .deck.playing .status .dot{opacity:1; animation:pulse 1.1s ease-in-out infinite}
+  @keyframes pulse{50%{transform:scale(.6);opacity:.4}}
+
+  /* compte à rebours de pose */
+  .drop-count{
+    position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); z-index:7;
+    font-family:"Fraunces",serif; font-weight:600; font-size:clamp(2rem,9vw,3.4rem);
+    color:var(--ink); pointer-events:none; opacity:0;
+  }
+  .deck.dropping .drop-count{ opacity:1; animation:dropnum 1.6s ease-out; }
+  @keyframes dropnum{0%{opacity:0;transform:translate(-50%,-50%) scale(.6)}20%{opacity:1}100%{opacity:0;transform:translate(-50%,-50%) scale(1.1)}}
+
+  .controls{display:flex; gap:12px; flex-wrap:wrap; justify-content:center; margin-top:34px}
+  button{
+    font-family:"Karla",sans-serif; font-weight:700; font-size:14px; cursor:pointer;
+    border:2px solid var(--ink); border-radius:8px; padding:12px 22px;
+    background:var(--terra); color:var(--paper); box-shadow:4px 4px 0 var(--ink);
+    transition:transform .12s, box-shadow .12s;
+  }
+  button:active{transform:translate(2px,2px); box-shadow:2px 2px 0 var(--ink)}
+  button.ghost{background:var(--paper); color:var(--ink)}
+  .note{max-width:460px; text-align:center; font-size:13px; color:var(--ink-2); line-height:1.5}
+  .legend{font-size:11px;color:var(--muted);max-width:460px;text-align:center}
+</style>
+</head>
+<body>
+  <p class="sub">Blindify · maquette</p>
+  <h1>La platine, version cérémonie</h1>
+  <p class="note">À chaque manche : le bras se relève, le disque change, puis le bras <b>se pose sur le bord</b> en ~1,6s. Quand l'aiguille touche le sillon, la musique démarre. Ce poser = le début de manche.</p>
+
+  <div class="deck" id="deck">
+    <div class="platter">
+      <div class="vinyl" id="vinyl">
+        <div class="label" id="label">
+          <div class="art" id="art"></div>
+        </div>
+        <div class="spindle"></div>
+      </div>
+    </div>
+    <div class="tonearm">
+      <div class="pivot"></div>
+      <div class="arm"><div class="head"></div></div>
+    </div>
+    <div class="drop-count" id="dropCount"></div>
+    <div class="status"><span class="dot"></span><span id="statusText">Prêt</span></div>
+  </div>
+
+  <div class="controls">
+    <button onclick="newRound()">Nouvelle manche</button>
+    <button class="ghost" onclick="reveal()">Révéler le titre</button>
+  </div>
+  <p class="legend">Couvertures de démonstration. L'anim est en CSS pur (transform/transition), aucune lib, donc zéro lag.</p>
+
+<script>
+  const deck = document.getElementById('deck');
+  const vinyl = document.getElementById('vinyl');
+  const label = document.getElementById('label');
+  const art = document.getElementById('art');
+  const statusText = document.getElementById('statusText');
+  const dropCount = document.getElementById('dropCount');
+  const covers = [
+    'https://i.scdn.co/image/ab67616d0000b2730c13d3d5a503c84fc4b2f0e0',
+    'https://i.scdn.co/image/ab67616d0000b273ef0d4234e1a645740f77d59c',
+    'https://i.scdn.co/image/ab67616d0000b2734e0362c225863f6ae2432651'
+  ];
+  let i = 0;
+  const ARM_MS = 1700; // doit matcher la transition CSS du bras
+  function newRound(){
+    // 1) le bras se relève (hors du disque) + le disque s'arrête net
+    deck.classList.remove('playing');
+    vinyl.classList.remove('spin');
+    label.classList.remove('revealed');
+    statusText.textContent = 'Le bras se relève...';
+    // change de pochette (cachée pendant le jeu)
+    art.style.backgroundImage = `url(${covers[i % covers.length]})`;
+    i++;
+
+    // 2) une fois le bras relevé, on le pose sur le sillon
+    setTimeout(()=>{
+      statusText.textContent = 'Le bras se pose...';
+      deck.classList.add('dropping');
+      deck.classList.add('playing'); // déclenche la descente du bras (ARM_MS)
+      // petit décompte pendant la pose
+      let n = 2; dropCount.textContent = n;
+      const t = setInterval(()=>{ n--; if(n<=0){clearInterval(t); dropCount.textContent='';} else dropCount.textContent=n; }, ARM_MS/2.2);
+
+      // 3) le bras a TOUCHÉ le sillon -> SEULEMENT MAINTENANT le disque tourne + la musique
+      setTimeout(()=>{
+        deck.classList.remove('dropping');
+        vinyl.classList.add('spin');
+        statusText.textContent = 'Écoute en cours';
+      }, ARM_MS);
+    }, 950);
+  }
+  function reveal(){ label.classList.add('revealed'); statusText.textContent = 'Révélé'; }
+</script>
+</body>
+</html>

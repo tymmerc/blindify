@@ -102,7 +102,7 @@ test.describe("Event (presentation) — host + participant full game", () => {
 
       // 6. Host clicks "Lancer"
       const launchBtn = hostPage.locator("button").filter({ hasText: /^lancer$/i })
-      const launchBtn2 = hostPage.locator("button").filter({ hasText: /lancer la partie|press start/i })
+      const launchBtn2 = hostPage.locator("button").filter({ hasText: /pose le diamant|lancer la partie|press start/i })
       const btn = (await launchBtn.count() > 0) ? launchBtn : launchBtn2
 
       if (await btn.count() > 0 && await btn.first().isEnabled()) {

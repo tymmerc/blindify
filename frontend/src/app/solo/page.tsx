@@ -69,7 +69,7 @@ function ClassicForm() {
         <div className="flex items-center gap-3 flex-wrap">
           <h2 className="font-display text-2xl font-semibold text-[#2e2014]">Blind test classique</h2>
           <span className="rounded-full border-[1.5px] border-[#2e2014] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#2e2014]">
-            No login
+            Sans compte
           </span>
         </div>
         <p className="text-sm text-[#6b573f]">
@@ -327,7 +327,7 @@ function SoloSelector() {
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 space-y-2">
             <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-[#c65133]">
-              Select · Solo
+              Face à la platine
             </p>
             <h1 className="font-display text-4xl font-semibold leading-[1.05] md:text-5xl">
               Jouer en <em className="font-medium italic text-[#c65133]">solo</em>

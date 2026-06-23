@@ -12,7 +12,7 @@ export default function UploadPlaceholderPage() {
         <h1 className="font-display text-4xl font-semibold text-[#2e2014]">Bientôt disponible</h1>
         <p className="text-sm text-[#6b573f]">
           Vous pourrez bientôt importer vos propres extraits MP3 et créer des manches personnalisées. Cette
-          fonctionnalité est en cours de développement — restez connectés !
+          fonctionnalité est en cours de développement, restez connectés !
         </p>
       </div>
       <div className="flex justify-center">

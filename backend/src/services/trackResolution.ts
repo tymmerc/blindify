@@ -12,27 +12,46 @@ import { logger } from "../utils/logger";
  * Hydrate a single audio source's preview URL using Deezer.
  * Updates the database if a preview is found. Returns the URL or null.
  */
+// Deezer signe ses previews avec une expiration (`?hdnea=exp=<unixSec>~...`). Passe ce delai,
+// l'URL renvoie 403 (text/html) et le navigateur leve NotSupportedError -> AUCUN son en jeu.
+// Les URLs sont stockees en base et peuvent dater de plusieurs mois -> on doit les detecter.
+export function isExpiredPreview(url: string | null | undefined): boolean {
+  if (!url) return false;
+  const m = url.match(/exp=(\d{8,})/);
+  if (!m) return false;
+  const exp = parseInt(m[1], 10);
+  if (!Number.isFinite(exp)) return false;
+  return exp * 1000 <= Date.now() + 60_000; // expiree, ou moins de 60s restantes
+}
+
 export async function hydratePreviewUrl(source: AudioSourceRow): Promise<string | null> {
-  if (source.audio_url) return source.audio_url;
+  const cached = source.audio_url;
+  // URL en cache encore valide -> on la garde.
+  if (cached && !isExpiredPreview(cached)) return cached;
 
   const title = source.title?.trim();
-  if (!title) return null;
   const artist = source.artist?.trim() || undefined;
-
-  try {
-    const deezerTrack = await deezerPreviewService.searchTrack(title, artist);
-    if (deezerTrack?.preview) {
-      await pool.query("UPDATE audio_sources SET audio_url=$1 WHERE id=$2", [
-        deezerTrack.preview,
-        source.id,
-      ]);
-      return deezerTrack.preview;
+  if (title) {
+    try {
+      const deezerTrack = await deezerPreviewService.searchTrack(title, artist);
+      if (deezerTrack?.preview) {
+        await pool.query("UPDATE audio_sources SET audio_url=$1 WHERE id=$2", [
+          deezerTrack.preview,
+          source.id,
+        ]);
+        return deezerTrack.preview;
+      }
+    } catch (err) {
+      logger.error("deezer_hydrate_failed", { id: source.id, title, error: err });
     }
-    return null;
-  } catch (err) {
-    logger.error("deezer_hydrate_failed", { id: source.id, title, error: err });
+  }
+
+  // Pas de preview fraiche trouvee : une URL en cache EXPIREE est inutilisable -> on l'annule.
+  if (cached && isExpiredPreview(cached)) {
+    await pool.query("UPDATE audio_sources SET audio_url=NULL WHERE id=$1", [source.id]).catch(() => {});
     return null;
   }
+  return cached ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -45,16 +64,20 @@ export async function fetchAudioSources(
   userIds: number | number[],
   provider: ProviderFilter,
   count: number,
-  opts: { likedOnly?: boolean; playlistId?: string; timeRange?: string } = {}
+  opts: { likedOnly?: boolean; playlistId?: string; timeRange?: string; ownedOnly?: boolean } = {}
 ): Promise<AudioSourceRow[]> {
   const extraConds: string[] = [];
   const params: unknown[] = [];
   const userList = Array.isArray(userIds) ? userIds : [userIds];
 
   params.push(userList);
+  // ownedOnly : uniquement les titres reellement possedes par ces joueurs (pas le pool
+  // global a user_id NULL). Sert a garantir une attribution "qui a ajoute" fiable.
   const userCond = opts.likedOnly
     ? `l.user_id = ANY($1)`
-    : `(s.user_id = ANY($1) OR s.user_id IS NULL)`;
+    : opts.ownedOnly
+      ? `s.user_id = ANY($1)`
+      : `(s.user_id = ANY($1) OR s.user_id IS NULL)`;
   let providerCond = "";
   if (provider !== "any") {
     params.push(provider);
@@ -116,7 +139,7 @@ export function shuffle<T>(arr: T[]): T[] {
 export async function collectPlayableSources(
   userIds: number | number[],
   desiredCount: number,
-  opts: { likedOnly?: boolean; playlistId?: string; timeRange?: string; provider?: ProviderFilter }
+  opts: { likedOnly?: boolean; playlistId?: string; timeRange?: string; provider?: ProviderFilter; ownedOnly?: boolean }
 ): Promise<AudioSourceRow[]> {
   const candidateLimit = Math.min(desiredCount * 8, 400);
   const providerFilter = opts.provider ?? "any";
@@ -124,17 +147,13 @@ export async function collectPlayableSources(
     likedOnly: opts.likedOnly,
     playlistId: opts.playlistId,
     timeRange: opts.timeRange,
+    ownedOnly: opts.ownedOnly,
   });
 
-  // Hydrate missing previews via Deezer
+  // Hydrate / rafraichit les previews via Deezer (re-fetch si manquante OU expiree).
   await Promise.all(
     candidates.map(async (source) => {
-      if (source.audio_url) return;
-      const preview = await hydratePreviewUrl(source);
-      if (preview) {
-        source.audio_url = preview;
-        logger.debug("deezer_preview_found", { sourceId: source.id, title: source.title });
-      }
+      source.audio_url = await hydratePreviewUrl(source);
     })
   );
 

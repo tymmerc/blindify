@@ -1178,7 +1178,7 @@ export function SoloGameClient({
     return (
       <div className="flex min-h-[40vh] flex-col items-center justify-center gap-4 rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-10 text-center shadow-[4px_4px_0_rgba(46,32,20,.18)]">
         <Sparkles className="h-10 w-10 text-[#c65133]" />
-        <p className="text-sm text-[#6b573f]">No tracks available — try syncing another provider.</p>
+        <p className="text-sm text-[#6b573f]">Aucun titre jouable. Essaie un autre service ou une autre playlist.</p>
         <Link
           href="/solo"
           className="rounded-md border-2 border-[#2e2014] px-5 py-2.5 text-sm font-bold text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"

@@ -171,7 +171,7 @@ function GameCard({ game }: { game: GameHistoryEntry }) {
       {expanded && <TrackList tracks={game.tracks} />}
 
       <p className="mt-2 text-center font-display text-xs italic text-[#8a7558]">
-        {expanded ? "— replier la pochette" : "— sortir le disque"}
+        {expanded ? "Replier la pochette" : "Sortir le disque"}
       </p>
     </button>
   )

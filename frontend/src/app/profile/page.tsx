@@ -138,12 +138,12 @@ export default function ProfilePage() {
             )}
           </div>
           <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">
-            Player Card
+            Ta pochette
           </p>
           <h1 className="font-display text-4xl font-semibold text-[#2e2014]">{displayName}</h1>
-          <p className="mt-2 text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">Account {providerLabel}</p>
+          <p className="mt-2 text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">Compte {providerLabel}</p>
           <div className="mt-4 inline-flex items-center gap-2 rounded-full border-[1.5px] border-[#2e2014] bg-[#e0a32e] px-4 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-[#2e2014]">
-            Level {Math.max(1, Math.floor((stats?.totalXp ?? 0) / 100) + 1)}
+            Niveau {Math.max(1, Math.floor((stats?.totalXp ?? 0) / 100) + 1)}
           </div>
         </div>
 

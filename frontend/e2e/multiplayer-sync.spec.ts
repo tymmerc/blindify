@@ -41,7 +41,7 @@ test.describe("Friends — audio sync and answer flow", () => {
       await hostPage.waitForTimeout(3000)
 
       // Launch
-      const launchBtn = hostPage.locator("button").filter({ hasText: /lancer la partie|press start/i })
+      const launchBtn = hostPage.locator("button").filter({ hasText: /pose le diamant|lancer la partie|press start/i })
       if (!await launchBtn.isVisible({ timeout: 5000 }).catch(() => false) || !await launchBtn.isEnabled()) {
         console.log("Cannot launch - not enough players or no music")
         return

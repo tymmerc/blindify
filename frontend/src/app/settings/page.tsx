@@ -50,6 +50,12 @@ export default function SettingsPage() {
   const user: UserSummary | null = userPayload?.user ?? null
   const displayName = user?.username || "Utilisateur"
   const email = user?.email || "Non renseigne"
+  const isGuest = user?.provider === "guest"
+
+  const handleLogout = async () => {
+    try { await api.logout() } catch { /* ignore */ }
+    router.replace("/auth/login")
+  }
 
   const updateToggle = (key: keyof typeof toggleDefaults) => {
     setToggles(prev => ({ ...prev, [key]: !prev[key] }))
@@ -76,19 +82,40 @@ export default function SettingsPage() {
         </div>
 
         <div className="mb-10 space-y-2">
-          <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-[#c65133]">Config · Panel</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-[#c65133]">Réglages</p>
           <h1 className="font-display text-4xl font-semibold md:text-5xl">
             Para<em className="font-medium italic text-[#c65133]">metres</em>
           </h1>
         </div>
 
         <Section title="Compte" accent="#c65133">
-          <SettingRow label="Nom d'utilisateur" description={displayName}>
-            <GhostButton disabled>Bientot</GhostButton>
-          </SettingRow>
-          <SettingRow label="Email" description={email}>
-            <GhostButton disabled>Bientot</GhostButton>
-          </SettingRow>
+          {isGuest ? (
+            <div className="flex flex-col gap-3 rounded-md border-[1.5px] border-[#c65133] bg-[rgba(198,81,51,.08)] px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-display text-base font-semibold text-[#2e2014]">Tu joues en invité</p>
+                <p className="text-sm text-[#6b573f]">Ta progression s'efface au bout de 4h. Crée un compte pour la garder, un pseudo et un mot de passe suffisent.</p>
+              </div>
+              <Link href="/auth/login" className="shrink-0 rounded-full border-2 border-[#2e2014] bg-[#c65133] px-5 py-2.5 text-center text-sm font-bold text-[#f4ecdb] shadow-[3px_3px_0_#2e2014] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_#2e2014]">
+                Créer un compte
+              </Link>
+            </div>
+          ) : (
+            <>
+              <SettingRow label="Nom d'utilisateur" description={displayName}>
+                <span className="rounded-full border-[1.5px] border-[#7d9471] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#4f6a45]">
+                  Compte {user?.provider}
+                </span>
+              </SettingRow>
+              {email !== "Non renseigne" && (
+                <SettingRow label="Email" description={email}>
+                  <span />
+                </SettingRow>
+              )}
+              <SettingRow label="Session" description="Te déconnecter de ce compte sur cet appareil">
+                <GhostButton onClick={handleLogout}>Se déconnecter</GhostButton>
+              </SettingRow>
+            </>
+          )}
         </Section>
 
         <Section title="Jeu" accent="#e0a32e">

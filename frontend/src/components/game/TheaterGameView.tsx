@@ -127,7 +127,7 @@ export function TheaterGameView(props: Props) {
       <div className="theater-stage relative z-[3] grid h-screen px-6 pt-4 pb-5 gap-2" style={{ gridTemplateRows: "auto 1fr auto" }}>
 
         {/* ====================== TOP BAR ====================== */}
-        <div className="grid items-center gap-4" style={{ gridTemplateColumns: "1fr auto 1fr" }}>
+        <div className="grid items-center gap-4 theater-topbar" style={{ gridTemplateColumns: "1fr auto 1fr" }}>
           <div className="theater-brand">
             <b>BLIND</b>IFY
             <small>FRIENDS · LIVE</small>
@@ -428,7 +428,7 @@ function GuessingStage({
     >
       <span className="theater-show-label">
         <span className="bullet" />
-        {isLocked ? `Reveal dans ${remaining}s` : "Face A · Extrait en cours"}
+        {isLocked ? `Révélation dans ${remaining}s` : "Extrait en cours"}
       </span>
 
       <div className="theater-arena">
@@ -438,15 +438,10 @@ function GuessingStage({
         </div>
         <div className="theater-tonearm">
           <div className="ta-base" />
-          <div className="ta-bar" />
-          <div className="ta-head" />
+          <div className="ta-bar"><div className="ta-head" /></div>
         </div>
-        {manualPlayRequired && isAudioPhase && (
-          <button onClick={onManualPlay} className="theater-manual-play" title="Lancer la musique">
-            <Play className="w-7 h-7" />
-            <span>Cliquer pour lancer</span>
-          </button>
-        )}
+        {/* Plus de bouton "cliquer pour lancer" : le son se debloque tout seul (host) ou au
+            premier tap n'importe ou (invite) — gere par MultiplayerGameClient. */}
         <span className="theater-arena-hint">33⅓ RPM · Stéréo</span>
       </div>
 
@@ -617,8 +612,12 @@ function TheaterFinale({
         animate={{ opacity: 1 }}
         transition={{ delay: 0.95 }}
       >
-        {winner ? `${winner.score} ${winner.score > 1 ? "bonnes reponses" : "bonne reponse"} · disque d'or de la session` : ""}
-        {meWins ? " - et c'est toi." : ""}
+        {winner
+          ? winner.score > 0
+            ? `${winner.score} ${winner.score > 1 ? "bonnes reponses" : "bonne reponse"} · disque d'or de la session`
+            : "Personne n'a marque. On rejoue ?"
+          : ""}
+        {meWins && (winner?.score ?? 0) > 0 ? " - et c'est toi." : ""}
       </motion.p>
 
       <div className="finale-board">
@@ -766,47 +765,54 @@ const theaterStyles = `
     border-radius:50%; border:2px solid rgba(46,32,20,.3);
   }
   .theater-vinyl{
-    position:relative; width:78%; height:78%; border-radius:50%;
-    background:repeating-radial-gradient(circle at 50% 50%, #241a10 0 2.5px, #3a2a1a 2.5px 5px);
-    border:3px solid ${INK};
-    box-shadow:6px 6px 0 rgba(46,32,20,.18);
-    animation:spin 7s linear infinite;
-    cursor:grab; z-index:1;
+    position:relative; width:80%; height:80%; border-radius:50%;
+    background:repeating-radial-gradient(circle at 50% 50%, #1c130b 0 1.5px, #2a1d10 1.5px 4px);
+    border:2px solid #000;
+    box-shadow:inset 0 0 34px rgba(0,0,0,.5), 6px 6px 0 rgba(46,32,20,.18);
+    animation:spin 4.5s linear infinite; z-index:1;
   }
+  /* label central : pochette teintee + anneau (fini le gros rond plein orange) */
   .theater-vinyl::after{
-    content:""; position:absolute; inset:33%; border-radius:50%;
-    background:${TERRA}; border:3px solid ${INK};
+    content:""; position:absolute; inset:34%; border-radius:50%;
+    background:radial-gradient(circle at 35% 30%, #d96a44, ${TERRA} 62%, #a83f24);
+    border:2px solid ${INK};
   }
   .theater-vinyl-center{
-    position:absolute; inset:46%; border-radius:50%;
-    background:${PAPER}; border:2px solid ${INK};
-    z-index:3;
+    position:absolute; left:50%; top:50%; width:12px; height:12px; transform:translate(-50%,-50%);
+    border-radius:50%; background:${PAPER}; border:2px solid ${INK}; z-index:3;
   }
-  .theater-gloss{display:none}
+  /* anneau imprime sur le label */
+  .theater-gloss{
+    position:absolute; left:50%; top:50%; width:22%; height:22%; transform:translate(-50%,-50%);
+    border-radius:50%; border:1px solid rgba(46,32,20,.4); z-index:2; pointer-events:none;
+  }
   @keyframes spin{to{transform:rotate(360deg)}}
 
-  /* Bras de lecture */
+  /* Bras de lecture : se POSE sur le sillon a chaque manche (animation de montage) */
   .theater-tonearm{
-    position:absolute; top:-2%; right:-4%;
-    width:40%; height:40%; z-index:4; pointer-events:none;
+    position:absolute; top:-4%; right:0%;
+    width:46%; height:60%; z-index:4; pointer-events:none;
+    transform-origin:88% 10%; transform:rotate(2deg);
+    animation:arm-drop 1.5s cubic-bezier(.34,.02,.2,1);
   }
+  @keyframes arm-drop{ from{ transform:rotate(-26deg) } to{ transform:rotate(2deg) } }
   .theater-tonearm .ta-base{
-    position:absolute; top:6%; right:6%;
-    width:34px; height:34px; border-radius:50%;
-    background:${INK};
+    position:absolute; top:3%; right:6%;
+    width:28px; height:28px; border-radius:50%;
+    background:radial-gradient(circle at 35% 30%, #5a4326, ${INK}); border:2px solid ${INK};
+    box-shadow:2px 2px 0 rgba(46,32,20,.25); z-index:2;
   }
   .theater-tonearm .ta-bar{
-    position:absolute; top:14%; right:24%;
-    width:5px; height:78%;
-    background:${INK}; border-radius:2px;
-    transform:rotate(-25deg); transform-origin:top center;
+    position:absolute; top:14px; right:15px;
+    width:6px; height:86%;
+    background:linear-gradient(90deg,#7a6244,#3a2a1a); border-radius:4px;
+    transform:rotate(10deg); transform-origin:top center;
   }
   .theater-tonearm .ta-head{
-    position:absolute; bottom:14%; left:24%;
-    width:20px; height:30px;
-    background:${TERRA};
-    border:2px solid ${INK}; border-radius:3px;
-    transform:rotate(-25deg);
+    position:absolute; left:50%; bottom:-14px; transform:translateX(-50%);
+    width:22px; height:28px;
+    background:${GOLD}; border:2px solid ${INK}; border-radius:3px;
+    box-shadow:2px 2px 0 rgba(46,32,20,.2);
   }
   .theater-arena-hint{
     position:absolute; bottom:-2%; left:50%; transform:translateX(-50%);
@@ -1244,7 +1250,14 @@ const theaterStyles = `
   /* ===== Téléphone : le chrono + les 3 champs doivent tenir SANS scroller.
      On bride la platine pour laisser la place au dock de réponse. ===== */
   @media (max-width:640px){
-    .theater-stage{padding:8px 12px 12px !important; gap:8px !important}
+    .theater-stage{padding:8px 12px 12px !important; gap:8px !important; overflow-x:hidden}
+    /* Top bar : sur telephone le slider + CHAT + Quitter debordaient (contenu plus large
+       que l'ecran). On reduit le gap, masque le slider et le CHAT (secondaire), compacte Quitter. */
+    .theater-topbar{gap:8px !important; grid-template-columns:auto 1fr auto !important}
+    .theater-volume-slider{display:none}
+    .theater-chat-btn{display:none}
+    .theater-vol{width:30px; height:30px}
+    .theater-quit{font-size:11px; padding:5px 9px}
     .theater-brand{font-size:14px}
     .theater-brand small{display:none}
     .theater-pill{gap:12px; padding:7px 14px}

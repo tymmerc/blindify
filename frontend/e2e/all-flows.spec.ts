@@ -42,7 +42,7 @@ test.describe("All Flows — Smoke Tests", () => {
     await page.waitForLoadState("networkidle")
 
     // Click "Jouer avec des amis"
-    const friendsCard = page.locator("text=Jouer avec des amis").first()
+    const friendsCard = page.locator("text=Entre amis").first()
     await expect(friendsCard).toBeVisible({ timeout: 5000 })
     await friendsCard.click()
     await page.waitForTimeout(500)
@@ -127,7 +127,7 @@ test.describe("All Flows — Smoke Tests", () => {
     await page.goto(`${BASE}/modes`)
     await page.waitForLoadState("networkidle")
 
-    const eventCard = page.locator("text=Jouer en événement").first()
+    const eventCard = page.locator("text=En soirée").first()
     await expect(eventCard).toBeVisible({ timeout: 5000 })
     await eventCard.click()
     await page.waitForTimeout(500)

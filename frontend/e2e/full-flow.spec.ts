@@ -141,31 +141,27 @@ test.describe("Full user flow — Mode Friends", () => {
     // F. Host launches game
     // ========================
 
-    const launchBtn = hostPage.locator("button", { hasText: /Lancer la partie|PRESS START/i })
-    await expect(launchBtn).toBeEnabled({ timeout: 10000 })
+    const launchBtn = hostPage.locator("button", { hasText: /Pose le diamant|Lancer la partie|PRESS START/i })
+    // Le bouton reste desactive tant que l'import du profil host n'est pas fini
+    // (canStartGame exige !importing). Un profil lourd peut prendre >30s -> attente genereuse.
+    await expect(launchBtn).toBeEnabled({ timeout: 90000 })
     await launchBtn.click()
     console.log("F: Host clicked 'Lancer la partie'")
 
     // ========================
     // G. Game UI for both players
     // ========================
-    // Wait for game UI to appear (vinyl, timer, input fields). Match many UI variants.
-    await hostPage.waitForFunction(
-      () => /Extrait en cours|Valider|Titre/i.test(document.body.textContent ?? "") || /\b1\//.test(document.body.textContent ?? ""),
-      { timeout: 45000 }
-    ).catch(() => {})
-    const hostGameText = await hostPage.locator("body").innerText()
-    const hostHasGame = /Extrait en cours|Valider|Titre/i.test(hostGameText) || /\b1\//.test(hostGameText)
+    // Attendre le marqueur EXCLUSIF au jeu : la pastille de manche `.theater-round`.
+    // L'ancien detecteur /Valider|Titre/ matchait "TES TITRES DANS LA PARTIE" du LOBBY
+    // (faux positif), et la transition host prend ~1-2s apres le clic "Lancer".
+    const hostHasGame = await hostPage.locator(".theater-round").first()
+      .waitFor({ state: "visible", timeout: 45000 }).then(() => true).catch(() => false)
     console.log(`G: Host sees game UI: ${hostHasGame}`)
     expect(hostHasGame).toBe(true)
 
     // Player should also see game UI
-    await playerPage.waitForFunction(
-      () => /Extrait en cours|Valider|Titre/i.test(document.body.textContent ?? "") || /\b1\//.test(document.body.textContent ?? ""),
-      { timeout: 20000 }
-    ).catch(() => {})
-    const playerGameText = await playerPage.locator("body").innerText()
-    const playerHasGame = /Extrait en cours|Valider|Titre/i.test(playerGameText) || /\b1\//.test(playerGameText)
+    const playerHasGame = await playerPage.locator(".theater-round").first()
+      .waitFor({ state: "visible", timeout: 20000 }).then(() => true).catch(() => false)
     console.log(`G: Player sees game UI: ${playerHasGame}`)
     expect(playerHasGame).toBe(true)
 

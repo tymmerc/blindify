@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Blindify · Micro-interactions (démo)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,500&family=Karla:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --paper: #f4ecdb;
+    --surface: #ece1c8;
+    --well: #efe5d0;
+    --ink: #2e2014;
+    --ink-2: #6b573f;
+    --muted: #8a7558;
+    --terra: #c65133;
+    --gold: #e0a32e;
+    --sage: #7d9471;
+    --err: #9c2f1d;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Karla", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    padding: 32px 18px 96px;
+  }
+  body::after {
+    content: ""; position: fixed; inset: 0; pointer-events: none; opacity: .035;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  .wrap { max-width: 680px; margin: 0 auto; position: relative; }
+  h1 { font-family: "Fraunces", serif; font-weight: 700; font-size: 2rem; margin: 0 0 4px; letter-spacing: -.01em; }
+  .sub { color: var(--ink-2); font-size: .92rem; margin: 0 0 28px; }
+  .card {
+    background: var(--surface);
+    border: 2px solid var(--ink);
+    border-radius: 10px;
+    box-shadow: 5px 5px 0 rgba(46,32,20,.18);
+    padding: 22px 22px 24px;
+    margin-bottom: 22px;
+  }
+  .card h2 { font-family: "Fraunces", serif; font-weight: 600; font-size: 1.18rem; margin: 0 0 2px; }
+  .where { font-size: .78rem; color: var(--muted); margin: 0 0 16px; text-transform: uppercase; letter-spacing: .08em; }
+  .stage { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  /* boutons base */
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: "Karla", sans-serif; font-weight: 700; font-size: .9rem;
+    color: var(--paper); border: 2px solid var(--ink); border-radius: 8px;
+    padding: 12px 22px; cursor: pointer;
+    transition: all .3s cubic-bezier(.2,.8,.2,1);
+  }
+  .btn svg { width: 16px; height: 16px; }
+  .btn-terra { background: var(--terra); box-shadow: 4px 4px 0 var(--ink); }
+  .btn-ink   { background: var(--ink);   box-shadow: 4px 4px 0 rgba(46,32,20,.35); }
+  .btn:active { transform: translate(2px,2px); box-shadow: 1px 1px 0 var(--ink); }
+  .btn.ok { background: var(--sage); transform: scale(1.03); }
+  .replay {
+    margin-left: auto; background: none; border: none; cursor: pointer;
+    color: var(--ink-2); font-family: "Karla"; font-weight: 700; font-size: .76rem;
+    text-decoration: underline; text-underline-offset: 3px;
+  }
+  /* slots joueurs */
+  .slots { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; }
+  .slot {
+    display: flex; align-items: center; gap: 10px; padding: 8px 11px;
+    background: var(--paper); border: 2px solid var(--ink); border-radius: 6px;
+    box-shadow: 3px 3px 0 rgba(46,32,20,.18);
+  }
+  .slot.host { border-color: var(--terra); }
+  .slot.empty { border: 2px dashed rgba(46,32,20,.35); background: transparent; box-shadow: none; }
+  .pellet {
+    width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-family: "Fraunces"; font-weight: 700; font-size: .85rem;
+    border: 2px solid var(--ink); background: var(--paper);
+  }
+  .pellet.host { background: var(--terra); color: var(--paper); }
+  .pellet.empty { border: 2px dashed rgba(46,32,20,.35); background: transparent; color: #b3a182; }
+  .slot .nm { flex: 1; font-family: "Fraunces"; font-weight: 600; font-size: .88rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .slot.empty .nm { color: #b3a182; }
+  .tag { flex-shrink: 0; font-size: .58rem; font-weight: 700; text-transform: uppercase; letter-spacing: .12em; padding: 2px 8px; border-radius: 99px; border: 1px solid rgba(46,32,20,.3); color: var(--sage); }
+  .tag.host { color: var(--terra); border-color: var(--terra); }
+  .tag.empty { color: #b3a182; }
+  @keyframes joinIn { from { opacity: 0; transform: translateY(10px) scale(.96); } to { opacity: 1; transform: none; } }
+  .joining { animation: joinIn .5s cubic-bezier(.2,.8,.2,1) both; }
+  /* inputs jeu */
+  .field { position: relative; width: 100%; }
+  .field input {
+    width: 100%; font-family: "Karla"; font-size: 1rem; color: var(--ink);
+    background: var(--well); border: 2px solid var(--ink); border-radius: 8px;
+    padding: 13px 42px 13px 14px; outline: none; transition: border-color .2s, box-shadow .2s;
+  }
+  .field input:focus { box-shadow: 3px 3px 0 rgba(46,32,20,.18); }
+  .field.valid input { border-color: var(--sage); }
+  .field .vmark {
+    position: absolute; right: 12px; top: 50%; transform: translateY(-50%) scale(0);
+    color: var(--sage); transition: transform .3s cubic-bezier(.2,1.5,.4,1);
+  }
+  .field.valid .vmark { transform: translateY(-50%) scale(1); }
+  .field .vmark svg { width: 20px; height: 20px; display: block; }
+  /* avatars picker */
+  .pickers { display: flex; gap: 12px; }
+  .pick {
+    width: 52px; height: 52px; border-radius: 50%; cursor: pointer;
+    border: 2px solid var(--ink); background: var(--paper); box-shadow: 3px 3px 0 rgba(46,32,20,.18);
+    display: flex; align-items: center; justify-content: center;
+    font-family: "Fraunces"; font-weight: 700; font-size: 1.1rem; color: var(--ink);
+    transition: transform .18s cubic-bezier(.2,1.4,.4,1), box-shadow .18s, background .18s, color .18s;
+  }
+  .pick:hover { transform: translateY(-2px); }
+  .pick:active { transform: scale(.9); }
+  .pick.sel { background: var(--terra); color: var(--paper); box-shadow: 5px 5px 0 var(--ink); transform: translateY(-3px); }
+  /* tracklist reveal */
+  .tracklist { width: 100%; border-top: 2px solid var(--ink); }
+  .trow {
+    display: flex; align-items: baseline; gap: 10px; padding: 9px 2px;
+    border-bottom: 1px dotted rgba(46,32,20,.4);
+    opacity: 0; transform: translateX(-12px);
+  }
+  .trow.in { animation: rowIn .45s cubic-bezier(.2,.8,.2,1) both; }
+  @keyframes rowIn { to { opacity: 1; transform: none; } }
+  .trow .rk { font-family: "Fraunces"; font-weight: 700; color: var(--terra); width: 26px; }
+  .trow .tt { flex: 1; font-weight: 600; }
+  .trow .pt { font-family: "Fraunces"; font-weight: 700; }
+  /* score count */
+  .score { font-family: "Fraunces"; font-weight: 700; font-size: 3rem; line-height: 1; letter-spacing: -.02em; }
+  .score .pts { font-size: 1rem; color: var(--muted); margin-left: 8px; }
+  /* transition manche */
+  .rt {
+    position: relative; width: 100%; height: 120px; overflow: hidden;
+    border: 2px solid var(--ink); border-radius: 8px; background: var(--well);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .rt .panel {
+    position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+    font-family: "Fraunces"; font-weight: 700;
+  }
+  .rt .kicker { font-size: .72rem; text-transform: uppercase; letter-spacing: .18em; color: var(--muted); }
+  .rt .big { font-size: 1.6rem; }
+  @keyframes wipeOut { to { transform: translateY(-100%); } }
+  @keyframes wipeIn  { from { transform: translateY(100%); } to { transform: none; } }
+  .rt .leaving { animation: wipeOut .55s cubic-bezier(.7,0,.3,1) both; }
+  .rt .entering { animation: wipeIn .55s cubic-bezier(.7,0,.3,1) both; }
+  /* mode select */
+  .modegrid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .vs { position: relative; cursor: pointer; padding-top: 38px; }
+  .vs .disc {
+    position: absolute; left: 50%; top: 6px; width: 74%; aspect-ratio: 1;
+    transform: translateX(-50%) translateY(0) rotate(0);
+    border-radius: 50%;
+    background: repeating-radial-gradient(circle at center, #221710 0 2px, #2e2014 2px 4px);
+    transition: transform .42s cubic-bezier(.5,0,.2,1);
+    z-index: 0;
+  }
+  .vs .disc .lbl { position: absolute; inset: 34%; border-radius: 50%; border: 3px solid var(--ink); background: var(--ac); }
+  .vs .disc .hole { position: absolute; inset: 47%; border-radius: 50%; background: var(--paper); }
+  .vs:hover .disc { transform: translateX(-50%) translateY(-26px) rotate(11deg); }
+  .vs .sleeve {
+    position: relative; z-index: 1; margin-top: 30px; min-height: 150px;
+    display: flex; flex-direction: column; justify-content: space-between;
+    border: 2px solid var(--ink); background: var(--surface); border-radius: 7px; padding: 16px;
+    box-shadow: 4px 4px 0 rgba(46,32,20,.18);
+    transition: border-color .2s, box-shadow .2s, transform .2s;
+  }
+  .vs:hover .sleeve { border-color: var(--ac); box-shadow: 6px 6px 0 var(--ac); transform: translateY(2px); }
+  .vs .mtitle { font-family: "Fraunces"; font-weight: 600; font-size: 1.05rem; line-height: 1.15; }
+  .vs .mbottom { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .vs .posture { font-size: .6rem; font-weight: 700; text-transform: uppercase; letter-spacing: .12em; color: var(--paper); background: var(--ac); border-radius: 99px; padding: 3px 9px; }
+  .vs .picked { font-size: .72rem; font-weight: 700; color: var(--ac); opacity: 0; transform: translateX(6px); transition: opacity .25s, transform .25s; }
+  /* état choisi : le disque RENTRE dans la pochette */
+  .vs.sel .disc { transform: translateX(-50%) translateY(34px) rotate(0) scale(.97); }
+  .vs.sel .sleeve { border-color: var(--ac); box-shadow: 6px 6px 0 var(--ac); }
+  .vs.sel .picked { opacity: 1; transform: none; }
+  .hint { font-size: .8rem; color: var(--ink-2); margin: 14px 0 0; }
+  .legend { font-size: .82rem; color: var(--ink-2); margin: 0 0 26px; padding: 12px 14px; border-left: 3px solid var(--terra); background: rgba(198,81,51,.06); border-radius: 0 6px 6px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Micro-interactions</h1>
+  <p class="sub">Démo isolée. Clique partout. Si le <em>feel</em> te va, je l'applique dans l'app.</p>
+  <p class="legend">Langage commun : confirmation = vert sauge + check qui pop · pression = le bouton s'enfonce dans son ombre · arrivée = glissement court, jamais de fade-in mou. Tout reste dans la DA Club analogique (papier, ombres dures, zéro glow).</p>
+
+  <!-- 1. COPY -->
+  <div class="card">
+    <h2>1 · Copier le code / lien</h2>
+    <p class="where">Lobby · partage de la partie</p>
+    <div class="stage">
+      <button class="btn btn-terra" id="cpCode" onclick="morphCopy(this,'Copier le code')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+        Copier le code
+      </button>
+      <button class="btn btn-ink" id="cpLink" onclick="morphCopy(this,'Copier le lien')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></svg>
+        Copier le lien
+      </button>
+    </div>
+    <p class="hint">Le bouton scale légèrement, vire sauge, l'icône devient un check en zoom+rotation. Revient seul après 1,4s.</p>
+  </div>
+
+  <!-- 2. JOIN -->
+  <div class="card">
+    <h2>2 · Arrivée d'un joueur</h2>
+    <p class="where">Lobby · équipage</p>
+    <div class="slots" id="slots">
+      <div class="slot host"><div class="pellet host">T</div><div class="nm">Tym</div><span class="tag host">Hôte</span></div>
+      <div class="slot empty"><div class="pellet empty">?</div><div class="nm">En attente</div><span class="tag empty">Libre</span></div>
+    </div>
+    <div class="stage" style="margin-top:14px">
+      <button class="btn btn-terra" onclick="addPlayer()">+ Un joueur rejoint</button>
+      <button class="replay" onclick="resetSlots()">réinitialiser</button>
+    </div>
+    <p class="hint">Le nouveau slot remplace une case libre en glissant depuis le bas. Les autres ne bougent pas.</p>
+  </div>
+
+  <!-- 3. LANCER -->
+  <div class="card">
+    <h2>3 · Lancer la partie</h2>
+    <p class="where">Lobby · bouton hôte</p>
+    <div class="stage">
+      <button class="btn btn-terra" id="launch" onclick="launchGame(this)" style="min-width:210px;justify-content:center">
+        Lancer la partie
+      </button>
+    </div>
+    <p class="hint">Pression franche, puis état « Lancement… » avec un point qui pulse. Pas un bouton figé pendant le chargement.</p>
+  </div>
+
+  <!-- 4. INPUTS -->
+  <div class="card">
+    <h2>4 · Réponse validée</h2>
+    <p class="where">Écran de jeu · titre / artiste</p>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div class="field"><input placeholder="Titre du morceau" oninput="validateField(this)"><span class="vmark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg></span></div>
+      <div class="field"><input placeholder="Artiste" oninput="validateField(this)"><span class="vmark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg></span></div>
+    </div>
+    <p class="hint">Dès que tu tapes quelque chose, la bordure passe sauge et un check pop à droite. Retour discret, pas envahissant.</p>
+  </div>
+
+  <!-- 5. PICKER -->
+  <div class="card">
+    <h2>5 · « Qui l'a ajouté ? »</h2>
+    <p class="where">Écran de jeu · picker d'avatars</p>
+    <div class="pickers" id="pickers">
+      <div class="pick" onclick="pickOne(this)">T</div>
+      <div class="pick" onclick="pickOne(this)">M</div>
+      <div class="pick" onclick="pickOne(this)">L</div>
+      <div class="pick" onclick="pickOne(this)">A</div>
+    </div>
+    <p class="hint">Hover = léger lift. Clic = l'avatar s'enfonce puis se cale en avant avec ombre dure terracotta. Un seul sélectionné.</p>
+  </div>
+
+  <!-- 6. REVEAL -->
+  <div class="card">
+    <h2>6 · Révélation du classement</h2>
+    <p class="where">Reveal · tracklist « Face B »</p>
+    <div class="tracklist" id="tl">
+      <div class="trow"><span class="rk">1</span><span class="tt">Tym</span><span class="pt">+120</span></div>
+      <div class="trow"><span class="rk">2</span><span class="tt">Marie</span><span class="pt">+90</span></div>
+      <div class="trow"><span class="rk">3</span><span class="tt">Léo</span><span class="pt">+60</span></div>
+      <div class="trow"><span class="rk">4</span><span class="tt">Alex</span><span class="pt">+30</span></div>
+    </div>
+    <div class="stage" style="margin-top:14px"><button class="replay" onclick="revealList()">▶ rejouer la révélation</button></div>
+    <p class="hint">Les lignes tombent une par une (stagger 90ms), pas tout d'un bloc.</p>
+  </div>
+
+  <!-- 7. SCORE -->
+  <div class="card">
+    <h2>7 · Score qui compte</h2>
+    <p class="where">Reveal / résultats</p>
+    <div class="score"><span id="scoreVal">0</span><span class="pts">pts</span></div>
+    <div class="stage" style="margin-top:14px"><button class="replay" onclick="countScore()">▶ rejouer le décompte</button></div>
+    <p class="hint">Le total grimpe en s'amortissant vers la fin au lieu d'apparaître brut.</p>
+  </div>
+
+  <!-- 9. MODE SELECT -->
+  <div class="card">
+    <h2>9 · Choix d'un mode</h2>
+    <p class="where">Page modes · vinyle qui rentre dans la pochette</p>
+    <div class="modegrid">
+      <div class="vs" style="--ac:var(--terra)" onclick="pickMode(this)">
+        <div class="disc"><span class="lbl"></span><span class="hole"></span></div>
+        <div class="sleeve">
+          <div class="mtitle">Entre amis, à distance</div>
+          <div class="mbottom"><span class="posture">Friends</span><span class="picked">Sélectionné ✓</span></div>
+        </div>
+      </div>
+      <div class="vs" style="--ac:var(--gold)" onclick="pickMode(this)">
+        <div class="disc"><span class="lbl"></span><span class="hole"></span></div>
+        <div class="sleeve">
+          <div class="mtitle">Autour d'une table</div>
+          <div class="mbottom"><span class="posture">Régie</span><span class="picked">Sélectionné ✓</span></div>
+        </div>
+      </div>
+    </div>
+    <p class="hint">Survol = le disque dépasse un peu (c'est cliquable). Clic = il <em>rentre</em> dans la pochette, qui prend la couleur du mode, puis « Sélectionné ✓ ». On navigue ~550ms après.</p>
+  </div>
+
+  <!-- 8. ROUND TRANSITION -->
+  <div class="card">
+    <h2>8 · Raccord entre manches</h2>
+    <p class="where">Reveal → manche suivante</p>
+    <div class="rt" id="rt">
+      <div class="panel" id="rtPanel"><span class="kicker">Manche 2 terminée</span><span class="big">On enchaîne…</span></div>
+    </div>
+    <div class="stage" style="margin-top:14px"><button class="replay" onclick="nextRound()">▶ jouer le raccord</button></div>
+    <p class="hint">Le panneau actuel remonte et le suivant arrive par le bas. Un vrai cut, pas un saut sec.</p>
+  </div>
+
+</div>
+
+<script>
+  function morphCopy(btn, label) {
+    if (btn.classList.contains('ok')) return;
+    btn.classList.add('ok');
+    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="transform:rotate(0);animation:none"><path d="M5 13l4 4L19 7"/></svg> Copié !';
+    btn.querySelector('svg').animate(
+      [{ transform: 'scale(0) rotate(-45deg)' }, { transform: 'scale(1) rotate(0)' }],
+      { duration: 300, easing: 'cubic-bezier(.2,1.5,.4,1)' }
+    );
+    setTimeout(() => {
+      btn.classList.remove('ok');
+      const isCode = label.includes('code');
+      btn.innerHTML = isCode
+        ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg> ' + label
+        : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></svg> ' + label;
+    }, 1400);
+  }
+
+  const NAMES = [['Marie','M'],['Léo','L'],['Alex','A'],['Sam','S'],['Nina','N']];
+  let joined = 0;
+  function addPlayer() {
+    const box = document.getElementById('slots');
+    const empty = box.querySelector('.slot.empty');
+    if (!joined && NAMES[joined]) {} // noop
+    if (joined >= NAMES.length) return;
+    const [nm, init] = NAMES[joined++];
+    const el = document.createElement('div');
+    el.className = 'slot joining';
+    el.innerHTML = '<div class="pellet">'+init+'</div><div class="nm">'+nm+'</div><span class="tag">En ligne</span>';
+    if (empty) box.replaceChild(el, empty);
+    else box.appendChild(el);
+    // garder au moins une case libre visible
+    if (!box.querySelector('.slot.empty') && joined < NAMES.length) {
+      const e = document.createElement('div');
+      e.className = 'slot empty';
+      e.innerHTML = '<div class="pellet empty">?</div><div class="nm">En attente</div><span class="tag empty">Libre</span>';
+      box.appendChild(e);
+    }
+  }
+  function resetSlots() {
+    joined = 0;
+    document.getElementById('slots').innerHTML =
+      '<div class="slot host"><div class="pellet host">T</div><div class="nm">Tym</div><span class="tag host">Hôte</span></div>' +
+      '<div class="slot empty"><div class="pellet empty">?</div><div class="nm">En attente</div><span class="tag empty">Libre</span></div>';
+  }
+
+  function launchGame(btn) {
+    if (btn.dataset.busy) return;
+    btn.dataset.busy = '1';
+    btn.innerHTML = 'Lancement<span style="animation:none">…</span>';
+    const dot = btn.querySelector('span');
+    dot.animate([{opacity:.3},{opacity:1},{opacity:.3}], {duration:900, iterations:Infinity});
+    setTimeout(() => {
+      btn.classList.add('ok');
+      btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg> C\'est parti';
+      btn.querySelector('svg').animate([{transform:'scale(0)'},{transform:'scale(1)'}],{duration:300,easing:'cubic-bezier(.2,1.5,.4,1)'});
+      setTimeout(() => { btn.classList.remove('ok'); btn.dataset.busy=''; btn.innerHTML='Lancer la partie'; }, 1500);
+    }, 1300);
+  }
+
+  function validateField(input) {
+    const f = input.closest('.field');
+    f.classList.toggle('valid', input.value.trim().length > 0);
+  }
+
+  function pickOne(el) {
+    document.querySelectorAll('#pickers .pick').forEach(p => p.classList.remove('sel'));
+    el.classList.add('sel');
+  }
+
+  function revealList() {
+    const rows = document.querySelectorAll('#tl .trow');
+    rows.forEach(r => r.classList.remove('in'));
+    void document.getElementById('tl').offsetWidth;
+    rows.forEach((r, i) => { r.style.animationDelay = (i*90)+'ms'; r.classList.add('in'); });
+  }
+
+  function countScore() {
+    const el = document.getElementById('scoreVal');
+    const target = 1240; const dur = 1100; const start = performance.now();
+    function tick(now) {
+      const t = Math.min(1, (now-start)/dur);
+      const eased = 1 - Math.pow(1-t, 3);
+      el.textContent = Math.round(target*eased);
+      if (t < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  let rnum = 2;
+  function nextRound() {
+    const rt = document.getElementById('rt');
+    const cur = document.getElementById('rtPanel');
+    cur.classList.add('leaving');
+    rnum++;
+    const next = document.createElement('div');
+    next.className = 'panel entering';
+    next.innerHTML = '<span class="kicker">Manche '+rnum+'</span><span class="big">À l\'écoute…</span>';
+    rt.appendChild(next);
+    setTimeout(() => { cur.remove(); next.id = 'rtPanel'; next.classList.remove('entering'); }, 600);
+  }
+
+  let modeBusy = false;
+  function pickMode(el) {
+    if (modeBusy) return;
+    modeBusy = true;
+    document.querySelectorAll('.vs').forEach(v => v.classList.remove('sel'));
+    el.classList.add('sel');           // le disque rentre dans la pochette
+    setTimeout(() => {                  // démo : on "navigue" → reset
+      el.classList.remove('sel');
+      modeBusy = false;
+    }, 1400);
+  }
+
+  // auto-play reveal + score une fois au chargement pour montrer le feel
+  window.addEventListener('load', () => { setTimeout(revealList, 400); setTimeout(countScore, 600); });
+</script>
+</body>
+</html>

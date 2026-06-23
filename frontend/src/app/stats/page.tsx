@@ -204,11 +204,11 @@ export default function StatsPage() {
         <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
           {/* Left column */}
           <div className="space-y-6">
-            {/* Skill profile */}
+            {/* Tes aptitudes */}
             <div className="rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-6 shadow-[4px_4px_0_rgba(46,32,20,.18)]">
               <div className="mb-4 flex items-center justify-between">
                 <div>
-                  <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">Skill profile</p>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">Tes aptitudes</p>
                   <h2 className="font-display text-xl font-semibold text-[#2e2014]">Niveau actuel</h2>
                 </div>
                 <Sparkles className="h-5 w-5 text-[#c65133]" />

@@ -114,13 +114,28 @@ async function submitAnswer(page: Page, answer: string, label: string): Promise<
 
 /** Detect the current round number from page text (e.g. "1 / 5" or "Round 2") */
 function detectRound(text: string): number {
-  // Match "N / M" pattern
+  // L'UI de jeu rend le label explicite "ROUND 01 / 05" (TheaterGameView) ou "Manche N".
+  // On l'ancre EN PREMIER : un "N / M" nu peut etre le compteur d'equipage "02 / 04"
+  // encore visible pendant la transition lobby->jeu, ce qui faussait la detection.
+  const labeled = text.match(/(?:ROUND|MANCHE)\s*0*(\d+)/i)
+  if (labeled) return parseInt(labeled[1], 10)
+  // Fallback legacy : un "N / M" nu (ancienne UI sans label).
   const slashMatch = text.match(/(\d+)\s*\/\s*\d+/)
   if (slashMatch) return parseInt(slashMatch[1], 10)
-  // Match "Round N" or "Manche N"
-  const roundMatch = text.match(/(?:Round|Manche)\s*(\d+)/i)
-  if (roundMatch) return parseInt(roundMatch[1], 10)
   return 0
+}
+
+// Lecture CIBLEE de la manche : l'indicateur visible est rendu dans `.theater-round`
+// ("ROUND 01 / 05"). On le lit directement pour eviter les faux positifs du scan global
+// (compteur d'equipage "02/04", mot contenant "round"/"manche", scores du classement...).
+async function readRound(page: Page): Promise<number> {
+  const el = page.locator(".theater-round")
+  if ((await el.count()) > 0) {
+    const t = (await el.first().innerText().catch(() => "")) || ""
+    const m = t.match(/0*(\d+)/)
+    if (m) return parseInt(m[1], 10)
+  }
+  return detectRound(await getBodyText(page))
 }
 
 // ── Tests ──
@@ -149,13 +164,16 @@ test.describe("Friends — 2 players full game", () => {
       const playerInLobby = /ROOM_CODE|CREW|PRESS START|Lobby|Défie|Defie|Code de la salle/i.test(playerText)
       expect(playerInLobby).toBe(true)
 
-      await hostPage.waitForTimeout(3000)
+      // Le bouton "Lancer" n'est rendu que quand le host voit 2 joueurs (propagation socket
+      // du room:join du 2e joueur). Cette propagation peut prendre quelques secondes, surtout
+      // pendant que le host importe encore sa musique -> on attend l'apparition, pas un delai fixe.
+      const launchBtn = hostPage.locator("button").filter({ hasText: /pose le diamant|lancer la partie|press start/i })
+      await expect(launchBtn).toBeVisible({ timeout: 30000 })
       const hostAfter = await getBodyText(hostPage)
       expect(hostAfter).toContain("2")
-
-      const launchBtn = hostPage.locator("button").filter({ hasText: /lancer la partie|press start/i })
-      await expect(launchBtn).toBeVisible({ timeout: 5000 })
-      expect(await launchBtn.isEnabled()).toBe(true)
+      // Le bouton reste desactive tant que l'import du profil n'est pas fini (canStartGame exige !importing).
+      // Un profil Spotify lourd peut prendre >30s a importer, on attend genereusement.
+      await expect(launchBtn).toBeEnabled({ timeout: 90000 })
     } finally {
       await hostCtx.close()
       await playerCtx.close()
@@ -201,20 +219,25 @@ test.describe("Friends — 2 players full game", () => {
       }
 
       // ── LAUNCH ──
-      const launchBtn = hostPage.locator("button").filter({ hasText: /lancer la partie|press start/i })
-      await expect(launchBtn).toBeEnabled({ timeout: 5000 })
+      const launchBtn = hostPage.locator("button").filter({ hasText: /pose le diamant|lancer la partie|press start/i })
+      // Import lourd du profil host -> bouton desactive jusqu'a la fin de l'import.
+      await expect(launchBtn).toBeEnabled({ timeout: 90000 })
       await launchBtn.click()
       console.log("Game launched!")
 
       // ── ROUND 1: Both see game UI ──
-      const hostHasGame = await waitForText(hostPage, /Valider|Titre/i, 15000)
-      const playerHasGame = await waitForText(playerPage, /Valider|Titre/i, 10000)
+      // IMPORTANT : on attend le marqueur EXCLUSIF au jeu (`.theater-round`). L'ancien detecteur
+      // /Valider|Titre/ matchait "TES TITRES DANS LA PARTIE" du LOBBY -> faux positif "game launched"
+      // alors que le host n'avait pas encore transitionne (la transition prend ~1-2s apres le clic).
+      const hostHasGame = await hostPage.locator(".theater-round").first()
+        .waitFor({ state: "visible", timeout: 30000 }).then(() => true).catch(() => false)
+      const playerHasGame = await playerPage.locator(".theater-round").first()
+        .waitFor({ state: "visible", timeout: 10000 }).then(() => true).catch(() => false)
       console.log(`Round 1 game UI - Host: ${hostHasGame}, Player: ${playerHasGame}`)
       expect(hostHasGame || playerHasGame).toBe(true)
 
-      // Verify we're on round 1
-      const r1HostText = await getBodyText(hostPage)
-      const round1 = detectRound(r1HostText)
+      // Verify we're on round 1 (lecture ciblee de l'indicateur de manche, pas le scan global)
+      const round1 = await readRound(hostHasGame ? hostPage : playerPage)
       console.log(`Detected round: ${round1}`)
       expect(round1).toBe(1)
 
@@ -238,7 +261,7 @@ test.describe("Friends — 2 players full game", () => {
       for (let i = 0; i < 20; i++) {
         await hostPage.waitForTimeout(1000)
         const text = await getBodyText(hostPage)
-        const currentRound = detectRound(text)
+        const currentRound = await readRound(hostPage)
         if (currentRound >= 2) {
           round2Detected = true
           console.log(`Round 2 detected after ${i + 1}s`)
@@ -254,8 +277,7 @@ test.describe("Friends — 2 players full game", () => {
       expect(round2Detected).toBe(true)
 
       // ── ROUND 2: Verify game UI is interactive again ──
-      const r2HostText = await getBodyText(hostPage)
-      const round2Num = detectRound(r2HostText)
+      const round2Num = await readRound(hostPage)
       if (round2Num >= 2) {
         console.log(`On round ${round2Num}, waiting for inputs...`)
         // Wait for the game UI to be fully interactive (animation transition)

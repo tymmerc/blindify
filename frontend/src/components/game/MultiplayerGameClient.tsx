@@ -11,6 +11,43 @@ import { TheaterGameView } from "./TheaterGameView"
 
 const VINYL_GROOVES = "repeating-radial-gradient(circle at 50% 50%, #241a10 0 2.5px, #3a2a1a 2.5px 5px)"
 
+const SAGE = "#7d9471"
+
+// Petit compteur qui grimpe en s'amortissant (ease-out cubic) jusqu'a `value`.
+// Remonte depuis la valeur precedente a chaque changement.
+function CountUp({ value, duration = 900 }: { value: number; duration?: number }) {
+  const [display, setDisplay] = useState(value)
+  const fromRef = useRef(value)
+  const rafRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    const from = fromRef.current
+    const to = value
+    if (from === to) {
+      setDisplay(to)
+      return
+    }
+    const start = performance.now()
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / duration)
+      const eased = 1 - Math.pow(1 - t, 3)
+      setDisplay(Math.round(from + (to - from) * eased))
+      if (t < 1) {
+        rafRef.current = requestAnimationFrame(tick)
+      } else {
+        fromRef.current = to
+      }
+    }
+    rafRef.current = requestAnimationFrame(tick)
+    return () => {
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
+      fromRef.current = to
+    }
+  }, [value, duration])
+
+  return <>{display}</>
+}
+
 // Platine analogique : sillons sombres, label central couleur d'accent bordé d'encre, trou papier.
 function AnalogVinyl({
   size,
@@ -401,6 +438,34 @@ export function MultiplayerGameClient({
     }
   }
 
+  // Plus de bouton "cliquer pour lancer" : si l'autoplay est bloque (invite qui n'a pas
+  // encore interagi), on relance le son au PREMIER tap n'importe ou sur la page.
+  useEffect(() => {
+    if (!manualPlayRequired || !isAudioPhase) return
+    const resume = () => { void handleManualPlay() }
+    document.addEventListener("pointerdown", resume, { once: true })
+    return () => document.removeEventListener("pointerdown", resume)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [manualPlayRequired, isAudioPhase, currentTrack?.previewUrl])
+
+  // Le navigateur met l'audio en pause quand l'onglet passe en arriere-plan (alt-tab entre
+  // Safari/Chrome). Au retour, on relance le son tout seul -> plus besoin de couper/remettre.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return
+      if (!isAudioPhase || !currentTrack?.previewUrl) return
+      if (audioManager.getState().playing) return
+      audioManager.resume("multiplayer")
+    }
+    document.addEventListener("visibilitychange", onVisible)
+    window.addEventListener("focus", onVisible)
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible)
+      window.removeEventListener("focus", onVisible)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAudioPhase, currentTrack?.previewUrl, muted])
+
   // Hex directs (pas des var()) : utilisés dans des templates `${color}14` pour les teintes.
   const verdictColor = (verdict: string | null | undefined) => {
     if (verdict === "correct") return "#7d9471"
@@ -409,9 +474,9 @@ export function MultiplayerGameClient({
   }
 
   const verdictLabel = (verdict: string | null | undefined) => {
-    if (verdict === "correct") return "Validé"
-    if (verdict === "close") return "Partiel"
-    return "Raté"
+    if (verdict === "correct") return "Trouvé"
+    if (verdict === "close") return "Presque"
+    return "À côté"
   }
 
   const panelClassName =
@@ -756,7 +821,7 @@ export function MultiplayerGameClient({
                         )}
                         <div className="text-center">
                           <p className="text-base font-bold uppercase tracking-[0.32em] text-[var(--muted)]">
-                            {isPlaying ? "Écoute en cours" : "Réponses verrouillées"}
+                            {isPlaying ? "Extrait en cours" : "Réponses verrouillées"}
                           </p>
                           <p className="mt-3 font-display text-6xl font-bold" style={{ color: accent }}>
                             {displayAnsweredCount} / {playerCount}
@@ -951,9 +1016,15 @@ export function MultiplayerGameClient({
                               <span className="font-display font-bold" style={{ color: isPlaying && remaining <= 5 ? "var(--error)" : "var(--ink)" }}>
                                 {isPlaying ? `${remaining}s` : isLocked ? "LOCK" : "REVEAL"}
                               </span>
-                              <span className="ml-2 text-[var(--muted)]">
+                              <motion.span
+                                key={state?.currentRound ?? 0}
+                                initial={{ scale: 1.35, color: accent }}
+                                animate={{ scale: 1, color: "var(--muted)" }}
+                                transition={{ duration: 0.5, ease: [0.2, 0.8, 0.2, 1] }}
+                                className="ml-2 inline-block text-[var(--muted)]"
+                              >
                                 Round {state?.currentRound ?? 0}/{state?.totalRounds ?? 0}
-                              </span>
+                              </motion.span>
                             </div>
                           </div>
                           <span className="text-xs text-[var(--muted)]">
@@ -983,7 +1054,7 @@ export function MultiplayerGameClient({
                               <div className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-[#2e2014]" style={{ background: `${accent}22` }}>
                                 <Lock className="h-6 w-6" style={{ color: accent }} />
                               </div>
-                              <p className="font-display text-lg font-semibold">Réponse envoyée</p>
+                              <p className="font-display text-lg font-semibold">C'est noté</p>
                               <p className="text-sm text-[var(--muted)]">Reveal dans {remaining}s</p>
                               <div className="mt-2 flex flex-wrap justify-center gap-1.5">
                                 {sortedPlayersFixed.filter(p => !p.hasAnswered).length > 0 && (
@@ -1007,27 +1078,47 @@ export function MultiplayerGameClient({
                           <div className="grid gap-4 sm:grid-cols-2">
                             <label className="space-y-2 text-xs text-[var(--muted)]">
                               <span className="text-[11px] font-bold uppercase tracking-[0.22em]">Titre</span>
-                              <input
-                                value={guessTitle}
-                                onChange={e => setGuessTitle(e.target.value)}
-                                disabled={localHasAnswered || disabled}
-                                autoComplete="off"
-                                aria-label="Titre du morceau"
-                                className="w-full border-0 border-b-2 border-[#2e2014] bg-transparent px-1 py-2 font-display text-lg text-[var(--ink)] outline-none transition placeholder:italic placeholder:text-[#b3a182] focus:border-[var(--accent)]"
-                                placeholder="Le morceau qui tourne…"
-                              />
+                              <div className="relative">
+                                <input
+                                  value={guessTitle}
+                                  onChange={e => setGuessTitle(e.target.value)}
+                                  disabled={localHasAnswered || disabled}
+                                  autoComplete="off"
+                                  aria-label="Titre du morceau"
+                                  className={`w-full border-0 border-b-2 bg-transparent px-1 py-2 pr-7 font-display text-lg text-[var(--ink)] outline-none transition-colors placeholder:italic placeholder:text-[#b3a182] focus:border-[var(--accent)] ${
+                                    guessTitle.trim() ? "border-[#7d9471]" : "border-[#2e2014]"
+                                  }`}
+                                  placeholder="Le morceau qui tourne…"
+                                />
+                                {guessTitle.trim() && (
+                                  <Check
+                                    className="animate-in zoom-in duration-300 pointer-events-none absolute right-0 top-1/2 h-4 w-4 -translate-y-1/2"
+                                    style={{ color: SAGE }}
+                                  />
+                                )}
+                              </div>
                             </label>
                             <label className="space-y-2 text-xs text-[var(--muted)]">
                               <span className="text-[11px] font-bold uppercase tracking-[0.22em]">Artiste</span>
-                              <input
-                                value={guessArtist}
-                                onChange={e => setGuessArtist(e.target.value)}
-                                disabled={localHasAnswered || disabled}
-                                autoComplete="off"
-                                aria-label="Artiste"
-                                className="w-full border-0 border-b-2 border-[#2e2014] bg-transparent px-1 py-2 font-display text-lg text-[var(--ink)] outline-none transition placeholder:italic placeholder:text-[#b3a182] focus:border-[var(--accent)]"
-                                placeholder="Qui chante ?"
-                              />
+                              <div className="relative">
+                                <input
+                                  value={guessArtist}
+                                  onChange={e => setGuessArtist(e.target.value)}
+                                  disabled={localHasAnswered || disabled}
+                                  autoComplete="off"
+                                  aria-label="Artiste"
+                                  className={`w-full border-0 border-b-2 bg-transparent px-1 py-2 pr-7 font-display text-lg text-[var(--ink)] outline-none transition-colors placeholder:italic placeholder:text-[#b3a182] focus:border-[var(--accent)] ${
+                                    guessArtist.trim() ? "border-[#7d9471]" : "border-[#2e2014]"
+                                  }`}
+                                  placeholder="Qui chante ?"
+                                />
+                                {guessArtist.trim() && (
+                                  <Check
+                                    className="animate-in zoom-in duration-300 pointer-events-none absolute right-0 top-1/2 h-4 w-4 -translate-y-1/2"
+                                    style={{ color: SAGE }}
+                                  />
+                                )}
+                              </div>
                             </label>
                           </div>
 
@@ -1040,11 +1131,13 @@ export function MultiplayerGameClient({
                                   type="button"
                                   disabled={localHasAnswered || disabled}
                                   onClick={() => setSourceGuess(sourceGuess === p.userId ? null : p.userId)}
-                                  className="flex items-center gap-2 rounded-full border-2 border-[#2e2014] px-3 py-1.5 text-xs font-bold transition disabled:opacity-60"
+                                  className={`flex items-center gap-2 rounded-full border-2 border-[#2e2014] px-3 py-1.5 text-xs font-bold transition-all duration-150 hover:-translate-y-0.5 active:scale-90 disabled:opacity-60 ${
+                                    sourceGuess === p.userId ? "-translate-y-0.5 scale-105" : ""
+                                  }`}
                                   style={{
                                     color: sourceGuess === p.userId ? "#f4ecdb" : "var(--ink)",
                                     background: sourceGuess === p.userId ? accent : "#f4ecdb",
-                                    boxShadow: sourceGuess === p.userId ? `0 0 0 2px #f4ecdb, 0 0 0 4px ${accent}` : "none",
+                                    boxShadow: sourceGuess === p.userId ? `4px 4px 0 #2e2014` : "none",
                                   }}
                                 >
                                   {p.avatar ? (
@@ -1086,7 +1179,7 @@ export function MultiplayerGameClient({
                             {localHasAnswered ? (
                               <span className="flex items-center justify-center gap-2">
                                 <Check className="h-4 w-4" style={{ color: accent }} />
-                                Envoyée
+                                Notée
                               </span>
                             ) : (
                               <span className="flex items-center justify-center gap-2">
@@ -1118,8 +1211,11 @@ export function MultiplayerGameClient({
 
                 <div className="mt-4">
                   {(leaderboardMode === "top3" ? sortedPlayersFixed.slice(0, 3) : sortedPlayersFixed).map((p, idx) => (
-                    <div
+                    <motion.div
                       key={p.userId}
+                      initial={{ opacity: 0, x: -12 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.4, delay: 0.25 + idx * 0.09, ease: [0.2, 0.8, 0.2, 1] }}
                       className={`flex items-baseline gap-2.5 ${isLargeUI ? "py-2.5 text-lg" : "py-1.5 text-base"}`}
                     >
                       <span className="w-7 shrink-0 text-xs text-[var(--muted)]">A{idx + 1}</span>
@@ -1130,7 +1226,7 @@ export function MultiplayerGameClient({
                         {p.username || `Joueur ${p.userId}`}
                       </span>
                       <span className="text-[11px] text-[var(--muted)]">
-                        {p.lastVerdict === "correct" ? "Validé" : p.lastVerdict === "close" ? "Partiel" : "Raté"}
+                        {p.lastVerdict === "correct" ? "Trouvé" : p.lastVerdict === "close" ? "Presque" : "À côté"}
                       </span>
                       {p.streak >= 2 && (
                         <span className="text-xs font-bold" style={{ color: "var(--warn)" }}>
@@ -1138,8 +1234,8 @@ export function MultiplayerGameClient({
                         </span>
                       )}
                       <span className="flex-1 -translate-y-1 border-b-2 border-dotted border-[rgba(46,32,20,.45)]" />
-                      <span className="font-bold">{p.score}</span>
-                    </div>
+                      <span className="font-bold tabular-nums"><CountUp value={p.score} /></span>
+                    </motion.div>
                   ))}
                 </div>
               </motion.section>

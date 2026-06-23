@@ -83,7 +83,13 @@ function FriendsEntryContent() {
   }, [mode, setMode])
 
   const [intent, setIntent] = useState<Intent>(joinParam ? "join" : null)
-  const [step, setStep] = useState<Step>("nickname")
+  // Nouveau flow : le nom + la musique sont saisis a l'ECRAN D'ENTREE (/). Si le nom est deja
+  // connu, on saute directement au choix creer/rejoindre au lieu de redemander nom+musique.
+  const [step, setStep] = useState<Step>(() => {
+    if (joinParam) return "nickname"
+    try { if ((localStorage.getItem("blindify_nickname") ?? "").trim()) return "intent" } catch { /* ignore */ }
+    return "nickname"
+  })
   const [nickname, setNickname] = useState(() => {
     if (typeof window === "undefined") return ""
     return localStorage.getItem("blindify_nickname") ?? ""
@@ -108,6 +114,17 @@ function FriendsEntryContent() {
     }, 100)
     return () => clearTimeout(timer)
   }, [step])
+
+  // Sauvegarde le nom + le lien EN CONTINU (pas seulement a la fin du wizard).
+  // Avant, la sauvegarde n'avait lieu que dans handleGo : selon le flow elle pouvait sauter
+  // (constate sur Chrome). On persiste a chaque changement, avec try/catch (localStorage peut
+  // lever dans certains modes prive/restrictifs).
+  useEffect(() => {
+    try { if (nickname.trim()) localStorage.setItem("blindify_nickname", nickname.trim()) } catch { /* ignore */ }
+  }, [nickname])
+  useEffect(() => {
+    try { if (profileUrl.trim()) localStorage.setItem("blindify_profile_url", profileUrl.trim()) } catch { /* ignore */ }
+  }, [profileUrl])
 
   // Flow: nickname -> music -> intent -> (code if join)
   // If ?join=CODE is present, skip intent and code steps entirely

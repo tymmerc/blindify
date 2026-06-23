@@ -80,7 +80,7 @@ test.describe("Friends Wizard Flow", () => {
     console.log(`Lobby (300): ${lobbyText.substring(0, 300)}`)
 
     // Lobby should show lobby content
-    const hasLobbyContent = /Code de la salle|Défie tes amis|Lobby|Lancer la partie|PRESS START|ROOM_CODE|CREW/i.test(lobbyText)
+    const hasLobbyContent = /Code de la salle|Défie tes amis|Lobby|Pose le diamant|Lancer la partie|PRESS START|ROOM_CODE|CREW/i.test(lobbyText)
     expect(hasLobbyContent).toBe(true)
     // Should NOT have the old "Rivalité active" / "Prêts / pas prêts" header
     expect(lobbyText).not.toContain("Rivalité active")
@@ -201,7 +201,7 @@ test.describe("Friends Wizard Flow", () => {
     ).catch(() => {})
     const joinLobbyText = await page.locator("body").innerText()
     console.log(`Join lobby (300): ${joinLobbyText.substring(0, 300)}`)
-    const hasLobbyContent = /Code de la salle|Défie tes amis|Lobby|Lancer la partie|PRESS START|ROOM_CODE|CREW/i.test(joinLobbyText)
+    const hasLobbyContent = /Code de la salle|Défie tes amis|Lobby|Pose le diamant|Lancer la partie|PRESS START|ROOM_CODE|CREW/i.test(joinLobbyText)
     expect(hasLobbyContent).toBe(true)
     expect(joinLobbyText).toContain("JoinTestPlayer")
 

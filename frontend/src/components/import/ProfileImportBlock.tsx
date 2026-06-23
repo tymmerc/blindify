@@ -13,9 +13,11 @@ type ProfileImportBlockProps = {
   /** Lance l'import automatiquement au montage si initialUrl est fournie
       (cas du wizard : l'URL collee doit etre consommee, pas perdue). */
   autoStart?: boolean
+  /** Masque le titre interne ("Importe ta musique") quand l'ecran parent a deja son propre titre. */
+  hideHeader?: boolean
 }
 
-export function ProfileImportBlock({ accent = "#c65133", onImportingChange, initialUrl, autoStart }: ProfileImportBlockProps) {
+export function ProfileImportBlock({ accent = "#c65133", onImportingChange, initialUrl, autoStart, hideHeader }: ProfileImportBlockProps) {
   const [url, setUrl] = useState(initialUrl ?? "")
   const [state, setState] = useState<ImportState>("idle")
   const [error, setError] = useState<string | null>(null)
@@ -99,8 +101,12 @@ export function ProfileImportBlock({ accent = "#c65133", onImportingChange, init
 
   return (
     <div className="space-y-2">
-      <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">Importe ta musique</p>
-      <p className="text-xs text-[#6b573f]">Colle ton lien de profil Spotify ou Deezer.</p>
+      {!hideHeader && (
+        <>
+          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">Importe ta musique</p>
+          <p className="text-xs text-[#6b573f]">Colle ton lien de profil Spotify ou Deezer.</p>
+        </>
+      )}
       <form onSubmit={handleImportAll} className="flex gap-2">
         <input
           value={url}

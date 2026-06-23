@@ -83,7 +83,7 @@ test.describe("Friends — full game with import and audio", () => {
     await page.screenshot({ path: "e2e/screenshots/game-friends-lobby-ready.png" })
 
     // Click "Lancer la partie" / "PRESS START"
-    const launchBtn = page.locator("button").filter({ hasText: /lancer la partie|press start/i })
+    const launchBtn = page.locator("button").filter({ hasText: /pose le diamant|lancer la partie|press start/i })
     if (await launchBtn.count() > 0 && await launchBtn.first().isEnabled()) {
       console.log("Launching game...")
       await launchBtn.first().click()

@@ -134,7 +134,7 @@ export function ResultsView({
   }
 
   return (
-    <section className="flex flex-col gap-5 rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-7 text-center shadow-[4px_4px_0_rgba(46,32,20,.18)]">
+    <section className="flex flex-col gap-5 rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-4 text-center shadow-[4px_4px_0_rgba(46,32,20,.18)] sm:p-7">
       <style>{`
         @keyframes res-rise { from { opacity: 0; transform: translateY(18px) } to { opacity: 1; transform: translateY(0) } }
         @keyframes res-pop { from { opacity: 0; transform: scale(.4) rotate(-90deg) } to { opacity: 1; transform: scale(1) rotate(0) } }
@@ -165,7 +165,9 @@ export function ResultsView({
               {podium[0].username || `Joueur ${podium[0].userId}`}
             </h2>
             <p className="res-rise text-sm text-[#6b573f]" style={{ animationDelay: "0.6s" }}>
-              {podium[0].score} {podium[0].score > 1 ? "bonnes réponses" : "bonne réponse"} · {podium[0].accuracy}% de précision · disque d'or de la session
+              {podium[0].score > 0
+                ? `${podium[0].score} ${podium[0].score > 1 ? "bonnes réponses" : "bonne réponse"} · ${podium[0].accuracy}% de précision · disque d'or de la session`
+                : "Personne n'a marqué. On rejoue ?"}
             </p>
           </>
         )}

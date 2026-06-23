@@ -92,15 +92,6 @@ function LobbyHeader({
         <h1 className="mt-1 truncate font-display text-2xl font-semibold text-[#2e2014]">{title}</h1>
       </div>
       <div className="flex shrink-0 flex-wrap items-center gap-2">
-        {isGuest ? (
-          <a
-            href={`/blindify/auth/login?returnTo=${encodeURIComponent(typeof window !== "undefined" ? window.location.pathname + window.location.search : "/blindify/multiplayer")}`}
-            className="flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[#f4ecdb] transition hover:brightness-95"
-            style={{ background: accent, border: "1.5px solid #2e2014" }}
-          >
-            Se connecter
-          </a>
-        ) : null}
         {onChangeMode ? (
           <button
             type="button"

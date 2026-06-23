@@ -145,7 +145,7 @@ export const roomsController = {
     const autoAdvance = Boolean(req.body?.autoAdvance);
     const maxPlayers = Number.isFinite(Number(req.body?.maxPlayers))
       ? Math.min(Math.max(Number(req.body.maxPlayers), 2), 16)
-      : 8;
+      : 12;
     const questionCount = Number.isFinite(Number(req.body?.questionCount))
       ? Math.min(Math.max(Number(req.body.questionCount), 5), 25)
       : 10;
@@ -374,7 +374,7 @@ export const roomsController = {
       return;
     }
 
-    const { rows: trackRows } = await pool.query(
+    const { rows: trackRowsRaw } = await pool.query(
       `SELECT gr.round_index AS round,
               s.id AS "audioSourceId",
               s.provider AS type,
@@ -383,13 +383,26 @@ export const roomsController = {
               s.artist,
               s.album_cover,
               s.audio_url,
-              s.metadata
+              s.metadata,
+              s.user_id AS owner_user_id,
+              u.username AS owner_username
        FROM game_rounds gr
        LEFT JOIN audio_sources s ON s.id = gr.audio_source_id
+       LEFT JOIN users u ON u.id = s.user_id
        WHERE gr.session_id=$1
        ORDER BY gr.round_index ASC`,
       [session.id]
     );
+    // Re-injecte l'attribution "qui a ajoute" dans le metadata (perdue sinon : owner_* n'est
+    // calcule qu'au lancement en memoire, jamais persiste dans audio_sources.metadata).
+    const trackRows = trackRowsRaw.map((row: Record<string, unknown>) => ({
+      ...row,
+      metadata: {
+        ...((row.metadata as Record<string, unknown> | null) ?? {}),
+        owner_user_id: row.owner_user_id ?? null,
+        owner_username: row.owner_username ?? null,
+      },
+    }));
 
     const gameState = getGameState(room.room_code) ?? null;
 
@@ -490,7 +503,7 @@ export const roomsController = {
         return;
       }
 
-      const { rows: trackRows } = await pool.query(
+      const { rows: trackRowsRaw } = await pool.query(
         `SELECT gr.round_index AS round,
                 s.id AS "audioSourceId",
                 s.provider AS type,
@@ -499,13 +512,24 @@ export const roomsController = {
                 s.artist,
                 s.album_cover,
                 s.audio_url,
-                s.metadata
+                s.metadata,
+                s.user_id AS owner_user_id,
+                u.username AS owner_username
          FROM game_rounds gr
          LEFT JOIN audio_sources s ON s.id = gr.audio_source_id
+         LEFT JOIN users u ON u.id = s.user_id
          WHERE gr.session_id=$1
          ORDER BY gr.round_index ASC`,
         [session.id]
       );
+      const trackRows = trackRowsRaw.map((row: Record<string, unknown>) => ({
+        ...row,
+        metadata: {
+          ...((row.metadata as Record<string, unknown> | null) ?? {}),
+          owner_user_id: row.owner_user_id ?? null,
+          owner_username: row.owner_username ?? null,
+        },
+      }));
 
       const gameState = getGameState(room.room_code) ?? null;
 
@@ -582,6 +606,17 @@ export const roomsController = {
 
     if (!participantIds.length) {
       fail(res, "no_participants", "Aucun joueur connecté pour lancer en mode événement", 400);
+      return;
+    }
+
+    // Regle : il faut au moins 2 joueurs ayant importe leur musique pour lancer.
+    const { rows: musicRows } = await pool.query<{ n: string }>(
+      `SELECT COUNT(DISTINCT user_id) AS n FROM audio_sources WHERE user_id = ANY($1::int[])`,
+      [participantIds]
+    );
+    const playersWithMusic = Number(musicRows[0]?.n ?? 0);
+    if (playersWithMusic < 2) {
+      fail(res, "need_more_music", "Il faut au moins 2 joueurs ayant importé leur musique pour lancer.", 400, { playersWithMusic });
       return;
     }
 
@@ -672,13 +707,32 @@ export const roomsController = {
         continue;
       }
 
-      const slice = await fetchAudioSources(pid, poolProvider, perUserCount, {
+      // 1) D'abord les titres que CE joueur possede vraiment -> attribution "qui a ajoute" fiable.
+      // On passe par collectPlayableSources pour HYDRATER les previews Deezer : les titres
+      // importes ont audio_url NULL au depart et seraient sinon jetes par le filtre playable.
+      const owned = await collectPlayableSources(pid, perUserCount, {
         likedOnly: likedChoice,
         playlistId: playlistChoice,
         timeRange: timeChoice,
+        provider: poolProvider,
+        ownedOnly: true,
       });
-      contribution.set(pid, (contribution.get(pid) ?? 0) + slice.length);
-      pushUnique(slice);
+      for (const s of owned) s.user_id = pid; // revendique la contribution pour cette partie
+      pushUnique(owned);
+
+      // 2) Complement depuis le pool mixte (peut inclure des titres globaux non attribues).
+      const need = perUserCount - owned.length;
+      let extra = 0;
+      if (need > 0) {
+        const slice = await fetchAudioSources(pid, poolProvider, need, {
+          likedOnly: likedChoice,
+          playlistId: playlistChoice,
+          timeRange: timeChoice,
+        });
+        extra = slice.length;
+        pushUnique(slice);
+      }
+      contribution.set(pid, (contribution.get(pid) ?? 0) + owned.length + extra);
     }
 
     // Compléter avec le pool commun si besoin
@@ -764,12 +818,12 @@ export const roomsController = {
     // Mélange final pour intercaler les sources entre joueurs (et accepter un nombre réduit si besoin)
     sources = shuffle(sources);
 
-    // Hydrate missing preview URLs via Deezer
+    // Hydrate/rafraichit les previews via Deezer. On passe TOUS les titres (pas seulement ceux
+    // sans URL) : une URL Deezer en cache peut etre EXPIREE (signature `exp=`) -> 403 -> pas de son.
+    // hydratePreviewUrl renvoie l'URL cache si fraiche, re-fetch si manquante/expiree, null si injouable.
     await Promise.all(
       sources.map(async source => {
-        if (source.audio_url) return;
-        const preview = await hydratePreviewUrl(source);
-        if (preview) source.audio_url = preview;
+        source.audio_url = await hydratePreviewUrl(source);
       })
     );
 

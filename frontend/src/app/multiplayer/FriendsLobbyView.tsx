@@ -1,8 +1,8 @@
 "use client"
 
 import Link from "next/link"
-import { Copy, Link2, Send, Sparkles } from "lucide-react"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { Copy, Link2, Send, Sparkles, Check } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { modeAccent } from "@/lib/uiTokens"
 import type { LobbyRendererProps, LobbyChatMessage } from "./lobbyTypes"
@@ -30,200 +30,6 @@ const lobbyAnimations = `
   to { opacity: 1; transform: translateX(0); }
 }
 `
-
-const VINYL_GROOVES = "repeating-radial-gradient(circle at 50% 50%, #241a10 0 2.5px, #3a2a1a 2.5px 5px)"
-
-/* ─── Interactive Vinyl: drag to spin ─── */
-function SpinVinyl({ accent }: { accent: string }) {
-  const [rpm, setRpm] = useState(0)
-  const [highScore, setHighScore] = useState(0)
-  const [angle, setAngle] = useState(0)
-  const dragging = useRef(false)
-  const lastAngle = useRef(0)
-  const velocity = useRef(0)
-  const lastTime = useRef(0)
-  const discRef = useRef<HTMLDivElement>(null)
-  const rafRef = useRef<number | null>(null)
-  const decayRef = useRef<ReturnType<typeof setInterval> | null>(null)
-
-  // Spin decay
-  useEffect(() => {
-    decayRef.current = setInterval(() => {
-      if (!dragging.current) {
-        setRpm(prev => {
-          const next = Math.max(0, prev * 0.97 - 0.5)
-          return next < 0.5 ? 0 : next
-        })
-      }
-    }, 50)
-    return () => { if (decayRef.current) clearInterval(decayRef.current) }
-  }, [])
-
-  // Continuous rotation from RPM
-  useEffect(() => {
-    let last = performance.now()
-    function tick(now: number) {
-      if (!dragging.current) {
-        const dt = (now - last) / 1000
-        setAngle(prev => prev + rpm * 6 * dt) // 6 deg per RPM per sec
-      }
-      last = now
-      rafRef.current = requestAnimationFrame(tick)
-    }
-    rafRef.current = requestAnimationFrame(tick)
-    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }
-  }, [rpm])
-
-  const getMouseAngle = useCallback((e: MouseEvent | TouchEvent) => {
-    const el = discRef.current
-    if (!el) return 0
-    const rect = el.getBoundingClientRect()
-    const cx = rect.left + rect.width / 2
-    const cy = rect.top + rect.height / 2
-    const clientX = "touches" in e ? e.touches[0]?.clientX ?? 0 : e.clientX
-    const clientY = "touches" in e ? e.touches[0]?.clientY ?? 0 : e.clientY
-    return Math.atan2(clientY - cy, clientX - cx) * (180 / Math.PI)
-  }, [])
-
-  const onDown = useCallback((e: React.MouseEvent | React.TouchEvent) => {
-    e.preventDefault()
-    dragging.current = true
-    const a = getMouseAngle(e.nativeEvent)
-    lastAngle.current = a
-    velocity.current = 0
-    lastTime.current = performance.now()
-  }, [getMouseAngle])
-
-  useEffect(() => {
-    const onMove = (e: MouseEvent | TouchEvent) => {
-      if (!dragging.current) return
-      const a = getMouseAngle(e)
-      let delta = a - lastAngle.current
-      if (delta > 180) delta -= 360
-      if (delta < -180) delta += 360
-      setAngle(prev => prev + delta)
-      const now = performance.now()
-      const dt = now - lastTime.current
-      if (dt > 0) velocity.current = delta / dt * 16
-      lastTime.current = now
-      lastAngle.current = a
-      setRpm(prev => {
-        const next = Math.min(Math.abs(velocity.current) * 3, 500)
-        if (next > highScore) setHighScore(next)
-        return Math.max(prev, next)
-      })
-    }
-    const onUp = () => {
-      if (!dragging.current) return
-      dragging.current = false
-      setRpm(Math.min(Math.abs(velocity.current) * 3, 500))
-    }
-    window.addEventListener("mousemove", onMove)
-    window.addEventListener("mouseup", onUp)
-    window.addEventListener("touchmove", onMove, { passive: false })
-    window.addEventListener("touchend", onUp)
-    return () => {
-      window.removeEventListener("mousemove", onMove)
-      window.removeEventListener("mouseup", onUp)
-      window.removeEventListener("touchmove", onMove)
-      window.removeEventListener("touchend", onUp)
-    }
-  }, [getMouseAngle, highScore])
-
-  const handleClick = useCallback(() => {
-    setRpm(prev => Math.min(prev + 20, 500))
-  }, [])
-
-  const displayRpm = Math.round(rpm) || 120
-  const barWidth = Math.max(30, Math.min(95, 35 + (rpm / 500) * 60))
-
-  return (
-    <div className="flex flex-col items-center gap-3 w-full">
-      {/* Vinyl stage on its platter */}
-      <div className="relative flex items-center justify-center my-2" style={{ width: 300, height: 300 }}>
-        {/* Platter outer ring */}
-        <div
-          aria-hidden
-          className="absolute -inset-3 rounded-full border-2 border-[rgba(46,32,20,.3)] pointer-events-none"
-        />
-
-        {/* Vinyl disc (interactive) */}
-        <div
-          ref={discRef}
-          onMouseDown={onDown}
-          onTouchStart={onDown}
-          onClick={handleClick}
-          className="relative outline-none select-none cursor-grab active:cursor-grabbing rounded-full"
-          style={{
-            width: 280,
-            height: 280,
-            background: VINYL_GROOVES,
-            border: "3px solid #2e2014",
-            transform: `rotate(${angle}deg)`,
-          }}
-          title="Fais tourner le vinyle"
-        >
-          {/* Terracotta label */}
-          <div
-            className="absolute inset-[32%] rounded-full flex items-center justify-center border-[3px] border-[#2e2014] bg-[#c65133]"
-          >
-            <span className="font-display text-[0.7rem] font-semibold tracking-[0.1em] text-[#f4ecdb]">
-              SIDE A
-            </span>
-          </div>
-          {/* Center hole */}
-          <div
-            className="absolute left-1/2 top-1/2 w-3 h-3 rounded-full border-2 border-[#2e2014] bg-[#f4ecdb]"
-            style={{ transform: "translate(-50%, -50%)" }}
-          />
-        </div>
-      </div>
-
-      {/* Audio bars */}
-      <div className="flex items-end gap-1 h-9 mb-1">
-        {[30, 60, 90, 50, 75, 40, 85, 55, 70].map((h, i) => (
-          <div
-            key={i}
-            style={{
-              width: 5,
-              height: `${h}%`,
-              background: i % 2 === 0 ? "#c65133" : "#e0a32e",
-              animation: `lobby-bar-bounce 0.6s ease-in-out infinite alternate`,
-              animationDelay: `${(i % 6) * 0.1}s`,
-              transformOrigin: "bottom",
-            }}
-          />
-        ))}
-      </div>
-
-      {/* RPM block */}
-      <div className="text-center w-full max-w-[240px]">
-        <div className="text-[11px] font-bold uppercase tracking-[0.4em] text-[#8a7558]">RPM</div>
-        <div className="font-display text-[2.2rem] font-bold leading-none mt-1 text-[#2e2014]">
-          {displayRpm}
-        </div>
-        <div className="w-full h-1 bg-[rgba(46,32,20,0.12)] mt-3 relative overflow-hidden rounded-full">
-          <div
-            className="absolute inset-0 transition-[width] duration-300"
-            style={{
-              width: `${barWidth}%`,
-              background: "linear-gradient(90deg, #c65133 0%, #e0a32e 100%)",
-              animation: rpm < 1 ? "lobby-rpm-pulse 1.2s ease-in-out infinite alternate" : undefined,
-            }}
-          />
-        </div>
-        <div className="font-display text-xs italic text-[#8a7558] mt-2">
-          Fais tourner le disque plus vite.
-        </div>
-        {highScore > 50 && (
-          <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#8a7558] mt-1">
-            Record : {Math.round(highScore)} RPM
-          </p>
-        )}
-      </div>
-    </div>
-  )
-}
 
 /* ─── Chat component (paper card with ink dividers) ─── */
 function LobbyChat({
@@ -267,7 +73,7 @@ function LobbyChat({
   }
 
   return (
-    <div className="relative flex h-full min-h-[360px] flex-col overflow-hidden rounded-md border-2 border-[#2e2014] bg-[#ece1c8] shadow-[4px_4px_0_rgba(46,32,20,.18)]">
+    <div className="relative flex h-full min-h-[280px] flex-col overflow-hidden rounded-md border-2 border-[#2e2014] bg-[#ece1c8] shadow-[4px_4px_0_rgba(46,32,20,.18)]">
       {/* Header */}
       <div className="flex items-center justify-between border-b-2 border-[#2e2014] px-5 py-4">
         <p className="m-0 text-[11px] font-bold uppercase tracking-[0.22em] text-[#c65133]">
@@ -282,7 +88,7 @@ function LobbyChat({
       {/* Messages */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-3 min-h-[280px]"
+        className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-3 min-h-[110px]"
         style={{ scrollbarWidth: "thin" }}
       >
         {messages.length === 0 && (
@@ -440,53 +246,35 @@ function PlayerSlot({
 
   return (
     <div
-      className="relative flex items-center gap-3 px-4 py-3 transition-transform hover:-translate-y-0.5"
+      className={`flex items-center gap-2.5 px-3 py-2 ${
+        isEmpty ? "" : "animate-in fade-in slide-in-from-bottom-2 duration-500"
+      }`}
       style={slotStyle}
     >
-      {isHost && (
-        <span className="absolute -top-2.5 left-2.5 rounded-full border-[1.5px] border-[#2e2014] bg-[#c65133] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[#f4ecdb]">
-          Hote
-        </span>
-      )}
-
-      {/* Avatar */}
+      {/* Petite pastille initiale (pas de vraie photo : on ne l'importe pas) */}
       <div
-        className="relative flex h-[54px] w-[54px] shrink-0 items-center justify-center overflow-hidden rounded-full font-display text-xl font-semibold"
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full font-display text-sm font-bold"
         style={avatarStyle}
       >
         {initial}
       </div>
-
-      {/* Info */}
-      <div className="flex-1 min-w-0">
-        <div
-          className="mb-1 text-[10px] font-bold uppercase tracking-[0.22em]"
-          style={{ color: isEmpty ? "#b3a182" : isHost ? "#c65133" : "#8a7558" }}
-        >
-          {tagText}
-        </div>
-        <div
-          className="overflow-hidden text-ellipsis whitespace-nowrap font-display text-base font-semibold"
-          style={{ color: isEmpty ? "#b3a182" : "#2e2014" }}
-        >
-          {displayName}
-          {isEmpty && (
-            <span
-              className="inline-block w-2 h-[14px] ml-0.5 align-middle"
-              style={{
-                background: "rgba(46,32,20,.35)",
-                animation: "lobby-caret 1s steps(2) infinite",
-              }}
-            />
-          )}
-        </div>
+      {/* Nom */}
+      <div
+        className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap font-display text-sm font-semibold"
+        style={{ color: isEmpty ? "#b3a182" : "#2e2014" }}
+      >
+        {displayName}
       </div>
-
-      {/* Status pill */}
-      <div className="flex shrink-0 items-center gap-1.5 rounded-full border-[1.5px] border-[rgba(46,32,20,.35)] px-2 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#6b573f]">
-        {!isEmpty && <span aria-hidden className="h-2 w-2 rounded-full bg-[#7d9471]" />}
-        {isEmpty ? "Libre" : "En ligne"}
-      </div>
+      {/* Statut compact */}
+      <span
+        className="shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em]"
+        style={{
+          color: isHost ? "#c65133" : isEmpty ? "#b3a182" : "#5d7252",
+          border: `1px solid ${isHost ? "#c65133" : "rgba(46,32,20,.3)"}`,
+        }}
+      >
+        {isHost ? "Hôte" : isEmpty ? "Libre" : "En ligne"}
+      </span>
     </div>
   )
 }
@@ -536,7 +324,8 @@ function FriendsLobby({
   }
 
   // Build slots: every participant + empty slots to fill up to 4 total (min 2 visible).
-  const totalSlots = Math.max(2, Math.min(4, playerCount + 1))
+  const maxPlayers = room?.max_players ?? 8
+  const totalSlots = Math.max(2, Math.min(maxPlayers, playerCount + 1))
   const emptySlots = Math.max(0, totalSlots - playerCount)
   const readyCount = playerCount
 
@@ -554,25 +343,8 @@ function FriendsLobby({
       {/* Inline keyframes used by this component */}
       <style jsx global>{lobbyAnimations}</style>
 
-      {/* Lobby header */}
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1
-            className="font-display font-semibold leading-none text-[#2e2014]"
-            style={{ fontSize: "clamp(1.6rem, 4vw, 2.6rem)", letterSpacing: "-0.01em" }}
-          >
-            Rassemble ton <em className="font-medium italic text-[#c65133]">equipage</em>
-          </h1>
-          <p className="mt-2 text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">
-            En attente des joueurs
-          </p>
-        </div>
-      </div>
-
-      <div className="grid gap-7 lg:grid-cols-[1fr_380px]">
-
-        {/* ─── Left: Main content ─── */}
-        <div className="space-y-6">
+      <div className="grid w-full max-w-5xl gap-6 lg:grid-cols-[1fr_380px] lg:items-stretch">
+        <div className="space-y-5">
 
           {/* ROOM CODE hero panel */}
           <section className="relative rounded-md border-2 border-[#2e2014] bg-[#ece1c8] px-7 py-7 shadow-[4px_4px_0_rgba(46,32,20,.18)]">
@@ -612,62 +384,37 @@ function FriendsLobby({
               <button
                 type="button"
                 onClick={copyCode}
-                className="flex items-center gap-2 rounded-md border-2 border-[#2e2014] bg-[#c65133] px-6 py-3 text-sm font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#2e2014]"
+                className={`flex items-center gap-2 rounded-md border-2 border-[#2e2014] px-6 py-3 text-sm font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] transition-all duration-300 hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#2e2014] ${copiedCode ? "scale-[1.03] bg-[#7d9471]" : "bg-[#c65133]"}`}
               >
-                <Copy size={13} />
-                {copiedCode ? "Copie !" : "Copier le code"}
+                {copiedCode ? (
+                  <Check size={14} className="animate-in zoom-in spin-in-45 duration-300" />
+                ) : (
+                  <Copy size={13} />
+                )}
+                {copiedCode ? "Copié !" : "Copier le code"}
               </button>
               <button
                 type="button"
                 onClick={copyLink}
-                className="flex items-center gap-2 rounded-md border-2 border-[#2e2014] bg-[#2e2014] px-6 py-3 text-sm font-bold text-[#f4ecdb] shadow-[4px_4px_0_rgba(46,32,20,.35)] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgba(46,32,20,.35)]"
+                className={`flex items-center gap-2 rounded-md border-2 border-[#2e2014] px-6 py-3 text-sm font-bold text-[#f4ecdb] transition-all duration-300 hover:translate-x-[2px] hover:translate-y-[2px] ${copiedLink ? "scale-[1.03] bg-[#7d9471] shadow-[4px_4px_0_#2e2014] hover:shadow-[2px_2px_0_#2e2014]" : "bg-[#2e2014] shadow-[4px_4px_0_rgba(46,32,20,.35)] hover:shadow-[2px_2px_0_rgba(46,32,20,.35)]"}`}
               >
-                <Link2 size={13} />
-                {copiedLink ? "Copie !" : "Copier le lien"}
+                {copiedLink ? (
+                  <Check size={14} className="animate-in zoom-in spin-in-45 duration-300" />
+                ) : (
+                  <Link2 size={13} />
+                )}
+                {copiedLink ? "Copié !" : "Copier le lien"}
               </button>
             </div>
             {copyError ? (
               <p className="mt-2 text-[11px] font-bold text-[#9c2f1d]">
-                Copie impossible ici — sélectionne le code à la main.
+                Copie impossible ici, sélectionne le code à la main.
               </p>
             ) : null}
           </section>
 
-          {/* Ta musique : import (consomme l'URL du wizard via autoStart) */}
-          <section className="relative rounded-md border-2 border-[#2e2014] bg-[#ece1c8] px-6 py-5 shadow-[4px_4px_0_rgba(46,32,20,.18)]">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <p className="m-0 text-[11px] font-bold uppercase tracking-[0.22em] text-[#c65133]">
-                Ta musique
-              </p>
-              <span className="rounded-full border-[1.5px] border-[#2e2014] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#2e2014]">
-                Tes titres dans la partie
-              </span>
-            </div>
-            <p className="mb-3 text-sm text-[#6b573f]">
-              Importe ton profil Spotify ou Deezer : la partie piochera dans les morceaux de tout l'equipage.
-            </p>
-            <ProfileImportBlock
-              accent="#c65133"
-              initialUrl={initialProfileUrl ?? undefined}
-              autoStart={Boolean(initialProfileUrl)}
-              onImportingChange={onImportingChange}
-            />
-          </section>
-
-          {/* Vinyl + Players grid */}
-          <div className="grid gap-6 md:grid-cols-[340px_1fr] items-stretch">
-
-            {/* Vinyl panel */}
-            <section className="relative flex flex-col items-center justify-between rounded-md border-2 border-[#2e2014] bg-[#ece1c8] px-6 py-6 shadow-[4px_4px_0_rgba(46,32,20,.18)]">
-              <div className="self-start mb-2 text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">
-                Platine · Fidget
-              </div>
-
-              <SpinVinyl accent={accent} />
-            </section>
-
-            {/* Players panel */}
-            <section className="relative rounded-md border-2 border-[#2e2014] bg-[#ece1c8] px-6 py-6 shadow-[4px_4px_0_rgba(46,32,20,.18)]">
+          {/* Equipage : qui est en ligne */}
+          <section className="relative rounded-md border-2 border-[#2e2014] bg-[#ece1c8] px-6 py-6 shadow-[4px_4px_0_rgba(46,32,20,.18)]">
               {/* Players head */}
               <div className="flex items-center justify-between mb-5">
                 <p className="m-0 text-[11px] font-bold uppercase tracking-[0.22em] text-[#c65133]">
@@ -677,7 +424,7 @@ function FriendsLobby({
                   <strong className="mx-1 font-display text-base font-bold text-[#2e2014]">
                     {playerCount.toString().padStart(2, "0")}
                   </strong>
-                  / 04
+                  / {maxPlayers.toString().padStart(2, "0")}
                 </span>
               </div>
 
@@ -702,53 +449,51 @@ function FriendsLobby({
                   />
                 ))}
               </div>
-            </section>
-          </div>
+          </section>
 
-          {/* Press Start button */}
-          <div className="mt-7 flex flex-col items-center gap-3">
+        </div>{/* fin colonne gauche */}
+
+        {/* Colonne droite : le chat etire + Lancer la partie en bas */}
+        <aside className="flex flex-col gap-4">
+          {onSendChat ? (
+            <div className="min-h-[280px] flex-1">
+              <LobbyChat
+                messages={chatMessages}
+                onSend={onSendChat}
+                currentUserId={currentUserId}
+                accent={accent}
+              />
+            </div>
+          ) : null}
+
+          {/* Lancer la partie */}
+          <div className="flex flex-col items-center gap-2">
             <button
               type="button"
               onClick={onStart}
               disabled={starting || !canStart}
-              className="relative w-full max-w-[720px] rounded-md border-2 border-[#2e2014] bg-[#c65133] text-center font-display font-bold text-[#f4ecdb] shadow-[6px_6px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[4px_4px_0_#2e2014] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-x-0 disabled:hover:translate-y-0 disabled:hover:shadow-[6px_6px_0_#2e2014]"
-              style={{
-                fontSize: "clamp(1.2rem, 2.6vw, 2rem)",
-                letterSpacing: "0.02em",
-                padding: "22px 40px",
-              }}
+              className="relative w-full rounded-md border-2 border-[#2e2014] bg-[#c65133] text-center font-display font-bold text-[#f4ecdb] shadow-[6px_6px_0_#2e2014] transition-all duration-150 hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[4px_4px_0_#2e2014] active:translate-x-[4px] active:translate-y-[4px] active:shadow-[2px_2px_0_#2e2014] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-x-0 disabled:hover:translate-y-0 disabled:hover:shadow-[6px_6px_0_#2e2014]"
+              style={{ fontSize: "clamp(1.1rem, 2vw, 1.6rem)", letterSpacing: "0.02em", padding: "18px 28px" }}
             >
-              {pressStartLabel}
+              {starting && isHost ? (
+                <span className="inline-flex items-center gap-0.5">
+                  Lancement
+                  <span className="inline-flex">
+                    <span className="animate-bounce [animation-delay:-0.3s]">.</span>
+                    <span className="animate-bounce [animation-delay:-0.15s]">.</span>
+                    <span className="animate-bounce">.</span>
+                  </span>
+                </span>
+              ) : (
+                pressStartLabel
+              )}
             </button>
-
             <div className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">
               <span className="text-[#5d7252]">{readyCount} joueurs prets</span>
               {" · "}
-              {isHost ? "a toi de lancer" : "en attente du host"}
+              {isHost ? "à toi de lancer" : "en attente de l'hôte"}
             </div>
-
-            {!canStart && isHost && playerCount < 2 && (
-              <p className="text-center font-display text-xs italic text-[#8a7558]">
-                Il faut au moins 2 joueurs pour lancer.
-              </p>
-            )}
           </div>
-        </div>
-
-        {/* ─── Right: Chat ─── */}
-        <aside>
-          {onSendChat ? (
-            <LobbyChat
-              messages={chatMessages}
-              onSend={onSendChat}
-              currentUserId={currentUserId}
-              accent={accent}
-            />
-          ) : (
-            <div className="relative rounded-md border-[1.5px] border-[rgba(46,32,20,.22)] bg-[#ece1c8] px-6 py-12 text-center text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">
-              Chat indisponible
-            </div>
-          )}
         </aside>
       </div>
     </section>

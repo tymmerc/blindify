@@ -113,9 +113,9 @@ export default function EventEntryPage() {
                 </span>
               </div>
               <ul className="space-y-2 text-sm text-[#6b573f]">
-                <li>Un seul ecran pilote, tout le monde suit la projection.</li>
-                <li>Les joueurs repondent sur leur telephone, sans friction.</li>
-                <li>Le host controle le rythme et les lancers de manches.</li>
+                <li>Un seul écran pilote, tout le monde suit la projection.</li>
+                <li>Les joueurs répondent sur leur téléphone.</li>
+                <li>L'hôte contrôle le rythme et lance les manches.</li>
               </ul>
             </div>
 

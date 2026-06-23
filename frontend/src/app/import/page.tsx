@@ -114,8 +114,8 @@ export default function ImportPage() {
               &larr; Retour
             </Link>
             <div className="space-y-1">
-              <h1 className="font-display text-3xl font-semibold sm:text-4xl">Importer ta <em className="font-medium italic text-[#c65133]">musique</em></h1>
-              <p className="text-[15px] text-[#6b573f]">Colle ton lien de profil pour retrouver tes playlists.</p>
+              <h1 className="font-display text-3xl font-semibold sm:text-4xl">Importe ta <em className="font-medium italic text-[#c65133]">musique</em></h1>
+              <p className="text-[15px] text-[#6b573f]">Colle ton lien Spotify ou Deezer pour récupérer tes titres.</p>
             </div>
           </div>
         </div>
@@ -153,6 +153,56 @@ export default function ImportPage() {
               <span className="rounded-full border border-[rgba(46,32,20,.3)] px-3 py-1">open.spotify.com/playlist/...</span>
               <span className="rounded-full border border-[rgba(46,32,20,.3)] px-3 py-1">deezer.com/playlist/...</span>
             </div>
+          </SurfaceCard>
+
+          {/* ─── Tutoriels : ou trouver le lien ─── */}
+          <SurfaceCard className="space-y-4">
+            <div className="space-y-1">
+              <h2 className="font-display text-xl font-semibold">Où trouver ton lien</h2>
+              <p className="text-sm text-[#6b573f]">Deux minutes, sur ordi ou sur téléphone. Ton profil (ou tes playlists) doit être <strong>public</strong>.</p>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              {/* Spotify */}
+              <div className="rounded-md border-[1.5px] border-[rgba(46,32,20,.25)] bg-[#efe5d0] p-4">
+                <div className="mb-2 flex items-center gap-2">
+                  <span className="rounded-full border-[1.5px] border-[#2e2014] bg-[#7d9471] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#f4ecdb]">Spotify</span>
+                </div>
+                <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#8a7558]">Sur ordinateur</p>
+                <ol className="mb-3 ml-4 list-decimal space-y-1 text-sm text-[#2e2014]">
+                  <li>Ouvre ton profil ou une playlist.</li>
+                  <li>Clic sur les <strong>···</strong> → <strong>Partager</strong> → <strong>Copier le lien</strong>.</li>
+                  <li>Colle-le dans le champ ci-dessus.</li>
+                </ol>
+                <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#8a7558]">Sur téléphone</p>
+                <ol className="ml-4 list-decimal space-y-1 text-sm text-[#2e2014]">
+                  <li>Ouvre le profil/la playlist dans l'app.</li>
+                  <li>Touche <strong>···</strong> (en haut à droite) → <strong>Partager</strong> → <strong>Copier le lien</strong>.</li>
+                </ol>
+              </div>
+
+              {/* Deezer */}
+              <div className="rounded-md border-[1.5px] border-[rgba(46,32,20,.25)] bg-[#efe5d0] p-4">
+                <div className="mb-2 flex items-center gap-2">
+                  <span className="rounded-full border-[1.5px] border-[#2e2014] bg-[#c65133] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#f4ecdb]">Deezer</span>
+                </div>
+                <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#8a7558]">Sur ordinateur</p>
+                <ol className="mb-3 ml-4 list-decimal space-y-1 text-sm text-[#2e2014]">
+                  <li>Ouvre ton profil ou une playlist.</li>
+                  <li>Clic sur les <strong>···</strong> → <strong>Partager</strong> → <strong>Copier le lien</strong>.</li>
+                  <li>Colle-le dans le champ ci-dessus.</li>
+                </ol>
+                <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#8a7558]">Sur téléphone</p>
+                <ol className="ml-4 list-decimal space-y-1 text-sm text-[#2e2014]">
+                  <li>Ouvre dans l'app Deezer.</li>
+                  <li>Touche <strong>···</strong> → <strong>Partager</strong> → <strong>Copier le lien</strong>.</li>
+                </ol>
+              </div>
+            </div>
+
+            <p className="text-xs italic text-[#8a7558]">
+              Astuce : un lien de <strong>profil</strong> récupère toutes tes playlists publiques d'un coup. Un lien de <strong>playlist</strong> n'en prend qu'une.
+            </p>
           </SurfaceCard>
 
           {error && (

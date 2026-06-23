@@ -30,7 +30,7 @@ const fraunces = Fraunces({
 })
 
 export const metadata: Metadata = {
-  title: "Blindify — Jouez votre musique autrement",
+  title: "Blindify · Jouez votre musique autrement",
   description:
     "Connectez vos services de musique préférés et défiez vos amis dans un blind test qui sent le vinyle et le café.",
   icons: {
@@ -42,7 +42,7 @@ export const metadata: Metadata = {
     apple: publicPath("/apple-touch-icon.png"),
   },
   openGraph: {
-    title: "Blindify — Jouez votre musique autrement",
+    title: "Blindify · Jouez votre musique autrement",
     description:
       "Connectez vos services de musique préférés et défiez vos amis dans un blind test qui sent le vinyle et le café.",
     type: "website",
@@ -50,7 +50,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Blindify — Jouez votre musique autrement",
+    title: "Blindify · Jouez votre musique autrement",
     description:
       "Connectez vos services de musique préférés et défiez vos amis dans un blind test qui sent le vinyle et le café.",
   },
@@ -66,7 +66,16 @@ export default function RootLayout({
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `document.documentElement.setAttribute("data-theme","dark")`,
+            __html: `document.documentElement.setAttribute("data-theme","dark");
+            /* Tue tout ancien service worker PWA qui sert un cache perime et empeche les MAJ. */
+            if ("serviceWorker" in navigator) {
+              navigator.serviceWorker.getRegistrations().then(function(rs){
+                if (rs && rs.length) {
+                  rs.forEach(function(r){ r.unregister(); });
+                  if (window.caches) { caches.keys().then(function(ks){ ks.forEach(function(k){ caches.delete(k); }); }); }
+                }
+              }).catch(function(){});
+            }`,
           }}
         />
       </head>

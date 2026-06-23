@@ -21,7 +21,7 @@ async function upsertTrack(
      ON CONFLICT (provider, external_id)
      DO UPDATE SET
        album_cover = COALESCE(EXCLUDED.album_cover, audio_sources.album_cover),
-       user_id = COALESCE(audio_sources.user_id, EXCLUDED.user_id)`,
+       user_id = COALESCE(EXCLUDED.user_id, audio_sources.user_id)`,
     [
       userId,
       track.provider,

@@ -408,3 +408,14 @@ body {
 .round-status.incorrect { background: rgba(198, 81, 51, 0.16); color: var(--terra); }
 .round-track { font-size: 13px; font-weight: 700; margin-bottom: 2px; }
 .round-artist { font-size: 12px; color: var(--ma-muted); }
+
+/* iOS Safari zoome automatiquement au focus d'un input dont la police fait < 16px,
+   et ne dezoome JAMAIS tout seul -> sensation "mal calibre, faut dezoomer/rezoomer".
+   On force 16px sur tous les champs en mobile pour tuer ce comportement. */
+@media (max-width: 640px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}

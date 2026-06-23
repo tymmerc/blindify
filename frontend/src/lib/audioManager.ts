@@ -100,31 +100,38 @@ class AudioManager {
       this.audio = new Audio();
     }
     // Play a silent buffer to unlock autoplay
-    this.audio.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+    const WARM = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+    this.audio.src = WARM;
     this.audio.volume = 0;
     this.audio.play().then(() => {
-      this.audio?.pause();
-      if (this.audio) this.audio.src = "";
+      // Ne PAS clobber si un vrai morceau a pris la main entre-temps (race warmup/play).
+      if (this.audio && this.audio.src.startsWith("data:audio/wav")) {
+        this.audio.pause();
+        this.audio.src = "";
+      }
     }).catch(() => {});
   }
 
   async play(options: { src: string; loop?: boolean; volume?: number; owner?: AudioOwner; seekTo?: number }): Promise<HTMLAudioElement | null> {
     if (typeof Audio === "undefined") return null;
 
-    // Replace any existing source before starting a new one.
-    this.stop("preempt");
-
+    // CRITIQUE : on REUTILISE le meme element audio. Une fois debloque par un geste
+    // (warmup au clic "Lancer"/au 1er tap), il reste autorise a jouer SANS nouvelle
+    // interaction pour toutes les manches suivantes. L'ancien code faisait stop()->null->
+    // new Audio() a chaque play : l'element fraichement debloque etait jete -> autoplay
+    // re-bloque -> overlay "cliquer pour lancer" a chaque manche.
     if (!this.audio) {
       this.audio = new Audio();
-    } else {
-      this.detach();
     }
+    this.detach();
+    try { this.audio.pause(); } catch { /* ignore */ }
 
     this.owner = options.owner ?? null;
     this.audio.loop = options.loop ?? false;
     this.volume = clampVolume(options.volume ?? this.volume);
     this.applyVolume();
     this.audio.src = options.src;
+    try { this.audio.currentTime = 0; } catch { /* ignore */ }
     this.bindLifecycle(this.owner);
 
     try {
@@ -136,7 +143,8 @@ class AudioManager {
       this.emit("play");
       return this.audio;
     } catch (err) {
-      this.stop("error", this.owner ?? undefined);
+      // NE PAS detruire l'element : il reste debloque pour un retry immediat.
+      this.emit("error");
       throw err;
     }
   }
@@ -175,7 +183,8 @@ class AudioManager {
       }
     }
     this.detach();
-    this.audio = null;
+    // On GARDE l'element audio (deja debloque par un geste) : le mettre a null forcerait
+    // un new Audio() non-debloque au prochain play -> autoplay re-bloque entre les manches.
     this.owner = null;
     this.emit(reason);
   }

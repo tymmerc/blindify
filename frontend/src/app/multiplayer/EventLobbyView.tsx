@@ -46,7 +46,7 @@ function EventEntry({
           Créer la salle
         </Button>
         <div className="rounded-xl border border-[rgba(46,32,20,.22)] bg-[#efe5d0] p-3 text-xs text-[#6b573f]">
-          <p>L'hôte diffuse la musique et affiche les résultats. Les joueurs n'entendent rien de leur côté — tout passe par l'écran principal.</p>
+          <p>L'hôte diffuse la musique et affiche les résultats. Les joueurs n'entendent rien de leur côté, tout passe par l'écran principal.</p>
         </div>
       </SurfaceCard>
 
@@ -87,87 +87,91 @@ function EventEntry({
 }
 
 function EventLobby(props: LobbyRendererProps) {
-  const accent = modeAccent("event")
+  const accent = modeAccent("event") // or #e0a32e
   const filteredParticipants = props.participants
   const filteredScores = props.scores
   const roomCode = (props.room?.room_code ?? props.joinCode ?? "").toUpperCase() || "-----"
-  const host = props.hostUser
+  const joinUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/blindify/?join=${roomCode}`
+  const playerCount = filteredParticipants.length
+
   return (
-    <section className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-      <SurfaceCard className="space-y-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="space-y-1">
-            <p className="text-xs uppercase tracking-[0.3em] text-[#6b573f]">Projection</p>
-            <h3 className="text-2xl font-semibold text-[#2e2014]">En scène</h3>
-            <p className="text-sm text-[#6b573f]">Lisible de loin. Le host contrôle le rythme.</p>
+    <section className="mx-auto grid w-full max-w-4xl gap-6 lg:grid-cols-[1.05fr_0.95fr] lg:items-start">
+      {/* L'ECRAN CENTRAL : on rejoint ici (QR + code en gros) */}
+      <div className="space-y-4 rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-6 text-center shadow-[4px_4px_0_rgba(46,32,20,.18)]">
+        <p className="text-[11px] font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>Autour d'une table</p>
+        <h2 className="font-display text-3xl font-semibold text-[#2e2014]">Rejoignez la partie</h2>
+        <p className="text-sm text-[#6b573f]">Scannez le QR, ou entrez le code sur vos téléphones.</p>
+
+        {roomCode !== "-----" && (
+          <div className="mx-auto w-fit rounded-md border-2 border-[#2e2014] bg-white p-3 shadow-[3px_3px_0_rgba(46,32,20,.18)]">
+            <QRCodeSVG value={joinUrl} size={168} bgColor="#ffffff" fgColor="#2e2014" level="M" />
           </div>
-          {host ? (
-            <div className="rounded-xl border border-[rgba(46,32,20,.22)] bg-[#efe5d0] px-3 py-2 text-right text-xs text-[#6b573f]">
-              <p className="uppercase tracking-[0.3em] text-[#6b573f]">Hôte</p>
-              <p className="text-sm font-semibold text-[#2e2014]">{host.username || `#${host.user_id}`}</p>
-            </div>
-          ) : null}
-          <Button
-            variant="outline"
-            onClick={props.onStart}
-            disabled={props.starting || !props.canStart}
-            className="gap-2 rounded-xl border border-[rgba(46,32,20,.22)] bg-[#ece1c8] px-5 py-3 text-sm font-semibold disabled:opacity-60"
-            style={{ borderColor: accent, color: accent }}
-          >
-            <Sparkles className="h-4 w-4" />
-            {props.isHost ? "Lancer" : "Hôte requis"}
-          </Button>
+        )}
+
+        <div className="flex flex-wrap items-center justify-center gap-1.5">
+          {roomCode.split("").map((char, i) => (
+            <span
+              key={`${char}-${i}`}
+              className="inline-flex h-12 w-9 items-center justify-center rounded-md border-2 border-[#2e2014] bg-[#efe5d0] font-display text-2xl font-bold text-[#2e2014] shadow-[2px_2px_0_rgba(46,32,20,.18)]"
+            >
+              {char}
+            </span>
+          ))}
         </div>
-        <SurfaceCard className="space-y-3 border-[rgba(46,32,20,.22)] bg-[#efe5d0]">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-sm text-[#2e2014]">
-              <Users className="h-4 w-4" />
-              <span>Participants</span>
-            </div>
-            <span className="text-xs uppercase tracking-[0.3em] text-[#6b573f]">{filteredParticipants.length} présent(s)</span>
+        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#8a7558]">Code de la salle</p>
+      </div>
+
+      {/* Cote regie : joueurs connectes + lancer */}
+      <div className="space-y-4">
+        <div className="rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-5 shadow-[4px_4px_0_rgba(46,32,20,.18)]">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="m-0 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>
+              <Users className="h-4 w-4" /> Joueurs
+            </p>
+            <span className="font-display text-base font-bold text-[#2e2014]">{playerCount.toString().padStart(2, "0")}</span>
           </div>
           <ParticipantPanel
             participants={filteredParticipants}
             scores={filteredScores}
-            title="Public connecté"
+            title="Connectés"
             compact
             modeConfig={props.modeConfig}
             variant="large"
           />
-        </SurfaceCard>
-      </SurfaceCard>
-
-      <div className="space-y-4">
-      <SurfaceCard className="space-y-3">
-        <ProfileImportBlock
-          accent={accent}
-          initialUrl={props.initialProfileUrl ?? undefined}
-          autoStart={Boolean(props.initialProfileUrl)}
-          onImportingChange={props.onImportingChange}
-        />
-      </SurfaceCard>
-
-      <SurfaceCard className="space-y-3">
-        <p className="text-xs uppercase tracking-[0.35em] text-[#6b573f]">Rappel</p>
-        <h4 className="text-xl font-semibold text-[#2e2014]">Projette le code</h4>
-        <p className="text-sm text-[#6b573f]">Les invités rejoignent via ce code. Tu contrôles le démarrage.</p>
-        <div className="rounded-xl border border-[rgba(46,32,20,.22)] bg-[#efe5d0] px-4 py-3">
-          <p className="text-xs uppercase tracking-[0.35em] text-[#6b573f]">Code salle</p>
-          <p className="mt-1 text-3xl font-semibold tracking-[0.24em] text-[#2e2014]">{roomCode}</p>
-          <p className="mt-2 text-xs text-[#6b573f]">Projette ce QR code ou dicte le code pour que les joueurs rejoignent.</p>
-          {roomCode !== "-----" && (
-            <div className="mt-3 flex justify-center rounded-lg bg-white p-3">
-              <QRCodeSVG
-                value={`${typeof window !== "undefined" ? window.location.origin : ""}/multiplayer?mode=event&code=${roomCode}`}
-                size={140}
-                bgColor="#ffffff"
-                fgColor="#0b0710"
-                level="M"
-              />
-            </div>
+          {playerCount === 0 && (
+            <p className="mt-2 text-center text-sm italic text-[#8a7558]">En attente des joueurs...</p>
           )}
         </div>
-      </SurfaceCard>
+
+        {props.isHost ? (
+          <button
+            type="button"
+            onClick={props.onStart}
+            disabled={props.starting || !props.canStart}
+            className="w-full rounded-md border-2 border-[#2e2014] text-center font-display text-lg font-bold text-[#2e2014] shadow-[5px_5px_0_#2e2014] transition-all duration-150 hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[3px_3px_0_#2e2014] active:translate-x-[3px] active:translate-y-[3px] active:shadow-[2px_2px_0_#2e2014] disabled:cursor-not-allowed disabled:opacity-40"
+            style={{ background: accent, padding: "18px 28px" }}
+          >
+            {props.starting ? (
+              <span className="inline-flex items-center gap-0.5">
+                Lancement
+                <span className="inline-flex">
+                  <span className="animate-bounce [animation-delay:-0.3s]">.</span>
+                  <span className="animate-bounce [animation-delay:-0.15s]">.</span>
+                  <span className="animate-bounce">.</span>
+                </span>
+              </span>
+            ) : (
+              "Lancer la partie"
+            )}
+          </button>
+        ) : (
+          <p className="rounded-md border-[1.5px] border-[rgba(46,32,20,.25)] bg-[#efe5d0] px-4 py-3 text-center text-sm text-[#6b573f]">
+            C'est l'hôte qui lance la partie depuis l'écran central.
+          </p>
+        )}
+        <p className="text-center text-[11px] text-[#8a7558]">
+          Cet écran diffuse la musique et les scores. Pose-le au milieu de la table ou branche-le à une TV.
+        </p>
       </div>
     </section>
   )

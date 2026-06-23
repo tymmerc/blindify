@@ -1122,7 +1122,9 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     setView("landing")
     setFlowStarted(false)
     dispatchLobby({ type: "reset" })
-    router.replace(ENTRY_ROUTE[mode])
+    // Retour a l'ecran d'entree (nom pre-rempli) : on peut re-choisir creer/rejoindre et
+    // n'importe quel mode. ENTRY_ROUTE[mode] renvoyait au meme mode -> on restait bloque dedans.
+    router.replace("/")
   }, [room, userPayload, router, mode])
 
   const handleChangeMode = useCallback(() => {
@@ -1375,7 +1377,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
           onAnswer={(guessTitle, guessArtist, sourceUserId) => {
             const socket = socketRef.current
             if (!socket || !socket.connected) {
-              showNotice("Connexion perdue — ta réponse n'est pas partie. Reconnexion…", true)
+              showNotice("Connexion perdue, ta réponse n'est pas partie. Reconnexion…", true)
               ensureSocket()
               return
             }
