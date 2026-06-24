@@ -489,7 +489,7 @@ function FriendsLobby({
               )}
             </button>
             <div className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">
-              <span className="text-[#5d7252]">{readyCount} joueurs prets</span>
+              <span className="text-[#5d7252]">{readyCount} joueur(s) prêt(s)</span>
               {" · "}
               {isHost ? "à toi de lancer" : "en attente de l'hôte"}
             </div>

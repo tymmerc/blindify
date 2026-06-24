@@ -247,7 +247,7 @@ export function ResultsView({
             <h3 className="font-display text-lg font-semibold text-[#2e2014]">Titres joués</h3>
             <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">Joueur source affiché et ajout aux likes</p>
           </div>
-          <span className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">{tracks.length} titres</span>
+          <span className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">{tracks.length} titre(s)</span>
         </div>
         <div className="grid gap-2 sm:grid-cols-2">
           {tracks.length === 0 ? (

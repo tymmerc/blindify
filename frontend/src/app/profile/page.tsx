@@ -208,7 +208,7 @@ export default function ProfilePage() {
                     <span className="rounded-full border-[1.5px] border-[#2e2014] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#2e2014]">
                       {stateLabel(game.state)}
                     </span>
-                    <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.15em] text-[#8a7558]">{game.total_rounds ?? 0} manches</div>
+                    <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.15em] text-[#8a7558]">{game.total_rounds ?? 0} manche(s)</div>
                   </div>
                 </div>
               ))

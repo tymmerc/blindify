@@ -255,7 +255,7 @@ export default function ImportPage() {
                 <div className="flex flex-col gap-3 rounded-md border-[1.5px] border-[rgba(46,32,20,.35)] bg-[#efe5d0] px-5 py-4 sm:flex-row sm:items-center">
                   <div className="flex-1">
                     <p className="text-sm font-bold text-[#2e2014]">
-                      Importer toutes les playlists ({totalTracks} titres)
+                      Importer toutes les playlists ({totalTracks} titre(s))
                     </p>
                     <p className="text-xs text-[#8a7558]">Le jeu piochera au hasard dans l'ensemble de ta musique.</p>
                   </div>

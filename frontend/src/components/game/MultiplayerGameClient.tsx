@@ -1255,7 +1255,7 @@ export function MultiplayerGameClient({
                   </div>
                   <h3 className="font-display text-xl font-semibold">Partie terminée</h3>
                   <p className="mt-1 text-xs text-[var(--muted)]">
-                    {state.totalRounds ?? 10} rounds joués
+                    {state.totalRounds ?? 10} round(s) joué(s)
                   </p>
                 </div>
 
