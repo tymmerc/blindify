@@ -1,5 +1,9 @@
 # Blindify - Architecture & Operations
 
+> **Agent qui reprend le projet : lis `docs/README.md` EN PREMIER.** Il contient le manuel de bord
+> (workflow de handoff local → relecture → prod, règles de code, pièges à ne pas casser, checklist de
+> relecture, ton produit). Ce CLAUDE.md reste la référence technique détaillée (archi, ports, ops).
+
 Music blind test multijoueur (Spotify/Deezer) avec modes solo, friends, event, streamer.
 
 ## Stack
