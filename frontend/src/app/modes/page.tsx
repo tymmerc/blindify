@@ -19,7 +19,7 @@ type ModeCard = {
 const MODE_CARDS: ModeCard[] = [
   {
     key: "friends",
-    title: "Entre amis, à distance",
+    title: "À distance",
     subtitle: "Chacun chez soi. Un code à partager, tout le monde joue sur son écran.",
     accent: "#c65133",
     destination: "/friends",
@@ -269,7 +269,7 @@ function ModeSelectionContent() {
 
               <div className="space-y-3">
                 <div className="border-l-4 border-[#c65133] bg-[#ece1c8] p-3">
-                  <p className="text-sm font-bold text-[#c65133]">Entre amis</p>
+                  <p className="text-sm font-bold text-[#c65133]">À distance</p>
                   <p className="mt-1 text-xs leading-relaxed text-[#6b573f]">
                     Crée une salle, invite tes potes avec un code et jouez ensemble. Chacun écoute la musique et répond de son côté. Celui qui devine le plus vite gagne le plus de points.
                   </p>
