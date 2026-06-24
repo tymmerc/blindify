@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { Copy, Link2, Send, Sparkles, Check } from "lucide-react"
+import { Copy, Link2, Send, Sparkles, Check, MessageCircle, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { modeAccent } from "@/lib/uiTokens"
@@ -246,7 +246,7 @@ function PlayerSlot({
 
   return (
     <div
-      className={`flex items-center gap-2.5 px-3 py-2 ${
+      className={`flex items-center gap-2 px-2.5 py-2 sm:gap-2.5 sm:px-3 ${
         isEmpty ? "" : "animate-in fade-in slide-in-from-bottom-2 duration-500"
       }`}
       style={slotStyle}
@@ -323,6 +323,12 @@ function FriendsLobby({
     void doCopy(`${origin}/blindify/friends/?join=${roomCode}`, setCopiedLink)
   }
 
+  // Chat mobile : ouverture + compteur de non-lus
+  const [chatOpen, setChatOpen] = useState(false)
+  const [lastSeenChat, setLastSeenChat] = useState(0)
+  useEffect(() => { if (chatOpen) setLastSeenChat(chatMessages.length) }, [chatOpen, chatMessages.length])
+  const unreadChat = Math.max(0, chatMessages.length - lastSeenChat)
+
   // Build slots: every participant + empty slots to fill up to 4 total (min 2 visible).
   const maxPlayers = room?.max_players ?? 8
   const totalSlots = Math.max(2, Math.min(maxPlayers, playerCount + 1))
@@ -347,29 +353,29 @@ function FriendsLobby({
         <div className="space-y-5">
 
           {/* ROOM CODE hero panel */}
-          <section className="relative rounded-md border-2 border-[#2e2014] bg-[#ece1c8] px-7 py-7 shadow-[4px_4px_0_rgba(46,32,20,.18)]">
+          <section className="relative rounded-md border-2 border-[#2e2014] bg-[#ece1c8] px-4 py-6 sm:px-7 sm:py-7 shadow-[4px_4px_0_rgba(46,32,20,.18)]">
             {/* Head */}
-            <div className="flex items-center justify-between mb-3">
+            <div className="mb-2 flex items-center justify-center gap-2 sm:mb-3 sm:justify-between">
               <p className="m-0 text-[11px] font-bold uppercase tracking-[0.22em] text-[#c65133]">
                 Salle · Code
               </p>
-              <span className="rounded-full border-[1.5px] border-[#2e2014] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#2e2014]">
+              <span className="hidden rounded-full border-[1.5px] border-[#2e2014] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#2e2014] sm:inline-block">
                 Partage pour inviter
               </span>
             </div>
 
             {/* Big framed room code */}
             <div
-              className="my-4 flex flex-wrap items-center justify-center gap-2"
+              className="my-4 flex flex-nowrap items-center justify-center gap-1.5 sm:flex-wrap sm:gap-2"
               aria-label={`Room code ${roomCode}`}
             >
               {roomCode.split("").map((char, i) => (
                 <span
                   key={`${char}-${i}`}
-                  className="inline-flex items-center justify-center rounded-md border-2 border-[#2e2014] bg-[#efe5d0] px-2 py-1 font-display font-bold leading-none text-[#2e2014] shadow-[3px_3px_0_rgba(46,32,20,.18)] sm:px-3"
+                  className="inline-flex items-center justify-center rounded-md border-2 border-[#2e2014] bg-[#efe5d0] px-1.5 py-1 font-display font-bold leading-none text-[#2e2014] shadow-[3px_3px_0_rgba(46,32,20,.18)] sm:px-3"
                   style={{
-                    // 8.5vw sur mobile : les 6 tuiles doivent tenir sur UNE ligne en 390px
-                    fontSize: "clamp(1.5rem, 8.5vw, 4rem)",
+                    // tient sur UNE ligne (6 tuiles) meme en 360px
+                    fontSize: "clamp(1.1rem, 6.2vw, 4rem)",
                     animation: "lobby-char-rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) backwards",
                     animationDelay: `${0.05 + i * 0.1}s`,
                   }}
@@ -380,30 +386,31 @@ function FriendsLobby({
             </div>
 
             {/* Share buttons */}
-            <div className="flex flex-wrap gap-3 justify-center mt-5">
+            <p className="mb-2 mt-5 text-center text-[10px] font-bold uppercase tracking-[0.16em] text-[#8a7558] sm:hidden">Partage pour inviter</p>
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-center sm:gap-3">
               <button
                 type="button"
                 onClick={copyCode}
-                className={`flex items-center gap-2 rounded-md border-2 border-[#2e2014] px-6 py-3 text-sm font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] transition-all duration-300 hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#2e2014] ${copiedCode ? "scale-[1.03] bg-[#7d9471]" : "bg-[#c65133]"}`}
+                className={`flex items-center gap-2 rounded-md border-2 border-[#2e2014] justify-center px-3 py-3 text-[13px] font-bold text-[#f4ecdb] sm:px-6 sm:text-sm shadow-[4px_4px_0_#2e2014] transition-all duration-300 hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#2e2014] ${copiedCode ? "scale-[1.03] bg-[#7d9471]" : "bg-[#c65133]"}`}
               >
                 {copiedCode ? (
                   <Check size={14} className="animate-in zoom-in spin-in-45 duration-300" />
                 ) : (
                   <Copy size={13} />
                 )}
-                {copiedCode ? "Copié !" : "Copier le code"}
+                {copiedCode ? "Copié !" : "Copier code"}
               </button>
               <button
                 type="button"
                 onClick={copyLink}
-                className={`flex items-center gap-2 rounded-md border-2 border-[#2e2014] px-6 py-3 text-sm font-bold text-[#f4ecdb] transition-all duration-300 hover:translate-x-[2px] hover:translate-y-[2px] ${copiedLink ? "scale-[1.03] bg-[#7d9471] shadow-[4px_4px_0_#2e2014] hover:shadow-[2px_2px_0_#2e2014]" : "bg-[#2e2014] shadow-[4px_4px_0_rgba(46,32,20,.35)] hover:shadow-[2px_2px_0_rgba(46,32,20,.35)]"}`}
+                className={`flex items-center gap-2 rounded-md border-2 border-[#2e2014] justify-center px-3 py-3 text-[13px] font-bold text-[#f4ecdb] sm:px-6 sm:text-sm transition-all duration-300 hover:translate-x-[2px] hover:translate-y-[2px] ${copiedLink ? "scale-[1.03] bg-[#7d9471] shadow-[4px_4px_0_#2e2014] hover:shadow-[2px_2px_0_#2e2014]" : "bg-[#2e2014] shadow-[4px_4px_0_rgba(46,32,20,.35)] hover:shadow-[2px_2px_0_rgba(46,32,20,.35)]"}`}
               >
                 {copiedLink ? (
                   <Check size={14} className="animate-in zoom-in spin-in-45 duration-300" />
                 ) : (
                   <Link2 size={13} />
                 )}
-                {copiedLink ? "Copié !" : "Copier le lien"}
+                {copiedLink ? "Copié !" : "Copier lien"}
               </button>
             </div>
             {copyError ? (
@@ -429,7 +436,7 @@ function FriendsLobby({
               </div>
 
               {/* Grid of slots */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2 sm:gap-3">
                 {participants.map((p, i) => {
                   const variant: SlotVariant = p.user_id === hostUserId ? "host" : "joined"
                   return (
@@ -456,7 +463,7 @@ function FriendsLobby({
         {/* Colonne droite : le chat etire + Lancer la partie en bas */}
         <aside className="flex flex-col gap-4">
           {onSendChat ? (
-            <div className="min-h-[280px] flex-1">
+            <div className="hidden min-h-[280px] flex-1 lg:block">
               <LobbyChat
                 messages={chatMessages}
                 onSend={onSendChat}
@@ -496,6 +503,48 @@ function FriendsLobby({
           </div>
         </aside>
       </div>
+
+      {/* Chat mobile : bouton flottant + bottom-sheet (lg:hidden) */}
+      {onSendChat ? (
+        <>
+          <button
+            type="button"
+            onClick={() => setChatOpen(true)}
+            aria-label="Ouvrir le chat"
+            className="fixed bottom-5 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full border-2 border-[#2e2014] bg-[#c65133] text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] transition active:translate-x-[2px] active:translate-y-[2px] lg:hidden"
+          >
+            <MessageCircle size={22} />
+            {unreadChat > 0 ? (
+              <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full border-2 border-[#2e2014] bg-[#7d9471] px-1 text-[10px] font-bold text-[#f4ecdb]">
+                {unreadChat > 9 ? "9+" : unreadChat}
+              </span>
+            ) : null}
+          </button>
+          {chatOpen ? (
+            <div
+              className="fixed inset-0 z-50 flex flex-col justify-end bg-[#2e2014]/30 lg:hidden"
+              onClick={() => setChatOpen(false)}
+            >
+              <div className="relative h-[72vh] w-full" onClick={e => e.stopPropagation()}>
+                <button
+                  type="button"
+                  onClick={() => setChatOpen(false)}
+                  aria-label="Fermer le chat"
+                  className="absolute right-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-full border-2 border-[#2e2014] bg-[#f4ecdb] text-[#2e2014]"
+                >
+                  <X size={16} />
+                </button>
+                <LobbyChat
+                  messages={chatMessages}
+                  onSend={onSendChat}
+                  currentUserId={currentUserId}
+                  accent={accent}
+                />
+              </div>
+            </div>
+          ) : null}
+        </>
+      ) : null}
     </section>
   )
 }
