@@ -761,8 +761,7 @@ const theaterStyles = `
     display:grid; place-items:center;
   }
   .theater-arena::before{
-    content:""; position:absolute; inset:2%;
-    border-radius:50%; border:2px solid rgba(46,32,20,.3);
+    display:none;
   }
   .theater-vinyl{
     position:relative; width:80%; height:80%; border-radius:50%;
@@ -1138,7 +1137,7 @@ const theaterStyles = `
 
   /* Chat drawer */
   .theater-chat-drawer{
-    position:fixed; top:0; right:0; bottom:0; width:340px; z-index:60;
+    position:fixed; top:0; right:0; bottom:0; width:min(340px, 90vw); z-index:60;
     display:flex; flex-direction:column;
     background:${PAPER};
     border-left:2px solid ${INK};
@@ -1271,8 +1270,12 @@ const theaterStyles = `
     .theater-dock > .theater-field{grid-column:1 / -1}
     .theater-dock-tag-left, .theater-dock-tag-right{display:none}
     .theater-input{font-size:16px}
-    .theater-picker{gap:6px}
-    .theater-pick{padding:5px 8px}
+    .theater-picker{gap:8px; overflow-x:auto; padding-bottom:4px; scrollbar-width:none}
+    .theater-picker::-webkit-scrollbar{display:none}
+    .theater-picker::after{content:""; position:sticky; right:0; flex:0 0 28px; margin-left:-28px; align-self:stretch; background:linear-gradient(to right, transparent, var(--paper-deep)); pointer-events:none}
+    .theater-pick{flex:0 0 auto; min-width:62px; padding:8px 8px 7px}
+    .theater-pick .pick-avatar{width:38px; height:38px; font-size:14px}
+    .theater-pick .pick-name{font-size:10px}
     .theater-submit{padding:14px; font-size:14px}
     .theater-reveal-card{flex-direction:column; text-align:center; gap:14px}
     .theater-reveal-cover{width:120px; height:120px}
