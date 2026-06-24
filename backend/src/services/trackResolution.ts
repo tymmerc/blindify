@@ -141,7 +141,9 @@ export async function collectPlayableSources(
   desiredCount: number,
   opts: { likedOnly?: boolean; playlistId?: string; timeRange?: string; provider?: ProviderFilter; ownedOnly?: boolean }
 ): Promise<AudioSourceRow[]> {
-  const candidateLimit = Math.min(desiredCount * 8, 400);
+  // Sur-fetch reduit (4x) : moins de recherches Deezer en parallele au lancement
+  // (les previews expirent et doivent etre re-cherchees) tout en gardant une marge.
+  const candidateLimit = Math.min(desiredCount * 4, 200);
   const providerFilter = opts.provider ?? "any";
   const candidates = await fetchAudioSources(userIds, providerFilter, candidateLimit, {
     likedOnly: opts.likedOnly,
