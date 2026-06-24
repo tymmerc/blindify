@@ -274,16 +274,25 @@ function PlayerSlot({
       >
         {displayName}
       </div>
-      {/* Statut compact */}
-      <span
-        className="shrink-0 rounded-full px-1.5 py-0 text-[8px] font-bold uppercase tracking-[0.06em]"
-        style={{
-          color: isHost ? "#c65133" : isEmpty ? "#b3a182" : "#5d7252",
-          border: `1px solid ${isHost ? "#c65133" : "rgba(46,32,20,.3)"}`,
-        }}
-      >
-        {isHost ? "Hôte" : isEmpty ? "Libre" : "En ligne"}
-      </span>
+      {/* Statut : pastille verte si en ligne, badge texte pour hote/libre */}
+      {isJoined ? (
+        <span
+          aria-label="En ligne"
+          title="En ligne"
+          className="h-2.5 w-2.5 shrink-0 rounded-full"
+          style={{ background: "#7d9471" }}
+        />
+      ) : (
+        <span
+          className="shrink-0 rounded-full px-1.5 py-0 text-[8px] font-bold uppercase tracking-[0.06em]"
+          style={{
+            color: isHost ? "#c65133" : "#b3a182",
+            border: `1px solid ${isHost ? "#c65133" : "rgba(46,32,20,.3)"}`,
+          }}
+        >
+          {isHost ? "Hôte" : "Libre"}
+        </span>
+      )}
     </div>
   )
 }
