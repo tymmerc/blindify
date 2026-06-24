@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useEffect, useMemo, useState } from "react"
+import { Suspense, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import type { Mode } from "@/contexts/ModeContext"
 import { useMode } from "@/contexts/ModeContext"
@@ -74,9 +74,23 @@ function VinylSleeve({
   onClick?: () => void
   onDoubleClick?: () => void
 }) {
-  const discOut = selected || out
+  const ref = useRef<HTMLButtonElement>(null)
+  const [inView, setInView] = useState(false)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    if (typeof window !== "undefined" && !window.matchMedia("(max-width: 639px)").matches) return
+    const io = new IntersectionObserver(
+      ([entry]) => setInView(entry.isIntersecting),
+      { threshold: 0.62, rootMargin: "-12% 0px -12% 0px" },
+    )
+    io.observe(el)
+    return () => io.disconnect()
+  }, [])
+  const discOut = inView
   return (
     <button
+      ref={ref}
       type="button"
       onClick={onClick}
       onDoubleClick={onDoubleClick}
@@ -86,10 +100,12 @@ function VinylSleeve({
       {/* Le disque sort au survol ; au CLIC il RENTRE dans la pochette (geste "je range le disque = je choisis") */}
       <span
         aria-hidden
-        className={`absolute left-1/2 top-1.5 z-0 aspect-square w-[78%] -translate-x-1/2 rounded-full transition-transform duration-[450ms] ${
+        className={`absolute left-1/2 top-9 z-0 aspect-square w-[44%] -translate-x-1/2 rounded-full transition-transform sm:top-1.5 sm:w-[78%] duration-[450ms] ${
           picking
             ? "translate-y-9 scale-[.97]"
-            : "duration-300 group-hover:-translate-y-9 group-hover:rotate-12"
+            : discOut
+              ? "-translate-y-6 rotate-6 duration-300 sm:-translate-y-9 sm:rotate-12"
+              : "duration-300 group-hover:-translate-y-9 group-hover:rotate-12"
         }`}
         style={{ background: DISC_GROOVES }}
       >
@@ -102,7 +118,7 @@ function VinylSleeve({
       {/* La pochette — au survol elle prend la COULEUR du mode (bordure + ombre) */}
       <span
         className={`relative z-10 mt-9 flex min-h-[225px] flex-col justify-between border-2 bg-[#ece1c8] p-5 transition-all duration-200 group-hover:translate-y-0.5 group-hover:![border-color:var(--ac)] group-hover:!shadow-[6px_6px_0_var(--ac)] ${
-          picking ? "![border-color:var(--ac)] !shadow-[6px_6px_0_var(--ac)]" : ""
+          picking || discOut ? "![border-color:var(--ac)] !shadow-[6px_6px_0_var(--ac)]" : ""
         }`}
         style={{
           ["--ac" as string]: accent,
@@ -134,7 +150,7 @@ function VinylSleeve({
             {!wip && (
               <span
                 className={`text-[10px] font-bold uppercase tracking-[0.14em] transition-opacity duration-200 ${
-                  picking ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                  picking || discOut ? "opacity-100" : "opacity-0 group-hover:opacity-100"
                 }`}
                 style={{ color: accent }}
               >
@@ -197,8 +213,8 @@ function ModeSelectionContent() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-6 py-14 text-[#2e2014]">
-      <div className="relative z-10 w-full max-w-5xl space-y-10">
+    <div className="flex min-h-dvh flex-col px-6 py-10 text-[#2e2014] sm:min-h-screen sm:flex-row sm:items-center sm:justify-center sm:py-14">
+      <div className="relative z-10 my-auto mx-auto w-full max-w-5xl space-y-10">
         <header className="flex flex-col gap-2">
           <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-[#c65133]">
             Choisis ta face
@@ -209,7 +225,7 @@ function ModeSelectionContent() {
           <p className="text-base text-[#6b573f]">Choisis ton terrain. Le reste suit.</p>
         </header>
 
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-10 sm:gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {MODE_CARDS.map(card => (
             <VinylSleeve
               key={card.key}
@@ -235,19 +251,9 @@ function ModeSelectionContent() {
           />
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-5">
-          <span className="font-display text-sm italic text-[#8a7558]">
-            Sors un disque de sa pochette pour voir.
-          </span>
-          <button
-            type="button"
-            onClick={() => handleConfirm()}
-            disabled={!selection}
-            className="btn-neon disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            Lancer une partie
-          </button>
-        </div>
+        <p className="text-center font-display text-sm italic text-[#8a7558]">
+          Choisis un mode pour lancer la partie.
+        </p>
 
         <button
           type="button"
