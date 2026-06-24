@@ -76,7 +76,7 @@ describe("audioManager", () => {
       expect(mockPause).toHaveBeenCalled()
     })
 
-    it("should throw and stop on play() rejection (autoplay blocked)", async () => {
+    it("should throw on play() rejection but keep owner + element for retry (autoplay blocked)", async () => {
       const am = await freshAudioManager()
 
       const error = new DOMException("NotAllowedError", "NotAllowedError")
@@ -86,10 +86,12 @@ describe("audioManager", () => {
         am.play({ src: "https://example.com/track.mp3", owner: "solo" })
       ).rejects.toThrow()
 
-      // After error, state should not be playing
+      // After a failed play(), audio is paused but the element + owner are kept
+      // so the next play() can retry without re-triggering the autoplay block.
       const state = am.getState()
       expect(state.playing).toBe(false)
-      expect(state.owner).toBeNull()
+      expect(state.owner).toBe("solo")
+      expect(am.getCurrent("solo")).not.toBeNull()
     })
   })
 
@@ -106,13 +108,15 @@ describe("audioManager", () => {
       expect(state.lastStopReason).toBe("test_stop")
     })
 
-    it("should nullify the audio element after stop", async () => {
+    it("should keep the audio element alive after stop (autoplay unlock preserved)", async () => {
       const am = await freshAudioManager()
 
       await am.play({ src: "https://example.com/track.mp3", owner: "solo" })
       am.stop("cleanup", "solo")
 
-      expect(am.getCurrent("solo")).toBeNull()
+      // stop() pauses + frees the owner but deliberately keeps the <audio> element
+      // alive so it stays unblocked for the next round (see audioManager.stop()).
+      expect(am.getCurrent("solo")).not.toBeNull()
     })
 
     it("should not stop if owner does not match", async () => {
@@ -213,13 +217,13 @@ describe("audioManager", () => {
       expect(am.getCurrent("multiplayer")).toBeNull()
     })
 
-    it("should return null after stop", async () => {
+    it("should keep returning the element after stop (kept for autoplay reuse)", async () => {
       const am = await freshAudioManager()
 
       await am.play({ src: "https://example.com/track.mp3", owner: "solo" })
       am.stop("done", "solo")
 
-      expect(am.getCurrent("solo")).toBeNull()
+      expect(am.getCurrent("solo")).not.toBeNull()
     })
   })
 })
