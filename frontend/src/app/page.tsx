@@ -188,13 +188,18 @@ export default function EntryWizard() {
   // ── Étape 2 : Musique (un seul bouton : importe puis continue) ──
   if (step === "musique") {
     const trimmedUrl = url.trim()
-    const hasLink = trimmedUrl.length > 5
+    const hasContent = trimmedUrl.length > 0
     const linkValid = /^https?:\/\/(open\.spotify\.com\/(playlist|user)\/|(www\.)?deezer\.com\/(\w\w\/)?(playlist|profile)\/)/i.test(trimmedUrl)
-    const formatError = hasLink && !linkValid
-    const needsImport = hasLink && synced === null
+    // Tout texte non vide doit etre un lien valide. Champ vide = on peut continuer sans musique.
+    const formatError = hasContent && !linkValid
+    const needsImport = linkValid && synced === null
     // En mode scan QR (joinParam) on rejoint directement, sinon on choisit creer/rejoindre.
     const proceed = joinParam ? handleJoin : () => setStep("action")
-    const onPrimary = needsImport ? doImport : proceed
+    const onPrimary = () => {
+      if (formatError) return // lien invalide : on bloque (clic ET Entree)
+      if (needsImport) { doImport(); return }
+      proceed()
+    }
     return (
       <Shell dots={3} index={1} onBack={() => setStep("nom")}>
         <div className="space-y-3 text-center">

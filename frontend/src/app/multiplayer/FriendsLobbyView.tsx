@@ -504,36 +504,26 @@ function FriendsLobby({
         </aside>
       </div>
 
-      {/* Chat mobile : bouton flottant + bottom-sheet (lg:hidden) */}
+      {/* Chat mobile : bouton flottant + carte compacte animee (lg:hidden) */}
       {onSendChat ? (
         <>
           <button
             type="button"
-            onClick={() => setChatOpen(true)}
-            aria-label="Ouvrir le chat"
-            className="fixed bottom-5 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full border-2 border-[#2e2014] bg-[#c65133] text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] transition active:translate-x-[2px] active:translate-y-[2px] lg:hidden"
+            onClick={() => setChatOpen(o => !o)}
+            aria-label={chatOpen ? "Fermer le chat" : "Ouvrir le chat"}
+            className="fixed bottom-5 right-5 z-[60] flex h-14 w-14 items-center justify-center rounded-full border-2 border-[#2e2014] bg-[#c65133] text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] transition active:translate-x-[2px] active:translate-y-[2px] lg:hidden"
           >
-            <MessageCircle size={22} />
-            {unreadChat > 0 ? (
+            {chatOpen ? <X size={22} /> : <MessageCircle size={22} />}
+            {!chatOpen && unreadChat > 0 ? (
               <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full border-2 border-[#2e2014] bg-[#7d9471] px-1 text-[10px] font-bold text-[#f4ecdb]">
                 {unreadChat > 9 ? "9+" : unreadChat}
               </span>
             ) : null}
           </button>
           {chatOpen ? (
-            <div
-              className="fixed inset-0 z-50 flex flex-col justify-end bg-[#2e2014]/30 lg:hidden"
-              onClick={() => setChatOpen(false)}
-            >
-              <div className="relative h-[72vh] w-full" onClick={e => e.stopPropagation()}>
-                <button
-                  type="button"
-                  onClick={() => setChatOpen(false)}
-                  aria-label="Fermer le chat"
-                  className="absolute right-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-full border-2 border-[#2e2014] bg-[#f4ecdb] text-[#2e2014]"
-                >
-                  <X size={16} />
-                </button>
+            <>
+              <div className="fixed inset-0 z-40 lg:hidden" onClick={() => setChatOpen(false)} />
+              <div className="fixed bottom-24 right-4 z-50 h-[min(440px,60vh)] w-[min(340px,calc(100vw-2rem))] animate-in fade-in slide-in-from-bottom-4 duration-200 lg:hidden">
                 <LobbyChat
                   messages={chatMessages}
                   onSend={onSendChat}
@@ -541,7 +531,7 @@ function FriendsLobby({
                   accent={accent}
                 />
               </div>
-            </div>
+            </>
           ) : null}
         </>
       ) : null}

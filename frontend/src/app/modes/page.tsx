@@ -213,7 +213,7 @@ function ModeSelectionContent() {
   }
 
   return (
-    <div className="flex min-h-dvh flex-col px-6 py-10 text-[#2e2014] sm:min-h-screen sm:flex-row sm:items-center sm:justify-center sm:py-14">
+    <div className="flex min-h-dvh flex-col px-6 pt-10 pb-24 text-[#2e2014] sm:min-h-screen sm:flex-row sm:items-center sm:justify-center sm:py-14">
       <div className="relative z-10 my-auto mx-auto w-full max-w-5xl space-y-10">
         <header className="flex flex-col gap-2">
           <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-[#c65133]">
