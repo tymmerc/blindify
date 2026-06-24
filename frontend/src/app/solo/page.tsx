@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useState, type FormEvent } from "react"
+import { Suspense, useState, useEffect, type FormEvent } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import GameClient from "../game/GameClient"
 
@@ -51,6 +51,13 @@ function ClassicForm() {
   const [quickError, setQuickError] = useState<string | null>(null)
   const [roundCount, setRoundCount] = useState(10)
   const [progressive, setProgressive] = useState(false)
+  const [editingLink, setEditingLink] = useState(false)
+  useEffect(() => {
+    try { const stored = localStorage.getItem("blindify_profile_url"); if (stored) setQuickUrl(stored) } catch { /* ignore */ }
+  }, [])
+  const hasLink = quickUrl.trim().length > 0
+  const showInput = editingLink || !hasLink
+  const provider = /deezer/i.test(quickUrl) ? "Deezer" : "Spotify"
 
   const handleQuickPlay = (e: FormEvent) => {
     e.preventDefault()
@@ -78,19 +85,30 @@ function ClassicForm() {
       </div>
 
       <form onSubmit={handleQuickPlay} className="space-y-4">
-        <div className="space-y-1.5">
-          <label htmlFor="playlist-url" className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">
-            Lien de playlist ou profil
-          </label>
-          <input
-            id="playlist-url"
-            type="url"
-            value={quickUrl}
-            onChange={e => setQuickUrl(e.target.value)}
-            placeholder="https://open.spotify.com/user/... ou deezer.com/profile/..."
-            className="w-full rounded-md border-[1.5px] border-[rgba(46,32,20,.35)] bg-[#efe5d0] px-4 py-3 text-sm text-[#2e2014] outline-none transition placeholder:italic placeholder:text-[#b3a182] focus:border-[#c65133]"
-          />
-        </div>
+        {showInput ? (
+          <div className="space-y-1.5">
+            <label htmlFor="playlist-url" className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">
+              Lien de playlist ou profil
+            </label>
+            <input
+              id="playlist-url"
+              type="url"
+              value={quickUrl}
+              onChange={e => setQuickUrl(e.target.value)}
+              placeholder="https://open.spotify.com/user/... ou deezer.com/profile/..."
+              className="w-full rounded-md border-[1.5px] border-[rgba(46,32,20,.35)] bg-[#efe5d0] px-4 py-3 text-sm text-[#2e2014] outline-none transition placeholder:italic placeholder:text-[#b3a182] focus:border-[#c65133]"
+            />
+          </div>
+        ) : (
+          <div className="flex items-center justify-between gap-3 rounded-md border-[1.5px] border-[#7d9471] bg-[#eef1e8] px-4 py-3">
+            <span className="flex items-center gap-2 text-sm font-semibold text-[#2e2014]">
+              <span className="text-base text-[#5d7252]">✓</span> Ta musique : {provider}
+            </span>
+            <button type="button" onClick={() => setEditingLink(true)} className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#8a7558] underline">
+              Changer
+            </button>
+          </div>
+        )}
 
         <div className="space-y-1.5">
           <label className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">
@@ -152,12 +170,14 @@ function ClassicForm() {
         </button>
       </form>
 
-      <div className="flex flex-wrap gap-2 text-[10px] font-bold uppercase tracking-[0.1em] text-[#8a7558]">
-        <span className="rounded-full border-[1.5px] border-[rgba(46,32,20,.22)] px-2.5 py-0.5 normal-case tracking-normal">spotify.com/user/...</span>
-        <span className="rounded-full border-[1.5px] border-[rgba(46,32,20,.22)] px-2.5 py-0.5 normal-case tracking-normal">spotify.com/playlist/...</span>
-        <span className="rounded-full border-[1.5px] border-[rgba(46,32,20,.22)] px-2.5 py-0.5 normal-case tracking-normal">deezer.com/profile/...</span>
-        <span className="rounded-full border-[1.5px] border-[rgba(46,32,20,.22)] px-2.5 py-0.5 normal-case tracking-normal">deezer.com/playlist/...</span>
-      </div>
+      {showInput && (
+        <div className="flex flex-wrap gap-2 text-[10px] font-bold uppercase tracking-[0.1em] text-[#8a7558]">
+          <span className="rounded-full border-[1.5px] border-[rgba(46,32,20,.22)] px-2.5 py-0.5 normal-case tracking-normal">spotify.com/user/...</span>
+          <span className="rounded-full border-[1.5px] border-[rgba(46,32,20,.22)] px-2.5 py-0.5 normal-case tracking-normal">spotify.com/playlist/...</span>
+          <span className="rounded-full border-[1.5px] border-[rgba(46,32,20,.22)] px-2.5 py-0.5 normal-case tracking-normal">deezer.com/profile/...</span>
+          <span className="rounded-full border-[1.5px] border-[rgba(46,32,20,.22)] px-2.5 py-0.5 normal-case tracking-normal">deezer.com/playlist/...</span>
+        </div>
+      )}
     </div>
   )
 }
@@ -167,6 +187,13 @@ function ChronoForm() {
   const [quickUrl, setQuickUrl] = useState("")
   const [quickError, setQuickError] = useState<string | null>(null)
   const [duration, setDuration] = useState(180)
+  const [editingLink, setEditingLink] = useState(false)
+  useEffect(() => {
+    try { const stored = localStorage.getItem("blindify_profile_url"); if (stored) setQuickUrl(stored) } catch { /* ignore */ }
+  }, [])
+  const hasLink = quickUrl.trim().length > 0
+  const showInput = editingLink || !hasLink
+  const provider = /deezer/i.test(quickUrl) ? "Deezer" : "Spotify"
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
@@ -193,19 +220,30 @@ function ChronoForm() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="space-y-1.5">
-          <label htmlFor="chrono-url" className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">
-            Lien de playlist ou profil
-          </label>
-          <input
-            id="chrono-url"
-            type="url"
-            value={quickUrl}
-            onChange={e => setQuickUrl(e.target.value)}
-            placeholder="https://open.spotify.com/user/... ou deezer.com/profile/..."
-            className="w-full rounded-md border-[1.5px] border-[rgba(46,32,20,.35)] bg-[#efe5d0] px-4 py-3 text-sm text-[#2e2014] outline-none transition placeholder:italic placeholder:text-[#b3a182] focus:border-[#c65133]"
-          />
-        </div>
+        {showInput ? (
+          <div className="space-y-1.5">
+            <label htmlFor="chrono-url" className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">
+              Lien de playlist ou profil
+            </label>
+            <input
+              id="chrono-url"
+              type="url"
+              value={quickUrl}
+              onChange={e => setQuickUrl(e.target.value)}
+              placeholder="https://open.spotify.com/user/... ou deezer.com/profile/..."
+              className="w-full rounded-md border-[1.5px] border-[rgba(46,32,20,.35)] bg-[#efe5d0] px-4 py-3 text-sm text-[#2e2014] outline-none transition placeholder:italic placeholder:text-[#b3a182] focus:border-[#c65133]"
+            />
+          </div>
+        ) : (
+          <div className="flex items-center justify-between gap-3 rounded-md border-[1.5px] border-[#7d9471] bg-[#eef1e8] px-4 py-3">
+            <span className="flex items-center gap-2 text-sm font-semibold text-[#2e2014]">
+              <span className="text-base text-[#5d7252]">✓</span> Ta musique : {provider}
+            </span>
+            <button type="button" onClick={() => setEditingLink(true)} className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#8a7558] underline">
+              Changer
+            </button>
+          </div>
+        )}
 
         <div className="space-y-1.5">
           <label className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">
