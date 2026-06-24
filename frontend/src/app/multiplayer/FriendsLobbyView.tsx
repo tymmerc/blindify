@@ -37,11 +37,13 @@ function LobbyChat({
   onSend,
   currentUserId,
   accent,
+  onClose,
 }: {
   messages: LobbyChatMessage[]
   onSend: (msg: string) => void
   currentUserId: number
   accent: string
+  onClose?: () => void
 }) {
   const [input, setInput] = useState("")
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -79,10 +81,17 @@ function LobbyChat({
         <p className="m-0 text-[11px] font-bold uppercase tracking-[0.22em] text-[#c65133]">
           Lobby · Chat
         </p>
-        <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-[#6b573f]">
-          <span aria-hidden className="h-2 w-2 rounded-full bg-[#7d9471]" />
-          On
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-[#6b573f]">
+            <span aria-hidden className="h-2 w-2 rounded-full bg-[#7d9471]" />
+            On
+          </span>
+          {onClose ? (
+            <button type="button" onClick={onClose} aria-label="Fermer le chat" className="flex h-7 w-7 items-center justify-center rounded-full border-[1.5px] border-[#2e2014] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]">
+              <X size={14} />
+            </button>
+          ) : null}
+        </div>
       </div>
 
       {/* Messages */}
@@ -504,36 +513,36 @@ function FriendsLobby({
         </aside>
       </div>
 
-      {/* Chat mobile : bouton flottant + carte compacte animee (lg:hidden) */}
+      {/* Chat mobile : FAB ferme -> s'ouvre EN chat (croix dans le header) (lg:hidden) */}
       {onSendChat ? (
-        <>
+        !chatOpen ? (
           <button
             type="button"
-            onClick={() => setChatOpen(o => !o)}
-            aria-label={chatOpen ? "Fermer le chat" : "Ouvrir le chat"}
+            onClick={() => setChatOpen(true)}
+            aria-label="Ouvrir le chat"
             className="fixed bottom-5 right-5 z-[60] flex h-14 w-14 items-center justify-center rounded-full border-2 border-[#2e2014] bg-[#c65133] text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] transition active:translate-x-[2px] active:translate-y-[2px] lg:hidden"
           >
-            {chatOpen ? <X size={22} /> : <MessageCircle size={22} />}
-            {!chatOpen && unreadChat > 0 ? (
+            <MessageCircle size={22} />
+            {unreadChat > 0 ? (
               <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full border-2 border-[#2e2014] bg-[#7d9471] px-1 text-[10px] font-bold text-[#f4ecdb]">
                 {unreadChat > 9 ? "9+" : unreadChat}
               </span>
             ) : null}
           </button>
-          {chatOpen ? (
-            <>
-              <div className="fixed inset-0 z-40 lg:hidden" onClick={() => setChatOpen(false)} />
-              <div className="fixed bottom-24 right-4 z-50 h-[min(440px,60vh)] w-[min(300px,82vw)] animate-in fade-in slide-in-from-bottom-4 duration-200 lg:hidden">
-                <LobbyChat
-                  messages={chatMessages}
-                  onSend={onSendChat}
-                  currentUserId={currentUserId}
-                  accent={accent}
-                />
-              </div>
-            </>
-          ) : null}
-        </>
+        ) : (
+          <div className="lg:hidden">
+            <div className="fixed inset-0 z-40" onClick={() => setChatOpen(false)} />
+            <div className="fixed bottom-4 right-4 z-50 h-[min(460px,64vh)] w-[min(300px,82vw)] animate-in fade-in slide-in-from-bottom-4 duration-200">
+              <LobbyChat
+                messages={chatMessages}
+                onSend={onSendChat}
+                currentUserId={currentUserId}
+                accent={accent}
+                onClose={() => setChatOpen(false)}
+              />
+            </div>
+          </div>
+        )
       ) : null}
     </section>
   )

@@ -113,8 +113,8 @@ export default function EntryWizard() {
       // Enchaine tout seul sur l'etape suivante (court instant pour voir la confirmation)
       // -> plus besoin d'un 2e clic sur "Continuer".
       setImporting(false)
-      // En mode "scan QR" (join) on reste sur l'etape (le bouton devient "Rejoindre").
-      if (!joinParam) setTimeout(() => setStep("action"), 1150)
+      // Apres import : en mode normal on avance a l'etape action, en mode join on rejoint direct.
+      setTimeout(() => { if (joinParam) { void handleJoin() } else { setStep("action") } }, 1150)
       return
     } catch {
       setImportError("Lien invalide ou profil privé. Vérifie le lien.")

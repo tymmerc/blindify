@@ -418,11 +418,14 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   useEffect(() => {
     if (!room?.room_code) return
     if (view !== "hosting" && view !== "waiting") return
-    // Immediate refresh + faster polling (2s) for participant visibility
+    // Refresh immediat (et re-sync a chaque (re)connexion socket).
     refreshParticipants(room.room_code)
-    const interval = setInterval(() => refreshParticipants(room.room_code), 2000)
+    // Socket connecte = il pousse les presences en temps reel -> AUCUN polling.
+    // Socket tombe = polling de secours toutes les 4s seulement.
+    if (socketConnected) return
+    const interval = setInterval(() => refreshParticipants(room.room_code), 4000)
     return () => clearInterval(interval)
-  }, [room?.room_code, view, refreshParticipants])
+  }, [room?.room_code, view, socketConnected, refreshParticipants])
 
   const storePostAuthRedirect = useCallback(
     (action?: PendingAction | null) => {
