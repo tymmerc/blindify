@@ -1137,7 +1137,7 @@ export function MultiplayerGameClient({
                                   type="button"
                                   disabled={localHasAnswered || disabled}
                                   onClick={() => setSourceGuess(sourceGuess === p.userId ? null : p.userId)}
-                                  className={`flex items-center gap-2 rounded-full border-2 border-[#2e2014] px-3 py-1.5 text-xs font-bold transition-all duration-150 hover:-translate-y-0.5 active:scale-90 disabled:opacity-60 ${
+                                  className={`flex items-center gap-2 rounded-full border-2 border-[#2e2014] px-3.5 py-2.5 text-xs font-bold transition-all duration-150 hover:-translate-y-0.5 active:scale-90 disabled:opacity-60 ${
                                     sourceGuess === p.userId ? "-translate-y-0.5 scale-105" : ""
                                   }`}
                                   style={{
