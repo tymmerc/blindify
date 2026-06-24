@@ -267,7 +267,7 @@ function PlayerSlot({
       </div>
       {/* Statut compact */}
       <span
-        className="shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em]"
+        className="shrink-0 rounded-full px-1.5 py-0 text-[8px] font-bold uppercase tracking-[0.06em]"
         style={{
           color: isHost ? "#c65133" : isEmpty ? "#b3a182" : "#5d7252",
           border: `1px solid ${isHost ? "#c65133" : "rgba(46,32,20,.3)"}`,
@@ -523,7 +523,7 @@ function FriendsLobby({
           {chatOpen ? (
             <>
               <div className="fixed inset-0 z-40 lg:hidden" onClick={() => setChatOpen(false)} />
-              <div className="fixed bottom-24 right-4 z-50 h-[min(440px,60vh)] w-[min(340px,calc(100vw-2rem))] animate-in fade-in slide-in-from-bottom-4 duration-200 lg:hidden">
+              <div className="fixed bottom-24 right-4 z-50 h-[min(440px,60vh)] w-[min(300px,82vw)] animate-in fade-in slide-in-from-bottom-4 duration-200 lg:hidden">
                 <LobbyChat
                   messages={chatMessages}
                   onSend={onSendChat}
