@@ -37,17 +37,17 @@ function StepShell({
   children: React.ReactNode
 }) {
   return (
-    <div className="flex min-h-screen items-center justify-center px-5">
-      <div className="w-full max-w-md">
+    <div className="flex min-h-dvh flex-col px-5 pt-6 pb-8 sm:min-h-screen sm:flex-row sm:items-center sm:justify-center sm:py-10">
+      <div className="mx-auto flex w-full max-w-md flex-1 flex-col sm:block sm:flex-none">
         {/* Top bar */}
-        <div className="mb-8 flex items-center justify-between">
+        <div className="flex h-7 shrink-0 items-center justify-between sm:mb-8 sm:h-auto">
           {onBack ? (
             <button
               type="button"
               onClick={onBack}
-              className="flex items-center gap-1.5 rounded-full border-[1.5px] border-[#2e2014] bg-[#ece1c8] px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+              className="flex items-center gap-1 rounded-full border-[1.5px] border-[#2e2014] bg-[#ece1c8] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb] sm:gap-1.5 sm:px-3 sm:py-1.5 sm:text-[11px] sm:tracking-[0.14em]"
             >
-              <ArrowLeft size={13} />
+              <ArrowLeft size={11} />
               Retour
             </button>
           ) : (
@@ -57,14 +57,14 @@ function StepShell({
         </div>
 
         {/* Progress dots */}
-        <div className="mb-10 flex items-center justify-center gap-1.5">
+        <div className="mb-10 mt-8 flex shrink-0 items-center justify-center gap-1.5 sm:mt-0">
           {Array.from({ length: totalSteps }).map((_, i) => (
             <StepDot key={i} active={i === currentIndex} done={i < currentIndex} />
           ))}
         </div>
 
         {/* Step content */}
-        <div className="animate-in fade-in slide-in-from-right-4 duration-300">{children}</div>
+        <div className="flex flex-1 flex-col justify-center animate-in fade-in slide-in-from-right-4 duration-300 sm:block sm:flex-none">{children}</div>
       </div>
     </div>
   )

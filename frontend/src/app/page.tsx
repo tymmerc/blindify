@@ -12,16 +12,16 @@ type Step = "nom" | "musique" | "action" | "code"
 
 function Shell({ dots, index, onBack, children }: { dots: number; index: number; onBack: (() => void) | null; children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen items-center justify-center px-5 py-10">
-      <div className="w-full max-w-md">
-        <div className="mb-8 flex items-center justify-between">
+    <div className="flex min-h-dvh flex-col px-5 pt-6 pb-8 sm:min-h-screen sm:flex-row sm:items-center sm:justify-center sm:py-10">
+      <div className="mx-auto flex w-full max-w-md flex-1 flex-col sm:block sm:flex-none">
+        <div className="flex h-7 shrink-0 items-center justify-between sm:mb-8 sm:h-auto">
           {onBack ? (
             <button
               type="button"
               onClick={onBack}
-              className="flex items-center gap-1.5 rounded-full border-[1.5px] border-[#2e2014] bg-[#ece1c8] px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+              className="flex items-center gap-1 rounded-full border-[1.5px] border-[#2e2014] bg-[#ece1c8] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb] sm:gap-1.5 sm:px-3 sm:py-1.5 sm:text-[11px] sm:tracking-[0.14em]"
             >
-              <ArrowLeft size={13} />
+              <ArrowLeft size={11} />
               Retour
             </button>
           ) : (
@@ -29,7 +29,7 @@ function Shell({ dots, index, onBack, children }: { dots: number; index: number;
           )}
           <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-[#c65133]">Blindify</p>
         </div>
-        <div className="mb-10 flex items-center justify-center gap-1.5">
+        <div className="mb-10 mt-8 flex shrink-0 items-center justify-center gap-1.5 sm:mt-0">
           {Array.from({ length: dots }).map((_, i) => (
             <span
               key={i}
@@ -38,7 +38,7 @@ function Shell({ dots, index, onBack, children }: { dots: number; index: number;
             />
           ))}
         </div>
-        <div className="animate-in fade-in slide-in-from-right-4 duration-300">{children}</div>
+        <div className="flex flex-1 flex-col justify-center animate-in fade-in slide-in-from-right-4 duration-300 sm:block sm:flex-none">{children}</div>
       </div>
     </div>
   )
@@ -187,7 +187,10 @@ export default function EntryWizard() {
 
   // ── Étape 2 : Musique (un seul bouton : importe puis continue) ──
   if (step === "musique") {
-    const hasLink = url.trim().length > 5
+    const trimmedUrl = url.trim()
+    const hasLink = trimmedUrl.length > 5
+    const linkValid = /^https?:\/\/(open\.spotify\.com\/(playlist|user)\/|(www\.)?deezer\.com\/(\w\w\/)?(playlist|profile)\/)/i.test(trimmedUrl)
+    const formatError = hasLink && !linkValid
     const needsImport = hasLink && synced === null
     // En mode scan QR (joinParam) on rejoint directement, sinon on choisit creer/rejoindre.
     const proceed = joinParam ? handleJoin : () => setStep("action")
@@ -212,11 +215,12 @@ export default function EntryWizard() {
           />
 
           {importError && <p className="text-center text-[12px] font-bold text-[#9c2f1d]">{importError}</p>}
+          {formatError && !importError && <p className="text-center text-[12px] font-bold text-[#9c2f1d]">Lien non reconnu. Mets un lien de playlist ou profil Spotify ou Deezer.</p>}
 
           {/* Le bouton SE TRANSFORME en confirmation verte quand l'import reussit (anim) */}
           <button
             type="button"
-            disabled={importing || going || synced !== null}
+            disabled={importing || going || synced !== null || formatError}
             onClick={onPrimary}
             className={`flex w-full items-center justify-center gap-2 overflow-hidden rounded-md border-2 border-[#2e2014] px-5 py-4 text-base font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] transition-all duration-300 disabled:cursor-default ${
               synced !== null
