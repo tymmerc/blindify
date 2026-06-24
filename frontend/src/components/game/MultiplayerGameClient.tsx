@@ -156,7 +156,13 @@ export function MultiplayerGameClient({
   const [guessArtist, setGuessArtist] = useState("")
   const [sourceGuess, setSourceGuess] = useState<number | null>(null)
   const [muted, setMuted] = useState(audioManager.getState().muted)
-  const [volume, setVolume] = useState(audioManager.getState().volume)
+  // Mobile : pas de slider in-app (cache <640px) -> on demarre a 100% pour que le
+  // volume physique du telephone controle tout le niveau. Desktop garde le defaut + slider.
+  const [volume, setVolume] = useState(() =>
+    typeof window !== "undefined" && window.matchMedia("(max-width: 639px)").matches
+      ? 1
+      : audioManager.getState().volume,
+  )
   const [manualPlayRequired, setManualPlayRequired] = useState(false)
   const [justSubmitted, setJustSubmitted] = useState(false)
   const [revealCountdown, setRevealCountdown] = useState(isFastPace ? 4 : 7)
