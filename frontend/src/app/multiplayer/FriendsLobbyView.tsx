@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { Copy, Link2, Send, Sparkles, Check, MessageCircle, X } from "lucide-react"
+import { Copy, Link2, Send, Sparkles, Check, MessageCircle, X, Crown } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { modeAccent } from "@/lib/uiTokens"
@@ -274,7 +274,7 @@ function PlayerSlot({
       >
         {displayName}
       </div>
-      {/* Statut : pastille (terracotta = hote, verte = en ligne), "Libre" en texte pour les vides */}
+      {/* Statut : couronne = hote, pastille verte = en ligne, "Libre" en texte pour les vides */}
       {isEmpty ? (
         <span
           className="shrink-0 rounded-full px-1.5 py-0 text-[8px] font-bold uppercase tracking-[0.06em]"
@@ -282,12 +282,14 @@ function PlayerSlot({
         >
           Libre
         </span>
+      ) : isHost ? (
+        <Crown aria-label="Hote" size={15} className="shrink-0 text-[#c65133]" />
       ) : (
         <span
-          aria-label={isHost ? "Hote" : "En ligne"}
-          title={isHost ? "Hote" : "En ligne"}
+          aria-label="En ligne"
+          title="En ligne"
           className="h-2.5 w-2.5 shrink-0 rounded-full"
-          style={{ background: isHost ? "#c65133" : "#7d9471" }}
+          style={{ background: "#7d9471" }}
         />
       )}
     </div>
