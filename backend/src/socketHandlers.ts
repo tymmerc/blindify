@@ -9,17 +9,20 @@ import {
   revealRound,
   removePlayer,
   upsertPlayer,
+  setHostConnected,
   markDisconnected,
   markReconnected,
   getGameMode,
   getSessionId,
 } from "./services/realtimeGame";
 import { persistRoundResponses } from "./services/gamePersistence";
+import * as lobbyRps from "./services/lobbyRps";
 import { validRoomCode, clampText, toIntOrNull, MAX_GUESS_LEN, MAX_CHAT_LEN } from "./utils/socketValidation";
 import {
   broadcastGameOver,
   broadcastState,
   clearRevealTimer,
+  scheduleForcedAdvance,
   scheduleReveal,
 } from "./services/realtimeOrchestrator";
 import { getSessionContextFromToken, type SessionContext } from "./utils/session";
@@ -32,6 +35,7 @@ import {
   setPresence,
   unregisterSocket,
 } from "./services/presence";
+import * as roomPresence from "./services/roomPresence";
 import { getAcceptedFriendIds } from "./services/social";
 import {
   handleStreamerGuess,
@@ -84,11 +88,13 @@ export type RoomAccess = {
   host_user_id: number;
   status: string;
   session_id: number | null;
+  mode: string;
+  host_plays: boolean;
 };
 
 export async function requireRoomAccess(roomCode: string, userId: number): Promise<{ room: RoomAccess; isHost: boolean } | null> {
   const { rows: roomRows } = await pool.query<RoomAccess>(
-    `SELECT id, room_code, host_user_id, status, session_id
+    `SELECT id, room_code, host_user_id, status, session_id, mode, host_plays
      FROM multiplayer_rooms
      WHERE room_code=$1
      LIMIT 1`,
@@ -231,6 +237,21 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
       }
     });
 
+    // Onglet au premier plan ou non (Page Visibility) : met a jour le statut "absent".
+    socket.on("presence:state", (payload: { roomCode?: unknown; state?: unknown }) => {
+      const roomCode = validRoomCode(payload?.roomCode);
+      const state = payload?.state;
+      if (!roomCode || (state !== "active" && state !== "away")) return;
+      if (!roomPresence.getMembers(roomCode).some(m => m.userId === currentUser.id)) return;
+      roomPresence.setStatus(roomCode, currentUser.id, state);
+      io.to(roomCode).emit("room:presence", {
+        type: "members",
+        roomCode,
+        members: roomPresence.getMembers(roomCode),
+        serverTimestamp: Date.now(),
+      });
+    });
+
     const sendStateToSocket = (roomCode: string) => {
       const snapshot = gameStateSnapshot(roomCode);
       if (snapshot) {
@@ -250,13 +271,24 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
       }
       socket.join(roomCode);
       logger.debug(`user ${currentUser.id} joined socket room ${roomCode}, rooms now: ${Array.from(socket.rooms).join(", ")}`);
+      // Le pseudo d'un invite peut etre renomme par joinRoom (REST) APRES la
+      // connexion socket : sans relecture, la presence figerait "Joueur".
+      try {
+        const { rows: freshRows } = await pool.query<{ username: string | null }>(
+          `SELECT username FROM users WHERE id=$1`,
+          [currentUser.id]
+        );
+        const freshName = freshRows[0]?.username ?? currentUser.username ?? null;
+        (currentUser as { username?: string | null }).username = freshName;
+        lastKnownUsername.set(currentUser.id, freshName);
+      } catch { /* pseudo de connexion conserve */ }
       // Clear disconnected flag when player reconnects
       markReconnected(roomCode, currentUser.id);
-      // In event mode, the host is a spectator/presenter — don't add them as a player
-      const roomGameMode = getGameMode(roomCode);
-      const roomGameState = getRealtimeState(roomCode);
-      const isEventHost = roomGameMode === "event" && roomGameState?.hostUserId === currentUser.id;
-      if (!isEventHost) {
+      // En mode event, l'hote est present-only SAUF s'il a choisi "je joue aussi".
+      const isEventPresenterOnly =
+        access.room.mode === "event" && access.room.host_plays !== true && access.room.host_user_id === currentUser.id;
+      if (access.isHost) setHostConnected(roomCode, true);
+      if (!isEventPresenterOnly) {
         upsertPlayer(roomCode, {
           userId: currentUser.id,
           username: currentUser.username ?? null,
@@ -267,6 +299,15 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
         type: "joined",
         roomCode,
         user: { id: currentUser.id, username: currentUser.username ?? undefined },
+        serverTimestamp: Date.now(),
+      });
+      // Presence lobby : (re)devient actif, on annule une eventuelle grace de deconnexion.
+      roomPresence.upsertMember(roomCode, currentUser.id, currentUser.username ?? null, "active");
+      roomPresence.cancelGrace(roomCode, currentUser.id);
+      io.to(roomCode).emit("room:presence", {
+        type: "members",
+        roomCode,
+        members: roomPresence.getMembers(roomCode),
         serverTimestamp: Date.now(),
       });
       sendStateToSocket(roomCode);
@@ -280,7 +321,15 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
       socket.leave(roomCode);
       const access = await requireRoomAccess(roomCode, currentUser.id);
       if (!access) return;
-      removePlayer(roomCode, currentUser.id);
+      // Meme regle que game:leave : partir en pleine partie ne doit pas effacer
+      // ses points du podium. Deconnecte pendant le jeu, supprime hors jeu.
+      const liveRoomState = getRealtimeState(roomCode);
+      if (liveRoomState && (liveRoomState.phase === "GUESSING" || liveRoomState.phase === "REVEAL")) {
+        markDisconnected(roomCode, currentUser.id);
+        if (liveRoomState.hostUserId === currentUser.id) setHostConnected(roomCode, false);
+      } else {
+        removePlayer(roomCode, currentUser.id);
+      }
       io.to(roomCode).emit("room:presence", {
         type: "left",
         roomCode,
@@ -295,15 +344,27 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
 
     socket.on(
       "game:answer",
-      async (payload: {
-        roomCode?: unknown;
-        guess?: unknown;
-        guessTitle?: unknown;
-        guessArtist?: unknown;
-        sourceUserId?: unknown;
-      }) => {
+      async (
+        payload: {
+          roomCode?: unknown;
+          guess?: unknown;
+          guessTitle?: unknown;
+          guessArtist?: unknown;
+          sourceUserId?: unknown;
+          /** Manche visee par la reponse : protege contre une reponse en retard
+              (relance apres coupure) qui serait comptee sur la chanson suivante. */
+          round?: unknown;
+        },
+        // Accuse de reception : sans lui, le client ne sait pas si sa reponse est
+        // arrivee (socket.io met ~20s a voir une coupure reseau, la reponse part
+        // dans le vide et le joueur reste bloque a 0).
+        ack?: (res: { ok: boolean; reason?: string }) => void
+      ) => {
         const roomCode = validRoomCode(payload?.roomCode);
-        if (!roomCode) return;
+        if (!roomCode) {
+          ack?.({ ok: false, reason: "invalid_room" });
+          return;
+        }
         const guess = clampText(payload?.guess, MAX_GUESS_LEN);
         const guessTitle = clampText(payload?.guessTitle, MAX_GUESS_LEN);
         const guessArtist = clampText(payload?.guessArtist, MAX_GUESS_LEN);
@@ -313,6 +374,7 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
         if (!access) {
           logger.debug(`game:answer DENIED - no access for user ${currentUser.id}`);
           emitRoomError(socket, roomCode, "Accès refusé à cette salle.");
+          ack?.({ ok: false, reason: "forbidden" });
           return;
         }
         // Ensure this socket is still in the room (may have lost membership on reconnect)
@@ -323,21 +385,42 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
         // If this player was marked disconnected, clear it since they're clearly online
         markReconnected(roomCode, currentUser.id);
         const state = getRealtimeState(roomCode);
-        // Block host from answering in event mode (host is spectator/presenter)
+        // En event, l'hote ne peut repondre QUE s'il a choisi "je joue aussi".
         const gameMode = getGameMode(roomCode);
-        if (gameMode === "event" && state?.hostUserId === currentUser.id) {
-          emitRoomError(socket, roomCode, "L'hôte ne peut pas répondre en mode événement.");
+        if (gameMode === "event" && state?.hostUserId === currentUser.id && !(state as any)?.hostPlays) {
+          emitRoomError(socket, roomCode, "L'hôte présente seulement sur cette partie.");
+          ack?.({ ok: false, reason: "presenter_only" });
           return;
         }
         if (!state) {
           logger.debug(`game:answer DENIED - no game state for room ${roomCode}`);
           emitRoomError(socket, roomCode, "Partie introuvable pour cette salle.");
+          ack?.({ ok: false, reason: "no_game" });
+          return;
+        }
+        // Reponse perimee : le client a vise une manche qui n'est plus celle en
+        // cours (relance apres coupure reseau). On refuse, sinon elle serait
+        // comptee sur la chanson suivante.
+        const targetRound = toIntOrNull(payload?.round);
+        if (targetRound !== null && targetRound !== state.currentRound) {
+          logger.debug(`game:answer STALE (round ${targetRound} vs ${state.currentRound}) user ${currentUser.id}`);
+          ack?.({ ok: false, reason: "stale_round" });
           return;
         }
         // Build combined guess for legacy compatibility
         const combinedGuess = guess ?? `${guessTitle ?? ""} ${guessArtist ?? ""}`.trim();
         logger.debug(`game:answer recording answer for user ${currentUser.id}: "${combinedGuess}"`);
+        // La manche doit encore etre en cours, sinon recordAnswer jette la reponse
+        // en silence (et on confirmait quand meme "c'est note" au joueur).
+        if (state.phase !== "GUESSING") {
+          logger.debug(`game:answer TOO LATE (phase ${state.phase}) user ${currentUser.id}`);
+          ack?.({ ok: false, reason: "round_over" });
+          return;
+        }
         recordAnswer(roomCode, currentUser.id, combinedGuess, sourceUserId, guessTitle, guessArtist);
+        // On confirme UNIQUEMENT si la reponse est reellement enregistree.
+        const recorded = getRealtimeState(roomCode)?.players?.[currentUser.id]?.hasAnswered === true;
+        ack?.({ ok: recorded, reason: recorded ? undefined : "not_recorded" });
 
         // Check if all answerable players have answered BEFORE broadcasting state,
         // so clients receive a single consistent state update instead of a GUESSING→REVEAL flicker.
@@ -367,6 +450,9 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
             void persistRoundResponses(revealed, getSessionId(roomCode));
             if (revealed.phase === "FINISHED") {
               broadcastGameOver(io, roomCode);
+            } else if (revealed.phase === "REVEAL") {
+              // Filet anti-AFK sur le chemin early-reveal aussi.
+              scheduleForcedAdvance(io, roomCode, revealed.currentRound);
             }
           }
         }
@@ -480,10 +566,101 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
       });
     });
 
+    // ─── Pierre-feuille-ciseaux de lobby (mini-jeu d'attente) ───
+    // Tout est broadcaste a la salle : les clients filtrent selon leur userId.
+    socket.on("lobby:rps:challenge", async (payload: { roomCode?: unknown; targetUserId?: unknown }) => {
+      const roomCode = validRoomCode(payload?.roomCode);
+      if (!roomCode) return;
+      const targetUserId = toIntOrNull(payload?.targetUserId);
+      if (!targetUserId || targetUserId === currentUser.id) return;
+      const access = await requireRoomAccess(roomCode, currentUser.id);
+      if (!access) return;
+      const match = lobbyRps.createMatch(
+        roomCode,
+        currentUser.id,
+        currentUser.username ?? null,
+        targetUserId,
+        lastKnownUsername.get(targetUserId) ?? null,
+        Date.now()
+      );
+      io.to(roomCode).emit("lobby:rps:challenge", {
+        matchId: match.id,
+        fromUserId: match.a,
+        fromUsername: match.aName,
+        targetUserId: match.b,
+      });
+    });
+
+    socket.on("lobby:rps:accept", async (payload: { roomCode?: unknown; matchId?: unknown }) => {
+      const roomCode = validRoomCode(payload?.roomCode);
+      if (!roomCode || typeof payload?.matchId !== "string") return;
+      const access = await requireRoomAccess(roomCode, currentUser.id);
+      if (!access) return;
+      const existing = lobbyRps.getMatch(roomCode, payload.matchId);
+      // Seul le joueur defie peut accepter.
+      if (!existing || existing.b !== currentUser.id) return;
+      const match = lobbyRps.acceptMatch(roomCode, payload.matchId);
+      if (!match) return;
+      io.to(roomCode).emit("lobby:rps:start", {
+        matchId: match.id,
+        a: match.a,
+        b: match.b,
+        aName: match.aName,
+        bName: match.bName,
+      });
+    });
+
+    socket.on("lobby:rps:decline", async (payload: { roomCode?: unknown; matchId?: unknown }) => {
+      const roomCode = validRoomCode(payload?.roomCode);
+      if (!roomCode || typeof payload?.matchId !== "string") return;
+      const access = await requireRoomAccess(roomCode, currentUser.id);
+      if (!access) return;
+      const existing = lobbyRps.getMatch(roomCode, payload.matchId);
+      if (!existing || (existing.b !== currentUser.id && existing.a !== currentUser.id)) return;
+      lobbyRps.removeMatch(roomCode, payload.matchId);
+      io.to(roomCode).emit("lobby:rps:declined", { matchId: payload.matchId, byUserId: currentUser.id });
+    });
+
+    socket.on("lobby:rps:move", async (payload: { roomCode?: unknown; matchId?: unknown; move?: unknown }) => {
+      const roomCode = validRoomCode(payload?.roomCode);
+      if (!roomCode || typeof payload?.matchId !== "string") return;
+      if (!lobbyRps.isValidMove(payload?.move)) return;
+      const access = await requireRoomAccess(roomCode, currentUser.id);
+      if (!access) return;
+      const res = lobbyRps.recordMove(roomCode, payload.matchId, currentUser.id, payload.move);
+      if (!res) return;
+      if (!res.done) return;
+      const { match } = res;
+      const winnerUserId = lobbyRps.resolveWinner(match);
+      if (winnerUserId) {
+        const winnerName = winnerUserId === match.a ? match.aName : match.bName;
+        lobbyRps.bumpWin(roomCode, winnerUserId, winnerName);
+      }
+      io.to(roomCode).emit("lobby:rps:result", {
+        matchId: match.id,
+        a: match.a,
+        b: match.b,
+        aMove: match.moves[match.a],
+        bMove: match.moves[match.b],
+        winnerUserId,
+      });
+      io.to(roomCode).emit("lobby:rps:scoreboard", { scoreboard: lobbyRps.getScoreboard(roomCode) });
+      lobbyRps.removeMatch(roomCode, match.id);
+    });
+
     socket.on("game:leave", async ({ roomCode }: { roomCode: string }) => {
       if (!roomCode) return;
       socket.leave(roomCode);
-      removePlayer(roomCode, currentUser.id);
+      const liveState = getRealtimeState(roomCode);
+      if (liveState?.hostUserId === currentUser.id) setHostConnected(roomCode, false);
+      // En pleine partie, on ne SUPPRIME pas le joueur : quelqu'un qui part a la
+      // manche 8/10 garde ses points au podium final. Marque deconnecte, il sort
+      // des compteurs "X/Y" mais reste au classement. Hors partie, on libere le slot.
+      if (liveState && (liveState.phase === "GUESSING" || liveState.phase === "REVEAL")) {
+        markDisconnected(roomCode, currentUser.id);
+      } else {
+        removePlayer(roomCode, currentUser.id);
+      }
       broadcastState(io, roomCode);
     });
 
@@ -525,6 +702,9 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
       const rooms = Array.from(socket.rooms).filter(room => room !== socket.id);
       for (const roomCode of rooms) {
         const state = getRealtimeState(roomCode);
+        // L'hote diffuse la musique pour toute la table : les autres doivent
+        // savoir qu'il n'est plus la pour prendre le relais sur leur telephone.
+        if (state && state.hostUserId === currentUser.id) setHostConnected(roomCode, false);
         if (state && state.phase === "GUESSING") {
           // Mark the player as disconnected instead of recording an empty answer.
           // This way they are excluded from allAnswerablePlayers() and won't
@@ -554,16 +734,27 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
           markDisconnected(roomCode, currentUser.id);
           broadcastState(io, roomCode);
         } else {
-          // Not in active game: remove player entirely
-          removePlayer(roomCode, currentUser.id);
+          // Lobby (pas de partie active) : on garde le slot pendant la grace
+          // (60s) pour permettre une reconnexion, puis on libere si pas de retour.
+          roomPresence.scheduleGrace(roomCode, currentUser.id, () => {
+            removePlayer(roomCode, currentUser.id);
+            roomPresence.removeMember(roomCode, currentUser.id);
+            io.to(roomCode).emit("room:presence", {
+              type: "members",
+              roomCode,
+              members: roomPresence.getMembers(roomCode),
+              serverTimestamp: Date.now(),
+            });
+            broadcastState(io, roomCode);
+          });
         }
+        roomPresence.setStatus(roomCode, currentUser.id, "disconnected");
         io.to(roomCode).emit("room:presence", {
-          type: "disconnected",
-          roomCode,
-          socketId: socket.id,
-          userId: currentUser.id,
-          serverTimestamp: Date.now(),
-        });
+        type: "members",
+        roomCode,
+        members: roomPresence.getMembers(roomCode),
+        serverTimestamp: Date.now(),
+      });
 
         // Cleanup streamer game if the host disconnects
         const streamerState = getStreamerSnapshot(roomCode);

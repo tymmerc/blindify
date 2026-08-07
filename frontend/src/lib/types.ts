@@ -100,11 +100,14 @@ export type MultiplayerRoom = {
   difficulty: string
   session_id?: number | null
   auto_advance?: boolean
+  host_plays?: boolean
+  round_duration_ms?: number | null
 }
 
 export type MultiplayerParticipant = {
   user_id: number
   username: string | null
+  status?: "active" | "away" | "disconnected"
 }
 
 export type MultiplayerPlayerState = {
@@ -124,11 +127,15 @@ export type MultiplayerPlayerState = {
   correct?: number
   streak?: number
   bestStreak?: number
+  /** Le serveur a perdu la socket de ce joueur (onglet ferme, reseau coupe). */
+  disconnected?: boolean
 }
 
 export type MultiplayerGameState = {
   roomCode: string
   hostUserId: number | null
+  hostPlays?: boolean
+  singleContributor?: boolean
   mode: "friends" | "event" | "streamer"
   phase: "LOBBY" | "GUESSING" | "REVEAL" | "FINISHED"
   currentRound: number
@@ -143,8 +150,11 @@ export type MultiplayerGameState = {
     previewUrl: string | null
     albumCover?: string | null
     metadata?: Record<string, unknown> | null
+    ownerChoices?: number[]
   } | null
   players: Record<number, MultiplayerPlayerState>
+  /** L'hote (source audio en mode event) est-il toujours connecte ? */
+  hostConnected?: boolean
   timing: {
     startAt: number | null
     revealAt: number | null
@@ -175,6 +185,7 @@ export interface RoundTrack {
   previewUrl: string | null
   albumCover?: string | null
   metadata?: Record<string, unknown> | null
+  ownerChoices?: number[]
 }
 
 export interface PlayerState {
@@ -213,6 +224,7 @@ export interface GameConfig {
 export interface GameState {
   roomCode: string
   hostUserId: number | null
+  hostPlays?: boolean
   mode: GameMode
   phase: GamePhase
   currentRound: number

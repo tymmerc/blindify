@@ -6,36 +6,26 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { api, type CurrentUserPayload } from "@/lib/api"
 import type { UserSummary } from "@/lib/types"
-
-const toggleDefaults = {
-  prefetchLiked: true,
-  notificationSound: true,
-  publicProfile: true,
-  leaderboard: true,
-  shareActivity: false,
-  invites: true,
-  achievements: true,
-  news: false,
-}
+import { AccountMenu } from "@/components/AccountMenu"
 
 export default function SettingsPage() {
   const router = useRouter()
   const [userPayload, setUserPayload] = useState<CurrentUserPayload | null>(null)
   const [loading, setLoading] = useState(true)
-  const [toggles, setToggles] = useState(toggleDefaults)
-  const [duration, setDuration] = useState("10 secondes")
-  const [difficulty, setDifficulty] = useState("Normal")
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     let active = true
     async function guard() {
       try {
-        const me = await api.checkAuth()
+        let me = await api.checkAuth()
         if (!active) return
         if (!me) {
-          router.replace("/auth/login")
-          return
+          // Guest-first : on cree un invite au lieu de forcer le login.
+          me = await api.ensureUserSession()
+          if (!active) return
         }
+        if (!me) return
         setUserPayload(me)
       } finally {
         if (active) setLoading(false)
@@ -49,7 +39,7 @@ export default function SettingsPage() {
 
   const user: UserSummary | null = userPayload?.user ?? null
   const displayName = user?.username || "Utilisateur"
-  const email = user?.email || "Non renseigne"
+  const email = user?.email || "Non renseigné"
   const isGuest = user?.provider === "guest"
 
   const handleLogout = async () => {
@@ -57,8 +47,20 @@ export default function SettingsPage() {
     router.replace("/auth/login")
   }
 
-  const updateToggle = (key: keyof typeof toggleDefaults) => {
-    setToggles(prev => ({ ...prev, [key]: !prev[key] }))
+  const handleDeleteAccount = async () => {
+    const confirmed = window.confirm(
+      "Supprimer définitivement ton compte ? Toutes tes données (parties, imports, sessions) seront effacées. Cette action est irréversible."
+    )
+    if (!confirmed) return
+    setDeleting(true)
+    try {
+      await api.deleteAccount()
+      router.replace("/")
+    } catch (err) {
+      console.error("delete_account_failed", err)
+      window.alert("La suppression a échoué. Réessaie dans un instant.")
+      setDeleting(false)
+    }
   }
 
   if (loading) {
@@ -71,6 +73,7 @@ export default function SettingsPage() {
 
   return (
     <div className="min-h-screen text-[#2e2014] pb-16">
+      <AccountMenu active="settings" />
       <div className="mx-auto max-w-3xl px-5 pt-10">
         <div className="mb-8 flex items-center justify-between">
           <Link
@@ -84,7 +87,7 @@ export default function SettingsPage() {
         <div className="mb-10 space-y-2">
           <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-[#c65133]">Réglages</p>
           <h1 className="font-display text-4xl font-semibold md:text-5xl">
-            Para<em className="font-medium italic text-[#c65133]">metres</em>
+            Para<em className="font-medium italic text-[#c65133]">mètres</em>
           </h1>
         </div>
 
@@ -93,7 +96,7 @@ export default function SettingsPage() {
             <div className="flex flex-col gap-3 rounded-md border-[1.5px] border-[#c65133] bg-[rgba(198,81,51,.08)] px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="font-display text-base font-semibold text-[#2e2014]">Tu joues en invité</p>
-                <p className="text-sm text-[#6b573f]">Ta progression s'efface au bout de 4h. Crée un compte pour la garder, un pseudo et un mot de passe suffisent.</p>
+                <p className="text-sm text-[#6b573f]">Ton pseudo et tes parties sont gardés sur cet appareil. Crée un compte pour les retrouver aussi sur ton ordi ou un autre téléphone.</p>
               </div>
               <Link href="/auth/login" className="shrink-0 rounded-full border-2 border-[#2e2014] bg-[#c65133] px-5 py-2.5 text-center text-sm font-bold text-[#f4ecdb] shadow-[3px_3px_0_#2e2014] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_#2e2014]">
                 Créer un compte
@@ -106,7 +109,7 @@ export default function SettingsPage() {
                   Compte {user?.provider}
                 </span>
               </SettingRow>
-              {email !== "Non renseigne" && (
+              {email !== "Non renseigné" && (
                 <SettingRow label="Email" description={email}>
                   <span />
                 </SettingRow>
@@ -118,60 +121,33 @@ export default function SettingsPage() {
           )}
         </Section>
 
-        <Section title="Jeu" accent="#e0a32e">
-          <SettingRow label="Duree des extraits" description="Temps d'ecoute pour deviner chaque morceau">
-            <Select value={duration} onChange={setDuration} options={["5 secondes", "10 secondes", "15 secondes", "20 secondes"]} />
-          </SettingRow>
-          <SettingRow label="Difficulte" description="Niveau de difficulte des questions">
-            <Select value={difficulty} onChange={setDifficulty} options={["Facile", "Normal", "Difficile"]} />
-          </SettingRow>
+        <Section title="Tes données" accent="#7d9471">
           <SettingRow
-            label="Son des notifications"
-            description="Activer les sons pour les bonnes et mauvaises reponses"
+            label="Ce qu'on garde"
+            description="Ton pseudo, ton lien de musique et l'historique de tes parties. Rien d'autre, aucun tracking publicitaire."
           >
-            <Toggle checked={toggles.notificationSound} onChange={() => updateToggle("notificationSound")} />
+            <span />
           </SettingRow>
-        </Section>
-
-        <Section title="Confidentialite" accent="#7d9471">
-          <SettingRow label="Profil public" description="Permettre aux autres utilisateurs de voir votre profil">
-            <Toggle checked={toggles.publicProfile} onChange={() => updateToggle("publicProfile")} />
-          </SettingRow>
-          <SettingRow label="Afficher dans les classements" description="Apparaitre dans les classements publics">
-            <Toggle checked={toggles.leaderboard} onChange={() => updateToggle("leaderboard")} />
-          </SettingRow>
-          <SettingRow label="Partage d'activite" description="Partager automatiquement vos scores sur les reseaux sociaux">
-            <Toggle checked={toggles.shareActivity} onChange={() => updateToggle("shareActivity")} />
-          </SettingRow>
-        </Section>
-
-        <Section title="Notifications" accent="#a8b8c8">
-          <SettingRow
-            label="Invitations de jeu"
-            description="Recevoir des notifications pour les invitations multijoueur"
-          >
-            <Toggle checked={toggles.invites} onChange={() => updateToggle("invites")} />
-          </SettingRow>
-          <SettingRow label="Nouveaux succes" description="Etre notifie lors du deblocage de succes">
-            <Toggle checked={toggles.achievements} onChange={() => updateToggle("achievements")} />
-          </SettingRow>
-          <SettingRow label="Nouveautes" description="Recevoir des notifications sur les nouvelles fonctionnalites">
-            <Toggle checked={toggles.news} onChange={() => updateToggle("news")} />
-          </SettingRow>
+          <div className="flex flex-wrap gap-x-4 gap-y-1 pt-2 text-[11px] text-[#8a7558]">
+            <Link href="/confidentialite" className="underline decoration-[rgba(46,32,20,.3)] underline-offset-2 transition hover:text-[#2e2014]">
+              Politique de confidentialité
+            </Link>
+            <Link href="/mentions-legales" className="underline decoration-[rgba(46,32,20,.3)] underline-offset-2 transition hover:text-[#2e2014]">
+              Mentions légales
+            </Link>
+          </div>
         </Section>
 
         <Section title="Zone de danger" accent="#9c2f1d">
-          <p className="mb-2 text-[12px] italic text-[#8a7558]">Ces actions arrivent bientot. Pour supprimer ton compte ou tes donnees maintenant, ecris-nous.</p>
-          <SettingRow label="Reinitialiser les statistiques" description="Remettre a zero toutes vos statistiques et succes">
-            <DangerButton disabled>Bientot</DangerButton>
-          </SettingRow>
-          <SettingRow label="Supprimer le compte" description="Supprimer definitivement votre compte et toutes vos donnees">
-            <DangerButton disabled>Bientot</DangerButton>
+          <SettingRow label="Supprimer le compte" description="Supprimer définitivement ton compte et toutes tes données. Cette action est irréversible.">
+            <DangerButton onClick={handleDeleteAccount} disabled={deleting}>
+              {deleting ? "Suppression..." : "Supprimer mon compte"}
+            </DangerButton>
           </SettingRow>
         </Section>
 
         <p className="mt-8 text-center text-[10px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">
-          Blindify v1.0.0
+          Blindz v1.0.0
         </p>
       </div>
     </div>
@@ -220,44 +196,7 @@ function SettingRow({
   )
 }
 
-function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onChange}
-      className="relative h-7 w-14 rounded-full border-2 border-[#2e2014] transition"
-      style={{
-        background: checked ? "#c65133" : "#efe5d0",
-      }}
-      aria-pressed={checked}
-    >
-      <span
-        className={`absolute left-1 top-1 h-4 w-4 rounded-full border-2 border-[#2e2014] transition ${
-          checked ? "translate-x-7 bg-[#f4ecdb]" : "bg-[#8a7558]"
-        }`}
-      />
-    </button>
-  )
-}
 
-function Select({ value, onChange, options }: { value: string; onChange: (value: string) => void; options: string[] }) {
-  return (
-    <div className="relative">
-      <select
-        value={value}
-        onChange={event => onChange(event.target.value)}
-        className="appearance-none rounded-md border-[1.5px] border-[rgba(46,32,20,.35)] bg-[#efe5d0] px-4 py-2 pr-9 text-sm font-bold text-[#2e2014] outline-none transition hover:border-[#2e2014] focus:border-[#c65133]"
-      >
-        {options.map(option => (
-          <option key={option} className="bg-[#f4ecdb] text-[#2e2014]">
-            {option}
-          </option>
-        ))}
-      </select>
-      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[#6b573f]">v</span>
-    </div>
-  )
-}
 
 function GhostButton({ children, disabled, onClick }: { children: React.ReactNode; disabled?: boolean; onClick?: () => void }) {
   return (

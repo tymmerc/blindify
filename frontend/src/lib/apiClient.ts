@@ -13,7 +13,7 @@ import type {
 } from "./types"
 
 export class ApiError extends Error {
-  constructor(readonly status: number, message: string) {
+  constructor(readonly status: number, message: string, readonly code?: string) {
     super(message)
     this.name = "ApiError"
   }
@@ -92,10 +92,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     let message = response.statusText || "API request failed"
+    let code: string | undefined
     try {
       const errorPayload = await response.json() as ApiEnvelope<unknown>
       if (errorPayload && errorPayload.error) {
         message = errorPayload.error.message || message
+        code = errorPayload.error.code
         if (errorPayload.error.details && typeof errorPayload.error.details === "string") {
           message = `${message}: ${errorPayload.error.details}`
         }
@@ -103,7 +105,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       // ignore json parsing issue, keep default message
     }
-    throw new ApiError(response.status, message)
+    throw new ApiError(response.status, message, code)
   }
 
   if (response.status === 204) {
@@ -114,7 +116,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!payload.success) {
     const message = payload.error?.message ?? "API request failed"
-    throw new ApiError(response.status, message)
+    throw new ApiError(response.status, message, payload.error?.code)
   }
 
   return (payload.data ?? ({} as T))
@@ -194,6 +196,8 @@ export const clientApi = {
     questionCount?: number
     autoAdvance?: boolean
     nickname?: string
+    mode?: "friends" | "event" | "streamer"
+    hostPlays?: boolean
   } = {}): Promise<{ room: MultiplayerRoom }> {
     return request<{ room: MultiplayerRoom }>("/api/rooms/create", {
       method: "POST",
@@ -274,6 +278,25 @@ export const clientApi = {
       body: JSON.stringify(payload),
     })
   },
+  async roomRounds(code: string): Promise<{
+    rounds: Array<{ round: number; title: string | null; artist: string | null; answers: number; correct: number }>
+    players: Array<{ userId: number; answered: number; avgMs: number | null }>
+  }> {
+    return request<{
+      rounds: Array<{ round: number; title: string | null; artist: string | null; answers: number; correct: number }>
+      players: Array<{ userId: number; answered: number; avgMs: number | null }>
+    }>(`/api/rooms/${code}/rounds`, { method: "GET", cache: "no-store" })
+  },
+  async updateRoomConfig(
+    code: string,
+    payload: { questionCount?: number; roundSeconds?: number }
+  ): Promise<{ questionCount: number | null; roundSeconds: number | null }> {
+    return request<{ questionCount: number | null; roundSeconds: number | null }>(`/api/rooms/${code}/config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })
+  },
   async friends(): Promise<{
     friends: import("./types").FriendEntry[]
     incoming: import("./types").FriendEntry[]
@@ -319,6 +342,12 @@ export const clientApi = {
   }> {
     return request("/api/friends/activity", { cache: "no-store" })
   },
+  async recentPlayers(): Promise<{ players: Array<{ userId: number; username: string | null; lastPlayed: string }> }> {
+    return request<{ players: Array<{ userId: number; username: string | null; lastPlayed: string }> }>(
+      "/api/invitations/recent-players",
+      { method: "GET", cache: "no-store" }
+    )
+  },
   async pendingInvitations(): Promise<{ invitations: RoomInvitation[] }> {
     const res = await request<{ invitations: RawInvitation[] }>("/api/invitations/pending", {
       method: "GET",
@@ -363,6 +392,11 @@ export const clientApi = {
       method: "POST",
     })
   },
+  async deleteAccount(): Promise<void> {
+    await request("/api/auth/account", {
+      method: "DELETE",
+    })
+  },
   async createGuestSession(nickname?: string): Promise<{ sessionToken: string }> {
     return request<{ sessionToken: string }>("/api/auth/guest", {
       method: "POST",
@@ -370,6 +404,13 @@ export const clientApi = {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ nickname }),
+    })
+  },
+  async reportBug(message: string, pageUrl?: string): Promise<{ received: boolean }> {
+    return request<{ received: boolean }>("/api/reports", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message, pageUrl }),
     })
   },
   async detailedStats(): Promise<{

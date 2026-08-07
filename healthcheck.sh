@@ -12,7 +12,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m'
 
 # Configuration
-DOMAIN="https://tymmerc.eu/blindify"
+DOMAIN="https://blindz.app"
 ALERT_EMAIL=""  # Add email for alerts
 LOG_FILE="/var/log/blindify-health.log"
 
@@ -41,12 +41,12 @@ check_service() {
 
 # Check PostgreSQL
 check_service "PostgreSQL" \
-    "pg_isready" \
+    "docker exec blindify-postgres pg_isready -U blindify" \
     "Database is not responding"
 
 # Check Redis
 check_service "Redis" \
-    "redis-cli ping" \
+    "docker exec blindify-redis redis-cli ping" \
     "Redis is not responding"
 
 # Check Backend API

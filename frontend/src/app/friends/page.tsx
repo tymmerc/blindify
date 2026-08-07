@@ -275,7 +275,7 @@ function FriendsEntryContent() {
               onClick={handleMusicNext}
               className="w-full py-2 text-xs font-medium text-[#8a7558] transition hover:text-[#2e2014]"
             >
-              {isLastStep ? "Rejoindre sans importer" : "Passer cette etape"}
+              {isLastStep ? "Rejoindre sans importer" : "Passer cette étape"}
             </button>
           )}
         </div>
@@ -315,8 +315,8 @@ function FriendsEntryContent() {
               <Users size={20} className="text-[#f4ecdb]" />
             </div>
             <div className="flex-1">
-              <p className="text-sm font-semibold text-[#2e2014]">Creer une partie</p>
-              <p className="mt-0.5 text-xs text-[#6b573f]">Deviens hote, partage le code a tes amis.</p>
+              <p className="text-sm font-semibold text-[#2e2014]">Créer une partie</p>
+              <p className="mt-0.5 text-xs text-[#6b573f]">Deviens hôte, partage le code à tes amis.</p>
             </div>
             <ArrowRight size={16} className="text-[#8a7558] transition group-hover:text-[#2e2014]" />
           </button>
@@ -334,7 +334,7 @@ function FriendsEntryContent() {
             </div>
             <div className="flex-1">
               <p className="text-sm font-semibold text-[#2e2014]">Rejoindre une partie</p>
-              <p className="mt-0.5 text-xs text-[#6b573f]">Un ami t'a envoye un code ? Entre-le ici.</p>
+              <p className="mt-0.5 text-xs text-[#6b573f]">Un ami t'a envoyé un code ? Entre-le ici.</p>
             </div>
             <ArrowRight size={16} className="text-[#8a7558] transition group-hover:text-[#2e2014]" />
           </button>
@@ -350,7 +350,7 @@ function FriendsEntryContent() {
       <StepShell step="code" totalSteps={totalSteps} currentIndex={currentIndex} onBack={goBack}>
         <div className="space-y-3 text-center">
           <h1 className="font-display text-3xl font-semibold text-[#2e2014] sm:text-4xl">Code de la <em className="font-medium italic text-[#c65133]">salle</em></h1>
-          <p className="text-sm text-[#6b573f]">Demande le code a ton ami qui a cree la partie.</p>
+          <p className="text-sm text-[#6b573f]">Demande le code à ton ami qui a créé la partie.</p>
         </div>
 
         <div className="mt-10 space-y-6">

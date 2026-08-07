@@ -67,7 +67,7 @@ function ChallengeContent() {
       setChallenge(data)
       setPhase("intro")
     }).catch((err) => {
-      setError(err instanceof Error ? err.message : "Defi introuvable")
+      setError(err instanceof Error ? err.message : "Défi introuvable")
       setPhase("error")
     })
   }, [code])
@@ -124,15 +124,15 @@ function ChallengeContent() {
     return (
       <div className="flex min-h-screen items-center justify-center px-6 text-[#2e2014]">
         <div className="w-full max-w-md space-y-6 text-center">
-          <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-[#c65133]">Defi</p>
-          <h1 className="font-display text-3xl font-semibold">Rejoindre un defi</h1>
-          <p className="text-sm text-[#6b573f]">Entre le code du defi pour commencer</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-[#c65133]">Défi</p>
+          <h1 className="font-display text-3xl font-semibold">Rejoindre un défi</h1>
+          <p className="text-sm text-[#6b573f]">Entre le code du défi pour commencer</p>
           <div className="flex gap-3">
             <input
               type="text"
               value={codeInput}
               onChange={(e) => setCodeInput(e.target.value.toUpperCase())}
-              placeholder="CODE DU DEFI"
+              placeholder="CODE DU DÉFI"
               maxLength={12}
               className="flex-1 rounded-md border-[1.5px] border-[rgba(46,32,20,.35)] bg-[#efe5d0] px-4 py-3 text-center font-display text-lg font-semibold tracking-[0.3em] text-[#2e2014] outline-none transition placeholder:font-sans placeholder:text-sm placeholder:italic placeholder:tracking-[0.15em] placeholder:text-[#b3a182] focus:border-[#c65133]"
               onKeyDown={(e) => e.key === "Enter" && handleCodeSubmit()}
@@ -163,7 +163,7 @@ function ChallengeContent() {
     return (
       <div className="flex min-h-screen items-center justify-center px-6 text-[#2e2014]">
         <div className="w-full max-w-md space-y-4 border-2 border-[#2e2014] bg-[#ece1c8] p-8 text-center shadow-[4px_4px_0_rgba(46,32,20,.18)]">
-          <h1 className="font-display text-2xl font-semibold text-[#9c2f1d]">Defi introuvable</h1>
+          <h1 className="font-display text-2xl font-semibold text-[#9c2f1d]">Défi introuvable</h1>
           <p className="text-sm text-[#6b573f]">{error}</p>
           <a
             href="/blindify/challenge/"
@@ -181,9 +181,9 @@ function ChallengeContent() {
       <div className="flex min-h-screen items-center justify-center px-6 text-[#2e2014]">
         <div className="w-full max-w-md space-y-6">
           <div className="space-y-2 text-center">
-            <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-[#c65133]">Defi</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-[#c65133]">Défi</p>
             <h1 className="font-display text-3xl font-semibold">
-              Defi de <em className="font-medium italic text-[#c65133]">{challenge.creatorName}</em>
+              Défi de <em className="font-medium italic text-[#c65133]">{challenge.creatorName}</em>
             </h1>
             <p className="text-sm text-[#6b573f]">
               {challenge.trackCount} titre{challenge.trackCount > 1 ? "s" : ""}
@@ -192,16 +192,16 @@ function ChallengeContent() {
 
           <div className="space-y-4 rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-6 shadow-[4px_4px_0_rgba(46,32,20,.18)]">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-[#6b573f]">Score a battre</span>
+              <span className="text-sm text-[#6b573f]">Score à battre</span>
               <span className="font-display text-2xl font-bold text-[#c65133]">{challenge.creatorScore} pts</span>
             </div>
             <div className="flex items-center justify-between text-sm text-[#6b573f]">
               <span>{challenge.creatorCorrect}/{challenge.creatorTotal} correct</span>
-              <span>Serie max : {challenge.creatorBestStreak}</span>
+              <span>Série max : {challenge.creatorBestStreak}</span>
             </div>
             {challenge.attempts.length > 0 && (
               <div className="border-t-2 border-dotted border-[rgba(46,32,20,.45)] pt-3 text-xs text-[#8a7558]">
-                {challenge.attempts.length} joueur{challenge.attempts.length > 1 ? "s" : ""} ont deja releve le defi
+                {challenge.attempts.length} joueur{challenge.attempts.length > 1 ? "s" : ""} ont déjà relevé le défi
               </div>
             )}
           </div>
@@ -221,7 +221,7 @@ function ChallengeContent() {
               disabled={!user}
               className="btn-neon w-full justify-center text-sm disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {user ? "Relever le defi" : "Chargement..."}
+              {user ? "Relever le défi" : "Chargement..."}
             </button>
           </div>
         </div>
@@ -267,7 +267,7 @@ function ChallengeContent() {
         <div className="w-full max-w-lg space-y-6">
           <div className="text-center space-y-2">
             <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-[#c65133]">Face B · Classement</p>
-            <h1 className="font-display text-3xl font-semibold">Resultats du defi</h1>
+            <h1 className="font-display text-3xl font-semibold">Résultats du défi</h1>
           </div>
 
           <div className="rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-6 shadow-[4px_4px_0_rgba(46,32,20,.18)]">
@@ -287,7 +287,7 @@ function ChallengeContent() {
                     </span>
                     {entry.isCreator && (
                       <span className="shrink-0 rounded-full border-[1.5px] border-[#e0a32e] bg-[#e0a32e] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[#2e2014]">
-                        Createur
+                        Créateur
                       </span>
                     )}
                     {isHighlighted && (
@@ -300,7 +300,7 @@ function ChallengeContent() {
                   <span className="shrink-0 text-right">
                     <span className="font-display text-base font-bold text-[#2e2014]">{entry.score} pts</span>
                     <span className="block text-[10px] text-[#8a7558]">
-                      {entry.correct}/{entry.total} · serie {entry.bestStreak}
+                      {entry.correct}/{entry.total} · série {entry.bestStreak}
                     </span>
                   </span>
                 </div>
@@ -323,7 +323,7 @@ function ChallengeContent() {
               }}
               className="btn-neon text-sm"
             >
-              Copier le lien du defi
+              Copier le lien du défi
             </button>
           </div>
         </div>

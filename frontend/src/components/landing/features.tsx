@@ -5,21 +5,21 @@ const features = [
     icon: Music,
     title: "Tes playlists Spotify",
     description:
-      "Connecte ton compte Spotify et joue avec tes playlists personnelles, tes titres likes et toute ta bibliotheque musicale.",
+      "Connecte ton compte Spotify et joue avec tes playlists personnelles, tes titres likés et toute ta bibliothèque musicale.",
     accent: "#c65133",
   },
   {
     icon: Users,
-    title: "Multijoueur en temps reel",
+    title: "Multijoueur en temps réel",
     description:
-      "Affronte tes amis en ligne, cree des salons prives ou rejoins des parties publiques avec des joueurs du monde entier.",
+      "Affronte tes amis en ligne, crée des salons privés ou rejoins des parties publiques avec des joueurs du monde entier.",
     accent: "#e0a32e",
   },
   {
     icon: Sparkles,
     title: "IA & recommandations",
     description:
-      "Nos algorithmes s'appuient sur tes gouts musicaux pour creer des blindtests personnalises et decouvrir de nouveaux titres.",
+      "Nos algorithmes s'appuient sur tes goûts musicaux pour créer des blindtests personnalisés et découvrir de nouveaux titres.",
     accent: "#7d9471",
   },
   {
@@ -31,16 +31,16 @@ const features = [
   },
   {
     icon: Zap,
-    title: "Gratuit & instantane",
+    title: "Gratuit & instantané",
     description:
-      "Aucune inscription complexe, aucune attente. Connecte ton compte Spotify et joue immediatement sans limite.",
+      "Aucune inscription complexe, aucune attente. Connecte ton compte Spotify et joue immédiatement sans limite.",
     accent: "#c65133",
   },
   {
     icon: Globe,
     title: "Accessible partout",
     description:
-      "Joue depuis n'importe quel appareil - ordinateur, tablette ou smartphone - avec une experience optimisee.",
+      "Joue depuis n'importe quel appareil - ordinateur, tablette ou smartphone - avec une expérience optimisée.",
     accent: "#e0a32e",
   },
 ]
@@ -54,11 +54,11 @@ export function Features() {
             Face A · L&apos;essentiel
           </p>
           <h2 className="font-display text-4xl lg:text-5xl font-semibold leading-[1.05] text-[#2e2014]">
-            Pourquoi <em className="font-medium italic text-[#c65133]">Blindify</em> ?
+            Pourquoi <em className="font-medium italic text-[#c65133]">Blindz</em> ?
           </h2>
           <p className="text-lg text-[#6b573f] max-w-2xl mx-auto">
-            Une plateforme complete et intuitive concue pour offrir la meilleure
-            experience de blindtest possible.
+            Une plateforme complète et intuitive conçue pour offrir la meilleure
+            expérience de blindtest possible.
           </p>
         </div>
 

@@ -1,10 +1,11 @@
 import type React from "react"
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 import { Karla, JetBrains_Mono, Fraunces } from "next/font/google"
 import "./globals.css"
 import "@/styles/theme-variables.css"
 
 import { AudioLifecycleGuard } from "@/components/system/AudioLifecycleGuard"
+import { BugReportDialog } from "@/components/BugReportDialog"
 import { ModeProvider } from "@/contexts/ModeContext"
 import { ThemeProvider } from "@/contexts/ThemeContext"
 import { publicPath } from "@/lib/publicPath"
@@ -29,10 +30,45 @@ const fraunces = Fraunces({
   display: "swap",
 })
 
+export const viewport: Viewport = {
+  themeColor: "#c65133",
+  // App installee : occupe tout l'ecran, sous la barre de statut (encoche iPhone).
+  viewportFit: "cover",
+}
+
+const SEO_TITLE = "Blindz · Le blind test avec VOS musiques, entre potes"
+const SEO_DESC =
+  "Le blind test avec VOS propres musiques. Importe tes playlists Spotify ou Deezer, devine les titres entre potes, autour d'une table ou à distance. Gratuit, rien à installer."
+
 export const metadata: Metadata = {
-  title: "Blindify · Jouez votre musique autrement",
-  description:
-    "Connectez vos services de musique préférés et défiez vos amis dans un blind test qui sent le vinyle et le café.",
+  metadataBase: new URL("https://blindz.app"),
+  applicationName: "Blindz",
+  title: {
+    default: SEO_TITLE,
+    // Les pages internes deviennent "… · Blindz" ; l'accueil garde le titre complet.
+    template: "%s · Blindz",
+  },
+  description: SEO_DESC,
+  keywords: [
+    "blind test",
+    "blindtest",
+    "blind test musique",
+    "blind test avec ses musiques",
+    "blind test entre potes",
+    "blind test soirée",
+    "jeu blind test",
+    "quiz musical",
+    "deviner des chansons",
+    "blind test Spotify",
+    "blind test Deezer",
+  ],
+  alternates: { canonical: "https://blindz.app/" },
+  manifest: publicPath("/manifest.webmanifest"),
+  appleWebApp: {
+    capable: true,
+    title: "Blindz",
+    statusBarStyle: "default",
+  },
   icons: {
     icon: [
       { url: publicPath("/favicon.ico") },
@@ -42,17 +78,17 @@ export const metadata: Metadata = {
     apple: publicPath("/apple-touch-icon.png"),
   },
   openGraph: {
-    title: "Blindify · Jouez votre musique autrement",
-    description:
-      "Connectez vos services de musique préférés et défiez vos amis dans un blind test qui sent le vinyle et le café.",
+    siteName: "Blindz",
+    title: SEO_TITLE,
+    description: SEO_DESC,
+    url: "https://blindz.app/",
     type: "website",
     locale: "fr_FR",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Blindify · Jouez votre musique autrement",
-    description:
-      "Connectez vos services de musique préférés et défiez vos amis dans un blind test qui sent le vinyle et le café.",
+    title: SEO_TITLE,
+    description: SEO_DESC,
   },
 }
 
@@ -78,6 +114,24 @@ export default function RootLayout({
             }`,
           }}
         />
+        {/* Donnees structurees : Google comprend que Blindz est un jeu de blind test. */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "WebApplication",
+              name: "Blindz",
+              alternateName: "Blindz - Blind test",
+              url: "https://blindz.app/",
+              description: SEO_DESC,
+              applicationCategory: "GameApplication",
+              operatingSystem: "Web",
+              inLanguage: "fr",
+              offers: { "@type": "Offer", price: "0", priceCurrency: "EUR" },
+            }),
+          }}
+        />
       </head>
       <body className={`${karla.variable} ${jetbrainsMono.variable} ${fraunces.variable} font-sans antialiased min-h-screen`}>
         {/* Club analogique : base papier creme, le grain est pose par globals.css */}
@@ -88,6 +142,7 @@ export default function RootLayout({
           <ModeProvider>
             <AudioLifecycleGuard />
             {children}
+            <BugReportDialog />
           </ModeProvider>
         </ThemeProvider>
       </body>

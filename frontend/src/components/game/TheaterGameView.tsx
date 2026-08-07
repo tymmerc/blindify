@@ -102,6 +102,16 @@ export function TheaterGameView(props: Props) {
   const totalRounds = state?.totalRounds ?? 10
   const isFinished = state?.phase === "FINISHED"
 
+  // Picker "qui a ajoute ?" : 3 candidats max (le bon + 2 leurres) fournis par le
+  // serveur via ownerChoices ; fallback sur tous les joueurs si absent (< 3 joueurs).
+  const pickerPlayers = useMemo<PlayerRow[]>(() => {
+    const choices = currentTrack?.ownerChoices
+    if (!choices || choices.length === 0) return sortedPlayers
+    return choices.map(
+      id => sortedPlayers.find(p => p.userId === id) ?? ({ userId: id, username: null, avatar: null } as PlayerRow)
+    )
+  }, [currentTrack?.ownerChoices, sortedPlayers])
+
   const dots = useMemo(
     () => Array.from({ length: Math.max(1, totalRounds) }, (_, i) => i + 1),
     [totalRounds]
@@ -113,7 +123,7 @@ export function TheaterGameView(props: Props) {
   const verdictTone = (v: string | null | undefined) =>
     v === "correct" ? SAGE : v === "close" ? GOLD : "#9c2f1d"
   const verdictLabel = (v: string | null | undefined) =>
-    v === "correct" ? "Valide" : v === "close" ? "Partiel" : "Rate"
+    v === "correct" ? "Validé" : v === "close" ? "Partiel" : "Raté"
 
   const me = user.id
 
@@ -294,13 +304,14 @@ export function TheaterGameView(props: Props) {
               />
             </div>
 
+            {!state?.singleContributor && (
             <div className="theater-field">
               <label className="theater-flabel">
-                Qui a ajoute ?
+                Qui a ajouté ?
                 <span className="tag">+1 pt</span>
               </label>
               <div className="theater-picker">
-                {sortedPlayers.map((p, idx) => {
+                {pickerPlayers.map((p, idx) => {
                   const c = playerColor(idx)
                   const selected = sourceGuess === p.userId
                   return (
@@ -322,6 +333,13 @@ export function TheaterGameView(props: Props) {
                 })}
               </div>
             </div>
+            )}
+
+            {state?.singleContributor && (
+              <p className="text-[11px] italic leading-snug" style={{ color: "#8a7558" }}>
+                Une seule playlist en jeu, pas de point « qui a ajouté » cette partie.
+              </p>
+            )}
 
             <button
               type="submit"
@@ -523,7 +541,7 @@ function RevealStage({
         <div className="theater-verdict" style={{ borderColor: verdictColor }}>
           <div>
             <span className="label">Ta réponse</span>
-            <p>{player.lastGuess || "(pas de reponse)"}</p>
+            <p>{player.lastGuess || "(pas de réponse)"}</p>
           </div>
           <span className="badge" style={{ color: verdictColor, borderColor: verdictColor }}>{verdictLabel}</span>
         </div>
@@ -583,7 +601,7 @@ function TheaterFinale({
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2 }}
       >
-        <span className="bullet" /> Fin de la face · Resultats
+        <span className="bullet" /> Fin de la face · Résultats
       </motion.p>
 
       <motion.div
@@ -604,7 +622,7 @@ function TheaterFinale({
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.7, duration: 0.5 }}
       >
-        {winner?.username || "Mystere"}
+        {winner?.username || "Mystère"}
       </motion.h2>
       <motion.p
         className="finale-sub"
@@ -614,8 +632,8 @@ function TheaterFinale({
       >
         {winner
           ? winner.score > 0
-            ? `${winner.score} ${winner.score > 1 ? "bonnes reponses" : "bonne reponse"} · disque d'or de la session`
-            : "Personne n'a marque. On rejoue ?"
+            ? `${winner.score} ${winner.score > 1 ? "bonnes réponses" : "bonne réponse"} · disque d'or de la session`
+            : "Personne n'a marqué. On rejoue ?"
           : ""}
         {meWins && (winner?.score ?? 0) > 0 ? " - et c'est toi." : ""}
       </motion.p>
@@ -632,7 +650,7 @@ function TheaterFinale({
             <span className="frank">{String(i + 1).padStart(2, "0")}</span>
             <span className="fname">{p.username || `Joueur ${p.userId}`}{p.userId === meId ? " (toi)" : ""}</span>
             <span className="fdots" />
-            {Boolean(p.bestStreak && p.bestStreak >= 3) && <span className="fstreak">serie x{p.bestStreak}</span>}
+            {Boolean(p.bestStreak && p.bestStreak >= 3) && <span className="fstreak">série x{p.bestStreak}</span>}
             <span className="fscore">{p.score} {p.score > 1 ? "pts" : "pt"}</span>
           </motion.div>
         ))}

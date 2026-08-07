@@ -5,10 +5,9 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { api, type CurrentUserPayload } from "@/lib/api"
 import type { GameSessionSummary, UserStats } from "@/lib/types"
-import { BottomNav } from "@/components/BottomNav"
-import { Logo } from "@/components/Logo"
+import { AccountMenu } from "@/components/AccountMenu"
 import { fetchUserDashboard } from "@/lib/userData"
-import { ArrowRight, Brain, Flame, Sparkles, TrendingUp } from "lucide-react"
+import { ArrowLeft, ArrowRight, Brain, Flame, Sparkles, TrendingUp } from "lucide-react"
 
 type StatCard = { label: string; value: string; hint?: string; color: string }
 
@@ -25,7 +24,7 @@ function formatAccuracy(value: number | null | undefined): string {
 }
 
 function stateLabel(state: string): string {
-  if (state === "finished") return "Termine"
+  if (state === "finished") return "Terminé"
   if (state === "in_progress") return "En cours"
   return state || "-"
 }
@@ -48,12 +47,14 @@ export default function StatsPage() {
     let active = true
     async function load() {
       try {
-        const me = await api.checkAuth()
+        let me = await api.checkAuth()
         if (!active) return
         if (!me) {
-          router.replace("/auth/login")
-          return
+          // Guest-first : on cree un invite au lieu de forcer le login.
+          me = await api.ensureUserSession()
+          if (!active) return
         }
+        if (!me) return
         setUserPayload(me)
         const { stats: fetchedStats, history: fetchedHistory } = await fetchUserDashboard()
         if (!active) return
@@ -80,11 +81,11 @@ export default function StatsPage() {
     const avgTime = formatDurationMs(stats?.averageReactionTime ?? 0)
     const level = Math.max(1, Math.floor((stats?.totalXp ?? 0) / 100) + 1)
     return [
-      { label: "Precision", value: accuracy, hint: "Progression globale", color: "#c65133" },
-      { label: "Reaction", value: avgTime, hint: "Ton temps de reponse moyen", color: "#e0a32e" },
-      { label: "Serie max", value: `${bestStreak}`, hint: "Enchaine en mode normal", color: "#7d9471" },
+      { label: "Précision", value: accuracy, hint: "Progression globale", color: "#c65133" },
+      { label: "Réaction", value: avgTime, hint: "Ton temps de réponse moyen", color: "#e0a32e" },
+      { label: "Série max", value: `${bestStreak}`, hint: "Enchaîne en mode normal", color: "#7d9471" },
       { label: "Parties", value: `${totalGames}`, hint: "Volume total", color: "#a8b8c8" },
-      { label: "Niveau", value: `${level}`, hint: "XP cumulee", color: "#c65133" },
+      { label: "Niveau", value: `${level}`, hint: "XP cumulée", color: "#c65133" },
     ]
   }, [stats])
 
@@ -104,7 +105,12 @@ export default function StatsPage() {
     return { buckets, max }
   }, [history])
 
-  const displayName = userPayload?.user?.username || "Profil"
+  const rawName = userPayload?.user?.username ?? ""
+  const isGuestUser = userPayload?.user?.provider === "guest"
+  // Les invites recoivent un identifiant auto moche (GUEST-XXXX) : on l'affiche
+  // pas. S'ils ont choisi un pseudo, on le garde.
+  const looksGenerated = /^guest[-_]/i.test(rawName)
+  const displayName = rawName && !looksGenerated ? rawName : "Profil"
 
   const highlights = useMemo(() => {
     const sorted = [...history].sort((a, b) => (new Date(b.started_at || 0).getTime()) - (new Date(a.started_at || 0).getTime()))
@@ -117,29 +123,29 @@ export default function StatsPage() {
     const actions: { title: string; description: string; href: string }[] = []
     if ((stats?.accuracyRate ?? 0) < 80) {
       actions.push({
-        title: "Gagner en precision",
-        description: "Refais 10 titres sur ta source la moins jouee pour +5% vise.",
+        title: "Gagner en précision",
+        description: "Refais 10 titres sur ta source la moins jouée pour +5% visé.",
         href: "/solo?source=library&count=10",
       })
     }
     if ((stats?.averageReactionTime ?? 0) > 1200) {
       actions.push({
-        title: "Affuter l oreille",
-        description: "Enchaine 10 manches : la vitesse departage les egalites au classement.",
+        title: "Affûter l'oreille",
+        description: "Enchaîne 10 manches : la vitesse départage les égalités au classement.",
         href: "/solo?source=library&count=10",
       })
     }
     if (modeSplit.multi === 0) {
       actions.push({
         title: "Tester la pression multi",
-        description: "Cree une room et termine 10 manches pour calibrer ta vitesse en live.",
+        description: "Crée une room et termine 10 manches pour calibrer ta vitesse en live.",
         href: "/modes",
       })
     }
     if (!actions.length) {
       actions.push({
-        title: "Continuer sur ta lancee",
-        description: "Enchaine une session multi pour comparer tes reflexes en groupe.",
+        title: "Continuer sur ta lancée",
+        description: "Enchaîne une session multi pour comparer tes réflexes en groupe.",
         href: "/modes",
       })
     }
@@ -172,7 +178,7 @@ export default function StatsPage() {
               className="btn-neon text-sm"
               type="button"
             >
-              Reessayer
+              Réessayer
             </button>
           </div>
         </div>
@@ -184,21 +190,29 @@ export default function StatsPage() {
     <div className="min-h-screen text-[#2e2014] pb-24">
       <div className="mx-auto max-w-5xl px-5 pt-10">
         {/* Header */}
-        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-4">
-            <Logo withText priority className="shrink-0" />
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-[#c65133]">Coach · Musical</p>
-              <h1 className="font-display text-3xl font-semibold">Plan de <em className="font-medium italic text-[#c65133]">progression</em></h1>
-              <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">Profil : {displayName}</p>
-            </div>
-          </div>
+        <div className="mb-9">
           <Link
             href="/modes"
-            className="inline-flex items-center gap-2 rounded-full border-[1.5px] border-[#2e2014] bg-[#ece1c8] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+            className="mb-6 inline-flex items-center gap-1.5 text-[12px] font-bold uppercase tracking-[0.16em] text-[#8a7558] transition hover:text-[#2e2014]"
           >
-            Retour
+            <ArrowLeft className="h-4 w-4" />
+            Modes
           </Link>
+          <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-[#c65133]">Coach · Musical</p>
+          <h1 className="mt-1 font-display text-[2.6rem] font-semibold leading-[1.02]">
+            Plan de <em className="font-medium italic text-[#c65133]">progression</em>
+          </h1>
+          {isGuestUser ? (
+            <p className="mt-2 text-[12px] font-semibold text-[#8a7558]">
+              Mode invité ·{" "}
+              <Link href="/auth/login" className="text-[#c65133] underline decoration-[1.5px] underline-offset-2">
+                crée un compte
+              </Link>{" "}
+              pour garder ta progression
+            </p>
+          ) : (
+            <p className="mt-2 text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">Profil : {displayName}</p>
+          )}
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
@@ -233,7 +247,7 @@ export default function StatsPage() {
               <div className="mb-3 flex items-center justify-between">
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">Solo vs Multi</p>
-                  <h2 className="font-display text-lg font-semibold text-[#2e2014]">Repartition des sessions</h2>
+                  <h2 className="font-display text-lg font-semibold text-[#2e2014]">Répartition des sessions</h2>
                 </div>
               </div>
               <div className="grid gap-3 sm:grid-cols-3">
@@ -265,12 +279,12 @@ export default function StatsPage() {
               <div className="mb-3 flex items-center justify-between">
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">Heatmap</p>
-                  <h2 className="font-display text-lg font-semibold text-[#2e2014]">Ou tu joues le plus</h2>
+                  <h2 className="font-display text-lg font-semibold text-[#2e2014]">Où tu joues le plus</h2>
                 </div>
                 <Brain className="h-5 w-5 text-[#c65133]" />
               </div>
               {Object.keys(sourceBuckets.buckets).length === 0 ? (
-                <p className="text-xs font-bold uppercase tracking-[0.15em] text-[#8a7558]">Pas encore de donnees.</p>
+                <p className="text-xs font-bold uppercase tracking-[0.15em] text-[#8a7558]">Pas encore de données.</p>
               ) : (
                 <div className="space-y-3">
                   {Object.entries(sourceBuckets.buckets).map(([src, count]) => {
@@ -302,7 +316,7 @@ export default function StatsPage() {
               <div className="mb-4 flex items-center justify-between">
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">Coach</p>
-                  <h2 className="font-display text-xl font-semibold text-[#2e2014]">Actions recommandees</h2>
+                  <h2 className="font-display text-xl font-semibold text-[#2e2014]">Actions recommandées</h2>
                 </div>
                 <Flame className="h-5 w-5 text-[#e0a32e]" />
               </div>
@@ -333,7 +347,7 @@ export default function StatsPage() {
               </div>
               <div className="divide-y divide-[rgba(46,32,20,.15)]">
                 {highlights.best.length === 0 ? (
-                  <div className="py-4 text-xs font-bold uppercase tracking-[0.15em] text-[#8a7558]">Aucune partie terminee.</div>
+                  <div className="py-4 text-xs font-bold uppercase tracking-[0.15em] text-[#8a7558]">Aucune partie terminée.</div>
                 ) : (
                   highlights.best.map(session => (
                     <SessionRow key={session.id} session={session} />
@@ -347,13 +361,13 @@ export default function StatsPage() {
               <div className="mb-3 flex items-center justify-between">
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">A travailler</p>
-                  <h2 className="font-display text-lg font-semibold text-[#2e2014]">Sessions a reprendre</h2>
+                  <h2 className="font-display text-lg font-semibold text-[#2e2014]">Sessions à reprendre</h2>
                 </div>
                 <TrendingUp className="h-5 w-5 text-[#9c2f1d]" />
               </div>
               <div className="divide-y divide-[rgba(46,32,20,.15)]">
                 {highlights.warnings.length === 0 ? (
-                  <div className="py-4 text-xs font-bold uppercase tracking-[0.15em] text-[#8a7558]">Rien a signaler.</div>
+                  <div className="py-4 text-xs font-bold uppercase tracking-[0.15em] text-[#8a7558]">Rien à signaler.</div>
                 ) : (
                   highlights.warnings.map(session => (
                     <SessionRow key={session.id} session={session} />
@@ -364,7 +378,7 @@ export default function StatsPage() {
           </div>
         </div>
       </div>
-      <BottomNav active="stats" />
+      <AccountMenu active="stats" />
     </div>
   )
 }

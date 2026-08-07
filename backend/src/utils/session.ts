@@ -26,6 +26,14 @@ type SessionData = NonNullable<Request["session"]>;
 
 const DEFAULT_SESSION_TTL = 1000 * 60 * 60 * 24; // 24h
 
+// Hache un token de session en SHA-256 hex.
+// On stocke ce hash en base (jamais le token brut) : une fuite de la table
+// user_sessions ne donne donc pas de sessions valides. Le token brut ne vit
+// que cote client. Toute lecture/ecriture par token doit passer par ce helper.
+export function hashToken(token: string): string {
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
+
 function ensureSessionObject(req: Request): SessionData {
   if (!req.session) {
     req.session = {};
@@ -45,12 +53,13 @@ async function queryUserById(id: number): Promise<AuthenticatedUser | null> {
 }
 
 async function querySessionByToken(token: string): Promise<UserSessionToken | null> {
+  // On interroge sur le hash du token entrant, pas sur le token brut.
   const { rows } = await pool.query<UserSessionToken>(
     `SELECT token, user_id, created_at, expires_at
      FROM user_sessions
      WHERE token=$1
      LIMIT 1`,
-    [token]
+    [hashToken(token)]
   );
   return rows[0] ?? null;
 }
@@ -79,6 +88,7 @@ async function queryConnection(userId: number, provider?: MusicProvider): Promis
 }
 
 export async function createSessionToken(userId: number, ttlMs = DEFAULT_SESSION_TTL): Promise<UserSessionToken> {
+  // Token brut renvoye au client, hash stocke en base.
   const token = crypto.randomUUID();
   const expiresAt = new Date(Date.now() + ttlMs);
 
@@ -86,19 +96,20 @@ export async function createSessionToken(userId: number, ttlMs = DEFAULT_SESSION
     `INSERT INTO user_sessions (token, user_id, expires_at)
      VALUES ($1, $2, $3)
      RETURNING token, user_id, created_at, expires_at`,
-    [token, userId, expiresAt]
+    [hashToken(token), userId, expiresAt]
   );
 
-  return rows[0];
+  // On renvoie toujours le token BRUT a l'appelant (RETURNING renvoie le hash).
+  return { ...rows[0], token };
 }
 
 export async function extendSessionToken(token: string, ttlMs = DEFAULT_SESSION_TTL): Promise<void> {
   const expiresAt = new Date(Date.now() + ttlMs);
-  await pool.query(`UPDATE user_sessions SET expires_at=$2 WHERE token=$1`, [token, expiresAt]);
+  await pool.query(`UPDATE user_sessions SET expires_at=$2 WHERE token=$1`, [hashToken(token), expiresAt]);
 }
 
 export async function revokeSessionToken(token: string): Promise<void> {
-  await pool.query(`DELETE FROM user_sessions WHERE token=$1`, [token]);
+  await pool.query(`DELETE FROM user_sessions WHERE token=$1`, [hashToken(token)]);
 }
 
 export async function getSessionContextFromToken(
@@ -166,9 +177,11 @@ export async function getSessionContext(
           return null;
         }
         userId = sessionRow.user_id;
-        sessionToken = sessionRow.token;
+        // On conserve le token BRUT (candidate) cote session, pas le hash
+        // renvoye par la base, car extendSessionToken re-hache en interne.
+        sessionToken = candidate;
         session.userId = userId;
-        session.sessionToken = sessionRow.token;
+        session.sessionToken = candidate;
       }
     }
   } else if (typeof session.sessionToken === "string") {

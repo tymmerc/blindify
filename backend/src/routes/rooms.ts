@@ -9,6 +9,8 @@ router.get("/:code/state", roomsController.state);
 router.post("/:code/preferences", roomsController.preferences);
 router.get("/:code", roomsController.details);
 router.post("/:code/start", roomsController.startGame);
+router.post("/:code/config", roomsController.updateConfig);
+router.get("/:code/rounds", roomsController.roundsSummary);
 router.post("/join", (req, res) => {
   if (typeof req.body?.code === "string") {
     (req.params as { code?: string }).code = req.body.code;

@@ -20,6 +20,7 @@ type LobbyShellProps = {
   onChangeMode?: () => void
   hideHeader?: boolean
   error?: string | null
+  errorAction?: { label: string; onClick: () => void } | null
   dataAttrs?: Record<string, string>
   stage?: "entry" | "lobby" | "game" | "results"
   isGuest?: boolean
@@ -34,6 +35,7 @@ export function LobbyShell({
   onChangeMode,
   hideHeader,
   error,
+  errorAction,
   dataAttrs,
   stage = "entry",
   isGuest,
@@ -42,7 +44,7 @@ export function LobbyShell({
   const accent = ANALOG_ACCENTS[mode] ?? "#c65133"
   return (
     <main className="min-h-screen text-[#2e2014]" {...(dataAttrs ?? {})}>
-      <div className={`relative mx-auto flex w-full flex-col ${stage === "game" ? "gap-0" : "max-w-6xl gap-6 px-6 py-8"}`}>
+      <div className={`relative mx-auto flex w-full flex-col ${stage === "game" ? "gap-0" : "min-h-screen max-w-6xl gap-6 px-6 py-8"}`}>
         {!hideHeader ? (
           <LobbyHeader
             mode={mode}
@@ -56,9 +58,26 @@ export function LobbyShell({
           />
         ) : null}
         {error ? (
-          <div className="rounded-md border-2 border-[#9c2f1d] bg-[#efe5d0] px-6 py-4 text-sm font-semibold text-[#9c2f1d] shadow-[4px_4px_0_rgba(46,32,20,.18)]">{error}</div>
+          <div className="flex flex-col gap-3 rounded-md border-2 border-[#9c2f1d] bg-[#efe5d0] px-6 py-4 text-sm font-semibold text-[#9c2f1d] shadow-[4px_4px_0_rgba(46,32,20,.18)] sm:flex-row sm:items-center sm:justify-between">
+            <span>{error}</span>
+            {errorAction ? (
+              <button
+                type="button"
+                onClick={errorAction.onClick}
+                className="shrink-0 self-start rounded-full border-2 border-[#9c2f1d] px-4 py-1.5 text-xs font-bold uppercase tracking-[0.14em] text-[#9c2f1d] transition hover:bg-[#9c2f1d] hover:text-[#efe5d0] sm:self-auto"
+              >
+                {errorAction.label}
+              </button>
+            ) : null}
+          </div>
         ) : null}
-        {children}
+        {stage === "entry" ? (
+          // Entrée : peu de contenu, on le centre verticalement pour ne pas laisser
+          // un océan de vide sur grand écran (sinon la carte colle sous le header).
+          <div className="flex flex-1 items-center justify-center py-4">{children}</div>
+        ) : (
+          children
+        )}
       </div>
     </main>
   )

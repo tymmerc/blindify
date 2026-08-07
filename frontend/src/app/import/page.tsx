@@ -221,7 +221,7 @@ export default function ImportPage() {
             <section className="space-y-4">
               <div className="flex items-center gap-3">
                 <h2 className="font-display text-2xl font-semibold">
-                  {playlists.length} playlist{playlists.length > 1 ? "s" : ""} trouv{playlists.length > 1 ? "ees" : "ee"}
+                  {playlists.length} playlist{playlists.length > 1 ? "s" : ""} trouv{playlists.length > 1 ? "ées" : "ée"}
                 </h2>
                 {provider && (
                   <span className={`rounded-full border-[1.5px] border-[#2e2014] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#f4ecdb] ${
@@ -239,7 +239,7 @@ export default function ImportPage() {
                 <div className="flex items-center gap-4 rounded-md border-[1.5px] border-[#7d9471] bg-[rgba(125,148,113,.14)] px-5 py-4">
                   <div className="flex-1">
                     <p className="text-sm font-bold text-[#4f6a45]">
-                      {syncAllResult.synced} titre{syncAllResult.synced > 1 ? "s" : ""} importe{syncAllResult.synced > 1 ? "s" : ""} depuis {playlists.length} playlist{playlists.length > 1 ? "s" : ""}
+                      {syncAllResult.synced} titre{syncAllResult.synced > 1 ? "s" : ""} importé{syncAllResult.synced > 1 ? "s" : ""} depuis {playlists.length} playlist{playlists.length > 1 ? "s" : ""}
                     </p>
                     <p className="text-xs text-[#8a7558]">Le jeu piochera au hasard dans tous ces titres.</p>
                   </div>
@@ -311,7 +311,7 @@ export default function ImportPage() {
                         <div className="mt-3 flex gap-2">
                           {isSynced ? (
                             <div className="flex w-full items-center justify-center gap-2 rounded-md border-[1.5px] border-[#7d9471] bg-[rgba(125,148,113,.14)] px-3 py-2 text-xs font-bold text-[#4f6a45]">
-                              {syncResult.synced} titres importes
+                              {syncResult.synced} titres importés
                             </div>
                           ) : (
                             <Button

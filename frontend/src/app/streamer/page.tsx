@@ -40,10 +40,10 @@ export default function StreamerEntryPage() {
                 Go live
               </p>
               <h2 className="font-display text-2xl font-semibold text-[#2e2014]">
-                Demarrer une session streamer
+                Démarrer une session streamer
               </h2>
               <p className="text-sm text-[#6b573f]">
-                Choisis ton format de jeu et demarre le stream avec ton chat.
+                Choisis ton format de jeu et démarre le stream avec ton chat.
               </p>
             </div>
             <button
@@ -52,18 +52,18 @@ export default function StreamerEntryPage() {
               className="inline-flex w-full items-center justify-center gap-2 rounded-md border-2 border-[#2e2014] px-6 py-3 font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#2e2014]"
               style={{ background: ACCENT }}
             >
-              Creer une session streamer
+              Créer une session streamer
             </button>
             <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">
-              Tu choisis le format de jeu dans le lobby avant de demarrer.
+              Tu choisis le format de jeu dans le lobby avant de démarrer.
             </p>
           </div>
 
           <div className="grid gap-4 md:grid-cols-3">
             {[
               { title: "Chat avec ta musique", label: "Mode 1", color: "#c65133", desc: "Le chat joue avec tes musiques. Parfait pour tester la culture musicale de ton audience avec ta playlist." },
-              { title: "Toi avec leur musique", label: "Mode 2", color: "#e0a32e", desc: "Tu joues avec les musiques du chat. Decouvre leurs gouts musicaux et montre que tu connais mieux qu'eux." },
-              { title: "Vous deux ensemble", label: "Mode 3", color: "#7d9471", desc: "Les deux jouent avec un mix des deux playlists. Le mode ultime pour une competition equitable." },
+              { title: "Toi avec leur musique", label: "Mode 2", color: "#e0a32e", desc: "Tu joues avec les musiques du chat. Découvre leurs goûts musicaux et montre que tu connais mieux qu'eux." },
+              { title: "Vous deux ensemble", label: "Mode 3", color: "#7d9471", desc: "Les deux jouent avec un mix des deux playlists. Le mode ultime pour une compétition équitable." },
             ].map(card => (
               <div
                 key={card.label}

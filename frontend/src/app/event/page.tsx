@@ -64,7 +64,7 @@ export default function EventEntryPage() {
                 Projection <em className="font-medium italic text-[#a87714]">collective</em>
               </h1>
               <p className="text-sm text-[#6b573f]">
-                Un ecran principal, un tempo clair, tout le monde suit sans se perdre.
+                La musique passe sur un seul écran et chacun répond depuis son téléphone.
               </p>
             </div>
             <Button
@@ -82,10 +82,10 @@ export default function EventEntryPage() {
                 Host control
               </p>
               <h2 className="font-display text-2xl font-semibold text-[#2e2014]">
-                Demarrer l&apos;evenement maintenant
+                Démarrer l&apos;événement maintenant
               </h2>
               <p className="text-sm text-[#6b573f]">
-                Lisible a distance, cadence stable, un seul hote garde le rythme.
+                C'est toi qui pilotes le rythme depuis l'écran, tes joueurs suivent sur leur téléphone.
               </p>
             </div>
             <button
@@ -94,10 +94,10 @@ export default function EventEntryPage() {
               className="inline-flex w-full items-center justify-center gap-2 rounded-md border-2 border-[#2e2014] px-6 py-3 font-bold text-[#2e2014] shadow-[4px_4px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#2e2014]"
               style={{ background: ACCENT }}
             >
-              Lancer l&apos;ecran principal
+              Lancer l&apos;écran principal
             </button>
             <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">
-              Les participants rejoignent via l&apos;ecran, tu peux changer de mode quand tu veux.
+              Les participants rejoignent via l&apos;écran, tu peux changer de mode quand tu veux.
             </p>
           </div>
 
@@ -127,9 +127,9 @@ export default function EventEntryPage() {
                 </span>
               </div>
               <ul className="space-y-2 text-sm text-[#6b573f]">
-                <li>Mettre le groupe au meme rythme avec un affichage lisible.</li>
+                <li>Mettre le groupe au même rythme avec un affichage lisible.</li>
                 <li>Projeter un score total qui motive toute la salle.</li>
-                <li>Garder une cadence stable pour enchainer les titres.</li>
+                <li>Garder une cadence stable pour enchaîner les titres.</li>
               </ul>
             </div>
           </div>

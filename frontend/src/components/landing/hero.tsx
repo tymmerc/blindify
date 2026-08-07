@@ -28,11 +28,11 @@ export function Hero() {
               blindtest
             </em>
             <br />
-            reinvente.
+            réinventé.
           </h1>
           <p className="text-base md:text-lg text-[#6b573f] max-w-xl mx-auto lg:mx-0 leading-relaxed">
-            Joue avec tes playlists Spotify, seul ou entre amis, et decouvre qui
-            a vraiment l&apos;oreille musicale la plus affutee.
+            Joue avec tes playlists Spotify, seul ou entre amis, et découvre qui
+            a vraiment l&apos;oreille musicale la plus affûtée.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
             <Link

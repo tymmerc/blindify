@@ -27,7 +27,7 @@ export function ShareImageButton({ stats, roundStates, tracks }: ShareImageButto
       if (canShareFiles) {
         await navigator.share({
           files: [file],
-          title: "Blindify Score",
+          title: "Blindz Score",
         })
       } else {
         downloadBlob(blob, "blindify-score.png")

@@ -247,7 +247,7 @@ export function ChronoGameClient({ tracks, durationSeconds, onGameComplete }: Ch
     return (
       <div className="grid min-h-screen place-items-center">
         <div className="flex flex-col items-center gap-6">
-          <p className="text-[11px] font-bold uppercase tracking-[0.3em] text-[#8a7558]">Prepare-toi</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.3em] text-[#8a7558]">Prépare-toi</p>
           <div
             className="font-display text-8xl font-bold tabular-nums"
             style={{ color: ACCENT }}
@@ -255,7 +255,7 @@ export function ChronoGameClient({ tracks, durationSeconds, onGameComplete }: Ch
             {countdownValue}
           </div>
           <p className="text-sm text-[#6b573f]">
-            {formatTime(durationSeconds)} a jouer
+            {formatTime(durationSeconds)} à jouer
           </p>
         </div>
       </div>
@@ -271,16 +271,16 @@ export function ChronoGameClient({ tracks, durationSeconds, onGameComplete }: Ch
         <div className="w-full max-w-md space-y-6 rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-8 shadow-[4px_4px_0_rgba(46,32,20,.18)]">
           <div className="text-center space-y-2">
             <p className="text-[11px] font-bold uppercase tracking-[0.3em]" style={{ color: ACCENT }}>
-              Chrono termine
+              Chrono terminé
             </p>
             <h2 className="font-display text-3xl font-bold text-[#2e2014]">{points} pts</h2>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <StatCard label="Corrects" value={`${correct} / ${attempted}`} />
-            <StatCard label="Precision" value={`${accuracy}%`} />
+            <StatCard label="Précision" value={`${accuracy}%`} />
             <StatCard label="Meilleur streak" value={String(bestStreak)} />
-            <StatCard label="Duree" value={formatTime(durationSeconds)} />
+            <StatCard label="Durée" value={formatTime(durationSeconds)} />
           </div>
 
           <div className="flex flex-col gap-3">

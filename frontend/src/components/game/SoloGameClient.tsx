@@ -6,13 +6,13 @@ import Link from "next/link"
 import { api } from "@/lib/api"
 import { clientApi } from "@/lib/apiClient"
 import type { SoloTrack, UserSummary } from "@/lib/types"
-import { ArrowRight, Heart, Loader2, Play, Share2, Sparkles, Volume2, VolumeX } from "lucide-react"
+import { ArrowRight, Loader2, Play, Share2, Sparkles, Volume2, VolumeX } from "lucide-react"
 import { StreakEffects } from "./StreakEffects"
 import { buildShareText } from "@/lib/shareText"
 import { ShareImageButton } from "./ShareImageButton"
 import { getSocket } from "@/lib/socket"
 import { audioManager, DEFAULT_AUDIO_VOLUME } from "@/lib/audioManager"
-import { RoundUiState, roundFlowReducer, computeScore, resolveModeFlags, ROUND_FEEDBACK_MS } from "@/lib/roundFlow"
+import { RoundUiState, roundFlowReducer, computeScore, resolveModeFlags, ROUND_FEEDBACK_MS, type ScoreBreakdown } from "@/lib/roundFlow"
 import { getListeningDuration } from "@/lib/progressiveDifficulty"
 import { HintButton } from "./HintButton"
 import { useMode } from "@/contexts/ModeContext"
@@ -21,7 +21,6 @@ import { evaluateGuess as evaluateGuessShared, evaluateGuessSeparate, normalize,
 type FinalizeReason = "timeout" | "reveal" | "guess"
 type RoundState = "pending" | "current" | Verdict
 
-const UUID_LIKE_REGEX = /^[0-9a-fA-F-]{10,}$/;
 
 export interface SoloGameClientProps {
   user: UserSummary
@@ -165,7 +164,6 @@ export function SoloGameClient({
   const [guessArtist, setGuessArtist] = useState("")
   const [verdict, setVerdict] = useState<Verdict | null>(null)
   const [feedback, setFeedback] = useState(false)
-  const [liking, setLiking] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [gameFinished, setGameFinished] = useState(false)
   const [roundStates, setRoundStates] = useState<RoundState[]>(() =>
@@ -189,8 +187,6 @@ export function SoloGameClient({
   } | null>(null)
   const lastDialogRoundRef = useRef<number>(0)
   const finalizeLockRef = useRef<number | null>(null)
-  const [likedTrackIds, setLikedTrackIds] = useState<Record<string, boolean>>({})
-  const [likeStatus, setLikeStatus] = useState<{ type: "success" | "error"; message: string } | null>(null)
   const [hintCount, setHintCount] = useState(0)
   const hintCountRef = useRef(0)
 
@@ -223,6 +219,10 @@ export function SoloGameClient({
   const guessTitleRef = useRef(guessTitle)
   const guessArtistRef = useRef(guessArtist)
   const verdictRef = useRef<Verdict | null>(verdict)
+  // Dernier resultat calcule (points + breakdown) du round courant. Les pop-ups de
+  // secours s'en servent pour afficher le VRAI score au lieu de zeros (le pop-up du
+  // setTimeout de finalizeRound se fait annuler par un cleanup au changement de phase).
+  const lastResultRef = useRef<{ round: number; points: number; breakdown: ScoreBreakdown; verdict: Verdict } | null>(null)
   const countdownRef = useRef<NodeJS.Timeout | null>(null)
   const listeningRafRef = useRef<number | null>(null)
   const revealTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -278,7 +278,7 @@ export function SoloGameClient({
   const currentListeningDuration = progressive ? getListeningDuration(index, total) : LISTENING_DURATION
   const currentListeningDurationMs = currentListeningDuration * 1000
   const [shareLabel, setShareLabel] = useState("Partager")
-  const [challengeLabel, setChallengeLabel] = useState("Defier un ami")
+  const [challengeLabel, setChallengeLabel] = useState("Défier un ami")
   const [challengeLoading, setChallengeLoading] = useState(false)
 
   const history = useMemo(
@@ -502,11 +502,11 @@ export function SoloGameClient({
       })
       const challengeUrl = `https://tymmerc.eu/blindify/challenge/?code=${code}`
       await navigator.clipboard.writeText(challengeUrl)
-      setChallengeLabel("Lien copie !")
-      setTimeout(() => setChallengeLabel("Defier un ami"), 3000)
+      setChallengeLabel("Lien copié !")
+      setTimeout(() => setChallengeLabel("Défier un ami"), 3000)
     } catch {
       setChallengeLabel("Erreur")
-      setTimeout(() => setChallengeLabel("Defier un ami"), 2000)
+      setTimeout(() => setChallengeLabel("Défier un ami"), 2000)
     } finally {
       setChallengeLoading(false)
     }
@@ -558,6 +558,16 @@ export function SoloGameClient({
         points: prevStats.points + gainedPoints,
       }
 
+      // Memorise le vrai resultat AVANT setStats : l'effet de secours (declenche par
+      // le changement de stats.rounds) pourra ainsi afficher les vrais points/breakdown
+      // au lieu de zeros (le pop-up du setTimeout ci-dessous se fait annuler par un
+      // cleanup au changement de phase).
+      lastResultRef.current = {
+        round: index + 1,
+        points: gainedPoints,
+        breakdown: scoreResult.breakdown,
+        verdict: finalVerdict,
+      }
       statsRef.current = updatedStats
       setStats(updatedStats)
       setVerdict(finalVerdict)
@@ -1075,7 +1085,8 @@ export function SoloGameClient({
     const roundNumber = index + 1
     if (lastDialogRoundRef.current === roundNumber) return
     if (dismissedRoundsRef.current.has(roundNumber)) return
-    const dialogVerdict = verdictRef.current ?? verdict ?? "wrong"
+    const real = lastResultRef.current?.round === roundNumber ? lastResultRef.current : null
+    const dialogVerdict = real?.verdict ?? verdictRef.current ?? verdict ?? "wrong"
     const dialogGuess = guessRef.current ?? guess
     setResultDialog({
       track: current,
@@ -1084,8 +1095,8 @@ export function SoloGameClient({
       guess: dialogGuess,
       guessTitle: guessTitleRef.current,
       guessArtist: guessArtistRef.current,
-      points: 0,
-      breakdown: { title: 0, artist: 0, speed: 0, penalty: 0, hint: 0 },
+      points: real?.points ?? 0,
+      breakdown: real?.breakdown ?? { title: 0, artist: 0, speed: 0, penalty: 0, hint: 0 },
     })
     lastDialogRoundRef.current = roundNumber
   }, [uiState, current, index, verdict, guess, resultDialog])
@@ -1097,7 +1108,8 @@ export function SoloGameClient({
     if (dismissedRoundsRef.current.has(stats.rounds)) return
     const resolvedTrack = trackList[stats.rounds - 1] ?? current
     if (!resolvedTrack) return
-    const dialogVerdict = verdictRef.current ?? verdict ?? "wrong"
+    const real = lastResultRef.current?.round === stats.rounds ? lastResultRef.current : null
+    const dialogVerdict = real?.verdict ?? verdictRef.current ?? verdict ?? "wrong"
     const dialogGuess = guessRef.current ?? guess
     setResultDialog({
       track: resolvedTrack,
@@ -1106,8 +1118,8 @@ export function SoloGameClient({
       guess: dialogGuess,
       guessTitle: guessTitleRef.current,
       guessArtist: guessArtistRef.current,
-      points: 0,
-      breakdown: { title: 0, artist: 0, speed: 0, penalty: 0, hint: 0 },
+      points: real?.points ?? 0,
+      breakdown: real?.breakdown ?? { title: 0, artist: 0, speed: 0, penalty: 0, hint: 0 },
     })
     lastDialogRoundRef.current = stats.rounds
   }, [stats.rounds, trackList, current, verdict, guess, resultDialog])
@@ -1123,40 +1135,6 @@ export function SoloGameClient({
     }
   }, [index, resultDialog, hideCorrectAnswerPopup])
 
-  const handleLike = useCallback(
-    async (track?: SoloTrack) => {
-      const target = track ?? current
-      if (!target || liking) return
-      const candidateId = target.audioSourceId ?? target.track_id ?? ""
-      const looksUuid = UUID_LIKE_REGEX.test(candidateId)
-      const sourceId = looksUuid ? candidateId : target.audioSourceId
-      if (!sourceId) {
-        setError("Impossible d'ajouter ce titre : identifiant manquant.")
-        setLikeStatus({ type: "error", message: "ID manquant pour ce titre." })
-        return
-      }
-      const key = String(sourceId)
-      if (likedTrackIds[key]) return
-      try {
-        setLiking(true)
-        setLikeStatus(null)
-        console.debug("add_like_request", { sourceId, track: target })
-        await api.addLike(user.id, sourceId)
-        setError(null)
-        setFeedback(true)
-        setLikeStatus({ type: "success", message: "Ajouté aux titres likés." })
-        setLikedTrackIds(prev => ({ ...prev, [key]: true }))
-      } catch (err) {
-        console.error("like_failed", err)
-        const message = err instanceof Error ? err.message : "Impossible d'ajouter ce titre."
-        setError(message)
-        setLikeStatus({ type: "error", message })
-      } finally {
-        setLiking(false)
-      }
-    },
-    [current, liking, user.id, likedTrackIds]
-  )
 
   useEffect(() => {
     if (!isMultiplayer || !isHost) return
@@ -1369,6 +1347,7 @@ export function SoloGameClient({
           {current && (
             <div className="mt-3 flex justify-center">
               <HintButton
+                key={current.round}
                 track={current}
                 disabled={isLocked || isRevealed || isArmed}
                 onHintUsed={() => {
@@ -1649,23 +1628,6 @@ export function SoloGameClient({
           </div>
 
           <div className="mt-5 flex flex-wrap gap-3">
-            {(() => {
-              const candidateId =
-                resultDialog.track.audioSourceId ??
-                (UUID_LIKE_REGEX.test(resultDialog.track.track_id) ? resultDialog.track.track_id : null)
-              const alreadyLiked = candidateId ? likedTrackIds[String(candidateId)] : false
-              return (
-            <button
-              type="button"
-              onClick={() => handleLike(resultDialog.track)}
-              disabled={liking || !candidateId || alreadyLiked}
-              className="inline-flex items-center gap-2 rounded-md border-2 border-[#2e2014] bg-transparent px-5 py-2.5 text-sm font-bold text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {liking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Heart className="h-4 w-4" />}
-              {alreadyLiked ? "Ajouté aux titres likés" : "Ajouter aux titres likés"}
-            </button>
-              )
-            })()}
             <button
               type="button"
               onClick={() => handleNext(true)}
@@ -1676,14 +1638,6 @@ export function SoloGameClient({
               {resultDialog.round >= total ? "Terminer" : "Manche suivante"}
             </button>
           </div>
-          {likeStatus ? (
-            <div
-              className="mt-2 text-sm"
-              style={{ color: likeStatus.type === "error" ? "#9c2f1d" : "#7d9471" }}
-            >
-              {likeStatus.message}
-            </div>
-          ) : null}
           {mode === "multiplayer" && leaderboard && leaderboard.length ? (
             <div className="mt-6 rounded-md border-[1.5px] border-[rgba(46,32,20,.22)] bg-[#ece1c8] p-4">
               <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.22em] text-[#c65133]">

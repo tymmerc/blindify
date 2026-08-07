@@ -23,6 +23,7 @@ export interface RoundTrack {
   previewUrl: string | null
   albumCover?: string | null
   metadata?: Record<string, unknown> | null
+  ownerChoices?: number[]
 }
 
 export interface PlayerState {
@@ -61,6 +62,8 @@ export interface GameConfig {
 export interface GameState {
   roomCode: string
   hostUserId: number | null
+  hostPlays?: boolean
+  singleContributor?: boolean
   mode: GameModeType
   phase: GamePhaseType
   currentRound: number

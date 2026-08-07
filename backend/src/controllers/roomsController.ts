@@ -13,9 +13,7 @@ import { GameMode, type RoundTrack } from "../types/game";
 import { initStreamerGame } from "../services/streamerOrchestrator";
 import {
   hydratePreviewUrl,
-  fetchAudioSources,
   collectPlayableSources,
-  fetchGlobalRandomSources,
   shuffle,
   type ProviderFilter,
 } from "../services/trackResolution";
@@ -35,9 +33,15 @@ async function ensureRoomParticipantPrefs(): Promise<void> {
 async function ensureRoomFlags(): Promise<void> {
   await pool.query(`ALTER TABLE multiplayer_rooms ADD COLUMN IF NOT EXISTS auto_advance BOOLEAN DEFAULT FALSE`);
   await pool.query(`ALTER TABLE multiplayer_rooms ADD COLUMN IF NOT EXISTS mode TEXT DEFAULT 'friends'`);
+  // Mode event : l'hote choisit de jouer (host_plays=true) ou de presenter seulement.
+  await pool.query(`ALTER TABLE multiplayer_rooms ADD COLUMN IF NOT EXISTS host_plays BOOLEAN DEFAULT FALSE`);
+  // Config de partie reglable par l'hote depuis le lobby (NULL = defaut du mode).
+  await pool.query(`ALTER TABLE multiplayer_rooms ADD COLUMN IF NOT EXISTS round_duration_ms INTEGER`);
 }
 
 const EVENT_ROUND_DURATION_MS = 15_000;
+// Decompte 3-2-1 avant la toute premiere manche (audio + chrono demarrent apres).
+const FIRST_ROUND_PREROLL_MS = 3_000;
 
 async function syncPlaylistTracks(userId: number, playlistId: string, accessToken: string): Promise<void> {
   const url = `https://api.spotify.com/v1/playlists/${playlistId}/tracks`;
@@ -151,13 +155,15 @@ export const roomsController = {
       : 10;
 
     const nickname = typeof req.body?.nickname === "string" ? req.body.nickname.trim().slice(0, 30) || null : null;
+    // Event uniquement : l'hote joue-t-il (true) ou presente-t-il seulement (false) ?
+    const hostPlays = mode === GameMode.EVENT ? Boolean(req.body?.hostPlays) : false;
 
     const code = generateRoomCode();
     const { rows } = await pool.query(
-      `INSERT INTO multiplayer_rooms (room_code, host_user_id, name, status, max_players, question_count, difficulty, mode)
-       VALUES ($1,$2,$3,'waiting',$4,$5,$6,$7)
-      RETURNING id, room_code, host_user_id, name, status, max_players, question_count, difficulty, mode`,
-      [code, user.id, name, maxPlayers, questionCount, difficulty, mode]
+      `INSERT INTO multiplayer_rooms (room_code, host_user_id, name, status, max_players, question_count, difficulty, mode, host_plays)
+       VALUES ($1,$2,$3,'waiting',$4,$5,$6,$7,$8)
+      RETURNING id, room_code, host_user_id, name, status, max_players, question_count, difficulty, mode, host_plays`,
+      [code, user.id, name, maxPlayers, questionCount, difficulty, mode, hostPlays]
     );
 
     const room = rows[0];
@@ -203,9 +209,38 @@ export const roomsController = {
       return;
     }
 
+    // Partie en cours : on laisse revenir ceux qui en font DEJA partie (rechargement
+    // de page, tunnel, appli fermee...). Avant, un simple F5 ejectait le joueur pour
+    // toute la soiree. Les nouveaux venus, eux, attendent la prochaine partie.
     if (room.status !== "waiting") {
-      fail(res, "room_locked", "La partie a déjà démarré", 409);
-      return;
+      const context = await getSessionContext(req, res, { requireConnection: false });
+      if (!context) return;
+      const { rows: already } = await pool.query(
+        `SELECT 1 FROM room_participants WHERE room_id=$1 AND user_id=$2 LIMIT 1`,
+        [room.id, context.user.id]
+      );
+      if (!already.length) {
+        // La room reste "in_progress" en base entre deux parties (elle ne repasse
+        // a "waiting" qu'au rejouer). Sans ce test, un retardataire ne pouvait
+        // JAMAIS rejoindre une soiree, meme pendant l'ecran des resultats.
+        const live = getGameState(room.room_code);
+        const betweenGames = !live || live.phase === "FINISHED";
+        if (!betweenGames) {
+          fail(res, "room_in_progress", "La partie est en cours. Tu pourras rejoindre la prochaine.", 409);
+          return;
+        }
+        // Manche finie : accueil normal (flux de join classique plus bas),
+        // il sera dans la prochaine partie.
+      } else {
+        const { rows: fullRoom } = await pool.query(
+          `SELECT id, room_code, host_user_id, status, max_players, question_count, difficulty,
+                  session_id, auto_advance, mode, host_plays, round_duration_ms
+           FROM multiplayer_rooms WHERE id=$1 LIMIT 1`,
+          [room.id]
+        );
+        ok(res, { room: fullRoom[0], rejoined: true });
+        return;
+      }
     }
 
     const participants = await pool.query(
@@ -254,7 +289,7 @@ export const roomsController = {
     }
 
     const { rows: roomRows } = await pool.query(
-      `SELECT id, room_code, host_user_id, status, max_players, question_count, difficulty, session_id, auto_advance, mode
+      `SELECT id, room_code, host_user_id, status, max_players, question_count, difficulty, session_id, auto_advance, mode, host_plays, round_duration_ms
        FROM multiplayer_rooms WHERE room_code=$1 LIMIT 1`,
       [code]
     );
@@ -339,7 +374,7 @@ export const roomsController = {
     }
 
     const { rows: roomRows } = await pool.query(
-      `SELECT id, room_code, host_user_id, status, max_players, question_count, difficulty, session_id, auto_advance, mode
+      `SELECT id, room_code, host_user_id, status, max_players, question_count, difficulty, session_id, auto_advance, mode, host_plays, round_duration_ms
        FROM multiplayer_rooms WHERE room_code=$1 LIMIT 1`,
       [code]
     );
@@ -424,6 +459,139 @@ export const roomsController = {
     });
   },
 
+  /**
+   * Bilan manche par manche de la derniere partie de la salle : qui a trouve quoi.
+   * Sert a l'ecran de fin ("le piege de la soiree" = le titre que personne n'a eu).
+   */
+  async roundsSummary(req: Request, res: Response): Promise<void> {
+    const code = typeof req.params?.code === "string" ? req.params.code.toUpperCase() : "";
+    if (!code) {
+      fail(res, "room_code_missing", "Code de salle requis", 400);
+      return;
+    }
+    const context = await getSessionContext(req, res, { requireConnection: false });
+    if (!context) return;
+
+    const { rows: roomRows } = await pool.query<{ session_id: number | null }>(
+      `SELECT session_id FROM multiplayer_rooms WHERE room_code=$1 LIMIT 1`,
+      [code]
+    );
+    const sessionId = roomRows[0]?.session_id ?? null;
+    if (!sessionId) {
+      ok(res, { rounds: [] });
+      return;
+    }
+
+    // ATTENTION : une ligne round_responses est creee meme pour un joueur qui n'a
+    // rien tape (revealRound marque tout le monde "hasAnswered"). On ne compte donc
+    // comme "reponse" que celles avec un texte, et comme "trouve" celles qui ont
+    // rapporte au moins 1 point (is_correct exige titre ET artiste : trop strict
+    // pour dire "personne ne l'a trouve").
+    const { rows } = await pool.query<{
+      round_index: number;
+      correct_title: string | null;
+      correct_artist: string | null;
+      answers: string;
+      correct: string;
+    }>(
+      `SELECT gr.round_index,
+              gr.correct_title,
+              gr.correct_artist,
+              COUNT(rr.id) FILTER (
+                WHERE COALESCE(rr.guess_title, '') <> '' OR COALESCE(rr.guess_artist, '') <> ''
+              )                                                   AS answers,
+              COUNT(rr.id) FILTER (WHERE COALESCE(rr.score_delta, 0) > 0) AS correct
+       FROM game_rounds gr
+       LEFT JOIN round_responses rr ON rr.round_id = gr.id
+       WHERE gr.session_id = $1
+       GROUP BY gr.round_index, gr.correct_title, gr.correct_artist
+       ORDER BY gr.round_index`,
+      [sessionId]
+    );
+
+    // Temps de reponse REEL par joueur : moyenne sur les manches ou il a
+    // vraiment repondu (avant, on divisait le temps total, penalites de
+    // non-reponse comprises, par le nombre de reponses parfaites -> 40s
+    // affiches sur une manche de 20s).
+    const { rows: playerRows } = await pool.query<{
+      user_id: number;
+      answered: string;
+      avg_ms: string | null;
+    }>(
+      `SELECT rr.user_id,
+              COUNT(*)                  AS answered,
+              AVG(rr.response_time_ms)  AS avg_ms
+       FROM round_responses rr
+       JOIN game_rounds gr ON gr.id = rr.round_id
+       WHERE gr.session_id = $1
+         AND (COALESCE(rr.guess_title, '') <> '' OR COALESCE(rr.guess_artist, '') <> '')
+         AND rr.response_time_ms IS NOT NULL
+       GROUP BY rr.user_id`,
+      [sessionId]
+    );
+
+    ok(res, {
+      players: playerRows.map(p => ({
+        userId: p.user_id,
+        answered: Number(p.answered),
+        avgMs: p.avg_ms === null ? null : Math.round(Number(p.avg_ms)),
+      })),
+      rounds: rows.map(r => ({
+        round: r.round_index,
+        title: r.correct_title,
+        artist: r.correct_artist,
+        answers: Number(r.answers),
+        correct: Number(r.correct),
+      })),
+    });
+  },
+
+  // Config de partie reglable par l'hote depuis le lobby (manches + duree de round).
+  async updateConfig(req: Request, res: Response): Promise<void> {
+    const code = typeof req.params?.code === "string" ? req.params.code.toUpperCase() : "";
+    if (!code) {
+      fail(res, "room_code_missing", "Code de salle requis", 400);
+      return;
+    }
+    const context = await getSessionContext(req, res, { requireConnection: false });
+    if (!context) return;
+
+    const { rows } = await pool.query(
+      `SELECT id, host_user_id, status FROM multiplayer_rooms WHERE room_code=$1 LIMIT 1`,
+      [code]
+    );
+    const room = rows[0];
+    if (!room) {
+      fail(res, "room_not_found", "Salle introuvable", 404);
+      return;
+    }
+    if (room.host_user_id !== context.user.id) {
+      fail(res, "room_forbidden", "Seul l'hôte peut régler la partie", 403);
+      return;
+    }
+    if (room.status !== "waiting") {
+      fail(res, "room_locked", "Impossible de régler une partie déjà lancée", 409);
+      return;
+    }
+
+    const questionCountRaw = Number(req.body?.questionCount);
+    const roundSecondsRaw = Number(req.body?.roundSeconds);
+    const questionCount = Number.isInteger(questionCountRaw) ? Math.min(30, Math.max(3, questionCountRaw)) : null;
+    const roundSeconds = Number.isInteger(roundSecondsRaw) ? Math.min(60, Math.max(5, roundSecondsRaw)) : null;
+    if (questionCount === null && roundSeconds === null) {
+      fail(res, "invalid_config", "Aucun réglage valide fourni", 400);
+      return;
+    }
+
+    if (questionCount !== null) {
+      await pool.query(`UPDATE multiplayer_rooms SET question_count=$1 WHERE id=$2`, [questionCount, room.id]);
+    }
+    if (roundSeconds !== null) {
+      await pool.query(`UPDATE multiplayer_rooms SET round_duration_ms=$1 WHERE id=$2`, [roundSeconds * 1000, room.id]);
+    }
+    ok(res, { questionCount, roundSeconds });
+  },
+
   async startGame(req: Request, res: Response): Promise<void> {
     const code = typeof req.params?.code === "string" ? req.params.code.toUpperCase() : "";
     if (!code) {
@@ -444,7 +612,7 @@ export const roomsController = {
             : null;
 
     const { rows: roomRows } = await pool.query(
-      `SELECT id, room_code, host_user_id, status, max_players, question_count, difficulty, mode, auto_advance, session_id
+      `SELECT id, room_code, host_user_id, status, max_players, question_count, difficulty, mode, host_plays, auto_advance, session_id, round_duration_ms
        FROM multiplayer_rooms
        WHERE room_code=$1 LIMIT 1`,
       [code]
@@ -600,25 +768,40 @@ export const roomsController = {
       `SELECT user_id, source_pref, playlist_pref FROM room_participants WHERE room_id=$1`,
       [room.id]
     );
+    // Joueurs qui REPONDENT : le presentateur (event sans host_plays) et l'hote streamer sont exclus.
     const participantIds = participantRows
       .map(p => p.user_id)
-      .filter(id => !((room.mode === GameMode.EVENT || room.mode === GameMode.STREAMER) && id === room.host_user_id));
+      .filter(id => !((((room.mode === GameMode.EVENT && !room.host_plays) || room.mode === GameMode.STREAMER)) && id === room.host_user_id));
+
+    // Contributeurs MUSIQUE : qui peut ramener la playlist. Autour d'une table, l'hote
+    // presentateur est le DJ : sa musique DOIT alimenter le pool meme s'il ne joue pas.
+    // Tout le monde present dans la room peut contribuer.
+    const musicContributorIds = room.mode === GameMode.EVENT
+      ? Array.from(new Set(participantRows.map(p => p.user_id)))
+      : participantIds;
 
     if (!participantIds.length) {
       fail(res, "no_participants", "Aucun joueur connecté pour lancer en mode événement", 400);
       return;
     }
 
-    // Regle : il faut au moins 2 joueurs ayant importe leur musique pour lancer.
+    // Regle : au moins 1 playlist importee (par un joueur OU l'hote presentateur).
     const { rows: musicRows } = await pool.query<{ n: string }>(
       `SELECT COUNT(DISTINCT user_id) AS n FROM audio_sources WHERE user_id = ANY($1::int[])`,
-      [participantIds]
+      [musicContributorIds]
     );
     const playersWithMusic = Number(musicRows[0]?.n ?? 0);
-    if (playersWithMusic < 2) {
-      fail(res, "need_more_music", "Il faut au moins 2 joueurs ayant importé leur musique pour lancer.", 400, { playersWithMusic });
+    // Assoupli : 2 joueurs minimum + au moins 1 playlist importee. Une seule personne
+    // peut ramener la musique (pratique pour une partie autour d'une table).
+    if (participantIds.length < 2) {
+      fail(res, "need_more_players", "Il faut au moins 2 joueurs pour lancer la partie.", 400);
       return;
     }
+    if (playersWithMusic < 1) {
+      fail(res, "need_more_music", "Il faut au moins une playlist importée (par un joueur ou l'hôte) pour lancer.", 400, { playersWithMusic });
+      return;
+    }
+    const singleContributor = playersWithMusic <= 1;
 
     const collected: AudioSourceRow[] = [];
     const seen = new Set<string>();
@@ -648,7 +831,7 @@ export const roomsController = {
     };
 
     // Charger les connexions Spotify des joueurs (hors hôte streamer/événement) pour synchroniser au besoin
-    const connectionUserIds = Array.from(new Set(participantIds)) as number[];
+    const connectionUserIds = Array.from(new Set(musicContributorIds)) as number[];
     const { rows: connRows } = await pool.query<{
       id: number;
       user_id: number;
@@ -691,9 +874,9 @@ export const roomsController = {
     }
 
     // Prélever un quota par joueur pour garantir la diversité
-    const perUserCount = Math.max(1, Math.ceil(room.question_count / Math.max(1, participantIds.length)));
+    const perUserCount = Math.max(1, Math.ceil(room.question_count / Math.max(1, musicContributorIds.length)));
     const contribution = new Map<number, number>();
-    for (const pid of participantIds) {
+    for (const pid of musicContributorIds) {
       const pref = prefMap.get(pid);
       const choice = normalizeSource(pref?.source ?? sourceParam);
       const likedChoice = choice === "liked";
@@ -720,11 +903,15 @@ export const roomsController = {
       for (const s of owned) s.user_id = pid; // revendique la contribution pour cette partie
       pushUnique(owned);
 
-      // 2) Complement depuis le pool mixte (peut inclure des titres globaux non attribues).
+      // 2) Complement, toujours dans la bibliotheque de CE joueur. On passe par
+      // collectPlayableSources pour hydrater les extraits et ecarter les titres
+      // sans audio (fetchAudioSources brut en laissait passer : manche muette).
       const need = perUserCount - owned.length;
       let extra = 0;
       if (need > 0) {
-        const slice = await fetchAudioSources(pid, poolProvider, need, {
+        const slice = await collectPlayableSources(pid, need, {
+          provider: poolProvider,
+          ownedOnly: true,
           likedOnly: likedChoice,
           playlistId: playlistChoice,
           timeRange: timeChoice,
@@ -737,7 +924,7 @@ export const roomsController = {
 
     // Compléter avec le pool commun si besoin
     if (collected.length < room.question_count) {
-      const fill = await collectPlayableSources(participantIds, room.question_count, {
+      const fill = await collectPlayableSources(musicContributorIds, room.question_count, {
         likedOnly: false,
         provider: poolProvider,
       });
@@ -750,7 +937,7 @@ export const roomsController = {
     // Si toujours insuffisant, compléter avec le pool global (provider "any")
     if (sources.length < room.question_count) {
       const remaining = room.question_count - sources.length;
-      const fallback = await collectPlayableSources(participantIds, remaining, {
+      const fallback = await collectPlayableSources(musicContributorIds, remaining, {
         likedOnly: false,
         provider: "any",
       });
@@ -764,47 +951,30 @@ export const roomsController = {
       }
     }
 
-    // Garantir au moins une piste par joueur en tirant directement dans sa bibliothèque, puis dans le pool global
-    for (const pid of participantIds) {
+    // Garantir au moins une piste par contributeur, uniquement depuis SA bibliotheque.
+    for (const pid of musicContributorIds) {
       const hasOne = sources.some(src => src.user_id === pid);
       if (hasOne) continue;
       const existingKeys = new Set(sources.map(src => src.external_id ?? String(src.id)));
-      const personalPool = await fetchAudioSources(pid, poolProvider, 3, {});
-      let injected = false;
+      // collectPlayableSources (et pas fetchAudioSources brut) : il rafraichit les
+      // extraits et jette ceux sans audio. Sinon on pouvait injecter ici un titre
+      // muet et la table restait 10 secondes dans le silence.
+      const personalPool = await collectPlayableSources(pid, 3, { provider: poolProvider, ownedOnly: true });
       for (const candidate of personalPool) {
         const key = candidate.external_id ?? String(candidate.id);
         if (existingKeys.has(key)) continue;
         sources.push(candidate);
         existingKeys.add(key);
-        injected = true;
         break;
       }
-      if (!injected) {
-        const globals = await fetchGlobalRandomSources(3);
-        for (const candidate of globals) {
-          const key = candidate.external_id ?? String(candidate.id);
-          if (existingKeys.has(key)) continue;
-          sources.push(candidate);
-          existingKeys.add(key);
-          break;
-        }
-      }
+      // On NE complete PLUS avec la musique d'inconnus : on joue uniquement les
+      // titres des joueurs presents, quitte a faire moins de manches.
       if (sources.length >= room.question_count) break;
     }
 
-    // Fallback ultime : tirer dans la table globale (sans filtre user) pour éviter l'erreur bloquante
-    if (sources.length < room.question_count) {
-      const missing = room.question_count - sources.length;
-      const globals = await fetchGlobalRandomSources(missing * 2);
-      const existingKeys = new Set(sources.map(src => src.external_id ?? String(src.id)));
-      for (const candidate of globals) {
-        const key = candidate.external_id ?? String(candidate.id);
-        if (existingKeys.has(key)) continue;
-        sources.push(candidate);
-        existingKeys.add(key);
-        if (sources.length >= room.question_count) break;
-      }
-    }
+    // Plus de repli sur le fonds commun : la promesse produit, c'est "VOS musiques".
+    // S'il manque des titres, la partie aura simplement moins de manches
+    // (effectiveRounds s'ajuste plus bas sur sources.length).
 
     // Dernier filet : si rien du tout, on s'arrête avec un message explicite
     if (sources.length === 0) {
@@ -838,7 +1008,7 @@ export const roomsController = {
 
     const { rows: participantUsers } = await pool.query<{ id: number; username: string | null; avatar: string | null }>(
       `SELECT id, username, avatar FROM users WHERE id = ANY($1::int[])`,
-      [participantIds]
+      [musicContributorIds]
     );
     const usernameMap = new Map<number, string | null>();
     const avatarMap = new Map<number, string | null>();
@@ -873,12 +1043,12 @@ export const roomsController = {
         [room.id, session.id]
       );
 
-      for (const participant of participantRows) {
+      for (const pid of participantIds) {
         await client.query(
           `INSERT INTO game_participants (session_id, user_id, score)
            VALUES ($1,$2,0)
            ON CONFLICT (session_id, user_id) DO NOTHING`,
-          [session.id, participant.user_id]
+          [session.id, pid]
         );
       }
 
@@ -921,7 +1091,12 @@ export const roomsController = {
       client.release();
     }
 
-    const roundDurationMs = room.mode === GameMode.EVENT ? EVENT_ROUND_DURATION_MS : 20_000;
+    // Duree configuree par l'hote dans le lobby, sinon defaut du mode.
+    const configuredMs = Number(room.round_duration_ms);
+    const roundDurationMs =
+      Number.isFinite(configuredMs) && configuredMs >= 5_000 && configuredMs <= 60_000
+        ? configuredMs
+        : room.mode === GameMode.EVENT ? EVENT_ROUND_DURATION_MS : 20_000;
 
     const roundTracks: RoundTrack[] = normalizedTracks.map(t => ({
       round: t.round,
@@ -994,6 +1169,8 @@ export const roomsController = {
     bootstrapGameState({
       roomCode: room.room_code,
       hostUserId: room.host_user_id,
+      hostPlays: room.mode === GameMode.EVENT && room.host_plays === true,
+      singleContributor,
       mode: session.mode as GameMode,
       tracks: roundTracks,
       participants: participantIds.map(id => ({
@@ -1009,7 +1186,12 @@ export const roomsController = {
     });
 
     // Start round 1 immediately in a server-authoritative way
-    const snapshot = startRoundAndBroadcast(io, room.room_code);
+    // Pre-roll : la 1re manche demarre 3s plus tard pour laisser passer le
+    // decompte 3-2-1 (avant, la musique jouait PENDANT le decompte). Le chrono
+    // et l'audio partent donc ensemble, a la fin du decompte.
+    const snapshot = startRoundAndBroadcast(io, room.room_code, {
+      startAt: Date.now() + FIRST_ROUND_PREROLL_MS,
+    });
 
     ok(res, {
       session: {

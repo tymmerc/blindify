@@ -4,6 +4,8 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import type { Mode } from "@/contexts/ModeContext"
 import { useMode } from "@/contexts/ModeContext"
+import { AccountMenu } from "@/components/AccountMenu"
+import { publicPath } from "@/lib/publicPath"
 
 type ModeCard = {
   key: Mode
@@ -20,7 +22,7 @@ const MODE_CARDS: ModeCard[] = [
   {
     key: "friends",
     title: "À distance",
-    subtitle: "Chacun chez soi. Un code à partager, tout le monde joue sur son écran.",
+    subtitle: "Chacun chez soi : tu partages un code et tout le monde joue depuis son écran.",
     accent: "#c65133",
     destination: "/friends",
     posture: "À distance",
@@ -38,7 +40,7 @@ const MODE_CARDS: ModeCard[] = [
   {
     key: "streamer",
     title: "Avec ta communauté",
-    subtitle: "Pour streamer : ton audience devine.",
+    subtitle: "Ton public devine les morceaux en direct depuis le chat de ton live.",
     accent: "#7d9471",
     destination: "/streamer",
     posture: "Stream",
@@ -214,15 +216,22 @@ function ModeSelectionContent() {
 
   return (
     <div className="flex min-h-dvh flex-col px-6 pt-10 pb-24 text-[#2e2014] sm:min-h-screen sm:flex-row sm:items-center sm:justify-center sm:py-14">
+      <AccountMenu />
       <div className="relative z-10 my-auto mx-auto w-full max-w-5xl space-y-10">
         <header className="flex flex-col gap-2">
+          {/* Sur grand ecran le logo se fixe en haut a gauche, au meme niveau que le bouton profil */}
+          <img
+            src={publicPath("/logo-mark.png")}
+            alt="Blindz"
+            className="mb-1 h-11 w-11 object-contain lg:fixed lg:left-8 lg:top-8 lg:z-40 lg:mb-0 lg:h-12 lg:w-12"
+          />
           <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-[#c65133]">
             Choisis ta face
           </p>
           <h1 className="font-display text-4xl font-semibold leading-[1.05] sm:text-5xl">
             Comment tu veux <em className="font-medium italic text-[#c65133]">jouer</em>&nbsp;?
           </h1>
-          <p className="text-base text-[#6b573f]">Choisis ton terrain. Le reste suit.</p>
+          <p className="text-base text-[#6b573f]">Trois façons de lancer un blind test, selon qui est là et où vous êtes.</p>
         </header>
 
         <div className="grid gap-10 sm:gap-6 sm:grid-cols-2 lg:grid-cols-4">
@@ -270,7 +279,7 @@ function ModeSelectionContent() {
             >
               <h3 className="font-display text-xl font-semibold text-[#2e2014]">Comment ça marche ?</h3>
               <p className="text-sm leading-relaxed text-[#6b573f]">
-                Blindify te fait écouter des extraits de musique. Tu dois deviner le titre et l'artiste le plus vite possible.
+                Blindz te fait écouter des extraits de musique. Tu dois deviner le titre et l'artiste le plus vite possible.
               </p>
 
               <div className="space-y-3">

@@ -11,6 +11,35 @@ import {
 import { persistGameResults, persistRoundResponses } from "./gamePersistence";
 
 const revealTimers = new Map<string, NodeJS.Timeout>();
+// Filet anti-blocage : la manche suivante part meme si un joueur AFK n'envoie
+// jamais son "ready" (tel verrouille, onglet en fond...). Sans ca, toute la
+// table reste coincee sur l'ecran de reveal.
+const advanceTimers = new Map<string, NodeJS.Timeout>();
+const READY_GRACE_MS = 10_000;
+
+function clearAdvanceTimer(roomCode: string): void {
+  const t = advanceTimers.get(roomCode);
+  if (t) {
+    clearTimeout(t);
+    advanceTimers.delete(roomCode);
+  }
+}
+
+export function scheduleForcedAdvance(io: IOServer, roomCode: string, revealedRound: number): void {
+  clearAdvanceTimer(roomCode);
+  if (finishedRooms.has(roomCode)) return;
+  const timer = setTimeout(() => {
+    advanceTimers.delete(roomCode);
+    if (finishedRooms.has(roomCode)) return;
+    const current = gameStateSnapshot(roomCode);
+    // N'avance que si on est TOUJOURS sur le reveal de la meme manche
+    // (sinon le chemin "tous prets" est deja passe par la).
+    if (!current || current.phase !== "REVEAL" || current.currentRound !== revealedRound) return;
+    logger.debug(`forced advance for ${roomCode} after ready grace (round ${revealedRound})`);
+    startRoundAndBroadcast(io, roomCode);
+  }, READY_GRACE_MS);
+  advanceTimers.set(roomCode, timer);
+}
 
 function emitState(io: IOServer, roomCode: string): GameState | undefined {
   const snapshot = gameStateSnapshot(roomCode);
@@ -79,6 +108,8 @@ export function scheduleReveal(io: IOServer, roomCode: string, revealAt: number)
       void persistRoundResponses(updated, getSessionId(roomCode));
       if (updated.phase === "FINISHED") {
         broadcastGameOver(io, roomCode);
+      } else if (updated.phase === "REVEAL") {
+        scheduleForcedAdvance(io, roomCode, updated.currentRound);
       }
     }
   }, delay);
@@ -90,6 +121,8 @@ export function startRoundAndBroadcast(
   roomCode: string,
   opts?: { forceRound?: number; startAt?: number }
 ): GameState | undefined {
+  // Une nouvelle manche demarre : le filet anti-AFK de la precedente est obsolete.
+  clearAdvanceTimer(roomCode);
   const state = startNextRound(roomCode, opts);
   logger.debug(`startRoundAndBroadcast ${roomCode}: round=${state?.currentRound}, phase=${state?.phase}, revealAt=${state?.timing?.revealAt}`);
   if (!state) return undefined;
@@ -124,6 +157,7 @@ export function broadcastGameOver(io: IOServer, roomCode: string) {
   // Persist final scores/stats before the in-memory state is dropped.
   void persistGameResults(snapshot, getSessionId(roomCode));
   revealTimers.delete(roomCode);
+  clearAdvanceTimer(roomCode);
   clearGame(roomCode);
   // Clean up the guard after a short delay to avoid memory leak.
   // unref so this housekeeping timer never keeps the process alive.

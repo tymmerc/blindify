@@ -8,11 +8,11 @@ const plans = [
     name: "Gratuit",
     price: "0\u20ac",
     period: "pour toujours",
-    description: "Parfait pour decouvrir Blindify",
+    description: "Parfait pour découvrir Blindz",
     features: [
-      "Parties illimitees",
+      "Parties illimitées",
       "Connexion Spotify",
-      "Jusqu'a 4 joueurs par partie",
+      "Jusqu'à 4 joueurs par partie",
       "Playlists personnelles",
       "Support communautaire",
     ],
@@ -23,14 +23,14 @@ const plans = [
     name: "Pro",
     price: "4,99\u20ac",
     period: "par mois",
-    description: "Pour les passionnes de musique",
+    description: "Pour les passionnés de musique",
     features: [
       "Tout du plan Gratuit",
-      "Jusqu'a 20 joueurs par partie",
-      "Blindtests personnalises",
-      "Statistiques avancees",
+      "Jusqu'à 20 joueurs par partie",
+      "Blindtests personnalisés",
+      "Statistiques avancées",
       "Badges exclusifs",
-      "Sans publicite",
+      "Sans publicité",
       "Support prioritaire",
     ],
     cta: "Essayer 14 jours gratuits",
@@ -40,13 +40,13 @@ const plans = [
     name: "Entreprise",
     price: "Sur mesure",
     period: "contactez-nous",
-    description: "Pour les evenements et entreprises",
+    description: "Pour les événements et entreprises",
     features: [
       "Tout du plan Pro",
-      "Joueurs illimites",
-      "Branding personnalise",
-      "API et integrations",
-      "Gestionnaire de compte dedie",
+      "Joueurs illimités",
+      "Branding personnalisé",
+      "API et intégrations",
+      "Gestionnaire de compte dédié",
       "Formation et onboarding",
       "SLA garanti",
     ],
@@ -64,7 +64,7 @@ export function Pricing() {
             Choisissez votre <em className="font-medium italic text-[#c65133]">formule</em>
           </h2>
           <p className="text-xl text-[#6b573f] max-w-2xl mx-auto text-pretty">
-            Des tarifs transparents adaptes a tous les besoins, sans engagement
+            Des tarifs transparents adaptés à tous les besoins, sans engagement
           </p>
         </div>
 

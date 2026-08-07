@@ -65,6 +65,8 @@ export const api = {
     questionCount?: number
     autoAdvance?: boolean
     nickname?: string
+    mode?: "friends" | "event" | "streamer"
+    hostPlays?: boolean
   }): Promise<{ room: MultiplayerRoom }> {
     return clientApi.createRoom(options)
   },
@@ -109,6 +111,12 @@ export const api = {
   },
   async setRoomPreference(code: string, payload: { source: string; playlistId?: string | null }) {
     return clientApi.setRoomPreference(code, payload)
+  },
+  async roomRounds(code: string) {
+    return clientApi.roomRounds(code)
+  },
+  async updateRoomConfig(code: string, payload: { questionCount?: number; roundSeconds?: number }) {
+    return clientApi.updateRoomConfig(code, payload)
   },
   async startMultiplayerGame(
     code: string,
@@ -175,6 +183,9 @@ export const api = {
   }> {
     return clientApi.friendsActivity()
   },
+  async recentPlayers(): Promise<{ players: Array<{ userId: number; username: string | null; lastPlayed: string }> }> {
+    return clientApi.recentPlayers()
+  },
   async listInvitations(): Promise<{ invitations: RoomInvitation[] }> {
     return clientApi.pendingInvitations()
   },
@@ -192,8 +203,14 @@ export const api = {
   async logout(): Promise<void> {
     await clientApi.logout()
   },
+  async deleteAccount(): Promise<void> {
+    await clientApi.deleteAccount()
+  },
   async startGuestSession(nickname?: string): Promise<void> {
     await clientApi.createGuestSession(nickname)
+  },
+  async reportBug(message: string, pageUrl?: string) {
+    return clientApi.reportBug(message, pageUrl)
   },
   async detailedStats() {
     return clientApi.detailedStats()

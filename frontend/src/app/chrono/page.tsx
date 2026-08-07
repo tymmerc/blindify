@@ -62,7 +62,7 @@ function ChronoSelector() {
             </div>
             <p className="text-sm text-[#6b573f]">
               Profil ou playlist Spotify / Deezer.
-              Les titres s'enchainent, devine-les avant que le temps ne s'ecoule !
+              Les titres s'enchaînent, devine-les avant que le temps ne s'écoule !
             </p>
           </div>
 
@@ -85,7 +85,7 @@ function ChronoSelector() {
             {/* Duration selector */}
             <div className="space-y-1.5">
               <label className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">
-                Duree du chrono
+                Durée du chrono
               </label>
               <div className="flex gap-2">
                 {durationOptions.map(opt => (
@@ -129,13 +129,13 @@ function ChronoSelector() {
         <div className="flex flex-col gap-6 lg:flex-row">
           <div className="flex-1 space-y-3 rounded-md border-[1.5px] border-[rgba(46,32,20,.22)] bg-[#ece1c8] p-6 text-left shadow-[4px_4px_0_rgba(46,32,20,.12)]">
             <div className="flex items-center justify-between">
-              <h3 className="font-display text-lg font-semibold text-[#2e2014]">Comment ca marche</h3>
+              <h3 className="font-display text-lg font-semibold text-[#2e2014]">Comment ça marche</h3>
               <span className="rounded-full border-[1.5px] border-[#2e2014] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#2e2014]">
                 Rapide
               </span>
             </div>
             <ul className="space-y-2 text-sm text-[#6b573f] leading-relaxed list-disc list-inside">
-              <li>Le chrono demarre, les titres s'enchainent automatiquement</li>
+              <li>Le chrono démarre, les titres s'enchaînent automatiquement</li>
               <li>Devine le titre et/ou l'artiste le plus vite possible</li>
               <li>Pas de pause entre les titres -- chaque seconde compte</li>
             </ul>
@@ -150,8 +150,8 @@ function ChronoSelector() {
             </div>
             <ul className="space-y-2 text-sm text-[#6b573f] leading-relaxed list-disc list-inside">
               <li>Titre correct = 1 pt, Artiste correct = 1 pt</li>
-              <li>Pas de bonus : le score = tes bonnes reponses</li>
-              <li>Enchaine les bonnes reponses pour la serie (pour le style)</li>
+              <li>Pas de bonus : le score = tes bonnes réponses</li>
+              <li>Enchaîne les bonnes réponses pour la série (pour le style)</li>
             </ul>
           </div>
         </div>

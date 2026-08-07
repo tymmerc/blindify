@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 
 export interface HintButtonProps {
   track: { title: string; artist: string }
@@ -11,6 +11,13 @@ export interface HintButtonProps {
 export function HintButton({ track, disabled, onHintUsed }: HintButtonProps) {
   const [titleRevealed, setTitleRevealed] = useState(false)
   const [artistRevealed, setArtistRevealed] = useState(false)
+
+  // L'indice est propre a la manche : on le remet a zero des que le titre change,
+  // sinon "Commence par : X" fuit sur les manches suivantes.
+  useEffect(() => {
+    setTitleRevealed(false)
+    setArtistRevealed(false)
+  }, [track.title, track.artist])
 
   const handleTitleHint = useCallback(() => {
     if (titleRevealed || disabled) return

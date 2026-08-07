@@ -162,8 +162,8 @@ export function StreamerGameClient({
     switch (state?.phase) {
       case "LOBBY": return "En attente"
       case "STARTING_ROUND": return `Décompte... ${remaining}s`
-      case "GUESSING_CHAT": return isHost ? "Le chat répond" : "A toi de répondre"
-      case "GUESSING_STREAMER": return isHost ? "A toi de jouer" : "Le streamer répond"
+      case "GUESSING_CHAT": return isHost ? "Le chat répond" : "À toi de répondre"
+      case "GUESSING_STREAMER": return isHost ? "À toi de jouer" : "Le streamer répond"
       case "REVEAL_PARTIAL": return "Score du chat"
       case "REVEAL_FINAL": return "Révélation"
       case "ROUND_ENDED": return "Manche terminée"
@@ -200,7 +200,7 @@ export function StreamerGameClient({
                 <Mic className="relative h-4 w-4" style={{ color: accent }} />
               </div>
               <div>
-                <p className="text-[9px] uppercase tracking-[0.4em] text-[var(--muted)]">Blindify</p>
+                <p className="text-[9px] uppercase tracking-[0.4em] text-[var(--muted)]">Blindz</p>
                 <h1 className="text-lg font-semibold leading-tight">Mode Streamer</h1>
               </div>
             </div>
@@ -288,7 +288,7 @@ export function StreamerGameClient({
                       ? "Le streamer l'emporte !"
                       : (state?.chatWins ?? 0) > (state?.streamerWins ?? 0)
                         ? "Le chat l'emporte !"
-                        : "Egalite !"}
+                        : "Égalité !"}
                   </p>
                   {onExit && (
                     <button

@@ -9,19 +9,19 @@ const steps = [
     number: "01",
     title: "Connecte ton compte Spotify",
     description:
-      "Blindify utilise tes titres likes et tes playlists pour creer une experience adaptee a tes gouts.",
+      "Blindz utilise tes titres likés et tes playlists pour créer une expérience adaptée à tes goûts.",
   },
   {
     number: "02",
     title: "Choisis ta playlist",
     description:
-      "Utilise tes playlists, tes titres likes ou un mix auto. L'IA evite les repetitions entre manches.",
+      "Utilise tes playlists, tes titres likés ou un mix auto. L'IA évite les répétitions entre manches.",
   },
   {
     number: "03",
     title: "Invite tes amis",
     description:
-      "Cree une room, partage le code et affrontez-vous en direct. Mode host facon Kahoot disponible.",
+      "Crée une room, partage le code et affrontez-vous en direct. Mode host façon Kahoot disponible.",
   },
   {
     number: "04",
@@ -36,8 +36,8 @@ export function HowItWorks() {
     <section id="how-it-works" className="py-28 border-t-2 border-[#2e2014] bg-[#ece1c8]">
       <div className="max-w-7xl mx-auto px-6">
         <PageHeader
-          title="Comment ca marche"
-          subtitle="4 etapes simples pour lancer ton blindtest personnalise"
+          title="Comment ça marche"
+          subtitle="4 étapes simples pour lancer ton blindtest personnalisé"
         />
 
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">

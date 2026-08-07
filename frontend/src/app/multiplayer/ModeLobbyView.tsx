@@ -13,6 +13,8 @@ import type { MultiplayerGameState, MultiplayerParticipant, MultiplayerRoom, Sol
 import { StreamerGameClient } from "@/components/game/StreamerGameClient"
 import { MultiplayerGameClient } from "@/components/game/MultiplayerGameClient"
 import { useRoomChat } from "./hooks/useRoomChat"
+import { useLobbyRps } from "./hooks/useLobbyRps"
+import { ProfileImportBlock } from "@/components/import/ProfileImportBlock"
 import { Button } from "@/components/ui/button"
 import { useServerTime } from "@/hooks/useServerTime"
 import { useMode } from "@/contexts/ModeContext"
@@ -96,6 +98,8 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   const [userPayload, setUserPayload] = useState<CurrentUserPayload | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [errorAction, setErrorAction] = useState<{ label: string; onClick: () => void } | null>(null)
+  const [showMusicImport, setShowMusicImport] = useState(false)
   const [view, setView] = useState<LobbyViewState>("landing")
   const [lobby, dispatchLobby] = useReducer(lobbyReducer, initialLobbyContext)
   const [flowStarted, setFlowStarted] = useState<boolean>(Boolean(initialJoinCode || autojoin))
@@ -132,6 +136,10 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   const [gameState, setGameState] = useState<MultiplayerGameState | StreamerState | null>(null)
   const [starting, setStarting] = useState(false)
   const [joining, setJoining] = useState(false)
+  // Code d'erreur structure du dernier join (ex: "room_in_progress") : les vues
+  // s'en servent pour afficher un ecran adapte plutot qu'un bandeau generique.
+  const [errorCode, setErrorCode] = useState<string | null>(null)
+  const autoJoinedCodesRef = useRef<Set<string>>(new Set())
   const [importing, setImporting] = useState(false)
   // Bandeau d'erreur transitoire (room:error socket, resync...) - auto-efface.
   const [socketNotice, setSocketNotice] = useState<string | null>(null)
@@ -166,6 +174,12 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     socketConnected ? socketRef.current : null,
     room?.room_code ?? null
   )
+  // Pierre-feuille-ciseaux de lobby (mini-jeu d'attente).
+  const rps = useLobbyRps(
+    socketConnected ? socketRef.current : null,
+    room?.room_code ?? null,
+    userPayload?.user.id ?? 0
+  )
   const PENDING_EVENT_CODE_KEY = "blindify:pending_event_code"
   const PENDING_AUTH_REDIRECT_KEY = "blindify:post_auth_redirect"
   const handlersRef = useRef<{
@@ -180,6 +194,14 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   }>({})
   const roomRef = useRef<MultiplayerRoom | null>(null)
   const gameStateRef = useRef<MultiplayerGameState | StreamerState | null>(null)
+  // Reference vers ensureSocket (declare plus bas) pour les filets anti-gel.
+  const ensureSocketRef = useRef<(() => Socket) | null>(null)
+  // Reponse qui n'a pas pu partir (socket coupe) : renvoyee a la reconnexion.
+  const pendingAnswerRef = useRef<{
+    roomCode: string
+    round: number
+    payload: { roomCode: string; guessTitle: string; guessArtist: string; sourceUserId?: number | null; round: number }
+  } | null>(null)
   const userRef = useRef<CurrentUserPayload | null>(null)
   const currentUserId = userPayload?.user.id ?? 0
 
@@ -192,12 +214,14 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   const activeParticipants = useMemo(
     () => {
       const hostId = room?.host_user_id ?? null
-      if (mode === "event" || mode === "streamer") {
+      // En event "je joue aussi", l'hote est un joueur : on le garde dans la liste.
+      const hostIsPlayer = mode === "event" && room?.host_plays === true
+      if ((mode === "event" || mode === "streamer") && !hostIsPlayer) {
         return participants.filter(p => p.user_id !== hostId)
       }
       return participants
     },
-    [participants, mode, room?.host_user_id]
+    [participants, mode, room?.host_user_id, room?.host_plays]
   )
   const canStartGame =
     isHost &&
@@ -225,7 +249,9 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
           setGuest(existing.user.provider === "guest")
           setUserPayload(existing)
         } else {
-          // No session — auto-create a guest session
+          // Pas de session : on cree un invite automatiquement (guest-first).
+          // Le login n'est JAMAIS un barrage : si la creation echoue (429, reseau),
+          // on reessaie tout seul au lieu de rediriger vers /auth/login.
           try {
             const guest = await api.ensureUserSession(initialNickname || "Joueur")
             if (!active) return
@@ -233,21 +259,14 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
               setGuest(true)
               setUserPayload(guest)
             } else {
-              storePostAuthRedirect()
-              const ret = window.location.pathname + window.location.search
-              router.replace(`/auth/login?returnTo=${encodeURIComponent(ret)}`)
-              return
-            }
-          } catch (guestErr) {
-            const gstatus = (guestErr as { status?: number })?.status
-            if (gstatus === 429) {
               setRateLimited(true)
               retryTimer = setTimeout(() => { if (active) bootstrap() }, 4000)
               return
             }
-            storePostAuthRedirect()
-            const ret = window.location.pathname + window.location.search
-            router.replace(`/auth/login?returnTo=${encodeURIComponent(ret)}`)
+          } catch (guestErr) {
+            const gstatus = (guestErr as { status?: number })?.status
+            setRateLimited(gstatus === 429)
+            retryTimer = setTimeout(() => { if (active) bootstrap() }, 4000)
             return
           }
         }
@@ -263,6 +282,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         // Autre erreur reseau : laisser l'utilisateur reessayer manuellement.
         setRateLimited(false)
         setError("Connexion impossible pour l'instant. Verifie ta connexion et reessaie.")
+        setErrorAction(null)
       } finally {
         if (active) setLoading(false)
       }
@@ -319,6 +339,68 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     }, 25000)
     return () => clearTimeout(t)
   }, [gameState, room, showNotice])
+
+  // Filet anti-gel GUESSING : si le temps de la manche est ecoule depuis longtemps
+  // et qu'on est toujours en train de "deviner", c'est qu'on a rate le reveal
+  // (socket coupe pendant la manche). On resynchronise au lieu de rester fige.
+  useEffect(() => {
+    const gs = gameState as MultiplayerGameState | null
+    if (!gs || gs.phase !== "GUESSING" || !room) return
+    const revealAt = gs.timing?.revealAt
+    if (!revealAt) return
+    const delay = Math.max(5000, revealAt - Date.now() + 8000)
+    const round = gs.currentRound
+    const t = setTimeout(() => {
+      const still = gameStateRef.current as MultiplayerGameState | null
+      if (still?.phase !== "GUESSING" || still.currentRound !== round) return
+      const socket = socketRef.current
+      if (!socket?.connected) {
+        ensureSocketRef.current?.()
+        return
+      }
+      socket.emit("room:join", { roomCode: room.room_code })
+      socket.emit("game:sync", { roomCode: room.room_code })
+      showNotice("Resynchronisation de la partie…")
+    }, delay)
+    return () => clearTimeout(t)
+  }, [gameState, room, showNotice])
+
+  // Relance d'une reponse restee en attente. On ne peut PAS se reposer sur
+  // l'evenement "connect" : lors d'une coupure courte, socket.io ne se
+  // deconnecte jamais vraiment, donc aucune reconnexion n'est signalee.
+  // On retente donc periodiquement tant que la manche est en cours.
+  useEffect(() => {
+    const gs = gameState as MultiplayerGameState | null
+    if (!gs || gs.phase !== "GUESSING" || !room) return
+    const id = setInterval(() => {
+      const pending = pendingAnswerRef.current
+      if (!pending || pending.roomCode !== room.room_code) return
+      // Manche depassee : la reponse n'a plus de sens, on l'abandonne au lieu de
+      // la faire compter sur la chanson suivante.
+      if (pending.round !== gs.currentRound) { pendingAnswerRef.current = null; return }
+      const socket = socketRef.current
+      if (!socket) return
+      socket.timeout(4000).emit("game:answer", pending.payload, (err: unknown, res?: { ok?: boolean; reason?: string }) => {
+        if (pendingAnswerRef.current !== pending) return
+        if (!err && res?.ok) {
+          pendingAnswerRef.current = null
+          showNotice("Ta réponse a bien été envoyée.")
+          return
+        }
+        // Inutile d'insister si la manche est passee.
+        if (!err && (res?.reason === "round_over" || res?.reason === "stale_round")) {
+          pendingAnswerRef.current = null
+        }
+      })
+    }, 3000)
+    return () => clearInterval(id)
+  }, [gameState, room, showNotice])
+
+  // La manche est finie : une reponse en attente n'a plus de sens.
+  useEffect(() => {
+    const gs = gameState as MultiplayerGameState | null
+    if (gs && gs.phase !== "GUESSING") pendingAnswerRef.current = null
+  }, [gameState])
 
   useEffect(() => {
     gameStateRef.current = gameState
@@ -393,8 +475,15 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   }, [userPayload?.user, ensureSocket])
 
   const syncParticipants = useCallback((list: MultiplayerParticipant[]) => {
-    setParticipants(list)
+    // Preserve le statut de presence (active/away/disconnected) lors d'un refresh API.
+    setParticipants(prev => {
+      const statusBy = new Map(prev.map(p => [p.user_id, p.status]))
+      return list.map(p => ({ ...p, status: p.status ?? statusBy.get(p.user_id) ?? "active" as const }))
+    })
   }, [])
+
+  // Expose ensureSocket aux effets declares plus haut (filets anti-gel).
+  ensureSocketRef.current = ensureSocket
 
   const refreshParticipants = useCallback(
     async (roomCode: string) => {
@@ -406,6 +495,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         // Room not found → expired or deleted
         if (err instanceof ApiError && (err.status === 404 || err.status === 410)) {
           setError("La salle a expiré ou a été fermée. Crée-en une nouvelle.")
+          setErrorAction(null)
           dispatchLobby({ type: "error", message: "room_expired" })
           setRoom(null)
         }
@@ -414,6 +504,17 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     },
     [syncParticipants]
   )
+
+  // Presence : signale "absent" quand l'onglet passe en arriere-plan (alt-tab / minimise).
+  useEffect(() => {
+    if (!room?.room_code || !socketConnected) return
+    const socket = socketRef.current
+    if (!socket) return
+    const send = () => socket.emit("presence:state", { roomCode: room.room_code, state: document.hidden ? "away" : "active" })
+    document.addEventListener("visibilitychange", send)
+    send()
+    return () => document.removeEventListener("visibilitychange", send)
+  }, [room?.room_code, socketConnected])
 
   useEffect(() => {
     if (!room?.room_code) return
@@ -461,14 +562,13 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     (action?: PendingAction): boolean => {
       if (loading) return false
       if (userPayload) return true
+      // Guest-first : pas encore de session invite (creation en cours / retry).
+      // On memorise l'action et on laisse le bootstrap fournir l'invite, sans
+      // jamais rediriger vers le login.
       if (action) setPendingAction(action)
-      storePostAuthRedirect(action ?? null)
-      const currentPath = typeof window !== "undefined" ? window.location.pathname + window.location.search : ""
-      const returnTo = currentPath ? `?returnTo=${encodeURIComponent(currentPath)}` : ""
-      router.replace(`/auth/login${returnTo}`)
       return false
     },
-    [loading, router, storePostAuthRedirect, userPayload]
+    [loading, userPayload]
   )
 
   const resolveViewFromState = useCallback(
@@ -484,6 +584,18 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       return isFinished ? "results" : isPlaying ? "playing" : "waiting"
     },
     [mode]
+  )
+
+  // "results" est collant : une fois l'ecran de classement affiche, un broadcast
+  // d'etat de fond (presence, sync post-clearGame qui renvoie l'etat lobby) ne
+  // doit PAS l'ejecter vers la salle "dans la seconde". On ne quitte l'ecran de
+  // fin que pour une vraie nouvelle partie (playing) ou via action utilisateur
+  // (Rejouer / Retour, qui posent le view explicitement).
+  const viewRef = useRef<LobbyViewState>("landing")
+  const stickyResults = useCallback(
+    (next: LobbyViewState): LobbyViewState =>
+      viewRef.current === "results" && next !== "playing" ? "results" : next,
+    []
   )
 
   type LobbyActionType = "reset" | "hosting" | "waiting" | "playing" | "results"
@@ -505,6 +617,9 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     }
   }, [])
 
+  // Garde viewRef synchro avec le view courant pour que stickyResults lise l'etat commit.
+  viewRef.current = view
+
   const attachSocketListeners = useCallback(
     (roomCode: string) => {
       const socket = ensureSocket()
@@ -523,6 +638,11 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
 
       const presenceHandler = (payload: RoomPresenceEvent) => {
         if (payload.roomCode !== roomCode) return
+        if ((payload as { type?: string }).type === "members") {
+          const members = (payload as unknown as { members?: Array<{ userId: number; username: string | null; status: "active" | "away" | "disconnected" }> }).members ?? []
+          setParticipants(members.map(m => ({ user_id: m.userId, username: m.username ?? null, status: m.status })))
+          return
+        }
         if (payload.type === "joined") {
           const userId = payload.user?.id
           if (!userId) return
@@ -570,7 +690,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
           }
           return payload
         })
-        const nextView = resolveViewFromState(payload)
+        const nextView = stickyResults(resolveViewFromState(payload))
         setView(nextView)
         dispatchLobby({ type: viewToLobbyAction(nextView) })
       }
@@ -703,7 +823,23 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         })
       }
 
-      const connectHandler = () => emitJoin()
+      // Reconnexion : on rejoint, on force une resynchro de l'etat de jeu (sinon
+      // l'ecran reste fige sur la manche d'avant), et on renvoie la reponse qui
+      // n'etait pas partie a cause de la coupure.
+      const connectHandler = () => {
+        emitJoin()
+        socket.emit("game:sync", { roomCode })
+        const pending = pendingAnswerRef.current
+        const liveRound = (gameStateRef.current as MultiplayerGameState | null)?.currentRound ?? -1
+        if (pending && pending.roomCode === roomCode && pending.round === liveRound) {
+          pendingAnswerRef.current = null
+          socket.emit("game:answer", pending.payload)
+          showNotice("Reconnecté, ta réponse a bien été envoyée.")
+        } else if (pending) {
+          // La manche est passee pendant la coupure : on n'envoie rien.
+          pendingAnswerRef.current = null
+        }
+      }
       socket.on("connect", connectHandler)
       handlersRef.current.connect = connectHandler
 
@@ -720,7 +856,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
           if (latest.gameState) {
             const gs = latest.gameState
             setGameState(gs)
-            const nextView = resolveViewFromState(gs)
+            const nextView = stickyResults(resolveViewFromState(gs))
             setView(nextView)
             dispatchLobby({ type: viewToLobbyAction(nextView) })
           }
@@ -733,7 +869,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   )
 
   const handleCreateRoom = useCallback(
-    async (skipSpotify?: boolean) => {
+    async (skipSpotify?: boolean, hostPlays?: boolean) => {
       if (!requireSession({ type: "host" })) return
       if (!skipSpotify) {
         const ok = await ensureSpotify({ type: "host" })
@@ -747,7 +883,14 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         dispatchLobby({ type: "creating" })
         setFlowStarted(true)
         autoStartGameRef.current = false
-        const { room: created } = await api.createRoom({ questionCount: 10, nickname: initialNickname || undefined })
+        const { room: created } = await api.createRoom({ questionCount: 10, nickname: initialNickname || undefined, mode, hostPlays })
+        // Le code dans l'URL : un F5 de l'hote passe alors par le flux de rejoin
+        // au lieu de le renvoyer au choix de role en perdant sa salle.
+        try {
+          const url = new URL(window.location.href)
+          url.searchParams.set("code", created.room_code)
+          window.history.replaceState(null, "", url.toString())
+        } catch { /* URL API indisponible : tant pis, pas bloquant */ }
         setRoom(created)
         setGameState(null)
         setView("hosting")
@@ -774,7 +917,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     // Don't redirect here — the bootstrap effect already handles auth redirect
     // Just wait for userPayload to be available before auto-creating
     if (!userPayload) return
-    if (intent === "host" && !autoHostTriggered.current && view === "landing" && !room && (lobby.status === "idle" || lobby.status === "error")) {
+    if (intent === "host" && mode !== "event" && !autoHostTriggered.current && view === "landing" && !room && (lobby.status === "idle" || lobby.status === "error")) {
       autoHostTriggered.current = true
       handleCreateRoom()
     }
@@ -817,6 +960,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         dispatchLobby({ type: "joining" })
         setFlowStarted(true)
         const { room: joined } = await api.joinRoom(normalizedCode, initialNickname || undefined)
+        setErrorCode(null)
         setRoom(joined)
         setGameState(null)
         setView("waiting")
@@ -825,18 +969,65 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         const details = await api.roomDetails(joined.room_code)
         setRoom(details.room)
         syncParticipants(details.participants)
+        // L'hote qui revient par le flux de join (F5) retrouve SA vue, avec le
+        // QR et le bouton lancer, pas l'ecran d'attente des participants.
+        const myId = userRef.current?.user?.id
+        if (myId && details.room?.host_user_id === myId) {
+          setView("hosting")
+          dispatchLobby({ type: "hosting" })
+        }
+        // Retour en cours de partie (rechargement de page, appli fermee) : on
+        // remet le joueur directement dans la manche au lieu du salon d'attente.
+        if (details.room?.status === "in_progress") {
+          try {
+            const latest = await api.roomState(joined.room_code)
+            if (latest.gameState) {
+              setGameState(latest.gameState)
+              const nextView = stickyResults(resolveViewFromState(latest.gameState))
+              setView(nextView)
+              dispatchLobby({ type: viewToLobbyAction(nextView) })
+              if (latest.tracks?.length) setTracks(latest.tracks)
+            }
+          } catch (err) {
+            console.error("rejoin_state_failed", err)
+          }
+        }
       } catch (err) {
         console.error("join_room_failed", err)
+        const code = err instanceof ApiError ? err.code ?? null : null
+        setErrorCode(code)
         const message = err instanceof ApiError && err.message ? err.message : friendlyError(mode, "join")
-        setError(message)
+        // "Partie en cours" a son propre ecran d'attente : pas de bandeau en double.
+        setError(code === "room_in_progress" ? null : message)
         dispatchLobby({ type: "error", message })
         setFlowStarted(false)
       } finally {
         setJoining(false)
       }
     },
-    [attachSocketListeners, joining, lobby.status, syncParticipants, mode, ensureSpotify, requireSession]
+    [
+      attachSocketListeners,
+      joining,
+      lobby.status,
+      syncParticipants,
+      mode,
+      ensureSpotify,
+      requireSession,
+      resolveViewFromState,
+      stickyResults,
+      viewToLobbyAction,
+    ]
   )
+
+  // Retardataire : on retente le join en douceur. Quand la partie se termine,
+  // il entre tout seul, sans avoir a marteler un bouton.
+  useEffect(() => {
+    if (errorCode !== "room_in_progress" || room) return
+    const code = joinCode.trim().toUpperCase()
+    if (!code) return
+    const id = setInterval(() => { joinRoomCode(code) }, 10_000)
+    return () => clearInterval(id)
+  }, [errorCode, room, joinCode, joinRoomCode])
 
   const handleJoinRoom = useCallback(
     async (event: React.FormEvent<HTMLFormElement>) => {
@@ -857,8 +1048,11 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   )
 
   const handleStartGame = useCallback(
-    async (skipSpotify?: boolean) => {
-      if (!room || !canStartGame) return
+    async (skipSpotify?: boolean, opts?: { restart?: boolean }) => {
+      if (!room) return
+      // "Rejouer" depuis l'ecran de fin : le lobby est en status playing/results,
+      // canStartGame est faux, mais le backend accepte le restart quand la partie est finie.
+      if (!opts?.restart && !canStartGame) return
       if (!skipSpotify) {
         const ok = await ensureSpotify({ type: "host" })
         if (!ok) return
@@ -866,6 +1060,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       try {
         setStarting(true)
         setError(null)
+        setErrorAction(null)
         dispatchLobby({ type: "starting" })
         // Pre-warm the audio element during this user interaction (click).
         // This unlocks autoplay so the round start audio plays without manual click.
@@ -897,7 +1092,8 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       } catch (err) {
         console.error("start_multiplayer_failed", err)
         const status = (err as { status?: number })?.status
-        const code = (err as { error?: { code?: string } })?.error?.code
+        // Le code d'erreur API vit sur ApiError.code (l'enveloppe {error:{code}} est consommee par apiClient).
+        const code = err instanceof ApiError ? err.code : (err as { error?: { code?: string } })?.error?.code
         if (status === 409 && code === "room_locked") {
           try {
             const latest = await api.roomState(room.room_code)
@@ -917,7 +1113,20 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
             ? err.message
             : friendlyError(mode, "start")
         setError(message)
-        dispatchLobby({ type: "error", message })
+        // Manque de musique : au lieu de laisser l'hote recreer une salle, on lui
+        // propose d'aller directement au bloc d'import musique du lobby.
+        if (code === "need_more_music") {
+          setErrorAction({
+            label: "Ajouter de la musique",
+            onClick: () => setShowMusicImport(true),
+          })
+        } else {
+          setErrorAction(null)
+        }
+        // NE PAS passer le lobby en status "error" : ca desactive canStartGame pour
+        // toujours et l'hote ne peut plus relancer (il devait recreer une salle).
+        // Le bandeau est deja porte par setError ; on revient a l'etat relancable.
+        dispatchLobby({ type: "hosting" })
       } finally {
         setStarting(false)
       }
@@ -1055,7 +1264,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         if (latest.gameState) {
           const gs = latest.gameState
           setGameState(gs)
-          const nextView = resolveViewFromState(gs)
+          const nextView = stickyResults(resolveViewFromState(gs))
           setView(nextView)
           dispatchLobby({ type: viewToLobbyAction(nextView) })
         }
@@ -1069,12 +1278,12 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
 
   useEffect(() => {
     if (!gameState) return
-    const next = resolveViewFromState(gameState)
+    const next = stickyResults(resolveViewFromState(gameState))
     if (next !== view) {
       setView(next)
       dispatchLobby({ type: viewToLobbyAction(next) })
     }
-  }, [gameState, resolveViewFromState, viewToLobbyAction, view])
+  }, [gameState, resolveViewFromState, viewToLobbyAction, view, stickyResults])
 
   const scores = useMemo(() => {
     if (mode === "streamer") return {}
@@ -1101,6 +1310,10 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         score: p.score,
         accuracy: p.accuracy ?? 0,
         avatar: p.avatar,
+        // Sert aux "titres de la soiree" sur l'ecran de fin (rapidite, serie).
+        bestStreak: p.bestStreak ?? 0,
+        totalReactionMs: p.totalReactionMs ?? 0,
+        correct: p.correct ?? 0,
       }))
       .sort((a, b) => {
         if (b.score !== a.score) return b.score - a.score
@@ -1125,9 +1338,9 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     setView("landing")
     setFlowStarted(false)
     dispatchLobby({ type: "reset" })
-    // Retour a l'ecran d'entree (nom pre-rempli) : on peut re-choisir creer/rejoindre et
-    // n'importe quel mode. ENTRY_ROUTE[mode] renvoyait au meme mode -> on restait bloque dedans.
-    router.replace("/")
+    // Retour au CHOIX DES MODES, pas au tout debut du wizard : le nom et la musique
+    // sont deja poses, revenir a la saisie du nom etait percu comme "tout recommencer".
+    router.replace("/modes")
   }, [room, userPayload, router, mode])
 
   const handleChangeMode = useCallback(() => {
@@ -1164,32 +1377,22 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       setJoinCode(code.toUpperCase())
       return
     }
-    // For join-by-code, enforce Spotify only in streamer mode
-    if (mode === "streamer" && !hasSpotify) {
-      setJoinCode(code.toUpperCase())
-      setRequireSpotify(true)
-      return
-    }
+    // Un seul essai automatique par code. Sans ce garde-fou, un join en echec
+    // faisait basculer lobby.status en "error", ce qui recreait joinRoomCode,
+    // ce qui relancait l'effet : ~17 requetes/seconde depuis un seul telephone.
+    const normalized = code.trim().toUpperCase()
+    if (autoJoinedCodesRef.current.has(normalized)) return
+    autoJoinedCodesRef.current.add(normalized)
+    // Plus d'obligation Spotify : la musique vient de l'import par lien de profil.
     joinRoomCode(code)
   }, [initialJoinCode, autojoin, room, joinRoomCode, hasSpotify, mode, requireSession])
 
   const dataAttrs = modeDataAttrs(mode)
   const headerCopy = HEADER_COPY[mode]
 
-  useEffect(() => {
-    if (loading) return
-    if (!userPayload) {
-      storePostAuthRedirect(
-        pendingAction ?? (intent === "host"
-          ? { type: "host" }
-          : initialJoinCode
-            ? { type: "join", code: initialJoinCode }
-            : null),
-      )
-      const ret = typeof window !== "undefined" ? window.location.pathname + window.location.search : ""
-      router.replace(`/auth/login?returnTo=${encodeURIComponent(ret)}`)
-    }
-  }, [loading, userPayload, router, storePostAuthRedirect, pendingAction, intent, initialJoinCode])
+  // Guest-first : pas de gate login. Si userPayload est encore null apres le
+  // chargement, c'est que la creation d'invite est en cours (le bootstrap
+  // reessaie) et l'ecran d'attente s'affiche. On ne redirige jamais vers /auth/login.
 
   if (loading || !userPayload) {
     return (
@@ -1241,11 +1444,13 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     mode,
     modeConfig,
     view,
+    intent,
     lobbyStatus: lobby.status,
+    errorCode,
     joinCode,
     setJoinCode,
     joining,
-    onHost: handleCreateRoom,
+    onHost: (hostPlays?: boolean) => handleCreateRoom(undefined, hostPlays),
     onJoinSubmit: handleJoinRoom,
     room,
     participants: activeParticipants,
@@ -1269,6 +1474,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     onImportingChange: setImporting,
     chatMessages,
     onSendChat: room ? sendChat : undefined,
+    rps: room ? rps : undefined,
   }
 
   const streamerModeSelector =
@@ -1312,25 +1518,9 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   const stage: "entry" | "lobby" | "game" | "results" =
     view === "playing" ? "game" : view === "results" ? "results" : view === "landing" ? "entry" : "lobby"
 
-  const spotifyPrompt = requireSpotify ? (
-    <div className="fixed inset-0 z-30 grid place-items-center bg-[#2e2014]/40 px-6 text-center">
-      <div className="max-w-md rounded-md border-2 border-[#2e2014] bg-[#f4ecdb] p-8 shadow-[6px_6px_0_rgba(46,32,20,.25)]">
-        <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">Spotify requis</p>
-        <h3 className="mt-3 font-display text-2xl font-semibold text-[#2e2014]">Connecte ton Spotify</h3>
-        <p className="mt-2 text-sm text-[#6b573f]">
-          Les musiques sont tirées des comptes des joueurs. Connecte-toi pour rejoindre la salle{" "}
-          <span className="font-display font-bold text-[#c65133]">{joinCode || "(code)"}</span>.
-        </p>
-        <p className="mt-2 text-xs text-[#8a7558]">Après connexion, tu entres directement dans la room.</p>
-        <Button onClick={() => {
-          handleSpotifyConnect()
-          setRequireSpotify(false)
-        }} className="mt-6 w-full justify-center rounded-md border-2 border-[#2e2014] bg-[#c65133] font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] backdrop-blur-none transition hover:translate-x-[2px] hover:translate-y-[2px] hover:border-[#2e2014] hover:bg-[#c65133] hover:shadow-[2px_2px_0_#2e2014]">
-          Se connecter à Spotify
-        </Button>
-      </div>
-    </div>
-  ) : null
+  // Connexion OAuth Spotify retiree : la musique vient de l'import par lien de profil
+  // (l'API Spotify limite trop l'usage public). Plus aucun prompt "Connecter Spotify".
+  const spotifyPrompt = null
 
   // Guest mode no longer supported - all users must use Spotify
   const guestNotice = null
@@ -1378,13 +1568,35 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
           serverNow={serverNow}
           answerRejectSignal={answerRejectSignal}
           onAnswer={(guessTitle, guessArtist, sourceUserId) => {
+            // La manche est collee a la reponse : une relance apres coupure ne doit
+            // JAMAIS etre comptee sur la chanson suivante.
+            const answerRound = (gameStateRef.current as MultiplayerGameState | null)?.currentRound ?? 0
+            const payload = { roomCode: room.room_code, guessTitle, guessArtist, sourceUserId, round: answerRound }
             const socket = socketRef.current
             if (!socket || !socket.connected) {
-              showNotice("Connexion perdue, ta réponse n'est pas partie. Reconnexion…", true)
+              // On NE PERD PAS la reponse : elle part des que la connexion revient.
+              pendingAnswerRef.current = { roomCode: room.room_code, round: answerRound, payload }
+              showNotice("Connexion perdue. Ta réponse part dès la reconnexion…", true)
               ensureSocket()
-              return
+              return true
             }
-            socket.emit("game:answer", { roomCode: room.room_code, guessTitle, guessArtist, sourceUserId })
+            // On attend la CONFIRMATION du serveur. Sans ca, une coupure reseau
+            // silencieuse (socket.io met ~20s a la detecter) laisse la reponse
+            // partir dans le vide et le joueur bloque a 0.
+            socket.timeout(4000).emit("game:answer", payload, (err: unknown, res?: { ok?: boolean; reason?: string }) => {
+              if (!err && res?.ok) return
+              // Manche deja terminee : reessayer ne servirait qu'a faire compter
+              // la reponse sur la chanson suivante. On le dit franchement.
+              if (!err && (res?.reason === "round_over" || res?.reason === "stale_round")) {
+                pendingAnswerRef.current = null
+                showNotice("Trop tard, la manche était finie. Ta réponse n'a pas compté.", true)
+                return
+              }
+              pendingAnswerRef.current = { roomCode: room.room_code, round: answerRound, payload }
+              showNotice("Ta réponse n'est pas passée. Nouvel essai dès que le réseau revient…", true)
+              ensureSocket()
+            })
+            return true
           }}
           onReady={() => {
             const socket = socketRef.current
@@ -1416,9 +1628,11 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       <ResultsView
         leaderboard={leaderboard}
         tracks={tracks}
+        roomCode={room?.room_code}
         currentUserId={currentUserId}
         accentColor={accentColor}
         isHost={isHost}
+        isGuest={isGuest}
         onReturn={() => router.replace("/modes")}
         onReplay={async () => {
           if (!room || !isHost) return
@@ -1461,6 +1675,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       onChangeMode={handleChangeMode}
       hideHeader={view === "results" || view === "playing"}
       error={error || lobby.message}
+      errorAction={error ? errorAction : null}
       dataAttrs={dataAttrs}
       stage={stage}
       isGuest={isGuest}
@@ -1479,6 +1694,49 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         {content}
         {spotifyPrompt}
       </div>
+
+      {/* Raccourci "j'ai changé d'avis" : l'ajout de musique se fait normalement a
+          l'etape 2 du wizard. Si l'hote n'en a pas mis et que le lancement bloque,
+          on lui ouvre le menu d'import ici, sans quitter ni recreer la salle. */}
+      {showMusicImport ? (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-[#2e2014]/40 p-4"
+          onClick={() => setShowMusicImport(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-md border-2 border-[#2e2014] bg-[#f4ecdb] p-5 shadow-[6px_6px_0_rgba(46,32,20,.25)]"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="m-0 font-display text-lg font-semibold text-[#2e2014]">Ajoute ta musique</h3>
+              <button
+                type="button"
+                onClick={() => setShowMusicImport(false)}
+                aria-label="Fermer"
+                className="flex h-8 w-8 items-center justify-center rounded-full border-[1.5px] border-[#2e2014] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="mb-4 text-sm text-[#6b573f]">
+              Colle ton lien Spotify ou Deezer. Une fois importé, ferme et relance la partie.
+            </p>
+            <ProfileImportBlock
+              accent={mode === "event" ? "#e0a32e" : mode === "streamer" ? "#7d9471" : "#c65133"}
+              initialUrl={initialProfileUrl ?? undefined}
+              onImportingChange={setImporting}
+              hideHeader
+            />
+            <button
+              type="button"
+              onClick={() => { setShowMusicImport(false); setError(null); setErrorAction(null) }}
+              className="mt-4 w-full rounded-md border-2 border-[#2e2014] bg-[#ece1c8] px-4 py-2.5 text-sm font-bold text-[#2e2014] transition hover:bg-[#e0d4ba]"
+            >
+              C'est bon, revenir au lobby
+            </button>
+          </div>
+        </div>
+      ) : null}
     </LobbyShell>
   )
 }

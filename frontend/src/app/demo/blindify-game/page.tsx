@@ -41,7 +41,7 @@ const revealFields = [
 const phaseCopy: Record<Phase, { badge: string; title: string; helper: string }> = {
   guessing: {
     badge: "Live",
-    title: "Ecoute en cours",
+    title: "Écoute en cours",
     helper: "Capture le titre et l'artiste avant la fin du timer.",
   },
   locked: {
@@ -51,8 +51,8 @@ const phaseCopy: Record<Phase, { badge: string; title: string; helper: string }>
   },
   reveal: {
     badge: "Reveal",
-    title: "Le morceau se devoile",
-    helper: "Compare tes reponses a la piste originale.",
+    title: "Le morceau se dévoile",
+    helper: "Compare tes réponses à la piste originale.",
   },
 }
 
@@ -100,7 +100,7 @@ function VinylDisc({ size = 300 }: { size?: number }) {
   )
 }
 
-export default function BlindifyGamePage() {
+export default function BlindzGamePage() {
   const roundDuration = 15
   const [phase, setPhase] = useState<Phase>("guessing")
   const [timer, setTimer] = useState(roundDuration)
@@ -111,9 +111,9 @@ export default function BlindifyGamePage() {
     label: "",
   })
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
-    { user: "Sofia", text: "Prets ?", time: "00:12" },
+    { user: "Sofia", text: "Prêts ?", time: "00:12" },
     { user: "Lena", text: "Go", time: "00:10" },
-    { user: "Mathieu", text: "Dur celle-la", time: "00:05" },
+    { user: "Mathieu", text: "Dur celle-là", time: "00:05" },
   ])
   const [newMessage, setNewMessage] = useState("")
   const [selectedPlayer, setSelectedPlayer] = useState<string>("Vous")
@@ -153,7 +153,7 @@ export default function BlindifyGamePage() {
     setPhase("locked")
     setChatMessages(prev => [
       ...prev,
-      { user: "SYSTEM", text: "Reponse envoyee", time: "00:00", system: true },
+      { user: "SYSTEM", text: "Réponse envoyée", time: "00:00", system: true },
     ])
   }
 
@@ -257,7 +257,7 @@ const playerAnswerSamples: Record<string, PlayerAnswers | undefined> = {
                 <Clock className="relative h-5 w-5" style={{ color: timerColor }} />
               </div>
               <div>
-                <p className="text-[10px] uppercase tracking-[0.4em] text-[var(--muted)]">Blindify</p>
+                <p className="text-[10px] uppercase tracking-[0.4em] text-[var(--muted)]">Blindz</p>
                 <h1 className="text-2xl font-semibold" style={displayStyle}>
                   Mode amis
                 </h1>
@@ -342,7 +342,7 @@ const playerAnswerSamples: Record<string, PlayerAnswers | undefined> = {
 
                     <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-strong)] px-4 py-4">
                       <div className="text-xs uppercase tracking-[0.3em] text-[var(--muted)]">
-                        Reponses de {selectedPlayer}
+                        Réponses de {selectedPlayer}
                       </div>
                       <div className="mt-3 space-y-2">
                         {revealFields.map(field => {
@@ -376,7 +376,7 @@ const playerAnswerSamples: Record<string, PlayerAnswers | undefined> = {
                           {phase === "guessing"
                             ? "Extrait en cours"
                             : phase === "locked"
-                              ? "On finalise les reponses"
+                              ? "On finalise les réponses"
                               : "Reveal en cours"}
                         </span>
                       </div>
@@ -400,7 +400,7 @@ const playerAnswerSamples: Record<string, PlayerAnswers | undefined> = {
                           <span>Salle amis</span>
                           <span className="flex items-center gap-1">
                             <Users className="h-3.5 w-3.5" />
-                            {readyCount}/{waitingPlayers.length} prets
+                            {readyCount}/{waitingPlayers.length} prêts
                           </span>
                         </div>
                         <div className="mt-2 flex flex-wrap gap-2 text-xs">
@@ -434,7 +434,7 @@ const playerAnswerSamples: Record<string, PlayerAnswers | undefined> = {
               >
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div>
-                    <p className="text-xs uppercase tracking-[0.35em] text-[var(--muted)]">Ta reponse</p>
+                    <p className="text-xs uppercase tracking-[0.35em] text-[var(--muted)]">Ta réponse</p>
                     <h3 className="text-2xl font-semibold" style={displayStyle}>
                       Capture la track
                     </h3>
@@ -486,12 +486,12 @@ const playerAnswerSamples: Record<string, PlayerAnswers | undefined> = {
               >
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div>
-                    <p className="text-xs uppercase tracking-[0.35em] text-[var(--muted)]">Reponses verrouillees</p>
+                    <p className="text-xs uppercase tracking-[0.35em] text-[var(--muted)]">Réponses verrouillées</p>
                     <h3 className="text-2xl font-semibold" style={displayStyle}>
                       On attend le dernier joueur
                     </h3>
                     <p className="text-sm text-[var(--muted)]">
-                      La revelation demarre des que tout le monde a valide.
+                      La révélation démarre dès que tout le monde a validé.
                     </p>
                   </div>
                   <button

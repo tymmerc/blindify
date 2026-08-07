@@ -11,7 +11,7 @@ type SoloTab = "classic" | "chrono" | "challenge"
 const TABS: { key: SoloTab; label: string; accent: string }[] = [
   { key: "classic", label: "Classique", accent: "#c65133" },
   { key: "chrono", label: "Chrono", accent: "#e0a32e" },
-  { key: "challenge", label: "Defi", accent: "#7d9471" },
+  { key: "challenge", label: "Défi", accent: "#7d9471" },
 ]
 
 const roundOptions = [5, 10, 15, 20]
@@ -205,7 +205,7 @@ function ChronoForm() {
           </span>
         </div>
         <p className="text-sm text-[#6b573f]">
-          Les titres s&apos;enchainent, devine-les avant que le temps ne s&apos;ecoule.
+          Les titres s&apos;enchaînent, devine-les avant que le temps ne s&apos;écoule.
         </p>
       </div>
 
@@ -237,7 +237,7 @@ function ChronoForm() {
 
         <div className="space-y-1.5">
           <label className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">
-            Duree du chrono
+            Durée du chrono
           </label>
           <div className="flex gap-2">
             {durationOptions.map(opt => {
@@ -287,22 +287,22 @@ function ChallengeForm() {
   return (
     <div className="flex flex-col gap-5 rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-7 shadow-[4px_4px_0_rgba(46,32,20,.18)]">
       <div className="space-y-2">
-        <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#7d9471]">Face A · Defi</p>
+        <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#7d9471]">Face A · Défi</p>
         <div className="flex items-center gap-3 flex-wrap">
-          <h2 className="font-display text-2xl font-semibold text-[#2e2014]">Rejoindre un defi</h2>
+          <h2 className="font-display text-2xl font-semibold text-[#2e2014]">Rejoindre un défi</h2>
           <span className="rounded-full border-[1.5px] border-[#7d9471] bg-[#7d9471] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#f4ecdb]">
             Versus
           </span>
         </div>
         <p className="text-sm text-[#6b573f]">
-          Un ami t&apos;a envoye un code de defi ? Entre-le ici pour tenter de battre son score.
+          Un ami t&apos;a envoyé un code de défi ? Entre-le ici pour tenter de battre son score.
         </p>
       </div>
 
       <div className="space-y-4">
         <div className="space-y-1.5">
           <label htmlFor="challenge-code" className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">
-            Code du defi
+            Code du défi
           </label>
           <input
             id="challenge-code"
@@ -322,7 +322,7 @@ function ChallengeForm() {
           onClick={handleCodeSubmit}
           className="btn-neon w-full justify-center text-sm disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          Rejoindre le defi
+          Rejoindre le défi
         </button>
       </div>
     </div>
@@ -381,18 +381,18 @@ function SoloSelector() {
         {/* Info cards */}
         {tab === "classic" && (
           <div className="flex flex-col gap-6 lg:flex-row">
-            <InfoCard label="3 etapes" title="Comment ca marche">
+            <InfoCard label="3 étapes" title="Comment ça marche">
               <ul className="space-y-2 text-sm text-[#6b573f] leading-relaxed list-disc list-inside">
                 <li>Choisis un profil ou une playlist publique (Spotify ou Deezer)</li>
                 <li>Copie le lien depuis l&apos;app ou le navigateur</li>
-                <li>Ecoute les extraits, tape le titre et/ou l&apos;artiste pour marquer des points</li>
+                <li>Écoute les extraits, tape le titre et/ou l&apos;artiste pour marquer des points</li>
               </ul>
             </InfoCard>
 
-            <InfoCard label="Pro tip" title="Bon a savoir">
+            <InfoCard label="Pro tip" title="Bon à savoir">
               <ul className="space-y-2 text-sm text-[#6b573f] leading-relaxed list-disc list-inside">
-                <li>Les playlists doivent etre <strong className="text-[#2e2014]">publiques</strong> pour etre trouvees</li>
-                <li>Profils et playlists Spotify et Deezer sont tous supportes</li>
+                <li>Les playlists doivent être <strong className="text-[#2e2014]">publiques</strong> pour être trouvées</li>
+                <li>Profils et playlists Spotify et Deezer sont tous supportés</li>
                 <li>Les extraits audio viennent de Deezer (30 secondes par titre)</li>
               </ul>
             </InfoCard>
@@ -401,9 +401,9 @@ function SoloSelector() {
 
         {tab === "chrono" && (
           <div className="flex flex-col gap-6 lg:flex-row">
-            <InfoCard label="Rules" title="Comment ca marche">
+            <InfoCard label="Rules" title="Comment ça marche">
               <ul className="space-y-2 text-sm text-[#6b573f] leading-relaxed list-disc list-inside">
-                <li>Le chrono demarre, les titres s&apos;enchainent automatiquement</li>
+                <li>Le chrono démarre, les titres s&apos;enchaînent automatiquement</li>
                 <li>Devine le titre et/ou l&apos;artiste le plus vite possible</li>
                 <li>Pas de pause entre les titres, chaque seconde compte</li>
               </ul>
@@ -412,8 +412,8 @@ function SoloSelector() {
             <InfoCard label="Score" title="Scoring">
               <ul className="space-y-2 text-sm text-[#6b573f] leading-relaxed list-disc list-inside">
                 <li>Titre correct = 1 pt, Artiste correct = 1 pt</li>
-                <li>Pas de bonus : le score = tes bonnes reponses</li>
-                <li>Enchaine les bonnes reponses pour la serie (pour le style)</li>
+                <li>Pas de bonus : le score = tes bonnes réponses</li>
+                <li>Enchaîne les bonnes réponses pour la série (pour le style)</li>
               </ul>
             </InfoCard>
           </div>

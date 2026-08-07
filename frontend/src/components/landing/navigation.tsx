@@ -12,13 +12,13 @@ export function Navigation() {
             href="#features"
             className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#6b573f] hover:text-[#c65133] transition-colors"
           >
-            Fonctionnalites
+            Fonctionnalités
           </Link>
           <Link
             href="#how-it-works"
             className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#6b573f] hover:text-[#c65133] transition-colors"
           >
-            Comment ca marche
+            Comment ça marche
           </Link>
           <Link
             href="#pricing"

@@ -22,13 +22,13 @@ export function Footer() {
             <ul className="space-y-2 text-sm">
               <li><Link href="/profile" className="text-[#6b573f] hover:text-[#c65133] transition-colors">Profil</Link></li>
               <li><Link href="/stats" className="text-[#6b573f] hover:text-[#c65133] transition-colors">Stats</Link></li>
-              <li><Link href="/settings" className="text-[#6b573f] hover:text-[#c65133] transition-colors">Reglages</Link></li>
+              <li><Link href="/settings" className="text-[#6b573f] hover:text-[#c65133] transition-colors">Réglages</Link></li>
             </ul>
           </div>
         </div>
 
         <div className="border-t border-[rgba(46,32,20,.22)] pt-8 flex flex-col md:flex-row justify-between items-center text-sm text-[#6b573f]">
-          <p>&copy; 2025 Blindify. Tous droits reserves.</p>
+          <p>&copy; 2025 Blindz. Tous droits réservés.</p>
           <p className="mt-2 md:mt-0">
             Made with <span className="text-[#c65133]">&#9834;</span> for music
             lovers

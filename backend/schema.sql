@@ -260,3 +260,13 @@ DO $$
 BEGIN
     RAISE NOTICE '✅ Blindify universal schema ready';
 END $$;
+
+-- Reports de bug in-app (auth optionnelle : user_id nullable pour les invites)
+CREATE TABLE IF NOT EXISTS bug_reports (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    message TEXT NOT NULL,
+    page_url TEXT,
+    user_agent TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

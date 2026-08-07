@@ -2,19 +2,25 @@
 
 import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, ArrowRight, Plus, LogIn, Check } from "lucide-react"
+import { ArrowLeft, ArrowRight, Plus, LogIn, Check, ExternalLink, Loader2 } from "lucide-react"
 import { api } from "@/lib/api"
+import { publicPath } from "@/lib/publicPath"
 
 const NAME_KEY = "blindify_nickname"
 const URL_KEY = "blindify_profile_url"
 
 type Step = "nom" | "musique" | "action" | "code"
 
-function Shell({ dots, index, onBack, children }: { dots: number; index: number; onBack: (() => void) | null; children: React.ReactNode }) {
+function Shell({ dots, index, onBack, wide, children }: { dots: number; index: number; onBack: (() => void) | null; wide?: boolean; children: React.ReactNode }) {
   return (
     <div className="flex min-h-dvh flex-col px-5 pt-6 pb-8 sm:min-h-screen sm:flex-row sm:items-center sm:justify-center sm:py-10">
-      <div className="mx-auto flex w-full max-w-md flex-1 flex-col sm:block sm:flex-none">
-        <div className="flex h-7 shrink-0 items-center justify-between sm:mb-8 sm:h-auto">
+      <div className={`mx-auto flex w-full max-w-md flex-1 flex-col sm:block sm:flex-none ${wide ? "lg:max-w-4xl" : ""}`}>
+        <div className="flex h-8 shrink-0 items-center justify-between sm:mb-8 sm:h-auto">
+          <img
+            src={publicPath("/logo-mark.png")}
+            alt="Blindz"
+            className="h-8 w-8 object-contain sm:h-10 sm:w-10"
+          />
           {onBack ? (
             <button
               type="button"
@@ -27,7 +33,6 @@ function Shell({ dots, index, onBack, children }: { dots: number; index: number;
           ) : (
             <span />
           )}
-          <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-[#c65133]">Blindify</p>
         </div>
         <div className="mb-10 mt-8 flex shrink-0 items-center justify-center gap-1.5 sm:mt-0">
           {Array.from({ length: dots }).map((_, i) => (
@@ -56,6 +61,7 @@ export default function EntryWizard() {
   const [code, setCode] = useState("")
   const [codeError, setCodeError] = useState<string | null>(null)
   const [joinParam, setJoinParam] = useState("") // ?join=CODE (scan du QR "Autour d'une table")
+  const [tuto, setTuto] = useState<null | "spotify" | "deezer">(null)
   const nameRef = useRef<HTMLInputElement>(null)
   const codeRef = useRef<HTMLInputElement>(null)
 
@@ -108,6 +114,17 @@ export default function EntryWizard() {
         const sync = await api.importSyncAll(res.provider, ids, 50)
         count = sync.synced ?? 0
       }
+      // 0 titre = echec silencieux : avant, on affichait fierement "0 titres
+      // importes" en vert et on continuait, le joueur croyait avoir sa musique.
+      if (count === 0) {
+        setImportError(
+          ids.length === 0
+            ? "Aucune playlist publique trouvée sur ce profil. Vérifie que tes playlists sont publiques, ou colle le lien d'une playlist."
+            : "Aucun titre n'a pu être récupéré pour l'instant. Réessaie dans un moment."
+        )
+        setImporting(false)
+        return
+      }
       setSynced(count)
       try { localStorage.setItem(URL_KEY, link) } catch { /* ignore */ }
       // Enchaine tout seul sur l'etape suivante (court instant pour voir la confirmation)
@@ -123,6 +140,19 @@ export default function EntryWizard() {
   }
 
   // CRÉER : on va choisir le mode
+  const handlePaste = async () => {
+    try {
+      const text = await navigator.clipboard.readText()
+      if (text && text.trim()) {
+        setUrl(text.trim())
+        setSynced(null)
+        setImportError(null)
+      }
+    } catch {
+      // Presse-papier non accessible (permission refusee / navigateur) : on ignore.
+    }
+  }
+
   const handleCreate = async () => {
     if (going) return
     setGoing(true)
@@ -155,6 +185,10 @@ export default function EntryWizard() {
     return (
       <Shell dots={3} index={0} onBack={null}>
         <div className="space-y-3 text-center">
+          {/* Phrase de positionnement (SEO + les visiteurs comprennent direct) */}
+          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#c65133]">
+            Le blind test avec tes propres musiques
+          </p>
           <h1 className="font-display text-3xl font-semibold text-[#2e2014] sm:text-4xl">
             Comment tu t'<em className="font-medium italic text-[#c65133]">appelles</em> ?
           </h1>
@@ -201,42 +235,113 @@ export default function EntryWizard() {
       proceed()
     }
     return (
-      <Shell dots={3} index={1} onBack={() => setStep("nom")}>
+      <Shell dots={3} index={1} onBack={() => setStep("nom")} wide>
         <div className="space-y-3 text-center">
           <h1 className="font-display text-3xl font-semibold text-[#2e2014] sm:text-4xl">
             Ta <em className="font-medium italic text-[#c65133]">musique</em>
           </h1>
           <p className="text-sm text-[#6b573f]">Colle ton lien Spotify ou Deezer pour jouer avec tes propres titres.</p>
         </div>
-        <div className="mt-9 space-y-4">
-          <input
-            value={url}
-            onChange={e => { setUrl(e.target.value); setSynced(null); setImportError(null) }}
-            onKeyDown={e => { if (e.key === "Enter") onPrimary() }}
-            placeholder="https://open.spotify.com/..."
-            className="w-full rounded-md border-2 border-[#2e2014] bg-[#efe5d0] px-4 py-5 text-base text-[#2e2014] outline-none transition placeholder:italic placeholder:text-[#b3a182] focus:border-[#c65133]"
-            autoComplete="off"
-            inputMode="url"
-          />
+        {/* Sur PC : saisie a gauche, aides/tutos en colonne a droite. Mobile : pile inchangee. */}
+        <div className="mt-9 lg:grid lg:grid-cols-[minmax(0,1fr)_320px] lg:grid-rows-[auto_1fr] lg:items-start lg:gap-x-10">
+          <div className="relative lg:col-start-1 lg:row-start-1">
+            <input
+              value={url}
+              onChange={e => { setUrl(e.target.value); setSynced(null); setImportError(null) }}
+              onKeyDown={e => { if (e.key === "Enter") onPrimary() }}
+              placeholder="https://open.spotify.com/..."
+              className="w-full rounded-md border-2 border-[#2e2014] bg-[#efe5d0] py-5 pl-4 pr-24 text-base text-[#2e2014] outline-none transition placeholder:italic placeholder:text-[#b3a182] focus:border-[#c65133]"
+              autoComplete="off"
+              inputMode="url"
+            />
+            <button
+              type="button"
+              onClick={handlePaste}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md border-2 border-[#2e2014] bg-[#ece1c8] px-3 py-2 text-[13px] font-bold text-[#2e2014] shadow-[2px_2px_0_#2e2014] transition active:translate-x-[1px] active:translate-y-[1px] active:shadow-[1px_1px_0_#2e2014]"
+            >
+              Coller
+            </button>
+          </div>
 
+          <div className="mt-5 space-y-2.5 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:mt-0 lg:rounded-md lg:border-[1.5px] lg:border-[rgba(46,32,20,.25)] lg:bg-[#ece1c8] lg:p-5">
+            <p className="text-center text-[12px] text-[#6b573f]">Besoin de ton lien&nbsp;?</p>
+            <div className="flex flex-wrap justify-center gap-2">
+              {/* Nouvel onglet : on ne perd JAMAIS le wizard Blindz derriere. Le rebond
+                  app<->web est le comportement de Spotify/Deezer, pas le notre. */}
+              <a
+                href="https://open.spotify.com/collection/playlists"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 rounded-full border-[1.5px] border-[#2e2014] bg-[#ece1c8] px-3 py-1.5 text-[12px] font-bold text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+              >
+                Ouvrir Spotify <ExternalLink className="h-3 w-3" />
+              </a>
+              <a
+                href="https://www.deezer.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 rounded-full border-[1.5px] border-[#2e2014] bg-[#ece1c8] px-3 py-1.5 text-[12px] font-bold text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+              >
+                Ouvrir Deezer <ExternalLink className="h-3 w-3" />
+              </a>
+            </div>
+            <div className="flex justify-center gap-4 text-[12px] font-semibold">
+              <button type="button" onClick={() => setTuto(t => (t === "spotify" ? null : "spotify"))} className="underline decoration-[1.5px] underline-offset-2 text-[#6b573f] transition hover:text-[#2e2014]">
+                Comment copier mon lien Spotify&nbsp;?
+              </button>
+            </div>
+            <div className="flex justify-center text-[12px] font-semibold">
+              <button type="button" onClick={() => setTuto(t => (t === "deezer" ? null : "deezer"))} className="underline decoration-[1.5px] underline-offset-2 text-[#6b573f] transition hover:text-[#2e2014]">
+                Comment copier mon lien Deezer&nbsp;?
+              </button>
+            </div>
+            {tuto && (
+              <ol className="mx-auto max-w-sm space-y-1.5 rounded-xl border-[1.5px] border-[#2e2014] bg-[#ece1c8] p-4 text-left text-[13px] text-[#6b573f]">
+                {(tuto === "spotify"
+                  ? [
+                      "Ouvre Spotify et va sur ton profil (ton nom en haut).",
+                      "Touche les trois points ··· puis « Partager ».",
+                      "Choisis « Copier le lien du profil ».",
+                      "Reviens ici et colle le lien au-dessus.",
+                    ]
+                  : [
+                      "Ouvre Deezer et va sur ton profil.",
+                      "Touche « Partager » (ou les trois points ···).",
+                      "Choisis « Copier le lien ».",
+                      "Reviens ici et colle le lien au-dessus.",
+                    ]
+                ).map((s, i) => (
+                  <li key={i} className="flex gap-2">
+                    <span className="font-bold text-[#c65133]">{i + 1}.</span>
+                    <span>{s}</span>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </div>
+
+          <div className="mt-5 space-y-4 lg:col-start-1 lg:row-start-2">
           {importError && <p className="text-center text-[12px] font-bold text-[#9c2f1d]">{importError}</p>}
           {formatError && !importError && <p className="text-center text-[12px] font-bold text-[#9c2f1d]">Lien non reconnu. Mets un lien de playlist ou profil Spotify ou Deezer.</p>}
 
           {/* Le bouton SE TRANSFORME en confirmation verte quand l'import reussit (anim) */}
           <button
             type="button"
-            disabled={importing || going || synced !== null || formatError}
+            disabled={importing || going || formatError}
             onClick={onPrimary}
             className={`flex w-full items-center justify-center gap-2 overflow-hidden rounded-md border-2 border-[#2e2014] px-5 py-4 text-base font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] transition-all duration-300 disabled:cursor-default ${
               synced !== null
-                ? "scale-[1.02] bg-[#7d9471]"
+                ? "scale-[1.02] bg-[#7d9471] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#2e2014]"
                 : "bg-[#c65133] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#2e2014] disabled:opacity-60"
             }`}
           >
             {synced !== null ? (
+              // Reste cliquable : si on revient en arriere apres l'auto-avance, ce
+              // bouton sert de "Continuer" (sinon on etait coince sur cette etape).
               <span key="done" className="flex items-center gap-2 duration-300 animate-in fade-in zoom-in-95">
                 <Check size={18} className="duration-500 animate-in zoom-in spin-in-45" />
-                {synced} titre{synced > 1 ? "s" : ""} importé{synced > 1 ? "s" : ""}
+                {synced} titre{synced > 1 ? "s" : ""} importé{synced > 1 ? "s" : ""} · Continuer
+                <ArrowRight size={16} />
               </span>
             ) : importing ? (
               <span className="animate-pulse">Import en cours...</span>
@@ -250,8 +355,9 @@ export default function EntryWizard() {
             )}
           </button>
           <p className="text-center text-[11px] text-[#8a7558]">
-            Pas de lien ? Tu peux continuer, mais il faut au moins 2 joueurs avec leur musique pour lancer.
+            Pas de lien ? Tu peux continuer : il suffit qu&apos;une personne ramène une playlist (2 joueurs minimum).
           </p>
+          </div>
         </div>
       </Shell>
     )
@@ -272,10 +378,18 @@ export default function EntryWizard() {
             type="button"
             disabled={going}
             onClick={handleCreate}
-            className="flex w-full items-center justify-between gap-3 rounded-md border-2 border-[#2e2014] bg-[#c65133] px-5 py-4 text-left font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#2e2014] disabled:opacity-50"
+            className={`flex w-full items-center justify-between gap-3 rounded-md border-2 border-[#2e2014] bg-[#c65133] px-5 py-4 text-left font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#2e2014] disabled:cursor-default disabled:opacity-100 ${going ? "animate-pulse" : ""}`}
           >
-            <span className="flex items-center gap-3"><Plus size={18} /> Créer une partie</span>
-            <ArrowRight size={16} />
+            {going ? (
+              <span className="flex w-full items-center justify-center gap-2">
+                <Loader2 size={18} className="animate-spin" /> Création de la partie...
+              </span>
+            ) : (
+              <>
+                <span className="flex items-center gap-3"><Plus size={18} /> Créer une partie</span>
+                <ArrowRight size={16} />
+              </>
+            )}
           </button>
           <button
             type="button"

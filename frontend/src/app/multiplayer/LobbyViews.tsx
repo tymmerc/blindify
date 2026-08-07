@@ -1,8 +1,11 @@
 "use client"
 
-import { useCallback, useMemo, useState } from "react"
-import { ArrowLeft, Heart, PartyPopper, ShieldCheck } from "lucide-react"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import Link from "next/link"
+import { ArrowLeft, PartyPopper, ShieldCheck, Share2, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { ConfettiBurst } from "@/components/game/ConfettiBurst"
+import { InstallApp } from "@/components/InstallApp"
 import type { GameModeConfig } from "@/lib/gameModes"
 
 const UUID_LIKE_REGEX = /^[0-9a-fA-F-]{10,}$/
@@ -65,17 +68,29 @@ export function ResultsView({
   onReplay,
   accentColor,
   isHost = true,
+  isGuest = false,
+  roomCode,
 }: {
-  leaderboard: Array<{ userId: number; username: string | null; score: number; accuracy: number; avatar?: string | null }>
+  leaderboard: Array<{
+    userId: number
+    username: string | null
+    score: number
+    accuracy: number
+    avatar?: string | null
+    bestStreak?: number
+    totalReactionMs?: number
+    correct?: number
+  }>
   tracks: SoloTrack[]
   currentUserId?: number | null
   onReturn: () => void
   onReplay: () => void
   accentColor?: string
   isHost?: boolean
+  isGuest?: boolean
+  /** Code de la salle : sert a recuperer le bilan manche par manche. */
+  roomCode?: string | null
 }) {
-  const [liking, setLiking] = useState<Record<string, boolean>>({})
-  const [likedIds, setLikedIds] = useState<Set<string>>(new Set())
 
   const podium = leaderboard.slice(0, 3)
   const podiumOrdered = [podium[1], podium[0], podium[2]].filter(Boolean)
@@ -105,6 +120,120 @@ export function ResultsView({
     [contributorById]
   )
 
+  // "Titres de la soiree" : de quoi se chambrer meme quand on finit dernier.
+  // Bilan serveur : piege de la soiree + vrais temps de reponse par joueur.
+  // Declare avant les awards, qui s'en servent.
+  const [trap, setTrap] = useState<{ title: string | null; artist: string | null } | null>(null)
+  const [serverTimes, setServerTimes] = useState<Map<number, number>>(new Map())
+
+  const awards = useMemo(() => {
+    const named = (id: number) => leaderboard.find(e => e.userId === id)?.username || `Joueur ${id}`
+    const out: Array<{ emoji: string; label: string; who: string; detail: string }> = []
+
+    // Le plus rapide : moyenne REELLE des temps de reponse (source serveur).
+    // Sans ca on divisait le temps total, penalites de non-reponse comprises,
+    // par le nombre de manches parfaites -> des "40s" sur une manche de 20s.
+    const speedy = [...serverTimes.entries()]
+      .filter(([id]) => leaderboard.some(e => e.userId === id))
+      .map(([id, avg]) => ({ id, avg }))
+      .sort((a, b) => a.avg - b.avg)[0]
+    if (speedy) out.push({ emoji: "⚡", label: "Le plus rapide", who: named(speedy.id), detail: `${(speedy.avg / 1000).toFixed(1)}s en moyenne` })
+
+    // Meilleure serie de bonnes reponses d'affilee.
+    const streaky = [...leaderboard].sort((a, b) => (b.bestStreak ?? 0) - (a.bestStreak ?? 0))[0]
+    if (streaky && (streaky.bestStreak ?? 0) >= 2) {
+      out.push({ emoji: "🔥", label: "Meilleure série", who: named(streaky.userId), detail: `${streaky.bestStreak} d'affilée` })
+    }
+
+    // Le DJ : celui qui a ramene le plus de titres joues ce soir.
+    const counts = new Map<number, number>()
+    tracks.forEach(t => {
+      const meta = (t.metadata ?? {}) as Record<string, unknown>
+      const raw = (meta.owner_user_id as number | string | undefined) ?? undefined
+      const id = typeof raw === "string" ? Number(raw) : raw
+      if (id && leaderboard.some(e => e.userId === id)) counts.set(id, (counts.get(id) ?? 0) + 1)
+    })
+    const dj = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]
+    if (dj && dj[1] > 0) out.push({ emoji: "🎧", label: "DJ de la soirée", who: named(dj[0]), detail: `${dj[1]} titre${dj[1] > 1 ? "s" : ""}` })
+
+    return out
+  }, [leaderboard, tracks, serverTimes])
+
+  // Le piege (titre que personne n'a trouve) a exactement le meme format qu'une
+  // distinction : on le met dans la meme rangee plutot que dans un bloc a part.
+  const highlights = useMemo(
+    () =>
+      trap?.title
+        ? [
+            ...awards,
+            {
+              emoji: "🙈",
+              label: "Le piège de la soirée",
+              who: trap.title,
+              detail: `${trap.artist ?? ""} · personne ne l'a trouvé`,
+            },
+          ]
+        : awards,
+    [awards, trap]
+  )
+
+  // Ta ligne perso : indispensable quand on finit hors du podium.
+  const myRank = currentUserId ? leaderboard.findIndex(e => e.userId === currentUserId) : -1
+  const me = myRank >= 0 ? leaderboard[myRank] : null
+
+  useEffect(() => {
+    if (!roomCode) return
+    let alive = true
+    api.roomRounds(roomCode)
+      .then(res => {
+        if (!alive) return
+        // "correct" = au moins 1 point marque (et non titre+artiste parfaits),
+        // "answers" = reponses reellement tapees. Le piege, c'est une manche
+        // que des gens ont tentee sans que personne ne marque quoi que ce soit.
+        const missed = (res.rounds ?? []).filter(r => r.answers > 0 && r.correct === 0)
+        if (missed.length) setTrap({ title: missed[0].title, artist: missed[0].artist })
+        const times = new Map<number, number>()
+        ;(res.players ?? []).forEach(p => {
+          if (typeof p.avgMs === "number" && p.answered > 0) times.set(p.userId, p.avgMs)
+        })
+        setServerTimes(times)
+      })
+      .catch(() => { /* pas bloquant */ })
+    return () => { alive = false }
+  }, [roomCode])
+
+  // Recap perso de la partie (visible seulement si on a joue).
+  const myStats = me
+    ? [
+        { label: "Bonnes réponses", value: `${me.correct ?? 0}` },
+        ...((me.bestStreak ?? 0) >= 2 ? [{ label: "Meilleure série", value: `${me.bestStreak}` }] : []),
+        // Temps moyen : valeur serveur (vraies manches repondues), pas un ratio bancal.
+        ...(serverTimes.has(me.userId)
+          ? [{ label: "Temps moyen", value: `${((serverTimes.get(me.userId) ?? 0) / 1000).toFixed(1)}s` }]
+          : []),
+      ]
+    : []
+
+  const [tracksOpen, setTracksOpen] = useState(false)
+
+  const [shared, setShared] = useState(false)
+  const handleShare = async () => {
+    const winner = podium[0]
+    const text = winner
+      ? `${winner.username || "Le vainqueur"} remporte le blind test sur Blindz ! ${me ? `Moi : ${myRank + 1}e avec ${me.score} pts.` : ""}`
+      : "On vient de faire un blind test sur Blindz !"
+    const url = "https://blindz.app"
+    try {
+      if (typeof navigator !== "undefined" && navigator.share) {
+        await navigator.share({ title: "Blindz", text, url })
+      } else {
+        await navigator.clipboard.writeText(`${text} ${url}`)
+        setShared(true)
+        setTimeout(() => setShared(false), 2500)
+      }
+    } catch { /* partage annule : rien a faire */ }
+  }
+
   const initials = (name: string | null | undefined, id: number) => {
     const safe = name?.trim()
     if (safe) {
@@ -115,26 +244,10 @@ export function ResultsView({
     return `#${id}`.slice(0, 2)
   }
 
-  const handleLike = async (track: SoloTrack) => {
-    // likes.audio_source_id est un UUID FK : ne liker QUE si on a un vrai
-    // audioSourceId (un track_id Spotify ferait planter l'INSERT en 500).
-    const uuid =
-      track.audioSourceId ??
-      (UUID_LIKE_REGEX.test(track.track_id) ? track.track_id : null)
-    if (!uuid || liking[uuid]) return
-    setLiking(prev => ({ ...prev, [uuid]: true }))
-    try {
-      await api.addLike(currentUserId, uuid)
-      setLikedIds(prev => new Set(prev).add(uuid))
-    } catch (err) {
-      console.error("like_track_failed", err)
-    } finally {
-      setLiking(prev => ({ ...prev, [uuid]: false }))
-    }
-  }
 
   return (
-    <section className="flex flex-col gap-5 rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-4 text-center shadow-[4px_4px_0_rgba(46,32,20,.18)] sm:p-7">
+    <section className="relative flex flex-col gap-5 overflow-hidden rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-4 text-center shadow-[4px_4px_0_rgba(46,32,20,.18)] sm:p-7">
+      <ConfettiBurst />
       <style>{`
         @keyframes res-rise { from { opacity: 0; transform: translateY(18px) } to { opacity: 1; transform: translateY(0) } }
         @keyframes res-pop { from { opacity: 0; transform: scale(.4) rotate(-90deg) } to { opacity: 1; transform: scale(1) rotate(0) } }
@@ -165,8 +278,9 @@ export function ResultsView({
               {podium[0].username || `Joueur ${podium[0].userId}`}
             </h2>
             <p className="res-rise text-sm text-[#6b573f]" style={{ animationDelay: "0.6s" }}>
+              {/* score = des POINTS (2 par manche parfaite), pas un nombre de bonnes reponses */}
               {podium[0].score > 0
-                ? `${podium[0].score} ${podium[0].score > 1 ? "bonnes réponses" : "bonne réponse"} · ${podium[0].accuracy}% de précision · disque d'or de la session`
+                ? `${podium[0].score} ${podium[0].score > 1 ? "points" : "point"} · ${podium[0].accuracy}% de précision · disque d'or de la session`
                 : "Personne n'a marqué. On rejoue ?"}
             </p>
           </>
@@ -174,16 +288,20 @@ export function ResultsView({
       </div>
 
       <div className="flex flex-col items-center">
-        <div className="grid w-full max-w-4xl grid-cols-1 items-end gap-4 md:grid-cols-3 md:gap-6">
+        {/* Desktop : rangee centree. La grille en 3 colonnes fixes laissait un trou
+            beant des qu'on n'etait pas exactement 3 joueurs. */}
+        <div className="flex w-full max-w-4xl flex-col gap-4 md:flex-row md:items-end md:justify-center md:gap-6">
           {podiumOrdered.map((entry, idx) => {
             const rank = idx === 1 ? 1 : idx === 0 ? 2 : 3
-            const height = rank === 1 ? "min-h-[13rem]" : rank === 2 ? "min-h-[11rem]" : "min-h-[10rem]"
-            const colOrder = rank === 1 ? "md:col-start-2" : rank === 2 ? "md:col-start-1" : "md:col-start-3"
+            // Mobile : marches basses et pastilles reduites (le podium empile
+            // prenait presque un ecran entier). Desktop garde la hauteur d'origine.
+            const height = rank === 1 ? "min-h-[5rem] md:min-h-[13rem]" : rank === 2 ? "min-h-[4.5rem] md:min-h-[11rem]" : "min-h-[4.5rem] md:min-h-[10rem]"
+            const colOrder = rank === 1 ? "md:order-2" : rank === 2 ? "md:order-1" : "md:order-3"
             const borderColor = rank === 1 ? accent : "#2e2014"
             return (
-              <div key={entry!.userId} className={`res-rise flex flex-col items-center gap-3 ${colOrder}`} style={{ animationDelay: `${0.75 + idx * 0.15}s` }}>
+              <div key={entry!.userId} className={`res-rise flex flex-row items-center gap-3 md:flex-col ${colOrder}`} style={{ animationDelay: `${0.75 + idx * 0.15}s` }}>
                 <div
-                  className={`relative flex items-center justify-center overflow-hidden rounded-full border-2 border-[#2e2014] bg-[#f4ecdb] text-xl font-bold text-[#2e2014] ${rank === 1 ? "h-24 w-24" : "h-20 w-20"}`}
+                  className={`relative flex shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-[#2e2014] bg-[#f4ecdb] font-bold text-[#2e2014] ${rank === 1 ? "h-14 w-14 text-base md:h-24 md:w-24 md:text-xl" : "h-12 w-12 text-sm md:h-20 md:w-20 md:text-xl"}`}
                 >
                   {rank === 1 && (
                     <span
@@ -200,14 +318,16 @@ export function ResultsView({
                   )}
                 </div>
                 <div
-                  className={`flex w-48 flex-col items-center justify-end rounded-md border-2 px-4 pb-4 pt-5 text-[#2e2014] ${height}`}
+                  className={`flex w-full flex-row items-center gap-3 rounded-md border-2 px-4 py-3 text-left text-[#2e2014] md:w-48 md:flex-col md:justify-end md:px-4 md:pb-4 md:pt-5 md:text-center ${height}`}
                   style={{ borderColor, backgroundColor: "#f4ecdb", boxShadow: rank === 1 ? `4px 4px 0 ${accent}` : "4px 4px 0 rgba(46,32,20,.18)" }}
                 >
-                  <div className="font-display text-4xl font-black" style={{ color: rank === 1 ? accent : "#8a7558" }}>
+                  <div className="font-display text-2xl font-black md:text-4xl" style={{ color: rank === 1 ? accent : "#8a7558" }}>
                     {rank}
                   </div>
-                  <div className="mt-1 text-base font-semibold text-[#2e2014]">{entry!.username || `Joueur ${entry!.userId}`}</div>
-                  <div className="text-sm text-[#6b573f]">{entry!.score} pts • {entry!.accuracy}%</div>
+                  <div className="min-w-0 flex-1 md:flex-none">
+                    <div className="truncate text-base font-semibold text-[#2e2014] md:mt-1">{entry!.username || `Joueur ${entry!.userId}`}</div>
+                    <div className="text-sm text-[#6b573f]">{entry!.score} pts • {entry!.accuracy}%</div>
+                  </div>
                 </div>
               </div>
             )
@@ -216,22 +336,67 @@ export function ResultsView({
         {podium.length === 0 && <div className="text-sm text-[#8a7558]">Aucun score.</div>}
       </div>
 
+      {/* Titres de la soiree : chacun repart avec quelque chose. Le piege est du
+          meme format, il tient donc dans la meme rangee au lieu de trainer tout
+          seul en bandeau pleine largeur plus bas. */}
+      {highlights.length > 0 && (
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-center">
+          {highlights.map(a => (
+            <div
+              key={a.label}
+              className="res-rise flex items-center gap-3 rounded-md border-[1.5px] border-[rgba(46,32,20,.22)] bg-[#efe5d0] px-3 py-2.5 text-left sm:min-w-[14rem] sm:max-w-sm sm:flex-1"
+              style={{ animationDelay: "1.1s" }}
+            >
+              <span className="text-xl leading-none">{a.emoji}</span>
+              <div className="min-w-0">
+                <p className="m-0 text-[10px] font-bold uppercase tracking-[0.18em] text-[#8a7558]">{a.label}</p>
+                <p className="m-0 truncate font-display text-sm font-semibold text-[#2e2014]">{a.who}</p>
+                <p className="m-0 truncate text-[11px] text-[#6b573f]">{a.detail}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Ta place, quand tu n'es pas sur le podium */}
+      {me && myRank >= 3 && (
+        <div
+          className="flex items-center justify-between gap-3 rounded-md border-2 px-4 py-3 text-left"
+          style={{ borderColor: accent, background: `${accent}14` }}
+        >
+          <div className="flex items-center gap-3">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full border-2 border-[#2e2014] font-display text-sm font-bold text-[#2e2014]" style={{ background: accent }}>
+              {myRank + 1}
+            </span>
+            <div>
+              <p className="m-0 text-[10px] font-bold uppercase tracking-[0.18em] text-[#8a7558]">Ta place</p>
+              <p className="m-0 font-display text-base font-semibold text-[#2e2014]">{me.username || "Toi"}</p>
+            </div>
+          </div>
+          <p className="m-0 font-display text-lg font-bold text-[#2e2014]">{me.score} pts</p>
+        </div>
+      )}
+
       {rest.length ? (
-        <div className="rounded-md border-[1.5px] border-[rgba(46,32,20,.22)] bg-[#efe5d0]">
+        <div className="overflow-x-auto rounded-md border-[1.5px] border-[rgba(46,32,20,.22)] bg-[#efe5d0]">
           <table className="w-full text-left text-sm text-[#2e2014]">
             <thead className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">
               <tr>
-                <th className="px-6 py-3">Rank</th>
-                <th className="px-6 py-3">Player</th>
+                <th className="px-6 py-3">Place</th>
+                <th className="px-6 py-3">Joueur</th>
                 <th className="px-6 py-3 text-right">Score</th>
-                <th className="px-6 py-3 text-right">Accuracy</th>
+                <th className="px-6 py-3 text-right">Précision</th>
               </tr>
             </thead>
             <tbody>
               {rest.map((entry, index) => (
-                <tr key={entry.userId} className="border-t border-dotted border-[rgba(46,32,20,.45)]">
+                <tr
+                  key={entry.userId}
+                  className="border-t border-dotted border-[rgba(46,32,20,.45)]"
+                  style={entry.userId === currentUserId ? { background: `${accent}12` } : undefined}
+                >
                   <td className="px-6 py-3">{index + 4}</td>
-                  <td className="px-6 py-3">{entry.username || `Player #${entry.userId}`}</td>
+                  <td className="px-6 py-3">{entry.username || `Joueur ${entry.userId}`}</td>
                   <td className="px-6 py-3 text-right font-semibold text-[#2e2014]">{entry.score}</td>
                   <td className="px-6 py-3 text-right text-[#6b573f]">{entry.accuracy}%</td>
                 </tr>
@@ -241,15 +406,35 @@ export function ResultsView({
         </div>
       ) : null}
 
-      <div className="rounded-md border-[1.5px] border-[rgba(46,32,20,.22)] bg-[#efe5d0] p-5 text-left">
-        <div className="mb-3 flex items-center justify-between">
-          <div>
-            <h3 className="font-display text-lg font-semibold text-[#2e2014]">Titres joués</h3>
-            <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">Joueur source affiché et ajout aux likes</p>
-          </div>
-          <span className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">{tracks.length} titre(s)</span>
+      {/* Recap perso de la partie */}
+      {myStats.length > 0 && (
+        <div className="grid grid-cols-3 gap-2">
+          {myStats.map(s => (
+            <div key={s.label} className="rounded-md border-[1.5px] border-[rgba(46,32,20,.22)] bg-[#efe5d0] px-2 py-2.5 text-center">
+              <p className="m-0 font-display text-xl font-bold text-[#2e2014]">{s.value}</p>
+              <p className="m-0 text-[9px] font-bold uppercase tracking-[0.14em] text-[#8a7558]">{s.label}</p>
+            </div>
+          ))}
         </div>
-        <div className="grid gap-2 sm:grid-cols-2">
+      )}
+
+      {/* Titres joues : replies par defaut (la liste mangeait tout l'ecran) */}
+      <div className="rounded-md border-[1.5px] border-[rgba(46,32,20,.22)] bg-[#efe5d0] p-4 text-left sm:p-5">
+        <button
+          type="button"
+          onClick={() => setTracksOpen(o => !o)}
+          className="flex w-full items-center justify-between gap-3 text-left"
+          aria-expanded={tracksOpen}
+        >
+          <div className="min-w-0">
+            <h3 className="m-0 font-display text-lg font-semibold text-[#2e2014]">Titres joués</h3>
+            <p className="m-0 text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">{tracks.length} titre(s) · qui les a ramenés</p>
+          </div>
+          <ChevronDown
+            className={`h-5 w-5 shrink-0 text-[#6b573f] transition-transform ${tracksOpen ? "rotate-180" : ""}`}
+          />
+        </button>
+        <div className={`grid gap-2 sm:grid-cols-2 ${tracksOpen ? "mt-4" : "hidden"}`}>
           {tracks.length === 0 ? (
             <p className="text-sm text-[#8a7558]">Aucun titre disponible.</p>
           ) : (
@@ -257,8 +442,6 @@ export function ResultsView({
               const owner = resolveContributor(track)
               const id =
                 track.audioSourceId ?? (UUID_LIKE_REGEX.test(track.track_id) ? track.track_id : null)
-              const isLiking = liking[id ?? ""] || false
-              const isLiked = likedIds.has(id ?? "")
               return (
                 <div
                   key={`${id}-${idx}`}
@@ -275,14 +458,6 @@ export function ResultsView({
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    <button
-                      disabled={!id || isLiking}
-                      onClick={() => handleLike(track)}
-                      className={`flex h-9 w-9 items-center justify-center rounded-full border-[1.5px] transition ${isLiked ? "border-[#c65133] bg-[#c65133] text-[#f4ecdb]" : "border-[rgba(46,32,20,.35)] bg-[#f4ecdb] text-[#2e2014] hover:border-[#c65133] hover:text-[#c65133]"}`}
-                      title="Ajouter aux likes"
-                    >
-                      <Heart className={`h-4 w-4 ${isLiked ? "fill-current" : ""}`} />
-                    </button>
                     <span className="text-xs text-[#8a7558]">#{idx + 1}</span>
                   </div>
                 </div>
@@ -292,7 +467,33 @@ export function ResultsView({
         </div>
       </div>
 
-      <div className="flex justify-center gap-4">
+      {isGuest && (
+        <div className="mx-auto mb-5 flex max-w-md flex-col items-center gap-1.5 rounded-2xl border-2 border-[#2e2014] bg-[#efe5d0] px-5 py-4 text-center shadow-[4px_4px_0_rgba(46,32,20,.14)]">
+          <p className="m-0 font-display text-base font-semibold text-[#2e2014]">Garde ton score</p>
+          <p className="m-0 text-[13px] text-[#6b573f]">Tes parties sont gardées sur cet appareil. Un pseudo et un mot de passe suffisent pour les retrouver sur ton ordi ou un autre téléphone.</p>
+          <Link
+            href="/auth/login"
+            className="mt-1.5 rounded-full border-2 border-[#2e2014] bg-[#c65133] px-5 py-2 text-sm font-bold text-[#f4ecdb] shadow-[3px_3px_0_#2e2014] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_#2e2014]"
+          >
+            Crée un compte
+          </Link>
+        </div>
+      )}
+
+      {/* Fin de partie = le meilleur moment pour proposer l'install (les gens viennent de jouer) */}
+      <div className="mx-auto mb-5 max-w-md">
+        <InstallApp />
+      </div>
+
+      <div className="flex flex-wrap justify-center gap-3">
+        <Button
+          variant="outline"
+          onClick={handleShare}
+          className="gap-2 rounded-full border-[1.5px] border-[#2e2014] bg-transparent px-4 py-2 text-sm font-bold text-[#2e2014] hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+        >
+          <Share2 className="h-4 w-4" />
+          {shared ? "Copié !" : "Partager"}
+        </Button>
         <Button
           variant="outline"
           onClick={onReturn}

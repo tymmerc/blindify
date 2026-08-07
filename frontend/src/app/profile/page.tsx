@@ -6,14 +6,14 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { api, type CurrentUserPayload } from "@/lib/api"
 import type { GameSessionSummary, UserSummary, UserStats } from "@/lib/types"
-import { BottomNav } from "@/components/BottomNav"
+import { AccountMenu } from "@/components/AccountMenu"
 
 const achievements = [
-  { icon: "TROPHY", name: "Premiere victoire", desc: "Gagner votre premiere partie", unlocked: true },
-  { icon: "FIRE", name: "En feu", desc: "10 bonnes reponses d'affilee", unlocked: true },
-  { icon: "BOLT", name: "Eclair", desc: "Repondre en moins de 3 secondes", unlocked: true },
+  { icon: "TROPHY", name: "Première victoire", desc: "Gagner votre première partie", unlocked: true },
+  { icon: "FIRE", name: "En feu", desc: "10 bonnes réponses d'affilée", unlocked: true },
+  { icon: "BOLT", name: "Éclair", desc: "Répondre en moins de 3 secondes", unlocked: true },
   { icon: "PERFECT", name: "Perfection", desc: "Score parfait 20/20", unlocked: false },
-  { icon: "MUSIC", name: "Melomane", desc: "Jouer 100 parties", unlocked: true },
+  { icon: "MUSIC", name: "Mélomane", desc: "Jouer 100 parties", unlocked: true },
   { icon: "CROWN", name: "Champion", desc: "Gagner 50 parties en multijoueur", unlocked: false },
 ]
 
@@ -30,7 +30,7 @@ function formatAccuracy(value: number | null | undefined): string {
 }
 
 function stateLabel(state: string): string {
-  if (state === "finished") return "Termine"
+  if (state === "finished") return "Terminé"
   if (state === "in_progress") return "En cours"
   return state || "-"
 }
@@ -46,12 +46,14 @@ export default function ProfilePage() {
     let active = true
     async function guard() {
       try {
-        const me = await api.checkAuth()
+        let me = await api.checkAuth()
         if (!active) return
         if (!me) {
-          router.replace("/auth/login")
-          return
+          // Guest-first : on cree un invite au lieu de forcer le login.
+          me = await api.ensureUserSession()
+          if (!active) return
         }
+        if (!me) return
         setUserPayload(me)
         const [statsRes, historyRes] = await Promise.all([api.detailedStats(), api.gameHistory()])
         if (!active) return
@@ -87,9 +89,9 @@ export default function ProfilePage() {
     const avgTime = stats?.averageReactionTime ?? 0
     return [
       { label: "Parties", value: `${totalGames}`, color: "#c65133" },
-      { label: "Precision", value: accuracy, color: "#e0a32e" },
+      { label: "Précision", value: accuracy, color: "#e0a32e" },
       { label: "Temps moyen", value: avgTime ? `${avgTime} ms` : "-", color: "#7d9471" },
-      { label: "Serie max", value: `${bestStreak}`, color: "#a8b8c8" },
+      { label: "Série max", value: `${bestStreak}`, color: "#a8b8c8" },
     ]
   }, [stats])
 
@@ -216,7 +218,7 @@ export default function ProfilePage() {
           </div>
         </section>
       </div>
-      <BottomNav active="profile" />
+      <AccountMenu active="profile" />
     </div>
   )
 }

@@ -76,6 +76,40 @@ function emitExpired(expired: ExpiredInvitation[]): void {
 }
 
 export const invitationsController = {
+  /**
+   * Joueurs avec qui on a joue recemment (30 jours), les plus recents d'abord.
+   * Permet de relancer une partie avec les memes potes sans systeme d'amis.
+   */
+  async recentPlayers(req: Request, res: Response): Promise<void> {
+    const context = await getSessionContext(req, res);
+    if (!context) return;
+
+    const { rows } = await pool.query<{ user_id: number; username: string | null; last_played: string }>(
+      `SELECT other.user_id,
+              COALESCE(other.nickname, u.username) AS username,
+              MAX(r.created_at) AS last_played
+       FROM room_participants me
+       JOIN room_participants other
+         ON other.room_id = me.room_id AND other.user_id <> me.user_id
+       JOIN multiplayer_rooms r ON r.id = me.room_id
+       JOIN users u ON u.id = other.user_id
+       WHERE me.user_id = $1
+         AND r.created_at > NOW() - INTERVAL '30 days'
+       GROUP BY other.user_id, COALESCE(other.nickname, u.username)
+       ORDER BY last_played DESC
+       LIMIT 8`,
+      [context.user.id]
+    );
+
+    ok(res, {
+      players: rows.map(r => ({
+        userId: r.user_id,
+        username: r.username,
+        lastPlayed: r.last_played,
+      })),
+    });
+  },
+
   async send(req: Request, res: Response): Promise<void> {
     const context = await getSessionContext(req, res);
     if (!context) return;

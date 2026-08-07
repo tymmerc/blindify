@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { ExternalLink } from "lucide-react"
 import { api } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 
@@ -39,7 +40,7 @@ export function ProfileImportBlock({ accent = "#c65133", onImportingChange, init
     try {
       const result = await api.importPlaylists(trimmed)
       if (result.playlists.length === 0) {
-        setError("Aucune playlist publique trouvee.")
+        setError("Aucune playlist publique trouvée.")
         updateState("idle")
         return
       }
@@ -81,7 +82,7 @@ export function ProfileImportBlock({ accent = "#c65133", onImportingChange, init
           </div>
         ) : (
           <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: accent }}>
-            <span>{syncedCount} titre{syncedCount > 1 ? "s" : ""} importe{syncedCount > 1 ? "s" : ""}</span>
+            <span>{syncedCount} titre{syncedCount > 1 ? "s" : ""} importé{syncedCount > 1 ? "s" : ""}</span>
           </div>
         )}
         <p className="text-[10px] text-[#8a7558]">
@@ -125,10 +126,29 @@ export function ProfileImportBlock({ accent = "#c65133", onImportingChange, init
           {state === "loading" ? "..." : state === "syncing" ? `${playlistCount} pl...` : "Go"}
         </Button>
       </form>
+      <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-[#8a7558]">
+        <span>Besoin de ton lien&nbsp;?</span>
+        <a
+          href="https://open.spotify.com/collection/playlists"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 rounded-full border-[1.5px] border-[#2e2014] bg-[#ece1c8] px-2.5 py-1 font-bold text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+        >
+          Ouvrir Spotify <ExternalLink className="h-3 w-3" />
+        </a>
+        <a
+          href="https://www.deezer.com/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 rounded-full border-[1.5px] border-[#2e2014] bg-[#ece1c8] px-2.5 py-1 font-bold text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+        >
+          Ouvrir Deezer <ExternalLink className="h-3 w-3" />
+        </a>
+      </div>
       <p className="text-[10px] text-[#8a7558]">
         {state === "syncing"
           ? "Import de toutes les playlists en cours..."
-          : "Toutes les playlists publiques seront importees."}
+          : "Toutes les playlists publiques seront importées."}
       </p>
       {error && <p className="text-xs font-bold text-[#9c2f1d]">{error}</p>}
     </div>

@@ -6,7 +6,7 @@ import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { api } from "@/lib/api"
 import type { GameHistoryEntry } from "@/lib/types"
-import { BottomNav } from "@/components/BottomNav"
+import { AccountMenu } from "@/components/AccountMenu"
 
 function formatDateFr(dateString: string): string {
   const date = new Date(dateString)
@@ -93,7 +93,7 @@ function TrackThumbnails({ tracks }: { tracks: GameHistoryEntry["tracks"] }) {
 
 function TrackList({ tracks }: { tracks: GameHistoryEntry["tracks"] }) {
   if (tracks.length === 0) {
-    return <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#8a7558]">Aucun titre enregistre.</p>
+    return <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#8a7558]">Aucun titre enregistré.</p>
   }
 
   return (
@@ -161,7 +161,7 @@ function GameCard({ game }: { game: GameHistoryEntry }) {
         </span>
         {game.bestStreak > 0 && (
           <span className="text-sm font-semibold text-[#6b573f]">
-            {game.bestStreak} <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#8a7558]">serie max</span>
+            {game.bestStreak} <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#8a7558]">série max</span>
           </span>
         )}
       </div>
@@ -187,11 +187,12 @@ export default function HistoryPage() {
     setLoading(true)
     setError(null)
     try {
-      const me = await api.checkAuth()
+      let me = await api.checkAuth()
       if (!me) {
-        router.replace("/auth/login")
-        return
+        // Guest-first : on cree un invite au lieu de forcer le login.
+        me = await api.ensureUserSession()
       }
+      if (!me) return
       const result = await api.gameHistoryDetailed()
       setGames(result?.games ?? [])
     } catch (err) {
@@ -220,7 +221,7 @@ export default function HistoryPage() {
             ))}
           </div>
         </div>
-        <BottomNav active="history" />
+        <AccountMenu active="history" />
       </div>
     )
   }
@@ -238,11 +239,11 @@ export default function HistoryPage() {
               onClick={loadHistory}
               className="btn-neon text-sm"
             >
-              Reessayer
+              Réessayer
             </button>
           </div>
         </div>
-        <BottomNav active="history" />
+        <AccountMenu active="history" />
       </div>
     )
   }
@@ -260,10 +261,10 @@ export default function HistoryPage() {
                 0
               </span>
             </div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-[#c65133]">Etagere vide</p>
-            <h1 className="font-display text-2xl font-semibold text-[#2e2014]">Aucune partie jouee</h1>
+            <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-[#c65133]">Étagère vide</p>
+            <h1 className="font-display text-2xl font-semibold text-[#2e2014]">Aucune partie jouée</h1>
             <p className="max-w-sm text-sm text-[#6b573f]">
-              Lance ta premiere partie pour voir ton historique ici.
+              Lance ta première partie pour voir ton historique ici.
             </p>
             <Link
               href="/solo"
@@ -273,7 +274,7 @@ export default function HistoryPage() {
             </Link>
           </div>
         </div>
-        <BottomNav active="history" />
+        <AccountMenu active="history" />
       </div>
     )
   }
@@ -302,7 +303,7 @@ export default function HistoryPage() {
           ))}
         </div>
       </div>
-      <BottomNav active="history" />
+      <AccountMenu active="history" />
     </div>
   )
 }

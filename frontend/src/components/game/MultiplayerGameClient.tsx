@@ -3,10 +3,12 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import type { MultiplayerGameState, UserSummary } from "@/lib/types"
 import { Button } from "@/components/ui/button"
-import { Check, Clock, Crown, Lock, Play, Trophy, Users, Volume2, VolumeX } from "lucide-react"
+import { Check, Clock, Crown, Lock, Play, Trophy, Users, Volume2, VolumeX, X } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { audioManager } from "@/lib/audioManager"
 import { GAME_MODES, type GameModeConfig, type GameMode } from "@/lib/gameModes"
+import { useWakeLock } from "@/lib/useWakeLock"
+import { ConfettiBurst } from "./ConfettiBurst"
 import { TheaterGameView } from "./TheaterGameView"
 
 const VINYL_GROOVES = "repeating-radial-gradient(circle at 50% 50%, #241a10 0 2.5px, #3a2a1a 2.5px 5px)"
@@ -148,7 +150,10 @@ export function MultiplayerGameClient({
   const isFastPace = gameConfig.pace === "fast"
   const REVEAL_COUNTDOWN = isFastPace ? 4 : 7
   const isHost = user.id === state?.hostUserId
-  const isEventPresenter = mode === "event" && isHost
+  // En event, l'hote presente seulement SAUF s'il a choisi "je joue aussi" (hostPlays) :
+  // dans ce cas il joue comme un participant tout en restant la source audio.
+  const hostPlays = state?.hostPlays === true
+  const isEventPresenter = mode === "event" && isHost && !hostPlays
   const isEventParticipant = mode === "event" && !isHost
   // largeUI only applies to the presenter projection — participants get normal sizing
   const isLargeUI = "largeUI" in gameConfig && gameConfig.largeUI === true && !isEventParticipant
@@ -170,6 +175,41 @@ export function MultiplayerGameClient({
   const chatScrollRef = useRef<HTMLDivElement>(null)
   const onReadyRef = useRef(onReady)
   onReadyRef.current = onReady
+
+  // Autour d'une table : aucun ecran ne doit se mettre en veille pendant la partie
+  // (l'ecran central diffuse, les telephones servent de manette).
+  useWakeLock(mode === "event")
+
+  // Compte a rebours 3-2-1 sur l'ecran central avant la toute premiere manche.
+  // Decompte cale sur l'heure de depart serveur : il se termine pile quand la
+  // musique demarre (avant, le decompte tournait pendant que le son jouait deja).
+  const [introCount, setIntroCount] = useState<number | null>(null)
+  useEffect(() => {
+    if (mode !== "event" || !isHost) return
+    if (state?.phase !== "GUESSING" || (state?.currentRound ?? 0) !== 1) return
+    const startAt = state?.timing?.startAt
+    if (!startAt) return
+    const tick = () => {
+      const left = startAt - Date.now()
+      if (left <= 0) { setIntroCount(null); return false }
+      setIntroCount(Math.max(1, Math.ceil(left / 1000)))
+      return true
+    }
+    if (!tick()) return
+    const id = setInterval(() => { if (!tick()) clearInterval(id) }, 200)
+    return () => clearInterval(id)
+  }, [mode, isHost, state?.phase, state?.currentRound, state?.timing?.startAt])
+
+  // Petit buzz quand une manche demarre : ramene le joueur qui regardait ailleurs.
+  const lastVibratedRoundRef = useRef(0)
+  useEffect(() => {
+    if (mode !== "event" || isEventPresenter) return
+    const round = state?.currentRound ?? 0
+    if (state?.phase !== "GUESSING" || round === 0) return
+    if (lastVibratedRoundRef.current === round) return
+    lastVibratedRoundRef.current = round
+    try { navigator.vibrate?.(60) } catch { /* non supporte */ }
+  }, [mode, isEventPresenter, state?.phase, state?.currentRound])
 
   const remaining = useMemo(() => {
     if (!state?.timing?.revealAt) return 0
@@ -259,7 +299,26 @@ export function MultiplayerGameClient({
   // after submit while waiting for other players). Use a stable boolean so the effect
   // doesn't re-trigger on guessing↔locked transitions.
   // In event mode, only the presenter plays audio — participants hear it from the projector.
-  const isAudioPhase = (uiPhase === "guessing" || uiPhase === "locked") && !isEventParticipant
+  // En mode "autour d'une table", seul l'ecran de l'hote diffuse la musique. S'il
+  // quitte, les joueurs devinaient sur du silence, chrono qui tourne, sans un mot
+  // d'explication. On bascule alors le son sur leur telephone. Le delai evite de
+  // declencher ca pendant les quelques secondes ou sa socket se rattache.
+  // On se fie a `hostConnected`, publie par le serveur : quand l'hote presente
+  // seulement, il n'est PAS dans `players`, donc son absence de la liste ne
+  // prouve rien. `!== false` pour ne pas declencher sur un etat plus ancien
+  // qui ne porterait pas encore le champ.
+  const hostAbsent = isEventParticipant && state?.hostConnected === false
+  const [hostGone, setHostGone] = useState(false)
+  useEffect(() => {
+    if (!hostAbsent) {
+      setHostGone(false)
+      return
+    }
+    const timer = setTimeout(() => setHostGone(true), 6000)
+    return () => clearTimeout(timer)
+  }, [hostAbsent])
+
+  const isAudioPhase = (uiPhase === "guessing" || uiPhase === "locked") && (!isEventParticipant || hostGone)
 
   // Warmup audio on first user interaction in the game view.
   // This unlocks autoplay for non-host players who didn't click "Lancer".
@@ -293,20 +352,36 @@ export function MultiplayerGameClient({
     audioManager.setMuted(muted, "multiplayer")
     // Calculate seek position to sync audio across players
     // timing.startAt is the server timestamp when the round started
-    const elapsed = state?.timing?.startAt ? (serverNow - state.timing.startAt) / 1000 : 0
+    const startAt = state?.timing?.startAt ?? 0
+    const elapsed = startAt ? (serverNow - startAt) / 1000 : 0
     const seekTo = elapsed > 0.5 ? elapsed : 0 // Only seek if >500ms has passed
-    audioManager.play({ src: currentTrack.previewUrl, loop: true, volume, owner: "multiplayer", seekTo })
-      .then(() => {
-        setManualPlayRequired(false)
-      })
-      .catch((err) => {
-        if ((err as DOMException)?.name === "NotAllowedError") {
-          setManualPlayRequired(true)
-        } else {
-          console.error("multiplayer_audio_play_failed", err)
-          setManualPlayRequired(true)
-        }
-      })
+
+    const startPlayback = () => {
+      audioManager.play({ src: currentTrack.previewUrl!, loop: true, volume, owner: "multiplayer", seekTo })
+        .then(() => {
+          setManualPlayRequired(false)
+        })
+        .catch((err) => {
+          if ((err as DOMException)?.name === "NotAllowedError") {
+            setManualPlayRequired(true)
+          } else {
+            console.error("multiplayer_audio_play_failed", err)
+            setManualPlayRequired(true)
+          }
+        })
+    }
+
+    // Pre-roll : si la manche demarre dans le futur (decompte 3-2-1), on attend
+    // l'heure de depart au lieu de jouer par-dessus le decompte.
+    const waitMs = startAt ? startAt - serverNow : 0
+    if (waitMs > 250) {
+      const t = setTimeout(startPlayback, waitMs)
+      return () => {
+        clearTimeout(t)
+        audioManager.stop("multiplayer_track_cleanup", "multiplayer")
+      }
+    }
+    startPlayback()
     return () => {
       audioManager.stop("multiplayer_track_cleanup", "multiplayer")
     }
@@ -329,6 +404,21 @@ export function MultiplayerGameClient({
       setJustSubmitted(false)
     }
   }, [uiPhase])
+
+  // Nouvelle manche = nouvelle ardoise, MEME si on n'est pas passe par un reveal.
+  // Apres une coupure reseau on saute directement de GUESSING(manche N, verrouille)
+  // a GUESSING(manche N+2) : sans ce reset le joueur restait bloque sur "C'est note"
+  // avec son ancienne reponse, incapable de jouer la manche en cours.
+  const lastRoundRef = useRef(0)
+  useEffect(() => {
+    const round = state?.currentRound ?? 0
+    if (round === lastRoundRef.current) return
+    lastRoundRef.current = round
+    setJustSubmitted(false)
+    setGuessTitle("")
+    setGuessArtist("")
+    setSourceGuess(null)
+  }, [state?.currentRound])
 
   useEffect(() => {
     if (uiPhase === "guessing") {
@@ -361,11 +451,16 @@ export function MultiplayerGameClient({
   // Auto-advance countdown during reveal phase.
   // Ne PAS tourner quand la partie est FINISHED : sinon on emet un game:ready
   // fantome apres la fin (room nettoyee -> "Aucune partie en cours").
+  // `state?.currentRound` dans les deps : apres une coupure, on peut enchainer
+  // REVEAL(manche N) -> REVEAL(manche N+1) sans changer de uiPhase. Sans ca le
+  // compteur restait a 0, le "pret" ne partait jamais et TOUTE la salle attendait
+  // le filet serveur de 10s a chaque incident reseau.
   useEffect(() => {
     if (uiPhase !== "reveal" || disabled || player?.isReady || backendPhase === "FINISHED") {
       setRevealCountdown(REVEAL_COUNTDOWN)
       return
     }
+    setRevealCountdown(REVEAL_COUNTDOWN)
     const interval = setInterval(() => {
       setRevealCountdown(prev => {
         if (prev <= 0) return 0
@@ -377,7 +472,7 @@ export function MultiplayerGameClient({
       })
     }, 1000)
     return () => clearInterval(interval)
-  }, [uiPhase, disabled, player?.isReady, REVEAL_COUNTDOWN, backendPhase])
+  }, [uiPhase, disabled, player?.isReady, REVEAL_COUNTDOWN, backendPhase, state?.currentRound])
 
   // Auto-scroll chat
   useEffect(() => {
@@ -389,8 +484,8 @@ export function MultiplayerGameClient({
   const sortedPlayersFixed = useMemo(() => {
     if (!state?.players) return []
     return Object.values(state.players)
-      // In event mode, the host is a spectator — exclude from all player lists
-      .filter(p => !(mode === "event" && state.hostUserId && p.userId === state.hostUserId))
+      // En event, l'hote est exclu des listes SAUF s'il a choisi "je joue aussi".
+      .filter(p => !(mode === "event" && !state.hostPlays && state.hostUserId && p.userId === state.hostUserId))
       .map(p => ({
         userId: p.userId,
         username: p.username,
@@ -404,6 +499,7 @@ export function MultiplayerGameClient({
         streak: p.streak ?? 0,
         bestStreak: p.bestStreak ?? 0,
         totalReactionMs: p.totalReactionMs,
+        disconnected: p.disconnected === true,
       }))
       .sort((a, b) => {
         if (b.score !== a.score) return b.score - a.score
@@ -412,10 +508,26 @@ export function MultiplayerGameClient({
       })
   }, [state?.players, mode, state?.hostUserId])
 
-  const answeredCount = useMemo(() => sortedPlayersFixed.filter(p => p.hasAnswered).length, [sortedPlayersFixed])
+  // Les "X/Y" ne comptent que les joueurs encore la. Sinon la table attend un
+  // fantome : "0/3 prets" alors que le 3e a ferme son onglet il y a 30 secondes.
+  // Ils restent visibles au classement (une coupure de tunnel ne doit pas effacer
+  // quelqu'un), ils sortent juste des denominateurs.
+  const activePlayers = useMemo(() => sortedPlayersFixed.filter(p => !p.disconnected), [sortedPlayersFixed])
+  const answeredCount = useMemo(() => activePlayers.filter(p => p.hasAnswered).length, [activePlayers])
   const displayAnsweredCount = Math.max(answeredCount, localHasAnswered ? 1 : 0)
-  const playerCount = sortedPlayersFixed.length
-  const readyCount = sortedPlayersFixed.filter(p => p.isReady).length
+  const playerCount = activePlayers.length
+  const readyCount = activePlayers.filter(p => p.isReady).length
+
+  // Picker "qui a ajoute ?" : 3 candidats (le bon + 2 leurres) fournis par le serveur
+  // via ownerChoices ; fallback sur tous les joueurs si absent (< 3 joueurs).
+  const pickerPlayers = useMemo(() => {
+    const choices = currentTrack?.ownerChoices
+    if (!choices || choices.length === 0) return sortedPlayersFixed
+    const resolved = choices
+      .map(id => sortedPlayersFixed.find(p => p.userId === id))
+      .filter((p): p is typeof sortedPlayersFixed[number] => Boolean(p))
+    return resolved.length > 0 ? resolved : sortedPlayersFixed
+  }, [currentTrack?.ownerChoices, sortedPlayersFixed])
 
   const handleSubmit = () => {
     if (uiPhase !== "guessing" || disabled || localHasAnswered || justSubmitted) return
@@ -573,17 +685,48 @@ export function MultiplayerGameClient({
       className="relative min-h-screen"
       style={{ ...theme, background: "var(--bg)", color: "var(--ink)" }}
     >
+      {/* 3-2-1 sur l'ecran central avant la premiere manche */}
+      <AnimatePresence>
+        {introCount !== null && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[70] flex items-center justify-center"
+            style={{ background: "rgba(244,236,219,0.94)" }}
+          >
+            <motion.span
+              key={introCount}
+              initial={{ scale: 2.2, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ duration: 0.35, ease: [0.2, 0.8, 0.2, 1] }}
+              className="font-display text-[9rem] font-bold leading-none sm:text-[13rem]"
+              style={{ color: accent }}
+            >
+              {introCount}
+            </motion.span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      {hostGone && (
+        <div
+          className="sticky top-0 z-[60] border-b-2 border-[#2e2014] px-3 py-2 text-center text-xs font-semibold sm:text-sm"
+          style={{ background: "#e0a32e", color: "#2e2014" }}
+        >
+          L&apos;organisateur a quitté. La musique passe sur ton téléphone, monte le son.
+        </div>
+      )}
       <div className="relative flex min-h-screen flex-col">
         {/* Header - compact */}
         <header className="shrink-0 border-b-2 border-[#2e2014]">
-          <div className="mx-auto flex w-full items-center justify-between gap-4 px-6 py-3 lg:px-12">
-            <div className="flex items-center gap-3">
-              <div className="relative flex h-10 w-10 items-center justify-center rounded-full border-2 border-[#2e2014] bg-[var(--surface)]">
+          <div className="mx-auto flex w-full items-center justify-between gap-2 px-3 py-2.5 sm:gap-4 sm:px-6 lg:px-12">
+            <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+              <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-[#2e2014] bg-[var(--surface)] sm:h-10 sm:w-10">
                 <Clock className="relative h-4 w-4" style={{ color: timerColor }} />
               </div>
-              <div>
-                <p className="text-[9px] font-bold uppercase tracking-[0.32em] text-[var(--muted)]">Blindify</p>
-                <h1 className="font-display text-lg font-semibold leading-tight">
+              <div className="min-w-0">
+                <p className="hidden text-[9px] font-bold uppercase tracking-[0.32em] text-[var(--muted)] sm:block">Blindz</p>
+                <h1 className="truncate font-display text-base font-semibold leading-tight sm:text-lg">
                   {mode === "event" ? "Événement" : mode === "streamer" ? "Streamer" : "Amis"}
                 </h1>
               </div>
@@ -598,7 +741,7 @@ export function MultiplayerGameClient({
                 <span className={`${isLargeUI ? "text-2xl" : "text-base"} font-display font-bold`} style={{ color: timerColor }}>
                   {isPlaying ? `${remaining}s` : isLocked ? "LOCK" : "REVEAL"}
                 </span>
-                <div className={`${isLargeUI ? "h-2 w-40" : "h-1.5 w-28"} rounded-full bg-[rgba(46,32,20,.15)]`}>
+                <div className={`hidden sm:block ${isLargeUI ? "h-2 w-40" : "h-1.5 w-28"} rounded-full bg-[rgba(46,32,20,.15)]`}>
                   <div
                     className="h-full rounded-full transition-all duration-1000"
                     style={{ width: `${timerProgress}%`, background: timerColor }}
@@ -616,17 +759,18 @@ export function MultiplayerGameClient({
                 <span>{playerCount}</span>
               </div>
               {/* Volume control (hidden for event participants — audio plays on presenter only) */}
-              {!isEventParticipant && <div className="flex items-center gap-1.5 rounded-full border-[1.5px] border-[#2e2014] bg-[var(--surface)] px-2 py-1.5">
+              {!isEventParticipant && <div className="flex shrink-0 items-center gap-1 rounded-full border-[1.5px] border-[#2e2014] bg-[var(--surface)] px-1.5 py-1.5">
                 <button
-                  className="text-[var(--muted)] transition hover:text-[var(--ink)]"
+                  className="flex h-7 w-7 items-center justify-center rounded-full text-[var(--muted)] transition hover:text-[var(--ink)]"
                   onClick={() => {
                     const next = !muted
                     audioManager.setMuted(next)
                     setMuted(next)
                   }}
                   title={muted ? "Activer le son" : "Couper le son"}
+                  aria-label={muted ? "Activer le son" : "Couper le son"}
                 >
-                  {muted ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
+                  {muted ? <VolumeX className="h-[18px] w-[18px]" /> : <Volume2 className="h-[18px] w-[18px]" />}
                 </button>
                 <input
                   type="range"
@@ -646,16 +790,18 @@ export function MultiplayerGameClient({
                       setMuted(true)
                     }
                   }}
-                  className="h-1 w-16 cursor-pointer appearance-none rounded-full bg-[rgba(46,32,20,.25)] accent-[var(--accent)] md:w-20"
+                  className="hidden h-1 cursor-pointer appearance-none rounded-full bg-[rgba(46,32,20,.25)] accent-[var(--accent)] sm:block sm:w-16 md:w-20"
                   style={{ accentColor: accent }}
                 />
               </div>}
               {onExit && (
                 <button
-                  className="rounded-full border-[1.5px] border-[#2e2014] bg-[var(--surface)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--ink)] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+                  className="flex shrink-0 items-center rounded-full border-[1.5px] border-[#2e2014] bg-[var(--surface)] px-2 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--ink)] transition hover:bg-[#2e2014] hover:text-[#f4ecdb] sm:px-3"
                   onClick={onExit}
+                  title="Quitter"
                 >
-                  Quitter
+                  <X className="h-4 w-4 sm:hidden" />
+                  <span className="hidden sm:inline">Quitter</span>
                 </button>
               )}
             </div>
@@ -680,6 +826,7 @@ export function MultiplayerGameClient({
                     {state?.phase === "FINISHED" ? (
                       /* --- PRESENTER: FINISHED --- */
                       <div className="relative flex flex-col items-center gap-8 py-6 w-full max-w-2xl">
+                        <ConfettiBurst />
                         <div className="flex h-16 w-16 items-center justify-center rounded-full" style={{ background: `${accent}22` }}>
                           <Trophy className="h-8 w-8" style={{ color: accent }} />
                         </div>
@@ -1007,9 +1154,10 @@ export function MultiplayerGameClient({
                         </div>
                       )}
 
-                      {/* Compact status bar for event participants (no audio, no vinyl) */}
+                      {/* Compact status bar for event participants (no audio, no vinyl).
+                          Cache sur mobile : le header affiche deja timer + round (doublon). */}
                       {isEventParticipant && (
-                        <div className="flex items-center justify-between rounded-md border-[1.5px] border-[#2e2014] bg-[var(--surface-strong)] px-4 py-3">
+                        <div className="hidden items-center justify-between rounded-md border-[1.5px] border-[#2e2014] bg-[var(--surface-strong)] px-4 py-3 sm:flex">
                           <div className="flex items-center gap-3">
                             {isPlaying ? (
                               <span className="h-2.5 w-2.5 animate-pulse rounded-full" style={{ background: accent }} />
@@ -1063,9 +1211,9 @@ export function MultiplayerGameClient({
                               <p className="font-display text-lg font-semibold">C'est noté</p>
                               <p className="text-sm text-[var(--muted)]">Reveal dans {remaining}s</p>
                               <div className="mt-2 flex flex-wrap justify-center gap-1.5">
-                                {sortedPlayersFixed.filter(p => !p.hasAnswered).length > 0 && (
+                                {activePlayers.filter(p => !p.hasAnswered).length > 0 && (
                                   <p className="text-xs text-[var(--muted)]">
-                                    En attente de : {sortedPlayersFixed.filter(p => !p.hasAnswered).map(p => p.username || `Joueur ${p.userId}`).join(", ")}
+                                    En attente de : {activePlayers.filter(p => !p.hasAnswered).map(p => p.username || `Joueur ${p.userId}`).join(", ")}
                                   </p>
                                 )}
                               </div>
@@ -1091,14 +1239,14 @@ export function MultiplayerGameClient({
                                   disabled={localHasAnswered || disabled}
                                   autoComplete="off"
                                   aria-label="Titre du morceau"
-                                  className={`w-full border-0 border-b-2 bg-transparent px-1 py-2 pr-7 font-display text-lg text-[var(--ink)] outline-none transition-colors placeholder:italic placeholder:text-[#b3a182] focus:border-[var(--accent)] ${
-                                    guessTitle.trim() ? "border-[#7d9471]" : "border-[#2e2014]"
+                                  className={`w-full rounded-md border-[1.5px] bg-[#f4ecdb] px-3 py-3 pr-9 font-display text-lg text-[var(--ink)] outline-none transition-colors placeholder:italic placeholder:text-[#b3a182] focus:border-[var(--accent)] ${
+                                    guessTitle.trim() ? "border-[#7d9471]" : "border-[rgba(46,32,20,.45)]"
                                   }`}
                                   placeholder="Le morceau qui tourne…"
                                 />
                                 {guessTitle.trim() && (
                                   <Check
-                                    className="animate-in zoom-in duration-300 pointer-events-none absolute right-0 top-1/2 h-4 w-4 -translate-y-1/2"
+                                    className="animate-in zoom-in duration-300 pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2"
                                     style={{ color: SAGE }}
                                   />
                                 )}
@@ -1113,14 +1261,14 @@ export function MultiplayerGameClient({
                                   disabled={localHasAnswered || disabled}
                                   autoComplete="off"
                                   aria-label="Artiste"
-                                  className={`w-full border-0 border-b-2 bg-transparent px-1 py-2 pr-7 font-display text-lg text-[var(--ink)] outline-none transition-colors placeholder:italic placeholder:text-[#b3a182] focus:border-[var(--accent)] ${
-                                    guessArtist.trim() ? "border-[#7d9471]" : "border-[#2e2014]"
+                                  className={`w-full rounded-md border-[1.5px] bg-[#f4ecdb] px-3 py-3 pr-9 font-display text-lg text-[var(--ink)] outline-none transition-colors placeholder:italic placeholder:text-[#b3a182] focus:border-[var(--accent)] ${
+                                    guessArtist.trim() ? "border-[#7d9471]" : "border-[rgba(46,32,20,.45)]"
                                   }`}
                                   placeholder="Qui chante ?"
                                 />
                                 {guessArtist.trim() && (
                                   <Check
-                                    className="animate-in zoom-in duration-300 pointer-events-none absolute right-0 top-1/2 h-4 w-4 -translate-y-1/2"
+                                    className="animate-in zoom-in duration-300 pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2"
                                     style={{ color: SAGE }}
                                   />
                                 )}
@@ -1128,10 +1276,11 @@ export function MultiplayerGameClient({
                             </label>
                           </div>
 
+                          {!state?.singleContributor && (
                           <div className="space-y-2 text-xs text-[var(--muted)]">
                             <span className="text-[11px] font-bold uppercase tracking-[0.22em]">Qui a ajouté ce titre ?</span>
                             <div className="flex flex-wrap gap-2">
-                              {sortedPlayersFixed.map(p => (
+                              {pickerPlayers.map(p => (
                                 <button
                                   key={p.userId}
                                   type="button"
@@ -1168,6 +1317,13 @@ export function MultiplayerGameClient({
                               ))}
                             </div>
                           </div>
+                          )}
+
+                          {state?.singleContributor && (
+                            <p className="text-[11px] italic leading-snug text-[var(--muted)]">
+                              Une seule playlist en jeu, pas de point « qui a ajouté » cette partie.
+                            </p>
+                          )}
 
                           <motion.button
                             type="submit"
@@ -1253,8 +1409,9 @@ export function MultiplayerGameClient({
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.5 }}
-                className={panelClassName}
+                className={`relative overflow-hidden ${panelClassName}`}
               >
+                <ConfettiBurst />
                 <div className="text-center">
                   <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full border-2 border-[#2e2014]" style={{ background: `${accent}22` }}>
                     <Trophy className="h-6 w-6" style={{ color: accent }} />
@@ -1377,30 +1534,42 @@ export function MultiplayerGameClient({
               {/* Scoreboard */}
               <div className="border-b-2 border-[#2e2014] px-4 py-3">
                 <p className="text-[10px] font-bold uppercase tracking-[0.3em]" style={{ color: accent }}>Face B · Classement</p>
-                <div className="mt-2">
+                <div className="mt-2 space-y-1">
                   {sortedPlayersFixed.map((p, idx) => (
                     <div
                       key={p.userId}
-                      className="flex items-baseline gap-2 py-1 text-xs"
+                      className={`flex items-center gap-2.5 rounded-md px-2 py-1.5 ${idx === 0 ? "border-[1.5px] border-[rgba(46,32,20,.35)]" : ""}`}
+                      style={idx === 0 ? { background: `${accent}1c` } : undefined}
                     >
-                      <span className="w-5 shrink-0 text-[10px] text-[var(--muted)]">A{idx + 1}</span>
                       <span
-                        className="font-display text-sm font-semibold"
+                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-[1.5px] border-[#2e2014] font-display text-[11px] font-bold ${idx === 0 ? "text-[#2e2014]" : "text-[var(--muted)]"}`}
+                        style={idx === 0 ? { background: accent } : undefined}
+                      >
+                        {idx + 1}
+                      </span>
+                      <span
+                        className="min-w-0 truncate font-display text-base font-semibold"
                         style={{ color: p.userId === user.id ? accent : "var(--ink)" }}
                       >
                         {p.username || `J${p.userId}`}
                       </span>
                       {/* Status indicator */}
                       {isPlaying && p.hasAnswered && (
-                        <span className="h-1.5 w-1.5 shrink-0 self-center rounded-full" style={{ background: accent }} />
+                        <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: accent }} />
                       )}
                       {isRevealed && p.isReady && (
-                        <Check className="h-3 w-3 shrink-0 self-center" style={{ color: "var(--success)" }} />
+                        <Check className="h-3 w-3 shrink-0" style={{ color: "var(--success)" }} />
                       )}
-                      <span className="flex-1 -translate-y-0.5 border-b-2 border-dotted border-[rgba(46,32,20,.45)]" />
-                      <span className="font-bold text-[var(--ink)]">
+                      <span className="flex-1 border-b-2 border-dotted border-[rgba(46,32,20,.35)]" />
+                      <motion.span
+                        key={`${p.userId}-${p.score}`}
+                        initial={{ scale: 1.45 }}
+                        animate={{ scale: 1 }}
+                        transition={{ duration: 0.45, ease: [0.2, 0.8, 0.2, 1] }}
+                        className="font-display text-lg font-bold text-[var(--ink)]"
+                      >
                         {p.score}
-                      </span>
+                      </motion.span>
                     </div>
                   ))}
                 </div>

@@ -9,6 +9,7 @@ export type RoundTrack = {
   previewUrl: string | null;
   albumCover?: string | null;
   metadata?: Record<string, unknown> | null;
+  ownerChoices?: number[];
 };
 
 export type PlayerState = {
@@ -38,6 +39,14 @@ export type PlayerState = {
 export type GameState = {
   roomCode: string;
   hostUserId: number | null;
+  hostPlays?: boolean;
+  /**
+   * L'hote est-il toujours connecte ? En mode event il diffuse la musique pour
+   * toute la table, et quand il presente seulement il n'apparait PAS dans
+   * `players` : sa presence ne peut donc pas se deduire de cette liste.
+   */
+  hostConnected?: boolean;
+  singleContributor?: boolean;
   mode: string;
   phase: "LOBBY" | "GUESSING" | "REVEAL" | "FINISHED";
   currentRound: number;
@@ -66,6 +75,8 @@ const games = new Map<string, GameContext>();
 export function bootstrapGameState(params: {
   roomCode: string;
   hostUserId: number;
+  hostPlays?: boolean;
+  singleContributor?: boolean;
   tracks: RoundTrack[];
   participants: Array<{ userId: number; username: string | null; avatar?: string | null }>;
   mode?: string;
@@ -92,6 +103,9 @@ export function bootstrapGameState(params: {
   const state: GameState = {
     roomCode: params.roomCode,
     hostUserId: params.hostUserId,
+    hostPlays: params.hostPlays ?? false,
+    hostConnected: true,
+    singleContributor: params.singleContributor ?? false,
     mode: params.mode ?? "friends",
     phase: "LOBBY",
     currentRound: 0,
@@ -130,12 +144,19 @@ export function allAnswerablePlayers(roomCode: string): PlayerState[] {
   const ctx = games.get(roomCode);
   if (!ctx) return [];
   let players = Object.values(ctx.state.players);
-  // In event mode, the host is a presenter and doesn't answer
-  if (ctx.mode === "event" && ctx.state.hostUserId) {
+  // En event, l'hote presente (exclu) SAUF s'il a choisi "je joue aussi".
+  if (ctx.mode === "event" && ctx.state.hostUserId && !ctx.state.hostPlays) {
     players = players.filter(p => p.userId !== ctx.state.hostUserId);
   }
   // Exclude disconnected players so they don't block or prematurely trigger reveals
   return players.filter(p => !p.disconnected);
+}
+
+export function setHostConnected(roomCode: string, connected: boolean): GameState | undefined {
+  const ctx = games.get(roomCode);
+  if (!ctx) return undefined;
+  ctx.state.hostConnected = connected;
+  return ctx.state;
 }
 
 export function markDisconnected(roomCode: string, userId: number): GameState | undefined {
@@ -186,6 +207,28 @@ export function startNextRound(roomCode: string, opts?: { forceRound?: number; s
   ctx.state.currentRound = nextRound;
   ctx.state.currentTrack = track;
   ctx.state.timing = { startAt, revealAt };
+
+  // Picker "qui a ajoute ?" : on propose 3 candidats (le bon + 2 leurres) plutot
+  // que tous les joueurs. Calcule une fois par round, identique pour tout le monde.
+  const ownerId = typeof (track.metadata as any)?.owner_user_id === "number"
+    ? ((track.metadata as any).owner_user_id as number)
+    : null;
+  const playerIds = Object.keys(ctx.state.players).map(Number);
+  if (ownerId && playerIds.includes(ownerId) && playerIds.length >= 3) {
+    const decoys = playerIds.filter(id => id !== ownerId);
+    for (let i = decoys.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [decoys[i], decoys[j]] = [decoys[j], decoys[i]];
+    }
+    const choices = [ownerId, decoys[0], decoys[1]];
+    for (let i = choices.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [choices[i], choices[j]] = [choices[j], choices[i]];
+    }
+    track.ownerChoices = choices;
+  } else {
+    track.ownerChoices = playerIds;
+  }
 
   Object.values(ctx.state.players).forEach(player => {
     player.hasAnswered = false;

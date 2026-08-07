@@ -3,15 +3,15 @@ import type { GameMode } from "@/lib/gameModes"
 export const HEADER_COPY: Record<GameMode, { title: string; subtitle: string }> = {
   friends: {
     title: "Défie tes amis",
-    subtitle: "Duels, revanche, et playlists partagées.",
+    subtitle: "Crée une salle, partage le code, et affronte tes potes sur vos playlists.",
   },
   event: {
     title: "Projection en direct",
-    subtitle: "Un seul écran, un rythme clair, tout le monde suit.",
+    subtitle: "Un écran central diffuse la musique pendant que chacun répond depuis son téléphone.",
   },
   streamer: {
     title: "Mode Streamer",
-    subtitle: "Joue en live avec ton chat - 3 modes de jeu disponibles.",
+    subtitle: "Joue en direct avec ton chat, trois formats de jeu au choix.",
   },
 }
 
@@ -21,14 +21,14 @@ export const LANDING_COPY: Record<
 > = {
   friends: {
     hostTitle: "Lance un duel entre amis",
-    hostSubtitle: "Invitations rapides, scores pour les bragging rights.",
+    hostSubtitle: "Invite tes potes, lancez le duel, et le score tranchera qui avait raison.",
     hostCta: "Ouvrir le duel",
     joinTitle: "Ils t'ont envoyé un code ?",
-    joinSubtitle: "Tape-le et attrape-les.",
+    joinSubtitle: "Entre le code qu'on t'a envoyé pour rejoindre la salle.",
   },
   event: {
     hostTitle: "Prêt pour la projection",
-    hostSubtitle: "Rythme piloté, affichage lisible, tout le monde suit.",
+    hostSubtitle: "Tu pilotes le rythme depuis l'écran principal, tout le monde suit dessus.",
     hostCta: "Démarrer la projection",
   },
   streamer: {

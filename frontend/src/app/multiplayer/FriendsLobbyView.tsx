@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { modeAccent } from "@/lib/uiTokens"
 import type { LobbyRendererProps, LobbyChatMessage } from "./lobbyTypes"
 import { ProfileImportBlock } from "@/components/import/ProfileImportBlock"
+import { LobbyChat } from "./LobbyChat"
 
 /* Component-scoped animations matching the analog mockup. */
 const lobbyAnimations = `
@@ -31,129 +32,6 @@ const lobbyAnimations = `
 }
 `
 
-/* ─── Chat component (paper card with ink dividers) ─── */
-function LobbyChat({
-  messages,
-  onSend,
-  currentUserId,
-  accent,
-  onClose,
-}: {
-  messages: LobbyChatMessage[]
-  onSend: (msg: string) => void
-  currentUserId: number
-  accent: string
-  onClose?: () => void
-}) {
-  const [input, setInput] = useState("")
-  const scrollRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-    }
-  }, [messages.length])
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    const trimmed = input.trim()
-    if (!trimmed) return
-    onSend(trimmed)
-    setInput("")
-  }
-
-  // Color-code each non-me sender by hashing user_id to one of the analog accents
-  const senderColor = (userId: number, isHost: boolean): string => {
-    if (isHost) return "#c65133"
-    const palette = ["#5d7252", "#a87714", "#6b573f"]
-    return palette[Math.abs(userId) % palette.length]
-  }
-
-  const formatTime = (ts: number) => {
-    const d = new Date(ts)
-    return `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`
-  }
-
-  return (
-    <div className="relative flex h-full min-h-[280px] flex-col overflow-hidden rounded-md border-2 border-[#2e2014] bg-[#ece1c8] shadow-[4px_4px_0_rgba(46,32,20,.18)]">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b-2 border-[#2e2014] px-5 py-4">
-        <p className="m-0 text-[11px] font-bold uppercase tracking-[0.22em] text-[#c65133]">
-          Lobby · Chat
-        </p>
-        <div className="flex items-center gap-2">
-          <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-[#6b573f]">
-            <span aria-hidden className="h-2 w-2 rounded-full bg-[#7d9471]" />
-            On
-          </span>
-          {onClose ? (
-            <button type="button" onClick={onClose} aria-label="Fermer le chat" className="flex h-7 w-7 items-center justify-center rounded-full border-[1.5px] border-[#2e2014] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]">
-              <X size={14} />
-            </button>
-          ) : null}
-        </div>
-      </div>
-
-      {/* Messages */}
-      <div
-        ref={scrollRef}
-        className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-3 min-h-[110px]"
-        style={{ scrollbarWidth: "thin" }}
-      >
-        {messages.length === 0 && (
-          <p className="py-6 text-center font-display text-sm italic text-[#8a7558]">
-            Le canal est ouvert. Lance la discussion !
-          </p>
-        )}
-        {messages.map((msg, i) => {
-          const isMe = msg.userId === currentUserId
-          const color = senderColor(msg.userId, isMe)
-          return (
-            <div
-              key={`${msg.timestamp}-${i}`}
-              className="text-[0.82rem] leading-[1.45]"
-              style={{
-                animation: "lobby-msg-in 0.4s ease-out backwards",
-                animationDelay: `${Math.min(i * 0.05, 0.5)}s`,
-              }}
-            >
-              <span className="mr-2 text-[0.65rem] text-[#8a7558]">
-                {formatTime(msg.timestamp)}
-              </span>
-              <span className="mr-1.5 font-bold tracking-[0.04em]" style={{ color }}>
-                {msg.username || `U${msg.userId}`}
-              </span>
-              <span className="text-[#2e2014]">{msg.message}</span>
-            </div>
-          )
-        })}
-      </div>
-
-      {/* Input row */}
-      <form
-        onSubmit={handleSubmit}
-        className="flex items-center gap-2 border-t-2 border-[#2e2014] bg-[#efe5d0] px-4 py-3"
-      >
-        <input
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          placeholder="dis quelque chose..."
-          maxLength={200}
-          className="flex-1 rounded-md border-[1.5px] border-[rgba(46,32,20,.35)] bg-[#f4ecdb] px-3 py-2.5 text-[0.82rem] text-[#2e2014] outline-none placeholder:italic placeholder:text-[#b3a182] focus:border-[#c65133]"
-        />
-        <button
-          type="submit"
-          disabled={!input.trim()}
-          className="flex items-center justify-center gap-1 rounded-md border-2 border-[#2e2014] bg-[#c65133] px-3 py-2.5 text-[#f4ecdb] shadow-[2px_2px_0_#2e2014] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_#2e2014] disabled:cursor-not-allowed disabled:opacity-30"
-          aria-label="Envoyer"
-        >
-          <Send size={14} />
-        </button>
-      </form>
-    </div>
-  )
-}
-
 /* ─── Landing: fallback if someone navigates directly to /multiplayer?mode=friends ─── */
 function FriendsEntry({
   onHost,
@@ -171,7 +49,7 @@ function FriendsEntry({
   return (
     <div className="mx-auto max-w-md space-y-6 py-10 text-center">
       <h2 className="font-display text-3xl font-semibold text-[#2e2014]">Partie entre <em className="font-medium italic text-[#c65133]">amis</em></h2>
-      <p className="text-sm text-[#6b573f]">Cree une room ou rejoins-en une avec un code.</p>
+      <p className="text-sm text-[#6b573f]">Crée une room ou rejoins-en une avec un code.</p>
       <div className="grid gap-3">
         <Button
           variant="outline"
@@ -179,7 +57,7 @@ function FriendsEntry({
           className="w-full justify-center gap-2 rounded-md border-2 border-[#2e2014] bg-[#c65133] px-5 py-3.5 text-sm font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:bg-[#c65133] hover:text-[#f4ecdb] hover:shadow-[2px_2px_0_#2e2014]"
         >
           <Sparkles className="h-4 w-4" />
-          Creer une partie
+          Créer une partie
         </Button>
         <form onSubmit={onJoinSubmit} className="flex gap-2">
           <input
@@ -212,19 +90,21 @@ function PlayerSlot({
   index,
   variant,
   username,
+  status,
 }: {
   index: number
   variant: SlotVariant
   username?: string | null
+  status?: "active" | "away" | "disconnected"
 }) {
   const isHost = variant === "host"
   const isEmpty = variant === "empty"
   const isJoined = variant === "joined"
 
   const tagText = isHost
-    ? `P${index} · Hote`
+    ? `P${index} · Hôte`
     : isJoined
-      ? `P${index} · Connecte`
+      ? `P${index} · Connecté`
       : `P${index} · Libre`
   const displayName = isEmpty ? "En attente" : username || `Joueur ${index}`
 
@@ -283,13 +163,13 @@ function PlayerSlot({
           Libre
         </span>
       ) : isHost ? (
-        <Crown aria-label="Hote" size={15} className="shrink-0 text-[#c65133]" />
+        <Crown aria-label="Hôte" size={15} className="shrink-0 text-[#c65133]" />
       ) : (
         <span
-          aria-label="En ligne"
-          title="En ligne"
+          aria-label={status === "away" ? "Absent" : status === "disconnected" ? "Hors ligne" : "En ligne"}
+          title={status === "away" ? "Absent (autre onglet)" : status === "disconnected" ? "Hors ligne" : "En ligne"}
           className="h-2.5 w-2.5 shrink-0 rounded-full"
-          style={{ background: "#7d9471" }}
+          style={{ background: status === "away" ? "#e0a32e" : status === "disconnected" ? "#b3a182" : "#7d9471" }}
         />
       )}
     </div>
@@ -442,7 +322,7 @@ function FriendsLobby({
               {/* Players head */}
               <div className="flex items-center justify-between mb-5">
                 <p className="m-0 text-[11px] font-bold uppercase tracking-[0.22em] text-[#c65133]">
-                  Equipage
+                  Équipage
                 </p>
                 <span className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#6b573f]">
                   <strong className="mx-1 font-display text-base font-bold text-[#2e2014]">
@@ -462,6 +342,7 @@ function FriendsLobby({
                       index={i + 1}
                       variant={variant}
                       username={p.username}
+                      status={p.status}
                     />
                   )
                 })}

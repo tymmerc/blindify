@@ -30,6 +30,7 @@ import authRoutes from "./routes/auth";
 import gamesRoutes from "./routes/games";
 import likesRoutes from "./routes/likes";
 import roomsRoutes from "./routes/rooms";
+import reportsRoutes from "./routes/reports";
 import statsRoutes from "./routes/stats";
 import audioSourcesRoutes from "./routes/audioSources";
 import friendsRoutes from "./routes/friends";
@@ -76,8 +77,13 @@ const cookieDomain = process.env.COOKIE_DOMAIN || (isProd ? "tymmerc.eu" : undef
 
 const allowedOrigins = [
   frontendBase,
+  "https://blindz.app",
   "https://tymmerc.eu",
   "https://tymmerc.eu/blindify",
+  // Origine nue obligatoire : le header Origin n'a jamais de chemin
+  // (l'entree avec /blindify ne sert que pour le referer).
+  "https://dev.tymmerc.eu",
+  "https://dev.tymmerc.eu/blindify",
   "http://localhost:3000",
   "http://localhost:5173",
 ].filter(Boolean) as string[];
@@ -186,7 +192,9 @@ const apiLimiter = rateLimit({
 
 const authLimiter = rateLimit({
   windowMs: 60_000,
-  max: 15,
+  // 60/min et non 15 : derriere sslh tous les clients partagent 127.0.0.1,
+  // la limite est donc GLOBALE (2 soirees simultanees depassaient 15 invites/min).
+  max: 60,
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, error: { code: "rate_limited", message: "Trop de requêtes. Réessaye dans 1 minute." } },
@@ -232,7 +240,11 @@ app.use((req, res, next) => {
   }
   const origin = req.headers.origin || "";
   const referer = req.headers.referer || "";
-  const allowed = allowedOrigins.some(o => origin.startsWith(o) || referer.startsWith(o));
+  // Comparaison STRICTE : egalite exacte, ou prefixe borne par un "/".
+  // Un simple startsWith laissait passer https://blindz.app.evil.com (CSRF).
+  const matchesAllowed = (value: string): boolean =>
+    allowedOrigins.some(o => value === o || value.startsWith(o.endsWith("/") ? o : `${o}/`));
+  const allowed = matchesAllowed(origin) || matchesAllowed(referer);
   if (!allowed) {
     return fail(res, "forbidden", "Requête refusée (origine non autorisée)", 403);
   }
@@ -291,6 +303,7 @@ app.use("/api/invitations", invitationsRoutes);
 app.use("/api/import", importRoutes);
 app.use("/api/quick-play", quickPlayRoutes);
 app.use("/api/challenges", challengeRoutes);
+app.use("/api/reports", reportsRoutes);
 
 app.use((_req, res) => {
   fail(res, "not_found", "Ressource introuvable", 404);

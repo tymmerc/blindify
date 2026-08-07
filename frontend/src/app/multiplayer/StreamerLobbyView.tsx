@@ -30,14 +30,14 @@ function StreamerEntry({
               Mode Streamer
             </p>
             <h2 className="text-3xl font-semibold leading-tight text-[#2e2014]">Lance le flux interactif</h2>
-            <p className="text-sm text-[#6b573f]">Le chat répond via code, tu contrôles le rythme.</p>
+            <p className="text-sm text-[#6b573f]">Ton chat rejoint avec un code et répond pendant que tu gardes la main sur le rythme.</p>
           </div>
           <span className="rounded-full border border-[rgba(46,32,20,.22)] px-3 py-1 text-[11px] uppercase tracking-[0.3em]" style={{ borderColor: accent, color: accent }}>
             Live
           </span>
         </div>
         <div className="flex flex-wrap gap-2">
-          {["Compte à rebours clair", "Streamer ≠ fournisseur", "Chat en autonomie"].map(point => (
+          {["Le chat joue depuis ton live", "Tu choisis la source musicale", "Décompte visible par tous"].map(point => (
             <span
               key={point}
               className="rounded-full border border-[rgba(46,32,20,.22)] bg-[#efe5d0] px-3 py-[6px] text-xs font-semibold text-[#6b573f]"

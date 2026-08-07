@@ -14,7 +14,7 @@ export function buildShareText(
     .join("")
 
   const lines = [
-    "\u{1F3B5} Blindify \u{2014} Blind Test",
+    "\u{1F3B5} Blindz \u{2014} Blind Test",
     `Score: ${stats.points} pts | ${stats.correct}/${stats.rounds} correct`,
     `S\u00E9rie max: ${stats.bestStreak} \u{1F525}`,
     "",

@@ -1,10 +1,12 @@
-const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "/blindify"
+// Nullish (??), pas ||, pour qu'une chaine VIDE = racine (blindz.app) soit respectee.
+// undefined (non defini) -> defaut "/blindify" (ancienne URL). "" -> racine.
+const rawBase = process.env.NEXT_PUBLIC_BASE_PATH ?? "/blindify"
+const basePath = rawBase === "" ? undefined : rawBase
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: "export",
-  basePath,
-  assetPrefix: basePath,
+  ...(basePath ? { basePath, assetPrefix: basePath } : {}),
   trailingSlash: true,
   images: {
     unoptimized: true,

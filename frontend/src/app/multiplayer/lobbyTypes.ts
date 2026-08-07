@@ -2,8 +2,21 @@ import type React from "react"
 import type { GameMode, GameModeConfig } from "@/lib/gameModes"
 import type { FriendEntry, MultiplayerParticipant, MultiplayerRoom, RoomInvitation } from "@/lib/types"
 import type { LobbyStatus } from "./lobbyMachine"
+import type { RpsMove, RpsScoreEntry, RpsIncoming, RpsActive, RpsResult } from "./hooks/useLobbyRps"
 
 export type LobbyViewState = "landing" | "hosting" | "waiting" | "playing" | "results"
+
+export type LobbyRpsState = {
+  scoreboard: RpsScoreEntry[]
+  incoming: RpsIncoming | null
+  active: RpsActive | null
+  pendingTargetId: number | null
+  result: RpsResult | null
+  challenge: (targetUserId: number) => void
+  accept: () => void
+  decline: () => void
+  play: (move: RpsMove) => void
+}
 
 export type LobbyChatMessage = {
   userId: number
@@ -16,11 +29,14 @@ export type LobbyRendererProps = {
   mode: GameMode
   modeConfig: GameModeConfig
   view: LobbyViewState
+  intent?: string | null
   lobbyStatus: LobbyStatus
+  /** Code d'erreur structure du dernier join (ex: "room_in_progress"). */
+  errorCode?: string | null
   joinCode: string
   setJoinCode: (value: string) => void
   joining: boolean
-  onHost: () => void
+  onHost: (hostPlays?: boolean) => void
   onJoinSubmit: (event: React.FormEvent<HTMLFormElement>) => void
   participants: MultiplayerParticipant[]
   scores: Record<number, { username: string | null; score: number; accuracy: number }>
@@ -46,4 +62,5 @@ export type LobbyRendererProps = {
   hostUser?: { user_id: number; username: string | null } | null
   chatMessages?: LobbyChatMessage[]
   onSendChat?: (message: string) => void
+  rps?: LobbyRpsState
 }

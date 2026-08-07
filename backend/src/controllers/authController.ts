@@ -13,6 +13,8 @@ import { fail, ok } from "../utils/response";
 import { logger } from "../utils/logger";
 
 const BCRYPT_ROUNDS = 10;
+// Session invite longue duree : l'app "se souvient" du joueur sans compte.
+const GUEST_SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 365; // 1 an
 
 function frontendBaseUrl(): string {
   const raw = process.env.FRONTEND_URL || "http://localhost:3000";
@@ -42,8 +44,8 @@ export const authController = {
         fail(res, "invalid_username", "Le pseudo doit contenir au moins 2 caractères", 400);
         return;
       }
-      if (!password || typeof password !== "string" || password.length < 6) {
-        fail(res, "invalid_password", "Le mot de passe doit contenir au moins 6 caractères", 400);
+      if (!password || typeof password !== "string" || password.length < 8) {
+        fail(res, "invalid_password", "Le mot de passe doit contenir au moins 8 caractères", 400);
         return;
       }
 
@@ -142,7 +144,9 @@ export const authController = {
       );
       const user = rows[0];
 
-      const guestTtlMs = 1000 * 60 * 60 * 4; // 4h guest session
+      // Identite persistante sans compte : l'invite garde son pseudo, son lien et
+      // son historique quand il revient (avant : 4h, l'historique disparaissait).
+      const guestTtlMs = GUEST_SESSION_TTL_MS;
       const session = await createSessionToken(user.id, guestTtlMs);
       if (!req.session) req.session = {};
       req.session.userId = user.id;
@@ -163,6 +167,51 @@ export const authController = {
       user: context.user,
       providerConnection: context.connection,
     });
+  },
+
+  async deleteAccount(req: Request, res: Response): Promise<void> {
+    const context = await getSessionContext(req, res);
+    if (!context) return; // getSessionContext a déjà répondu 401
+
+    const userId = context.user.id;
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      // audio_sources : FK ON DELETE SET NULL vers users, donc supprimer users
+      // ne les efface pas. On les retire explicitement (RGPD, pas d'orphelines).
+      // used_tracks référence audio_sources en ON DELETE CASCADE : on le vide
+      // d'abord via les audio_sources de l'user pour rester explicite.
+      await client.query(
+        `DELETE FROM used_tracks
+         WHERE audio_source_id IN (SELECT id FROM audio_sources WHERE user_id=$1)`,
+        [userId]
+      );
+      await client.query(`DELETE FROM audio_sources WHERE user_id=$1`, [userId]);
+
+      // Les tables suivantes ont une FK ON DELETE CASCADE vers users : supprimer
+      // la ligne users suffirait, mais on efface explicitement pour l'audit RGPD.
+      await client.query(`DELETE FROM game_participants WHERE user_id=$1`, [userId]);
+      await client.query(`DELETE FROM round_responses WHERE user_id=$1`, [userId]);
+      await client.query(`DELETE FROM room_participants WHERE user_id=$1`, [userId]);
+      await client.query(`DELETE FROM user_connections WHERE user_id=$1`, [userId]);
+      await client.query(`DELETE FROM user_sessions WHERE user_id=$1`, [userId]);
+      await client.query(`DELETE FROM users WHERE id=$1`, [userId]);
+
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      logger.error("delete_account_failed", { error, userId });
+      fail(res, "delete_account_failed", "Impossible de supprimer le compte", 500);
+      return;
+    } finally {
+      client.release();
+    }
+
+    // Compte supprimé : on invalide la session côté serveur et le cookie client.
+    clearSession(req);
+    res.clearCookie("blindify_session_token", { path: "/" });
+    ok(res, { deleted: true });
   },
 
   async logout(req: Request, res: Response): Promise<void> {
