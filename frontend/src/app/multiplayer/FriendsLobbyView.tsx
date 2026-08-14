@@ -8,6 +8,7 @@ import { modeAccent } from "@/lib/uiTokens"
 import type { LobbyRendererProps, LobbyChatMessage } from "./lobbyTypes"
 import { ProfileImportBlock } from "@/components/import/ProfileImportBlock"
 import { LobbyChat } from "./LobbyChat"
+import { LobbyRps } from "./LobbyRps"
 
 /* Component-scoped animations matching the analog mockup. */
 const lobbyAnimations = `
@@ -62,7 +63,7 @@ function FriendsEntry({
         <form onSubmit={onJoinSubmit} className="flex gap-2">
           <input
             value={joinCode}
-            onChange={e => setJoinCode(e.target.value.toUpperCase())}
+            onChange={e => setJoinCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8))}
             placeholder="CODE"
             className="flex-1 rounded-md border-2 border-[#2e2014] bg-[#efe5d0] px-4 py-3 font-display text-sm font-bold uppercase tracking-[0.25em] text-[#2e2014] outline-none placeholder:text-[#b3a182] focus:border-[#c65133]"
           />
@@ -190,6 +191,7 @@ function FriendsLobby({
   onSendChat,
   initialProfileUrl,
   onImportingChange,
+  rps,
 }: LobbyRendererProps) {
   const accent = modeAccent("friends")
   const roomCode = room?.room_code ?? ""
@@ -360,6 +362,23 @@ function FriendsLobby({
 
         {/* Colonne droite : le chat etire + Lancer la partie en bas */}
         <aside className="flex flex-col gap-4">
+          {/* Mini-jeu d'attente : pierre-feuille-ciseaux, comme dans le lobby event */}
+          {rps ? (
+            <LobbyRps
+              players={participants.map(p => ({ userId: p.user_id, username: p.username }))}
+              currentUserId={currentUserId}
+              accent={accent}
+              scoreboard={rps.scoreboard}
+              incoming={rps.incoming}
+              active={rps.active}
+              pendingTargetId={rps.pendingTargetId}
+              result={rps.result}
+              onChallenge={rps.challenge}
+              onAccept={rps.accept}
+              onDecline={rps.decline}
+              onPlay={rps.play}
+            />
+          ) : null}
           {onSendChat ? (
             <div className="hidden min-h-[280px] flex-1 lg:block">
               <LobbyChat

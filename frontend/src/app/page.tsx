@@ -44,6 +44,10 @@ function Shell({ dots, index, onBack, wide, children }: { dots: number; index: n
           ))}
         </div>
         <div className="flex flex-1 flex-col justify-center animate-in fade-in slide-in-from-right-4 duration-300 sm:block sm:flex-none">{children}</div>
+        {/* Lien decouvrable par les crawlers (le sitemap ne suffit pas toujours) */}
+        <p className="mt-6 shrink-0 text-center text-[11px] text-[#b3a182]">
+          <a href="/faq/" className="underline hover:text-[#6b573f]">Questions fréquentes</a>
+        </p>
       </div>
     </div>
   )
@@ -163,7 +167,7 @@ export default function EntryWizard() {
   // REJOINDRE : on résout le mode de la room depuis le code, sans jamais voir les modes
   const handleJoin = async () => {
     if (going) return
-    const c = code.trim().toUpperCase()
+    const c = code.toUpperCase().replace(/[^A-Z0-9]/g, "")
     if (c.length < 4) { setCodeError("Entre un code valide."); return }
     setGoing(true)
     setCodeError(null)
@@ -418,10 +422,9 @@ export default function EntryWizard() {
         <input
           ref={codeRef}
           value={code}
-          onChange={e => { setCode(e.target.value.toUpperCase()); setCodeError(null) }}
+          onChange={e => { setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8)); setCodeError(null) }}
           onKeyDown={e => { if (e.key === "Enter") handleJoin() }}
           placeholder="CODE"
-          maxLength={8}
           className="w-full rounded-md border-2 border-[#2e2014] bg-[#efe5d0] px-4 py-4 text-center font-display text-3xl font-semibold uppercase tracking-[0.4em] text-[#2e2014] outline-none placeholder:text-base placeholder:tracking-[0.2em] placeholder:italic placeholder:text-[#b3a182] focus:border-[#c65133]"
           autoComplete="off"
         />

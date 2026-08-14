@@ -71,7 +71,7 @@ export default function ProfilePage() {
 
   const user: UserSummary | null = userPayload?.user ?? null
   const displayName = user?.username || "Player 1"
-  const providerLabel = user?.provider ? user.provider.toUpperCase() : "BLINDIFY"
+  const providerLabel = user?.provider ? user.provider.toUpperCase() : "BLINDZ"
   const initials = useMemo(() => {
     if (!displayName) return "?"
     return displayName

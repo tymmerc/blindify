@@ -343,6 +343,24 @@ export function MultiplayerGameClient({
   // isAudioPhase and previewUrl happen to be the same across rounds.
   const currentRound = state?.currentRound ?? 0
 
+  // Sequence platine : vinyle IMMOBILE, le bras se pose (~1.3s), la musique part
+  // a startAt. Avant, tout demarrait en meme temps et ca cassait l'illusion.
+  const [needleStage, setNeedleStage] = useState<"raised" | "dropping" | "down">("down")
+  useEffect(() => {
+    const startAt = state?.timing?.startAt
+    if (uiPhase === "reveal" || !startAt) { setNeedleStage("raised"); return }
+    const wait = startAt - serverNow
+    if (wait <= 120) { setNeedleStage("down"); return }
+    setNeedleStage("raised")
+    const t1 = setTimeout(() => setNeedleStage("dropping"), Math.max(0, wait - 1300))
+    const t2 = setTimeout(() => setNeedleStage("down"), wait)
+    return () => { clearTimeout(t1); clearTimeout(t2) }
+    // serverNow volontairement hors deps : il tique chaque seconde, on ne veut
+    // sequencer qu'au changement de manche / de phase.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state?.timing?.startAt, currentRound, uiPhase === "reveal"])
+
+
   useEffect(() => {
     if (!isAudioPhase || !currentTrack?.previewUrl) {
       audioManager.stop("multiplayer_phase_end", "multiplayer")
@@ -630,6 +648,7 @@ export function MultiplayerGameClient({
         state={state}
         uiPhase={uiPhase}
         isPlaying={isPlaying}
+        needleStage={needleStage}
         isLocked={isLocked}
         isRevealed={isRevealed}
         remaining={remaining}
@@ -962,7 +981,7 @@ export function MultiplayerGameClient({
                     ) : (
                       /* --- PRESENTER: GUESSING / LOCKED --- */
                       <div className="relative flex flex-col items-center gap-8 py-6">
-                        <AnalogVinyl size={320} spinning={isPlaying && !manualPlayRequired} accentColor={accent} coverUrl={currentTrack?.albumCover} blurred={!isRevealed} />
+                        <AnalogVinyl size={320} spinning={isPlaying && !manualPlayRequired && needleStage === "down"} accentColor={accent} coverUrl={currentTrack?.albumCover} blurred={!isRevealed} />
                         {manualPlayRequired && isAudioPhase && (
                           <button
                             onClick={handleManualPlay}
@@ -1108,7 +1127,7 @@ export function MultiplayerGameClient({
                           >
                             <AnalogVinyl
                               size={isLargeUI ? 140 : 100}
-                              spinning={isPlaying && !manualPlayRequired}
+                              spinning={isPlaying && !manualPlayRequired && needleStage === "down"}
                               accentColor={accent}
                               coverUrl={currentTrack?.albumCover}
                               blurred={!isRevealed}

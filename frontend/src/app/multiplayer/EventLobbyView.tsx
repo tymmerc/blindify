@@ -81,7 +81,7 @@ function EventEntry({
         <form onSubmit={onJoinSubmit} className="space-y-3">
           <input
             value={joinCode}
-            onChange={e => setJoinCode(e.target.value.toUpperCase())}
+            onChange={e => setJoinCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8))}
             placeholder="CODE DE LA SALLE"
             className="w-full rounded-xl border border-[rgba(46,32,20,.22)] bg-[#efe5d0] px-4 py-3 text-sm uppercase tracking-[0.25em] text-[#2e2014] outline-none focus:border-[rgba(46,32,20,.22)]"
           />

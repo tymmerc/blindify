@@ -25,6 +25,7 @@ type PlayerRow = {
   streak?: number
   bestStreak?: number
   totalReactionMs?: number
+  disconnected?: boolean
 }
 
 type UiPhase = "guessing" | "locked" | "reveal"
@@ -34,6 +35,8 @@ type Props = {
   state: MultiplayerGameState | null
   uiPhase: UiPhase
   isPlaying: boolean
+  /** Sequence platine : le vinyle ne tourne que bras pose ("down"). */
+  needleStage?: "raised" | "dropping" | "down"
   isLocked: boolean
   isRevealed: boolean
   remaining: number
@@ -87,7 +90,7 @@ const initial = (name: string | null | undefined) =>
 
 export function TheaterGameView(props: Props) {
   const {
-    user, state, uiPhase, isPlaying, isLocked, isRevealed,
+    user, state, uiPhase, isPlaying, needleStage = "down", isLocked, isRevealed,
     remaining, totalSeconds, sortedPlayers, displayAnsweredCount, playerCount, readyCount,
     guessTitle, setGuessTitle, guessArtist, setGuessArtist, sourceGuess, setSourceGuess,
     localHasAnswered, onSubmit, disabled,
@@ -127,8 +130,6 @@ export function TheaterGameView(props: Props) {
 
   const me = user.id
 
-  const [showChat, setShowChat] = useState(false)
-  const chatBtnRef = useRef<HTMLButtonElement>(null)
 
   return (
     <div className="theater-root relative min-h-screen overflow-hidden" style={{ background: "transparent", color: INK }}>
@@ -139,8 +140,8 @@ export function TheaterGameView(props: Props) {
         {/* ====================== TOP BAR ====================== */}
         <div className="grid items-center gap-4 theater-topbar" style={{ gridTemplateColumns: "1fr auto 1fr" }}>
           <div className="theater-brand">
-            <b>BLIND</b>IFY
-            <small>FRIENDS · LIVE</small>
+            <b>BLIND</b>Z
+            <small>À DISTANCE · LIVE</small>
           </div>
 
           <div className="flex flex-col items-center gap-2">
@@ -172,16 +173,6 @@ export function TheaterGameView(props: Props) {
               className="theater-volume-slider"
               aria-label="Volume"
             />
-            {onSendChat && (
-              <button
-                ref={chatBtnRef}
-                className={`theater-chat-btn ${chatMessages.length > 0 ? "has-msg" : ""}`}
-                onClick={() => setShowChat(s => !s)}
-              >
-                Chat
-                {chatMessages.length > 0 && <span className="dot" />}
-              </button>
-            )}
             {onExit && (
               <button className="theater-quit" onClick={onExit}>Quitter</button>
             )}
@@ -206,6 +197,8 @@ export function TheaterGameView(props: Props) {
               />
             ) : (
               <GuessingStage
+                needleStage={needleStage}
+                isRevealed={isRevealed}
                 key="guessing"
                 isAudioPhase={isAudioPhase}
                 manualPlayRequired={manualPlayRequired}
@@ -229,10 +222,13 @@ export function TheaterGameView(props: Props) {
                 const color = playerColor(idx)
                 const isMe = p.userId === me
                 const isLead = idx === 0
-                const statusText = isRevealed
-                  ? (p.isReady ? "Prêt" : "Regarde")
-                  : (p.hasAnswered ? "A répondu" : (isMe && (guessTitle || guessArtist) ? "Écrit..." : "Attend"))
-                const statusCls = isRevealed && p.isReady ? "locked"
+                const statusText = p.disconnected
+                  ? "Parti"
+                  : isRevealed
+                    ? (p.isReady ? "Prêt" : "Regarde")
+                    : (p.hasAnswered ? "A répondu" : (isMe && (guessTitle || guessArtist) ? "Écrit..." : "Attend"))
+                const statusCls = p.disconnected ? "gone"
+                  : isRevealed && p.isReady ? "locked"
                   : !isRevealed && p.hasAnswered ? "locked"
                   : isMe && !p.hasAnswered && (guessTitle || guessArtist) ? "typing"
                   : ""
@@ -241,7 +237,7 @@ export function TheaterGameView(props: Props) {
                     key={p.userId}
                     layout
                     transition={{ type: "spring", stiffness: 240, damping: 26 }}
-                    className={`theater-pchip ${isMe ? "you" : ""} ${isLead && p.score > 0 ? "lead" : ""}`}
+                    className={`theater-pchip ${isMe ? "you" : ""} ${isLead && p.score > 0 ? "lead" : ""} ${p.disconnected ? "gone" : ""}`}
                     style={{ "--c": color } as CSSProperties}
                   >
                     <div className="pavatar">
@@ -265,6 +261,43 @@ export function TheaterGameView(props: Props) {
                 )
               })}
             </div>
+
+            {/* Chat integre : visible en permanence sous le classement (PC).
+                Avant : un tiroir qui recouvrait l'ecran, ferme par defaut. */}
+            {onSendChat && (
+              <div className="theater-chat-inline">
+                <div className="theater-col-title"><span className="head">Chat</span></div>
+                <div ref={chatScrollRef} className="theater-chat-body">
+                  {chatMessages.length === 0 && (
+                    <p className="theater-chat-empty">Aucun message pour l'instant.</p>
+                  )}
+                  {chatMessages.map((m, i) => (
+                    <div key={i} className="theater-chat-msg">
+                      <span className="who" style={{ color: m.userId === me ? TERRA : "#6b573f" }}>{m.username}</span>
+                      <span className="txt">{m.message}</span>
+                    </div>
+                  ))}
+                </div>
+                <form
+                  className="theater-chat-form"
+                  onSubmit={e => {
+                    e.preventDefault()
+                    const txt = chatInput.trim()
+                    if (!txt) return
+                    onSendChat(txt)
+                    setChatInput("")
+                  }}
+                >
+                  <input
+                    value={chatInput}
+                    onChange={e => setChatInput(e.target.value)}
+                    placeholder="Dis quelque chose..."
+                    maxLength={200}
+                    className="theater-input"
+                  />
+                </form>
+              </div>
+            )}
           </div>
         </div>
 
@@ -364,55 +397,6 @@ export function TheaterGameView(props: Props) {
         )}
       </div>
 
-      {/* Chat drawer */}
-      {onSendChat && (
-        <AnimatePresence>
-          {showChat && (
-            <motion.aside
-              key="chat"
-              initial={{ x: 320, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              exit={{ x: 320, opacity: 0 }}
-              transition={{ duration: 0.25 }}
-              className="theater-chat-drawer"
-            >
-              <div className="theater-chat-head">
-                <span>Chat du salon</span>
-                <button onClick={() => setShowChat(false)} className="theater-quit">Fermer</button>
-              </div>
-              <div ref={chatScrollRef} className="theater-chat-body">
-                {chatMessages.length === 0 && (
-                  <p className="theater-chat-empty">Aucun message pour l'instant.</p>
-                )}
-                {chatMessages.map((m, i) => (
-                  <div key={i} className="theater-chat-msg">
-                    <span className="who" style={{ color: m.userId === me ? TERRA : "#6b573f" }}>{m.username}</span>
-                    <span className="txt">{m.message}</span>
-                  </div>
-                ))}
-              </div>
-              <form
-                className="theater-chat-form"
-                onSubmit={e => {
-                  e.preventDefault()
-                  const txt = chatInput.trim()
-                  if (!txt) return
-                  onSendChat(txt)
-                  setChatInput("")
-                }}
-              >
-                <input
-                  value={chatInput}
-                  onChange={e => setChatInput(e.target.value)}
-                  placeholder="Dis quelque chose..."
-                  maxLength={200}
-                  className="theater-input"
-                />
-              </form>
-            </motion.aside>
-          )}
-        </AnimatePresence>
-      )}
     </div>
   )
 }
@@ -427,6 +411,8 @@ function GuessingStage({
   displayAnsweredCount,
   playerCount,
   remaining,
+  needleStage,
+  isRevealed,
 }: {
   isAudioPhase: boolean
   manualPlayRequired: boolean
@@ -435,6 +421,8 @@ function GuessingStage({
   displayAnsweredCount: number
   playerCount: number
   remaining: number
+  needleStage: "raised" | "dropping" | "down"
+  isRevealed: boolean
 }) {
   return (
     <motion.div
@@ -450,11 +438,11 @@ function GuessingStage({
       </span>
 
       <div className="theater-arena">
-        <div className="theater-vinyl">
+        <div className={`theater-vinyl ${needleStage === "down" && !isRevealed ? "spinning" : ""}`}>
           <div className="theater-gloss" />
           <div className="theater-vinyl-center" />
         </div>
-        <div className="theater-tonearm">
+        <div className={`theater-tonearm ${needleStage !== "raised" ? "down" : ""}`}>
           <div className="ta-base" />
           <div className="ta-bar"><div className="ta-head" /></div>
         </div>
@@ -786,8 +774,9 @@ const theaterStyles = `
     background:repeating-radial-gradient(circle at 50% 50%, #1c130b 0 1.5px, #2a1d10 1.5px 4px);
     border:2px solid #000;
     box-shadow:inset 0 0 34px rgba(0,0,0,.5), 6px 6px 0 rgba(46,32,20,.18);
-    animation:spin 4.5s linear infinite; z-index:1;
+    z-index:1;
   }
+  .theater-vinyl.spinning{ animation:spin 4.5s linear infinite }
   /* label central : pochette teintee + anneau (fini le gros rond plein orange) */
   .theater-vinyl::after{
     content:""; position:absolute; inset:34%; border-radius:50%;
@@ -809,10 +798,10 @@ const theaterStyles = `
   .theater-tonearm{
     position:absolute; top:-4%; right:0%;
     width:46%; height:60%; z-index:4; pointer-events:none;
-    transform-origin:88% 10%; transform:rotate(2deg);
-    animation:arm-drop 1.5s cubic-bezier(.34,.02,.2,1);
+    transform-origin:88% 10%; transform:rotate(-26deg);
+    transition:transform 1.3s cubic-bezier(.34,.02,.2,1);
   }
-  @keyframes arm-drop{ from{ transform:rotate(-26deg) } to{ transform:rotate(2deg) } }
+  .theater-tonearm.down{ transform:rotate(2deg) }
   .theater-tonearm .ta-base{
     position:absolute; top:3%; right:6%;
     width:28px; height:28px; border-radius:50%;
@@ -896,6 +885,8 @@ const theaterStyles = `
     animation:rec 1.2s ease-in-out infinite;
   }
 
+  .theater-pchip.gone{ opacity:.45; filter:saturate(.4) }
+  .theater-pchip .pstatus.gone{ color:#7a1712; font-weight:700 }
   .theater-pchip{
     display:grid;
     grid-template-columns:34px auto 1fr auto;
@@ -1154,6 +1145,14 @@ const theaterStyles = `
   }
 
   /* Chat drawer */
+  .theater-chat-inline{
+    display:flex; flex-direction:column; flex:1; min-height:120px;
+    margin-top:4px; border:2px solid ${INK}; border-radius:8px;
+    background:rgba(236,225,200,.55); overflow:hidden;
+  }
+  .theater-chat-inline .theater-col-title{ padding:6px 10px 0 }
+  .theater-chat-inline .theater-chat-body{ flex:1; min-height:0; overflow-y:auto; padding:6px 10px }
+  .theater-chat-inline .theater-chat-form{ padding:6px; border-top:1.5px solid rgba(46,32,20,.25) }
   .theater-chat-drawer{
     position:fixed; top:0; right:0; bottom:0; width:min(340px, 90vw); z-index:60;
     display:flex; flex-direction:column;

@@ -545,7 +545,12 @@ export const gamesController = {
 
     if (sources.length < count) {
       const remaining = count - sources.length;
-      const globalPool = await fetchGlobalRandomSources(remaining * 2);
+      // *3 : les extraits Deezer expirent, on sur-tire pour compenser ceux
+      // dont l'hydratation echoue (sinon on servait des URLs mortes -> silence).
+      const globalPool = await fetchGlobalRandomSources(remaining * 3);
+      await Promise.all(globalPool.map(async candidate => {
+        candidate.audio_url = await hydratePreviewUrl(candidate);
+      }));
       const existingKeys = new Set(sources.map(src => src.external_id ?? String(src.id)));
       for (const candidate of globalPool) {
         const key = candidate.external_id ?? String(candidate.id);

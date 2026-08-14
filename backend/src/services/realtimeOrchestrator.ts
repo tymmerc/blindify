@@ -123,7 +123,9 @@ export function startRoundAndBroadcast(
 ): GameState | undefined {
   // Une nouvelle manche demarre : le filet anti-AFK de la precedente est obsolete.
   clearAdvanceTimer(roomCode);
-  const state = startNextRound(roomCode, opts);
+  // Pre-roll entre les manches : le bras de lecture se pose sur le vinyle AVANT
+  // que la musique parte (les clients sequencent l'animation sur startAt).
+  const state = startNextRound(roomCode, { ...opts, startAt: opts?.startAt ?? Date.now() + 1_600 });
   logger.debug(`startRoundAndBroadcast ${roomCode}: round=${state?.currentRound}, phase=${state?.phase}, revealAt=${state?.timing?.revealAt}`);
   if (!state) return undefined;
   if (state.phase === "FINISHED") {

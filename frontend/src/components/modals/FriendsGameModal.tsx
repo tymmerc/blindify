@@ -94,7 +94,7 @@ export function FriendsGameModal({
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                 <input
                   value={joinCode}
-                  onChange={e => setJoinCode(e.target.value.toUpperCase())}
+                  onChange={e => setJoinCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8))}
                   placeholder="CODE"
                   className="w-full rounded-md border-[1.5px] border-[rgba(46,32,20,.35)] bg-[#efe5d0] px-3 py-2 font-display text-sm uppercase tracking-[0.25em] text-[#2e2014] outline-none placeholder:text-[#b3a182] focus:border-[#2e2014]"
                   maxLength={12}

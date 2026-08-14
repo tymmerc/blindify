@@ -652,7 +652,17 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
           })
           refreshParticipants(roomCode)
         } else if ((payload.type === "left" || payload.type === "disconnected") && payload.userId) {
-          setParticipants(prev => prev.filter(p => p.user_id !== payload.userId))
+          // En pleine partie, un depart doit se VOIR : sans annonce, les autres
+          // jouaient sans savoir qu'ils attendaient quelqu'un de parti.
+          const leaverId = payload.userId
+          setParticipants(prev => {
+            const leaver = prev.find(p => p.user_id === leaverId)
+            const gs = gameStateRef.current as MultiplayerGameState | null
+            if (gs && gs.phase !== "FINISHED" && leaver && payload.type === "left") {
+              showNotice(`${leaver.username ?? "Un joueur"} a quitté la partie.`)
+            }
+            return prev.filter(p => p.user_id !== leaverId)
+          })
         }
       }
 
@@ -937,7 +947,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
 
   const joinRoomCode = useCallback(
     async (code: string, skipSpotify?: boolean) => {
-      const normalizedCode = code.trim().toUpperCase()
+      const normalizedCode = code.toUpperCase().replace(/[^A-Z0-9]/g, "")
       if (!requireSession({ type: "join", code: normalizedCode })) {
         setJoinCode(normalizedCode)
         return

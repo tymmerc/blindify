@@ -171,7 +171,7 @@ function ModeSelectionContent() {
   const searchParams = useSearchParams()
   const { mode, setMode, isGuest, setGuest } = useMode()
   const [selection, setSelection] = useState<Mode | null>(mode)
-  const [picking, setPicking] = useState<Mode | "solo" | null>(null)
+  const [picking, setPicking] = useState<Mode | "solo" | "buzzer" | null>(null)
   const [showHelp, setShowHelp] = useState(false)
 
   const fallbackRoute = useMemo(() => searchParams.get("from") || "/modes", [searchParams])
@@ -214,6 +214,12 @@ function ModeSelectionContent() {
     setTimeout(() => router.push("/solo"), 520)
   }
 
+  const handleBuzzer = () => {
+    if (picking) return
+    setPicking("buzzer")
+    setTimeout(() => router.push("/buzzer"), 520)
+  }
+
   return (
     <div className="flex min-h-dvh flex-col px-6 pt-10 pb-24 text-[#2e2014] sm:min-h-screen sm:flex-row sm:items-center sm:justify-center sm:py-14">
       <AccountMenu />
@@ -231,7 +237,7 @@ function ModeSelectionContent() {
           <h1 className="font-display text-4xl font-semibold leading-[1.05] sm:text-5xl">
             Comment tu veux <em className="font-medium italic text-[#c65133]">jouer</em>&nbsp;?
           </h1>
-          <p className="text-base text-[#6b573f]">Trois façons de lancer un blind test, selon qui est là et où vous êtes.</p>
+          <p className="text-base text-[#6b573f]">Choisis selon qui est là, où vous êtes, et combien de téléphones vous avez.</p>
         </header>
 
         <div className="grid gap-10 sm:gap-6 sm:grid-cols-2 lg:grid-cols-4">
@@ -257,6 +263,15 @@ function ModeSelectionContent() {
             rpm="33⅓ RPM · STÉRÉO"
             picking={picking === "solo"}
             onClick={handleSolo}
+          />
+          <VinylSleeve
+            title="Un seul tel"
+            subtitle="Tous les doigts sur un téléphone : le premier qui lâche répond."
+            accent="#5b7d99"
+            posture="En vrai"
+            rpm="78 RPM · MONO"
+            picking={picking === "buzzer"}
+            onClick={handleBuzzer}
           />
         </div>
 
