@@ -553,6 +553,15 @@ export function MultiplayerGameClient({
     onAnswer(guessTitle.trim(), guessArtist.trim(), sourceGuess)
   }
 
+  // "Je sais pas" : envoie une reponse vide. Le serveur marque le joueur comme
+  // ayant repondu -> des que tout le monde a tranche, le reveal part sans
+  // attendre la fin du chrono. C'est ca qui rend les manches courtes a 2-3.
+  const handlePass = () => {
+    if (uiPhase !== "guessing" || disabled || localHasAnswered || justSubmitted) return
+    setJustSubmitted(true)
+    onAnswer("", "", null)
+  }
+
   const [playLoading, setPlayLoading] = useState(false)
 
   const handleManualPlay = async () => {
@@ -666,6 +675,7 @@ export function MultiplayerGameClient({
         setSourceGuess={setSourceGuess}
         localHasAnswered={localHasAnswered}
         onSubmit={handleSubmit}
+        onPass={handlePass}
         disabled={disabled}
         muted={muted}
         volume={volume}
@@ -1369,6 +1379,15 @@ export function MultiplayerGameClient({
                               </span>
                             )}
                           </motion.button>
+                          {!localHasAnswered && (
+                            <button
+                              type="button"
+                              onClick={handlePass}
+                              className="mt-1.5 w-full py-1.5 text-center text-[12px] font-bold uppercase tracking-[0.1em] text-[var(--muted)] underline decoration-dotted underline-offset-4"
+                            >
+                              Je sais pas, passer
+                            </button>
+                          )}
                         </form>
                       </div>
                     </div>

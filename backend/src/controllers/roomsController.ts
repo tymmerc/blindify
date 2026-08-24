@@ -39,7 +39,7 @@ async function ensureRoomFlags(): Promise<void> {
   await pool.query(`ALTER TABLE multiplayer_rooms ADD COLUMN IF NOT EXISTS round_duration_ms INTEGER`);
 }
 
-const EVENT_ROUND_DURATION_MS = 15_000;
+const EVENT_ROUND_DURATION_MS = 20_000;
 // Decompte 3-2-1 avant la toute premiere manche (audio + chrono demarrent apres).
 const FIRST_ROUND_PREROLL_MS = 3_000;
 
@@ -1001,7 +1001,28 @@ export const roomsController = {
     sources = sources.filter(s => Boolean(s.audio_url));
 
     const cappedCount = Math.max(1, Math.min(sources.length, room.question_count));
-    sources = sources.slice(0, cappedCount);
+    // Equite entre joueurs : la coupe en fin de liste amputait au hasard la part
+    // d'un contributeur (vu en vrai : 4/4/2 sur 10 manches a 3 joueurs). On
+    // repartit en tourniquet : chacun place un titre a tour de role, ecart max 1.
+    const byOwner = new Map<string, AudioSourceRow[]>();
+    for (const src of sources) {
+      const key = String(src.user_id ?? "commun");
+      if (!byOwner.has(key)) byOwner.set(key, []);
+      byOwner.get(key)!.push(src);
+    }
+    const buckets = shuffle(Array.from(byOwner.values()));
+    const picked: AudioSourceRow[] = [];
+    while (picked.length < cappedCount) {
+      let progressed = false;
+      for (const bucket of buckets) {
+        if (picked.length >= cappedCount) break;
+        const next = bucket.shift();
+        if (next) { picked.push(next); progressed = true; }
+      }
+      if (!progressed) break;
+    }
+    // Re-melange : sans ca l'ordre de passage suivrait le cycle des joueurs.
+    sources = shuffle(picked);
 
     // Ajuster le nombre de rounds à ce qui est réellement disponible (borné par la demande)
     const effectiveRounds = Math.max(1, sources.length);

@@ -112,7 +112,7 @@ function EventLobby(props: LobbyRendererProps) {
   useWakeLock(props.isHost)
   // Reglages hote : nombre de manches + duree d'un round (sauves direct au clic)
   const [rounds, setRounds] = useState<number>(props.room?.question_count ?? 10)
-  const [roundSec, setRoundSec] = useState<number>(Math.round((props.room?.round_duration_ms ?? 15000) / 1000))
+  const [roundSec, setRoundSec] = useState<number>(Math.round((props.room?.round_duration_ms ?? 20000) / 1000))
   const saveConfig = (payload: { questionCount?: number; roundSeconds?: number }) => {
     if (!props.room) return
     void api.updateRoomConfig(props.room.room_code, payload).catch(() => {})

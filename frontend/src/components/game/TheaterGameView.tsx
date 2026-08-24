@@ -54,6 +54,8 @@ type Props = {
   setSourceGuess: (id: number | null) => void
   localHasAnswered: boolean
   onSubmit: () => void
+  /** "Je sais pas" : reponse vide -> reveal anticipe quand tout le monde a tranche. */
+  onPass: () => void
   disabled?: boolean
   muted: boolean
   volume: number
@@ -93,7 +95,7 @@ export function TheaterGameView(props: Props) {
     user, state, uiPhase, isPlaying, needleStage = "down", isLocked, isRevealed,
     remaining, totalSeconds, sortedPlayers, displayAnsweredCount, playerCount, readyCount,
     guessTitle, setGuessTitle, guessArtist, setGuessArtist, sourceGuess, setSourceGuess,
-    localHasAnswered, onSubmit, disabled,
+    localHasAnswered, onSubmit, onPass, disabled,
     muted, volume, onToggleMute, onVolumeChange,
     manualPlayRequired, isAudioPhase, onManualPlay,
     currentTrack, trackOwnerUsername, player, revealCountdown,
@@ -374,13 +376,25 @@ export function TheaterGameView(props: Props) {
               </p>
             )}
 
-            <button
-              type="submit"
-              className="theater-submit"
-              disabled={localHasAnswered || disabled}
-            >
-              {localHasAnswered ? "Envoyée" : "Valider ma réponse"}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="submit"
+                className="theater-submit flex-1"
+                disabled={localHasAnswered || disabled}
+              >
+                {localHasAnswered ? "Envoyée" : "Valider ma réponse"}
+              </button>
+              {/* Personne ne connait ce son : on passe au lieu de regarder le
+                  chrono, reveal des que tout le monde a tranche. */}
+              <button
+                type="button"
+                onClick={onPass}
+                disabled={localHasAnswered || disabled}
+                className="theater-pass"
+              >
+                Je sais pas
+              </button>
+            </div>
 
             <span className="theater-dock-tag-left">Face A · Réponse</span>
             <span className="theater-dock-tag-right">{displayAnsweredCount}/{playerCount} réponses</span>
@@ -1038,6 +1052,15 @@ const theaterStyles = `
     color:var(--soft);
   }
 
+  .theater-pass{
+    flex-shrink:0; border:2px solid rgba(46,32,20,.45); background:transparent;
+    padding:10px 12px; border-radius:8px; cursor:pointer;
+    font-family:var(--font-sans, 'Karla'), sans-serif; font-weight:700;
+    font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:#6b573f;
+    transition:border-color .15s, color .15s;
+  }
+  .theater-pass:hover{ border-color:#2e2014; color:#2e2014 }
+  .theater-pass:disabled{ opacity:.4; cursor:default }
   .theater-submit{
     padding:14px 26px;
     font-family:var(--font-sans, 'Karla'), sans-serif; font-weight:700;
