@@ -68,6 +68,8 @@ export interface GameState {
   totalRounds: number
   currentTrack: RoundTrack | null
   players: Record<number, PlayerState>
+  /** Partie mise en pause par l'hote (timers geles cote serveur). */
+  paused?: boolean
   timing: GameTiming
   config: GameConfig
 }

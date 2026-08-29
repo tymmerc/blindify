@@ -21,6 +21,7 @@ type PlayerRow = {
   hasAnswered: boolean
   lastGuess?: string | null
   lastVerdict?: string | null
+  lastGained?: number
   isReady: boolean
   streak?: number
   bestStreak?: number
@@ -37,6 +38,8 @@ type Props = {
   isPlaying: boolean
   /** Sequence platine : le vinyle ne tourne que bras pose ("down"). */
   needleStage?: "raised" | "dropping" | "down"
+  isHost?: boolean
+  onPauseToggle?: () => void
   isLocked: boolean
   isRevealed: boolean
   remaining: number
@@ -92,7 +95,7 @@ const initial = (name: string | null | undefined) =>
 
 export function TheaterGameView(props: Props) {
   const {
-    user, state, uiPhase, isPlaying, needleStage = "down", isLocked, isRevealed,
+    user, state, uiPhase, isPlaying, needleStage = "down", isHost, onPauseToggle, isLocked, isRevealed,
     remaining, totalSeconds, sortedPlayers, displayAnsweredCount, playerCount, readyCount,
     guessTitle, setGuessTitle, guessArtist, setGuessArtist, sourceGuess, setSourceGuess,
     localHasAnswered, onSubmit, onPass, disabled,
@@ -175,6 +178,9 @@ export function TheaterGameView(props: Props) {
               className="theater-volume-slider"
               aria-label="Volume"
             />
+            {isHost && onPauseToggle && (
+              <button className="theater-quit" onClick={onPauseToggle}>Pause</button>
+            )}
             {onExit && (
               <button className="theater-quit" onClick={onExit}>Quitter</button>
             )}
@@ -187,6 +193,8 @@ export function TheaterGameView(props: Props) {
             {isRevealed ? (
               <RevealStage
                 key="reveal"
+                sortedPlayers={sortedPlayers}
+                me={me}
                 currentTrack={currentTrack}
                 trackOwnerUsername={trackOwnerUsername}
                 player={player}
@@ -481,6 +489,8 @@ function GuessingStage({
 /* ============================ REVEAL STAGE ============================ */
 
 function RevealStage({
+  sortedPlayers,
+  me,
   currentTrack,
   trackOwnerUsername,
   player,
@@ -491,6 +501,8 @@ function RevealStage({
   isFinished,
   onRematch,
 }: {
+  sortedPlayers: PlayerRow[]
+  me: number
   currentTrack: MultiplayerGameState["currentTrack"] | null
   trackOwnerUsername: string | null
   player: PlayerRow | null
@@ -539,15 +551,29 @@ function RevealStage({
         </div>
       </div>
 
-      {player && (
-        <div className="theater-verdict" style={{ borderColor: verdictColor }}>
-          <div>
-            <span className="label">Ta réponse</span>
-            <p>{player.lastGuess || "(pas de réponse)"}</p>
-          </div>
-          <span className="badge" style={{ color: verdictColor, borderColor: verdictColor }}>{verdictLabel}</span>
-        </div>
-      )}
+      {/* Recap central : la reponse de CHACUN + points gagnes, classe par score.
+          C'est le moment le plus drole de la manche, il merite le centre. */}
+      <div className="theater-recap">
+        {sortedPlayers.map((p, idx) => {
+          const v = p.lastVerdict
+          const color = v === "correct" ? SAGE : v === "close" ? GOLD : "#9c2f1d"
+          const answered = Boolean((p.lastGuess ?? "").trim())
+          const label = answered ? `« ${p.lastGuess} »` : p.hasAnswered ? "a passé" : "n'a pas répondu"
+          return (
+            <div key={p.userId} className={`theater-recap-row ${p.userId === me ? "you" : ""}`}>
+              <span className="rank">{idx + 1}</span>
+              <span className="who">{p.username || `J${p.userId}`}{p.userId === me ? " (toi)" : ""}</span>
+              <span className="ans" style={{ color: answered ? color : "#8a7558", fontStyle: answered ? "normal" : "italic" }}>
+                {label}
+              </span>
+              <span className="gain" style={{ color: (p.lastGained ?? 0) > 0 ? SAGE : "#8a7558" }}>
+                {(p.lastGained ?? 0) > 0 ? `+${p.lastGained}` : "+0"}
+              </span>
+              <span className="total">{p.score} pts</span>
+            </div>
+          )
+        })}
+      </div>
 
       {!isFinished && (
         <button
@@ -1081,6 +1107,23 @@ const theaterStyles = `
   }
 
   /* Reveal */
+  .theater-recap{
+    display:flex; flex-direction:column; gap:6px;
+    width:min(640px, 92%); margin:0 auto;
+  }
+  .theater-recap-row{
+    display:grid; grid-template-columns:26px minmax(90px, 150px) 1fr auto auto;
+    align-items:center; gap:10px;
+    border:1.5px solid rgba(46,32,20,.28); border-radius:8px;
+    background:rgba(236,225,200,.55); padding:7px 12px;
+    font-family:var(--font-sans, 'Karla'), sans-serif; font-size:13px; color:#2e2014;
+  }
+  .theater-recap-row.you{ border-color:#2e2014; background:rgba(224,163,46,.14) }
+  .theater-recap-row .rank{ font-family:var(--font-display, 'Fraunces'), serif; font-weight:700; color:#8a7558 }
+  .theater-recap-row .who{ font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+  .theater-recap-row .ans{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+  .theater-recap-row .gain{ font-weight:700 }
+  .theater-recap-row .total{ font-family:var(--font-display, 'Fraunces'), serif; font-weight:700 }
   .theater-reveal-card{
     display:flex; gap:24px; align-items:center;
     padding:24px;

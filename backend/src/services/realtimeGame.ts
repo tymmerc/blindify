@@ -57,6 +57,8 @@ export type GameState = {
     revealAt: number | null;
   };
   players: Record<number, PlayerState>;
+  /** Partie mise en pause par l'hote (timers geles cote serveur). */
+  paused?: boolean;
   config: { autoAdvance: boolean; roundDurationMs: number };
 };
 
@@ -70,7 +72,7 @@ type GameContext = {
 
 const DEFAULT_LISTENING_MS = 20_000;
 
-const games = new Map<string, GameContext>();
+const games = new Map<string, GameContext & { pausedAt?: number | null }>();
 
 export function bootstrapGameState(params: {
   roomCode: string;
@@ -123,7 +125,7 @@ export function bootstrapGameState(params: {
   };
 
   const roundDurationMs = params.config?.roundDurationMs ?? DEFAULT_LISTENING_MS;
-  games.set(params.roomCode, { state, tracks: params.tracks, mode: params.mode ?? "friends", roundDurationMs, sessionId: params.sessionId });
+  games.set(params.roomCode, { state, tracks: params.tracks, mode: params.mode ?? "friends", roundDurationMs, sessionId: params.sessionId, pausedAt: null });
   return state;
 }
 
@@ -150,6 +152,30 @@ export function allAnswerablePlayers(roomCode: string): PlayerState[] {
   }
   // Exclude disconnected players so they don't block or prematurely trigger reveals
   return players.filter(p => !p.disconnected);
+}
+
+export function pauseGame(roomCode: string): GameState | undefined {
+  const ctx = games.get(roomCode);
+  if (!ctx) return undefined;
+  if (ctx.state.paused) return ctx.state;
+  if (ctx.state.phase !== "GUESSING" && ctx.state.phase !== "REVEAL") return ctx.state;
+  ctx.pausedAt = Date.now();
+  ctx.state.paused = true;
+  return ctx.state;
+}
+
+export function resumeGame(roomCode: string): GameState | undefined {
+  const ctx = games.get(roomCode);
+  if (!ctx) return undefined;
+  if (!ctx.state.paused) return ctx.state;
+  // Decaler les horloges du temps passe en pause : le chrono reprend ou il en
+  // etait, et l'audio se resynchronise tout seul (seek base sur startAt).
+  const delta = Date.now() - (ctx.pausedAt ?? Date.now());
+  if (ctx.state.timing.startAt) ctx.state.timing.startAt += delta;
+  if (ctx.state.timing.revealAt) ctx.state.timing.revealAt += delta;
+  ctx.pausedAt = null;
+  ctx.state.paused = false;
+  return ctx.state;
 }
 
 export function setHostConnected(roomCode: string, connected: boolean): GameState | undefined {
@@ -430,6 +456,38 @@ function isWordMatch(word: string, candidates: string[]): boolean {
   });
 }
 
+
+/**
+ * Variantes acceptees d'un TITRE : le titre complet, et le titre "de base"
+ * sans les parentheses/crochets ni les suffixes " - Radio Edit" & co.
+ * "Chocolat (feat. Awa Imani)" -> taper "chocolat" suffit.
+ */
+function titleVariants(title: string): string[] {
+  const variants = [title];
+  const stripped = title
+    .replace(/\(.*?\)|\[.*?\]/g, " ")
+    .split(" - ")[0]
+    .trim();
+  if (stripped && stripped.toLowerCase() !== title.toLowerCase()) variants.push(stripped);
+  return variants;
+}
+
+/**
+ * Variantes acceptees d'un ARTISTE : la liste complete, et chaque artiste seul.
+ * "Naza, Awa Imani" -> "naza" valide, "awa imani" aussi (le feat compte).
+ */
+function artistVariants(artist: string): string[] {
+  const variants = [artist];
+  const parts = artist
+    .split(/,|;|\/|&|\bfeat\.?\b|\bft\.?\b|\bfeaturing\b|\bavec\b|\bwith\b|\bvs\.?\b|\bx\b|×/i)
+    .map(p => p.trim())
+    .filter(p => p.length > 1);
+  for (const p of parts) {
+    if (p.toLowerCase() !== artist.toLowerCase()) variants.push(p);
+  }
+  return variants;
+}
+
 function evaluateGuessDetail(
   guess: string,
   track: RoundTrack,
@@ -451,20 +509,25 @@ function evaluateGuessDetail(
     const artistInput = separateArtist?.trim() ?? "";
     const guessProvided = titleInput.length > 0 || artistInput.length > 0;
 
-    const titleTokens = tokenize(track.title);
-    const artistTokens = tokenize(track.artist);
+    const titleVars = titleVariants(track.title);
+    const artistVars = artistVariants(track.artist);
 
-    const inputMatches = (input: string, target: string, targetTokens: string[]): boolean => {
+    const matchesAnyVariant = (input: string, variants: string[]): boolean => {
       if (!input) return false;
       const inputTokens = tokenize(input);
-      return normalize(target) === normalize(input) ||
-        (inputTokens.length > 0 && targetTokens.length > 0 && targetTokens.every(tok => isWordMatch(tok, inputTokens)));
+      return variants.some(variant => {
+        const variantTokens = tokenize(variant);
+        return (
+          normalize(variant) === normalize(input) ||
+          (inputTokens.length > 0 && variantTokens.length > 0 && variantTokens.every(tok => isWordMatch(tok, inputTokens)))
+        );
+      });
     };
 
-    const titleByTitle = inputMatches(titleInput, track.title, titleTokens);
-    const titleByArtistField = inputMatches(artistInput, track.title, titleTokens);
-    const artistByArtist = inputMatches(artistInput, track.artist, artistTokens);
-    const artistByTitleField = inputMatches(titleInput, track.artist, artistTokens);
+    const titleByTitle = matchesAnyVariant(titleInput, titleVars);
+    const titleByArtistField = matchesAnyVariant(artistInput, titleVars);
+    const artistByArtist = matchesAnyVariant(artistInput, artistVars);
+    const artistByTitleField = matchesAnyVariant(titleInput, artistVars);
 
     // Chaque champ ne credite qu'un seul element (pas de double comptage si
     // l'utilisateur tape la meme chose dans les deux champs).
@@ -482,19 +545,18 @@ function evaluateGuessDetail(
   const normalizedGuess = normalize(guess);
   const guessProvided = normalizedGuess.length > 0;
 
-  const titleMatch = guessProvided && normalize(track.title) === normalizedGuess;
-  const artistMatch = guessProvided && normalize(track.artist) === normalizedGuess;
-
   const guessTokens = tokenize(guess);
-  const titleTokens = tokenize(track.title);
-  const artistTokens = tokenize(track.artist);
-  const titleMatchTokens =
-    guessTokens.length > 0 && titleTokens.length > 0 && titleTokens.every(tok => isWordMatch(tok, guessTokens));
-  const artistMatchTokens =
-    guessTokens.length > 0 && artistTokens.length > 0 && artistTokens.every(tok => isWordMatch(tok, guessTokens));
+  const anyVariant = (variants: string[]): boolean =>
+    variants.some(variant => {
+      const variantTokens = tokenize(variant);
+      return (
+        (guessProvided && normalize(variant) === normalizedGuess) ||
+        (guessTokens.length > 0 && variantTokens.length > 0 && variantTokens.every(tok => isWordMatch(tok, guessTokens)))
+      );
+    });
 
-  const matchedTitle = titleMatch || titleMatchTokens;
-  const matchedArtist = artistMatch || artistMatchTokens;
+  const matchedTitle = anyVariant(titleVariants(track.title));
+  const matchedArtist = anyVariant(artistVariants(track.artist));
 
   let verdict: Verdict = "wrong";
   if (matchedTitle && matchedArtist) verdict = "correct";

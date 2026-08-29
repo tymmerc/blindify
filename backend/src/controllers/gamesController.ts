@@ -379,7 +379,7 @@ async function syncPlaylistTracks(userId: number, playlistId: string, accessToke
            album_cover=EXCLUDED.album_cover,
            duration_ms=EXCLUDED.duration_ms,
            metadata=EXCLUDED.metadata,
-           user_id=EXCLUDED.user_id`,
+           user_id=COALESCE(audio_sources.user_id, EXCLUDED.user_id)`,
         ["spotify", track.id, userId, track.name, artist, cover, track.duration_ms ?? null, metadata]
       );
     }
@@ -422,7 +422,7 @@ async function syncTopTracks(
          album_cover=EXCLUDED.album_cover,
          duration_ms=EXCLUDED.duration_ms,
          metadata=EXCLUDED.metadata,
-         user_id=EXCLUDED.user_id`,
+         user_id=COALESCE(audio_sources.user_id, EXCLUDED.user_id)`,
       ["spotify", track.id, userId, track.name, artist, cover, track.duration_ms ?? null, metadata]
     );
   }

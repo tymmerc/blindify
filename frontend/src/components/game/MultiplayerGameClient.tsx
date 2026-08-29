@@ -123,6 +123,8 @@ type Props = {
   onSendChat?: (message: string) => void
   /** Incremente quand le serveur refuse une reponse -> sortir de l'etat "Envoyee". */
   answerRejectSignal?: number
+  /** Pause / reprise (hote uniquement) : emis vers le serveur par le parent. */
+  onPauseToggle?: () => void
 }
 
 type Phase = "guessing" | "locked" | "reveal"
@@ -136,6 +138,7 @@ export function MultiplayerGameClient({
   onRematch,
   onExit,
   disabled,
+  onPauseToggle,
   modeConfig,
   accentColor,
   mode,
@@ -169,6 +172,11 @@ export function MultiplayerGameClient({
       : audioManager.getState().volume,
   )
   const [manualPlayRequired, setManualPlayRequired] = useState(false)
+  const [audioBrokenNotice, setAudioBrokenNotice] = useState(false)
+  const showAudioBrokenNotice = () => setAudioBrokenNotice(true)
+  // Watchdog audio : force une re-execution de l'effet de lecture (relance).
+  const [audioRetryNonce, setAudioRetryNonce] = useState(0)
+  const audioRetriesRef = useRef(0)
   const [justSubmitted, setJustSubmitted] = useState(false)
   const [revealCountdown, setRevealCountdown] = useState(isFastPace ? 4 : 7)
   const [chatInput, setChatInput] = useState("")
@@ -318,7 +326,8 @@ export function MultiplayerGameClient({
     return () => clearTimeout(timer)
   }, [hostAbsent])
 
-  const isAudioPhase = (uiPhase === "guessing" || uiPhase === "locked") && (!isEventParticipant || hostGone)
+  const isPaused = state?.paused === true
+  const isAudioPhase = (uiPhase === "guessing" || uiPhase === "locked") && (!isEventParticipant || hostGone) && !isPaused
 
   // Warmup audio on first user interaction in the game view.
   // This unlocks autoplay for non-host players who didn't click "Lancer".
@@ -374,8 +383,9 @@ export function MultiplayerGameClient({
     const elapsed = startAt ? (serverNow - startAt) / 1000 : 0
     const seekTo = elapsed > 0.5 ? elapsed : 0 // Only seek if >500ms has passed
 
+    const playedSrc = currentTrack.previewUrl!
     const startPlayback = () => {
-      audioManager.play({ src: currentTrack.previewUrl!, loop: true, volume, owner: "multiplayer", seekTo })
+      audioManager.play({ src: playedSrc, loop: true, volume, owner: "multiplayer", seekTo })
         .then(() => {
           setManualPlayRequired(false)
         })
@@ -396,21 +406,46 @@ export function MultiplayerGameClient({
       const t = setTimeout(startPlayback, waitMs)
       return () => {
         clearTimeout(t)
-        audioManager.stop("multiplayer_track_cleanup", "multiplayer")
+        audioManager.stopIfSrc(playedSrc, "multiplayer_track_cleanup", "multiplayer")
       }
     }
     startPlayback()
     return () => {
-      audioManager.stop("multiplayer_track_cleanup", "multiplayer")
+      audioManager.stopIfSrc(playedSrc, "multiplayer_track_cleanup", "multiplayer")
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- volume changes are applied via setVolume, not by re-triggering play. currentRound forces re-trigger on new rounds.
-  }, [isAudioPhase, currentTrack?.previewUrl, muted, currentRound])
+  }, [isAudioPhase, currentTrack?.previewUrl, muted, currentRound, audioRetryNonce])
 
   useEffect(() => {
     return () => {
       audioManager.stop("multiplayer_unmount", "multiplayer")
     }
   }, [])
+
+  // Nouvelle manche : le watchdog repart de zero.
+  useEffect(() => { audioRetriesRef.current = 0; setAudioBrokenNotice(false) }, [currentRound])
+
+  // Watchdog : pendant une phase audio, si rien ne joue alors que ca devrait
+  // (extrait mort, lecture interrompue par le navigateur, race au rematch),
+  // on relance tout seul jusqu'a 2 fois, puis on montre le bouton play + un
+  // message. Fini les manches muettes sans explication.
+  useEffect(() => {
+    if (!isAudioPhase || !currentTrack?.previewUrl || manualPlayRequired) return
+    const id = setInterval(() => {
+      const startAt = state?.timing?.startAt ?? 0
+      if (startAt && Date.now() < startAt + 1500) return // pas encore l'heure
+      if (audioManager.getState().playing) { audioRetriesRef.current = 0; return }
+      if (audioRetriesRef.current < 2) {
+        audioRetriesRef.current += 1
+        setAudioRetryNonce(n => n + 1) // re-execute l'effet de lecture
+      } else {
+        setManualPlayRequired(true)
+        showAudioBrokenNotice()
+      }
+    }, 2500)
+    return () => clearInterval(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAudioPhase, currentTrack?.previewUrl, manualPlayRequired, currentRound])
 
 
   // Reset justSubmitted as soon as reveal happens, so it's clean for the next round.
@@ -513,6 +548,7 @@ export function MultiplayerGameClient({
         hasAnswered: p.hasAnswered,
         lastGuess: p.lastGuess,
         lastVerdict: p.lastVerdict,
+        lastGained: p.lastGained ?? 0,
         isReady: p.isReady,
         streak: p.streak ?? 0,
         bestStreak: p.bestStreak ?? 0,
@@ -649,14 +685,37 @@ export function MultiplayerGameClient({
   )
 
   // Theater UI is the new visual for friends/streamer modes.
+  // Overlay de pause : plein ecran chez tout le monde, bouton reprendre chez l'hote.
+  const pauseOverlay = isPaused ? (
+    <div className="fixed inset-0 z-[80] flex flex-col items-center justify-center gap-4 px-8 text-center" style={{ background: "rgba(46,32,20,.92)" }}>
+      <p className="font-display text-6xl font-bold text-[#f4ecdb]">PAUSE</p>
+      <p className="text-sm font-semibold text-[#d8cdb4]">
+        {isHost ? "La partie est gelée pour tout le monde." : "L'hôte a mis la partie en pause."}
+      </p>
+      {isHost && onPauseToggle && (
+        <button
+          type="button"
+          onClick={onPauseToggle}
+          className="rounded-md border-2 border-[#f4ecdb] bg-[#f4ecdb] px-6 py-3 font-display text-lg font-bold text-[#2e2014] shadow-[4px_4px_0_rgba(244,236,219,.3)]"
+        >
+          Reprendre
+        </button>
+      )}
+    </div>
+  ) : null
+
   // Event mode keeps its dedicated presenter/participant rendering below.
   if (mode !== "event") {
     return (
+      <>
+      {pauseOverlay}
       <TheaterGameView
         user={user}
         state={state}
         uiPhase={uiPhase}
         isPlaying={isPlaying}
+        isHost={isHost}
+        onPauseToggle={onPauseToggle}
         needleStage={needleStage}
         isLocked={isLocked}
         isRevealed={isRevealed}
@@ -706,6 +765,7 @@ export function MultiplayerGameClient({
         onSendChat={onSendChat}
         chatScrollRef={chatScrollRef}
       />
+      </>
     )
   }
 
@@ -737,6 +797,15 @@ export function MultiplayerGameClient({
           </motion.div>
         )}
       </AnimatePresence>
+      {pauseOverlay}
+      {audioBrokenNotice && (
+        <div
+          className="sticky top-0 z-[59] border-b-2 border-[#2e2014] px-3 py-2 text-center text-xs font-semibold sm:text-sm"
+          style={{ background: "#b3543f", color: "#f4ecdb" }}
+        >
+          Pas de son ? L&apos;extrait semble indisponible. Tente le bouton play, ou passez la manche.
+        </div>
+      )}
       {hostGone && (
         <div
           className="sticky top-0 z-[60] border-b-2 border-[#2e2014] px-3 py-2 text-center text-xs font-semibold sm:text-sm"
@@ -823,6 +892,16 @@ export function MultiplayerGameClient({
                   style={{ accentColor: accent }}
                 />
               </div>}
+              {isHost && onPauseToggle && (
+                <button
+                  className="flex shrink-0 items-center rounded-full border-[1.5px] border-[#2e2014] bg-[var(--surface)] px-2 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--ink)] transition hover:bg-[#2e2014] hover:text-[#f4ecdb] sm:px-3"
+                  onClick={onPauseToggle}
+                  title="Pause"
+                >
+                  <span className="sm:hidden">II</span>
+                  <span className="hidden sm:inline">Pause</span>
+                </button>
+              )}
               {onExit && (
                 <button
                   className="flex shrink-0 items-center rounded-full border-[1.5px] border-[#2e2014] bg-[var(--surface)] px-2 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--ink)] transition hover:bg-[#2e2014] hover:text-[#f4ecdb] sm:px-3"
@@ -1092,6 +1171,29 @@ export function MultiplayerGameClient({
                             {verdictLabel(player?.lastVerdict)}
                           </span>
                         </div>
+                      </motion.div>
+
+                      {/* Les reponses des autres + points gagnes : le vrai sel du reveal */}
+                      <motion.div
+                        className="w-full max-w-sm space-y-1"
+                        initial={{ y: 12, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        transition={{ duration: 0.4, delay: 0.4 }}
+                      >
+                        {sortedPlayersFixed.filter(p => p.userId !== user.id).map(p => {
+                          const answered = Boolean((p.lastGuess ?? "").trim())
+                          return (
+                            <div key={p.userId} className="flex items-center justify-between gap-2 rounded-md border-[1.5px] border-[rgba(46,32,20,.25)] bg-[var(--surface-strong)] px-3 py-1.5 text-xs">
+                              <span className="shrink-0 font-bold">{p.username || `J${p.userId}`}</span>
+                              <span className="min-w-0 flex-1 truncate text-right" style={{ color: answered ? verdictColor(p.lastVerdict) : "var(--muted)", fontStyle: answered ? "normal" : "italic" }}>
+                                {answered ? `« ${p.lastGuess} »` : p.hasAnswered ? "a passé" : "pas de réponse"}
+                              </span>
+                              <span className="shrink-0 font-bold" style={{ color: (p.lastGained ?? 0) > 0 ? "#5d7252" : "var(--muted)" }}>
+                                +{p.lastGained ?? 0}
+                              </span>
+                            </div>
+                          )
+                        })}
                       </motion.div>
 
                       {/* Ready button with countdown */}

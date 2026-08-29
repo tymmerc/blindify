@@ -40,7 +40,7 @@ await host.getByRole("button", { name: /continuer/i }).click()
 // URL vide -> Continuer -> ecran Creer/Rejoindre
 await host.getByRole("button", { name: /^continuer$/i }).click({ timeout: 20000 })
 const hostId = await hostIdP
-seedLibrary(hostId, 3101, 20)
+seedLibrary(hostId, 3103, 20)
 say(`hote guest ${hostId} seede avec 20 titres (copie de 3101)`) 
 await host.getByText(/créer une partie/i).click()
 await host.waitForURL(/\/modes/, { timeout: 40000 })
@@ -49,9 +49,7 @@ await host.getByText("Je présente seulement").waitFor({ timeout: 40000 })
 await host.getByText("Je présente seulement").click()
 await host.getByText("CODE DE LA SALLE").waitFor({ timeout: 40000 })
 await host.getByRole("button", { name: "10", exact: true }).click()
-const sevenBtn = host.getByRole("button", { name: "7s", exact: true })
-if (await sevenBtn.isVisible().catch(() => false)) { await sevenBtn.click(); say("duree 7s selectionnee (nouveau bouton OK)") }
-else { bad("bouton 7s absent du lobby"); await host.getByRole("button", { name: "10s", exact: true }).click() }
+await host.getByRole("button", { name: "10s", exact: true }).click()
 const code = (await host.locator("span.h-12.w-9").allTextContents()).join("")
 say(`room ${code}`)
 

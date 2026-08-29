@@ -10,6 +10,8 @@ import type {
   SoloGameResponse,
   SoloTrack,
   UserSummary,
+  ImportedLink,
+  LinkDetails,
 } from "./types"
 
 export class ApiError extends Error {
@@ -449,6 +451,7 @@ export const clientApi = {
   async importPlaylists(url: string): Promise<{
     provider: "spotify" | "deezer"
     type: "user" | "playlist"
+    linkId: number | null
     playlists: Array<{ id: string; name: string; trackCount: number; cover: string | null }>
     notice: string
   }> {
@@ -465,12 +468,30 @@ export const clientApi = {
       body: JSON.stringify({ provider, playlistId }),
     })
   },
-  async importSyncAll(provider: string, playlistIds: string[], maxTracksPerPlaylist?: number): Promise<{ synced: number; failed: number; total: number }> {
+  async importSyncAll(provider: string, playlistIds: string[], maxTracksPerPlaylist?: number, linkId?: number | null): Promise<{ synced: number; failed: number; total: number }> {
     return request("/api/import/sync-all", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ provider, playlistIds, maxTracksPerPlaylist }),
+      body: JSON.stringify({ provider, playlistIds, maxTracksPerPlaylist, linkId }),
     })
+  },
+
+  // ---- Bibliotheque de liens ----
+  async getLinks(): Promise<{ links: ImportedLink[] }> {
+    return request("/api/links", { method: "GET" })
+  },
+  async toggleLink(id: number, active: boolean): Promise<{ id: number; active: boolean }> {
+    return request(`/api/links/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ active }),
+    })
+  },
+  async deleteLink(id: number): Promise<{ deleted: number }> {
+    return request(`/api/links/${id}`, { method: "DELETE" })
+  },
+  async linkDetails(id: number): Promise<LinkDetails> {
+    return request(`/api/links/${id}/details`, { method: "GET" })
   },
   async createChallenge(data: {
     tracks: import("./types").SoloTrack[]

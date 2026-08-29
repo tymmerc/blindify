@@ -1,12 +1,14 @@
 "use client"
 
 import Link from "next/link"
-import { Copy, Link2, Send, Sparkles, Check, MessageCircle, X, Crown } from "lucide-react"
+import { Copy, Link2, Send, Sparkles, Check, MessageCircle, X, Crown, SlidersHorizontal } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { modeAccent } from "@/lib/uiTokens"
+import { api } from "@/lib/api"
 import type { LobbyRendererProps, LobbyChatMessage } from "./lobbyTypes"
 import { ProfileImportBlock } from "@/components/import/ProfileImportBlock"
+import { MusicLibrary } from "@/components/import/MusicLibrary"
 import { LobbyChat } from "./LobbyChat"
 import { LobbyRps } from "./LobbyRps"
 
@@ -194,6 +196,14 @@ function FriendsLobby({
   rps,
 }: LobbyRendererProps) {
   const accent = modeAccent("friends")
+  const [libRefresh, setLibRefresh] = useState(0)
+  // Reglages hote (manches + duree), sauves direct au clic, comme dans le lobby event.
+  const [rounds, setRounds] = useState<number>(room?.question_count ?? 10)
+  const [roundSec, setRoundSec] = useState<number>(Math.round((room?.round_duration_ms ?? 20000) / 1000))
+  const saveConfig = (payload: { questionCount?: number; roundSeconds?: number }) => {
+    if (!room) return
+    void api.updateRoomConfig(room.room_code, payload).catch(() => {})
+  }
   const roomCode = room?.room_code ?? ""
   const hostUserId = room?.host_user_id ?? null
   const [copiedCode, setCopiedCode] = useState(false)
@@ -319,6 +329,17 @@ function FriendsLobby({
             ) : null}
           </section>
 
+          {/* Ta musique : l'historique des liens, cases cochees = ce qui joue ce soir */}
+          <section className="relative rounded-md border-2 border-[#2e2014] bg-[#ece1c8] px-6 py-6 shadow-[4px_4px_0_rgba(46,32,20,.18)]">
+            <p className="m-0 mb-4 text-[11px] font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>
+              Ta musique
+            </p>
+            <MusicLibrary accent={accent} refreshSignal={libRefresh} />
+            <div className="mt-4 border-t-2 border-dotted border-[rgba(46,32,20,.35)] pt-4">
+              <ProfileImportBlock accent={accent} hideHeader onImported={() => setLibRefresh(n => n + 1)} />
+            </div>
+          </section>
+
           {/* Equipage : qui est en ligne */}
           <section className="relative rounded-md border-2 border-[#2e2014] bg-[#ece1c8] px-6 py-6 shadow-[4px_4px_0_rgba(46,32,20,.18)]">
               {/* Players head */}
@@ -362,6 +383,53 @@ function FriendsLobby({
 
         {/* Colonne droite : le chat etire + Lancer la partie en bas */}
         <aside className="flex flex-col gap-4">
+          {/* Reglages : reserves a l'hote, memes options que le lobby event */}
+          {isHost && (
+            <section className="rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-4 shadow-[4px_4px_0_rgba(46,32,20,.18)]">
+              <p className="mb-3 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>
+                <SlidersHorizontal className="h-4 w-4" /> Réglages
+              </p>
+              <div className="space-y-3">
+                <div>
+                  <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.18em] text-[#8a7558]">Manches</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[5, 10, 15, 20].map(n => (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => { setRounds(n); saveConfig({ questionCount: n }) }}
+                        className={`rounded-full border-[1.5px] border-[#2e2014] px-3.5 py-1.5 text-sm font-bold transition ${
+                          rounds === n ? "text-[#f4ecdb]" : "bg-[#f4ecdb] text-[#6b573f] hover:bg-[#e0d4ba]"
+                        }`}
+                        style={rounds === n ? { background: accent } : undefined}
+                      >
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.18em] text-[#8a7558]">Durée d'une manche</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[10, 15, 20, 30].map(sec => (
+                      <button
+                        key={sec}
+                        type="button"
+                        onClick={() => { setRoundSec(sec); saveConfig({ roundSeconds: sec }) }}
+                        className={`rounded-full border-[1.5px] border-[#2e2014] px-3.5 py-1.5 text-sm font-bold transition ${
+                          roundSec === sec ? "text-[#f4ecdb]" : "bg-[#f4ecdb] text-[#6b573f] hover:bg-[#e0d4ba]"
+                        }`}
+                        style={roundSec === sec ? { background: accent } : undefined}
+                      >
+                        {sec}s
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </section>
+          )}
+
           {/* Mini-jeu d'attente : pierre-feuille-ciseaux, comme dans le lobby event */}
           {rps ? (
             <LobbyRps

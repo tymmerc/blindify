@@ -10,6 +10,8 @@ import {
   removePlayer,
   upsertPlayer,
   setHostConnected,
+  pauseGame,
+  resumeGame,
   markDisconnected,
   markReconnected,
   getGameMode,
@@ -21,6 +23,7 @@ import { validRoomCode, clampText, toIntOrNull, MAX_GUESS_LEN, MAX_CHAT_LEN } fr
 import {
   broadcastGameOver,
   broadcastState,
+  clearAdvanceTimer,
   clearRevealTimer,
   scheduleForcedAdvance,
   scheduleReveal,
@@ -417,6 +420,10 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
           ack?.({ ok: false, reason: "round_over" });
           return;
         }
+        if (state.paused) {
+          ack?.({ ok: false, reason: "paused" });
+          return;
+        }
         recordAnswer(roomCode, currentUser.id, combinedGuess, sourceUserId, guessTitle, guessArtist);
         // On confirme UNIQUEMENT si la reponse est reellement enregistree.
         const recorded = getRealtimeState(roomCode)?.players?.[currentUser.id]?.hasAnswered === true;
@@ -480,6 +487,7 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
       }
       markReconnected(roomCode, currentUser.id);
       const existing = getRealtimeState(roomCode);
+      if (existing?.paused) return; // pas d'avancement de manche pendant la pause
       if (!existing) {
         emitRoomError(socket, roomCode, "Aucune partie en cours.");
         return;
@@ -522,8 +530,10 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
         logger.debug(`game:sync socket ${socket.id} not in room ${roomCode}, re-joining`);
         socket.join(roomCode);
       }
-      // If the game is stuck in GUESSING with an expired revealAt, trigger reveal now
-      if (state.phase === "GUESSING" && state.timing.revealAt && state.timing.revealAt <= Date.now()) {
+      // If the game is stuck in GUESSING with an expired revealAt, trigger reveal now.
+      // JAMAIS pendant une pause : revealAt y est fige dans le passe par design,
+      // un simple resync de client aurait force le reveal a travers la pause.
+      if (!state.paused && state.phase === "GUESSING" && state.timing.revealAt && state.timing.revealAt <= Date.now()) {
         logger.debug(`game:sync forcing reveal for ${roomCode} (revealAt was ${state.timing.revealAt}, now=${Date.now()})`);
         const updated = revealRound(roomCode);
         if (updated) {
@@ -648,6 +658,36 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
       lobbyRps.removeMatch(roomCode, match.id);
     });
 
+    // Pause / reprise : reservee a l'hote. Pause = gel des timers serveur ;
+    // reprise = decalage des horloges puis re-programmation du timer de la phase.
+    socket.on("game:pause", async ({ roomCode }: { roomCode: string }) => {
+      if (!roomCode) return;
+      const access = await requireRoomAccess(roomCode, currentUser.id);
+      if (!access?.isHost) {
+        emitRoomError(socket, roomCode, "Seul l'hôte peut mettre en pause.");
+        return;
+      }
+      const state = pauseGame(roomCode);
+      if (!state?.paused) return;
+      clearRevealTimer(roomCode);
+      clearAdvanceTimer(roomCode);
+      broadcastState(io, roomCode);
+    });
+
+    socket.on("game:resume", async ({ roomCode }: { roomCode: string }) => {
+      if (!roomCode) return;
+      const access = await requireRoomAccess(roomCode, currentUser.id);
+      if (!access?.isHost) return;
+      const state = resumeGame(roomCode);
+      if (!state || state.paused) return;
+      if (state.phase === "GUESSING" && state.timing.revealAt) {
+        scheduleReveal(io, roomCode, state.timing.revealAt);
+      } else if (state.phase === "REVEAL") {
+        scheduleForcedAdvance(io, roomCode, state.currentRound);
+      }
+      broadcastState(io, roomCode);
+    });
+
     socket.on("game:leave", async ({ roomCode }: { roomCode: string }) => {
       if (!roomCode) return;
       socket.leave(roomCode);
@@ -704,7 +744,21 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
         const state = getRealtimeState(roomCode);
         // L'hote diffuse la musique pour toute la table : les autres doivent
         // savoir qu'il n'est plus la pour prendre le relais sur leur telephone.
-        if (state && state.hostUserId === currentUser.id) setHostConnected(roomCode, false);
+        if (state && state.hostUserId === currentUser.id) {
+          setHostConnected(roomCode, false);
+          // Seul l'hote peut reprendre une pause : s'il disparait pendant une
+          // pause, la table resterait gelee pour toujours. On reprend pour lui.
+          if (state.paused) {
+            const resumed = resumeGame(roomCode);
+            if (resumed && !resumed.paused) {
+              if (resumed.phase === "GUESSING" && resumed.timing.revealAt) {
+                scheduleReveal(io, roomCode, resumed.timing.revealAt);
+              } else if (resumed.phase === "REVEAL") {
+                scheduleForcedAdvance(io, roomCode, resumed.currentRound);
+              }
+            }
+          }
+        }
         if (state && state.phase === "GUESSING") {
           // Mark the player as disconnected instead of recording an empty answer.
           // This way they are excluded from allAnswerablePlayers() and won't

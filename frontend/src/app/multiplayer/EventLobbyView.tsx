@@ -8,6 +8,7 @@ import { QRCodeSVG } from "qrcode.react"
 import { Button } from "@/components/ui/button"
 import { SurfaceCard } from "@/components/ui/SurfaceCard"
 import { ProfileImportBlock } from "@/components/import/ProfileImportBlock"
+import { MusicLibrary } from "@/components/import/MusicLibrary"
 import { modeAccent } from "@/lib/uiTokens"
 import { ParticipantPanel } from "./LobbyViews"
 import { LobbyChat } from "./LobbyChat"
@@ -108,6 +109,7 @@ function EventLobby(props: LobbyRendererProps) {
   const accent = modeAccent("event") // or #e0a32e
   const filteredParticipants = props.participants
   const filteredScores = props.scores
+  const [libRefresh, setLibRefresh] = useState(0)
   // L'ecran central ne doit jamais se mettre en veille (QR affiche / partie a lancer).
   useWakeLock(props.isHost)
   // Reglages hote : nombre de manches + duree d'un round (sauves direct au clic)
@@ -255,6 +257,17 @@ function EventLobby(props: LobbyRendererProps) {
             {playerCount === 0 && (
               <p className="mt-2 text-center text-sm italic text-[#8a7558]">En attente des joueurs...</p>
             )}
+          </div>
+
+          {/* Ta musique : cases cochees = ce qui joue ce soir */}
+          <div className="rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-4 shadow-[4px_4px_0_rgba(46,32,20,.18)]">
+            <p className="m-0 mb-3 text-[11px] font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>
+              Ta musique
+            </p>
+            <MusicLibrary accent={accent} refreshSignal={libRefresh} />
+            <div className="mt-3 border-t-2 border-dotted border-[rgba(46,32,20,.35)] pt-3">
+              <ProfileImportBlock accent={accent} hideHeader onImported={() => setLibRefresh(n => n + 1)} />
+            </div>
           </div>
 
           {/* Relancer une partie avec les potes des dernieres soirees */}

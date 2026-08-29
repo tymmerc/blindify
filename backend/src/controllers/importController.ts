@@ -4,6 +4,8 @@ import { getSessionContext } from "../utils/session";
 import { ok, fail } from "../utils/response";
 import { logger } from "../utils/logger";
 import { parseProfileUrl, fetchPublicPlaylists, fetchPlaylistTracks, type ImportedTrack } from "../services/profileImportService";
+import { upsertLink, claimLegacyTracks } from "./linksController";
+import axios from "axios";
 import { deezerPreviewService } from "../services/deezerPreviewService";
 
 /** How many tracks to pre-resolve Deezer previews for after import (fire-and-forget). */
@@ -14,14 +16,23 @@ async function upsertTrack(
   userId: number,
   track: ImportedTrack,
   playlistId: string,
+  linkId?: number | null,
 ): Promise<void> {
   await pool.query(
-    `INSERT INTO audio_sources (user_id, provider, external_id, title, artist, album_cover, audio_url, duration_ms, metadata)
-     VALUES ($1, $2, $3, $4, $5, $6, NULL, $7, $8)
+    `INSERT INTO audio_sources (user_id, provider, external_id, title, artist, album_cover, audio_url, duration_ms, metadata, link_id)
+     VALUES ($1, $2, $3, $4, $5, $6, NULL, $7, $8, $9)
      ON CONFLICT (provider, external_id)
      DO UPDATE SET
        album_cover = COALESCE(EXCLUDED.album_cover, audio_sources.album_cover),
-       user_id = COALESCE(EXCLUDED.user_id, audio_sources.user_id)`,
+       -- Le PREMIER importeur garde le titre : avant, chaque import re-assignait
+       -- la ligne (partagee par toute la plateforme) au dernier venu, et la
+       -- bibliotheque du premier tombait a zero (vol croise, vu en vrai).
+       user_id = COALESCE(audio_sources.user_id, EXCLUDED.user_id),
+       link_id = CASE
+         WHEN audio_sources.user_id IS NULL OR audio_sources.user_id = EXCLUDED.user_id
+           THEN COALESCE(EXCLUDED.link_id, audio_sources.link_id)
+         ELSE audio_sources.link_id
+       END`,
     [
       userId,
       track.provider,
@@ -35,6 +46,7 @@ async function upsertTrack(
         playlist_id: playlistId,
         album: track.album,
       }),
+      linkId ?? null,
     ]
   );
 }
@@ -99,9 +111,45 @@ export const importController = {
 
     try {
       const playlists = await fetchPublicPlaylists(parsed);
+
+      // La carte de bibliotheque : nom + image du lien. Pour une playlist c'est
+      // direct ; pour un profil on tente le nom/avatar du compte (Deezer public),
+      // sinon on retombe sur la premiere playlist ou un libelle generique.
+      let label: string | null = null;
+      let imageUrl: string | null = null;
+      if (parsed.type === "playlist") {
+        label = playlists[0]?.name ?? "Playlist";
+        imageUrl = playlists[0]?.cover ?? null;
+      } else {
+        if (parsed.provider === "deezer") {
+          try {
+            const { data } = await axios.get(`https://api.deezer.com/user/${encodeURIComponent(parsed.id)}`, { timeout: 6000 });
+            label = data?.name ? `Profil de ${data.name}` : null;
+            imageUrl = data?.picture_medium ?? null;
+          } catch { /* profil prive ou API indisponible : fallback plus bas */ }
+        }
+        label = label ?? `Profil ${parsed.provider === "deezer" ? "Deezer" : "Spotify"}`;
+        imageUrl = imageUrl ?? playlists[0]?.cover ?? null;
+      }
+      let linkId: number | null = null;
+      try {
+        await claimLegacyTracks(context.user.id);
+        linkId = await upsertLink({
+          userId: context.user.id,
+          url: url.trim(),
+          provider: parsed.provider,
+          kind: parsed.type,
+          label,
+          imageUrl,
+        });
+      } catch (err) {
+        logger.error("link_upsert_failed", { error: err });
+      }
+
       ok(res, {
         provider: parsed.provider,
         type: parsed.type,
+        linkId,
         playlists,
         notice: "Seules les playlists publiques sont récupérées.",
       });
@@ -119,7 +167,7 @@ export const importController = {
     const context = await getSessionContext(req, res);
     if (!context) return;
 
-    const { provider, playlistId } = req.body as { provider?: string; playlistId?: string };
+    const { provider, playlistId, linkId } = req.body as { provider?: string; playlistId?: string; linkId?: number };
     if (!provider || !playlistId) {
       fail(res, "missing_params", "provider et playlistId requis.");
       return;
@@ -139,7 +187,7 @@ export const importController = {
       let synced = 0;
       for (const track of tracks) {
         try {
-          await upsertTrack(context.user.id, track, playlistId);
+          await upsertTrack(context.user.id, track, playlistId, linkId ?? null);
           synced++;
         } catch (err) {
           logger.error("import_track_failed", { title: track.title, error: err });
@@ -164,7 +212,7 @@ export const importController = {
     const context = await getSessionContext(req, res);
     if (!context) return;
 
-    const { provider, playlistIds, maxTracksPerPlaylist } = req.body as { provider?: string; playlistIds?: string[]; maxTracksPerPlaylist?: number };
+    const { provider, playlistIds, maxTracksPerPlaylist, linkId } = req.body as { provider?: string; playlistIds?: string[]; maxTracksPerPlaylist?: number; linkId?: number };
     if (!provider || !Array.isArray(playlistIds) || playlistIds.length === 0) {
       fail(res, "missing_params", "provider et playlistIds requis.");
       return;
@@ -193,7 +241,7 @@ export const importController = {
           total++;
 
           try {
-            await upsertTrack(context.user.id, track, playlistId);
+            await upsertTrack(context.user.id, track, playlistId, linkId ?? null);
             synced++;
           } catch (err) {
             logger.error("import_track_failed", { title: track.title, error: err });

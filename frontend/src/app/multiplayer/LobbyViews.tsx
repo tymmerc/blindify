@@ -46,7 +46,13 @@ export function ParticipantPanel({
                 {scores[participant.user_id]?.score ?? 0} pts · {scores[participant.user_id]?.accuracy ?? 0}%
               </span>
             ) : (
-              <span className="text-xs font-bold uppercase tracking-[0.14em] text-[#7d9471]">Présent</span>
+              <span className="text-xs font-bold uppercase tracking-[0.14em] text-[#7d9471]">
+                {typeof participant.track_count === "number"
+                  ? participant.track_count > 0
+                    ? `${participant.track_count} titres`
+                    : "sans musique"
+                  : "Présent"}
+              </span>
             )}
           </li>
         ))}

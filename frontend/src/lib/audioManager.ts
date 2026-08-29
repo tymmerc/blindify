@@ -70,10 +70,16 @@ class AudioManager {
         this.emit("ended");
       }
     };
+    // error/stalled : un extrait expire (403 Deezer) ou un reseau qui decroche
+    // doivent se VOIR dans l'etat, pour que le watchdog du jeu puisse reagir.
+    const onError = () => this.emit("error");
+    const onStalled = () => this.emit("stalled");
     this.handlers = [
       ["play", onPlay],
       ["pause", onPause],
       ["ended", onEnded],
+      ["error", onError],
+      ["stalled", onStalled],
     ];
     this.handlers.forEach(([event, handler]) => this.audio?.addEventListener(event, handler));
   }
@@ -147,6 +153,17 @@ class AudioManager {
       this.emit("error");
       throw err;
     }
+  }
+
+  /**
+   * Stop UNIQUEMENT si la source jouee est encore celle attendue. Le nettoyage
+   * d'un ancien effet React (ex: rematch) ne peut ainsi plus couper le morceau
+   * suivant deja lance : c'etait le bug "la musique coupe apres 2-3s au Rejouer".
+   */
+  stopIfSrc(expectedSrc: string, reason = "cleanup", owner?: AudioOwner): void {
+    if (!this.audio) return;
+    if (this.audio.src !== expectedSrc && !this.audio.src.endsWith(expectedSrc)) return;
+    this.stop(reason, owner);
   }
 
   pause(owner?: AudioOwner): void {

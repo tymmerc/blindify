@@ -53,27 +53,52 @@ function isWordMatch(word: string, candidates: string[]): boolean {
  * Matching CROSS-FIELD, comme sur le serveur : chaque champ est teste contre le
  * titre ET l'artiste (taper "damso" dans le champ titre doit valider l'artiste).
  */
+
+/** Titre complet OU titre "de base" (sans parentheses / suffixes " - ..."). */
+function titleVariants(title: string): string[] {
+  const variants = [title]
+  const stripped = title.replace(/\(.*?\)|\[.*?\]/g, " ").split(" - ")[0].trim()
+  if (stripped && stripped.toLowerCase() !== title.toLowerCase()) variants.push(stripped)
+  return variants
+}
+
+/** Liste complete OU chaque artiste seul (principal comme featuring). */
+function artistVariants(artist: string): string[] {
+  const variants = [artist]
+  const parts = artist
+    .split(/,|;|\/|&|\bfeat\.?\b|\bft\.?\b|\bfeaturing\b|\bavec\b|\bwith\b|\bvs\.?\b|\bx\b|×/i)
+    .map(p => p.trim())
+    .filter(p => p.length > 1)
+  for (const p of parts) {
+    if (p.toLowerCase() !== artist.toLowerCase()) variants.push(p)
+  }
+  return variants
+}
+
 export function evaluateGuess(
   titleInput: string,
   artistInput: string,
   track: { title: string; artist: string },
 ): { verdict: GuessVerdict; matchedTitle: boolean; matchedArtist: boolean } {
-  const titleTokens = tokenize(track.title)
-  const artistTokens = tokenize(track.artist)
+  const titleVars = titleVariants(track.title)
+  const artistVars = artistVariants(track.artist)
 
-  const inputMatches = (input: string, target: string, targetTokens: string[]): boolean => {
+  const matchesAnyVariant = (input: string, variants: string[]): boolean => {
     if (!input.trim()) return false
     const inputTokens = tokenize(input)
-    return (
-      normalize(target) === normalize(input) ||
-      (inputTokens.length > 0 && targetTokens.length > 0 && targetTokens.every(tok => isWordMatch(tok, inputTokens)))
-    )
+    return variants.some(variant => {
+      const variantTokens = tokenize(variant)
+      return (
+        normalize(variant) === normalize(input) ||
+        (inputTokens.length > 0 && variantTokens.length > 0 && variantTokens.every(tok => isWordMatch(tok, inputTokens)))
+      )
+    })
   }
 
-  const titleByTitle = inputMatches(titleInput, track.title, titleTokens)
-  const titleByArtistField = inputMatches(artistInput, track.title, titleTokens)
-  const artistByArtist = inputMatches(artistInput, track.artist, artistTokens)
-  const artistByTitleField = inputMatches(titleInput, track.artist, artistTokens)
+  const titleByTitle = matchesAnyVariant(titleInput, titleVars)
+  const titleByArtistField = matchesAnyVariant(artistInput, titleVars)
+  const artistByArtist = matchesAnyVariant(artistInput, artistVars)
+  const artistByTitleField = matchesAnyVariant(titleInput, artistVars)
 
   const matchedTitle = titleByTitle || (titleByArtistField && !artistByArtist)
   const matchedArtist = artistByArtist || (artistByTitleField && !titleByTitle)

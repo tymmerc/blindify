@@ -52,6 +52,18 @@ export const api = {
   } = {}): Promise<SoloGameResponse> {
     return clientApi.startSoloGame(params)
   },
+  async getLinks() {
+    return clientApi.getLinks()
+  },
+  async toggleLink(id: number, active: boolean) {
+    return clientApi.toggleLink(id, active)
+  },
+  async deleteLink(id: number) {
+    return clientApi.deleteLink(id)
+  },
+  async linkDetails(id: number) {
+    return clientApi.linkDetails(id)
+  },
   async recordSoloResult(payload: { sessionId: number; rounds: number; correct: number; bestStreak: number }) {
     return clientApi.recordSoloResult(payload)
   },
@@ -227,8 +239,8 @@ export const api = {
   async importSync(provider: string, playlistId: string) {
     return clientApi.importSync(provider, playlistId)
   },
-  async importSyncAll(provider: string, playlistIds: string[], maxTracksPerPlaylist?: number) {
-    return clientApi.importSyncAll(provider, playlistIds, maxTracksPerPlaylist)
+  async importSyncAll(provider: string, playlistIds: string[], maxTracksPerPlaylist?: number, linkId?: number | null) {
+    return clientApi.importSyncAll(provider, playlistIds, maxTracksPerPlaylist, linkId)
   },
   async quickPlay(url: string, count?: number) {
     return clientApi.quickPlay(url, count)

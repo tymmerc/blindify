@@ -64,7 +64,7 @@ export async function fetchAudioSources(
   userIds: number | number[],
   provider: ProviderFilter,
   count: number,
-  opts: { likedOnly?: boolean; playlistId?: string; timeRange?: string; ownedOnly?: boolean } = {}
+  opts: { likedOnly?: boolean; playlistId?: string; timeRange?: string; ownedOnly?: boolean; linkIds?: number[] } = {}
 ): Promise<AudioSourceRow[]> {
   const extraConds: string[] = [];
   const params: unknown[] = [];
@@ -92,6 +92,11 @@ export async function fetchAudioSources(
     params.push(opts.timeRange);
     extraConds.push(`metadata->>'time_range' = $${params.length}`);
   }
+  // Bibliotheque de liens : ne jouer QUE les titres des cartes cochees.
+  if (opts.linkIds) {
+    params.push(opts.linkIds);
+    extraConds.push(`link_id = ANY($${params.length}::int[])`);
+  }
 
   const extraClause = extraConds.length ? `AND ${extraConds.join(" AND ")}` : "";
 
@@ -99,7 +104,7 @@ export async function fetchAudioSources(
     params.push(count);
     const limitIndex = params.length;
     const { rows } = await pool.query<AudioSourceRow>(
-      `SELECT s.id, s.user_id AS user_id, s.provider, s.external_id, s.title, s.artist, s.album_cover, s.audio_url, s.duration_ms, s.metadata
+      `SELECT s.id, s.user_id AS user_id, s.provider, s.external_id, s.title, s.artist, s.album_cover, s.audio_url, s.duration_ms, s.metadata, s.link_id
        FROM audio_sources s
        INNER JOIN likes l ON l.audio_source_id = s.id
        WHERE ${userCond} ${providerCond} ${extraClause}
@@ -113,7 +118,7 @@ export async function fetchAudioSources(
   params.push(count);
   const limitIndex = params.length;
   const { rows } = await pool.query<AudioSourceRow>(
-    `SELECT s.id, s.user_id AS user_id, s.provider, s.external_id, s.title, s.artist, s.album_cover, s.audio_url, s.duration_ms, s.metadata
+    `SELECT s.id, s.user_id AS user_id, s.provider, s.external_id, s.title, s.artist, s.album_cover, s.audio_url, s.duration_ms, s.metadata, s.link_id
      FROM audio_sources s
      WHERE ${userCond} ${providerCond} ${extraClause}
      ORDER BY RANDOM()
@@ -139,7 +144,7 @@ export function shuffle<T>(arr: T[]): T[] {
 export async function collectPlayableSources(
   userIds: number | number[],
   desiredCount: number,
-  opts: { likedOnly?: boolean; playlistId?: string; timeRange?: string; provider?: ProviderFilter; ownedOnly?: boolean }
+  opts: { likedOnly?: boolean; playlistId?: string; timeRange?: string; provider?: ProviderFilter; ownedOnly?: boolean; linkIds?: number[] }
 ): Promise<AudioSourceRow[]> {
   // Sur-fetch reduit (4x) : moins de recherches Deezer en parallele au lancement
   // (les previews expirent et doivent etre re-cherchees) tout en gardant une marge.
@@ -150,6 +155,7 @@ export async function collectPlayableSources(
     playlistId: opts.playlistId,
     timeRange: opts.timeRange,
     ownedOnly: opts.ownedOnly,
+    linkIds: opts.linkIds,
   });
 
   // Hydrate / rafraichit les previews via Deezer (re-fetch si manquante OU expiree).

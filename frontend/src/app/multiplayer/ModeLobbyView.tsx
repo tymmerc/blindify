@@ -353,6 +353,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     const t = setTimeout(() => {
       const still = gameStateRef.current as MultiplayerGameState | null
       if (still?.phase !== "GUESSING" || still.currentRound !== round) return
+      if (still.paused) return // pause volontaire : rien a resynchroniser
       const socket = socketRef.current
       if (!socket?.connected) {
         ensureSocketRef.current?.()
@@ -378,6 +379,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       // Manche depassee : la reponse n'a plus de sens, on l'abandonne au lieu de
       // la faire compter sur la chanson suivante.
       if (pending.round !== gs.currentRound) { pendingAnswerRef.current = null; return }
+      if (gs.paused) return
       const socket = socketRef.current
       if (!socket) return
       socket.timeout(4000).emit("game:answer", pending.payload, (err: unknown, res?: { ok?: boolean; reason?: string }) => {
@@ -1602,6 +1604,12 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
                 showNotice("Trop tard, la manche était finie. Ta réponse n'a pas compté.", true)
                 return
               }
+              // Partie en pause : on garde la reponse au chaud, elle repartira a
+              // la reprise via la relance periodique. Pas de message anxiogene.
+              if (!err && res?.reason === "paused") {
+                pendingAnswerRef.current = { roomCode: room.room_code, round: answerRound, payload }
+                return
+              }
               pendingAnswerRef.current = { roomCode: room.room_code, round: answerRound, payload }
               showNotice("Ta réponse n'est pas passée. Nouvel essai dès que le réseau revient…", true)
               ensureSocket()
@@ -1616,6 +1624,12 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
               return
             }
             socket.emit("game:ready", { roomCode: room.room_code })
+          }}
+          onPauseToggle={() => {
+            const socket = socketRef.current
+            if (!socket || !room) return
+            const paused = (gameStateRef.current as MultiplayerGameState | null)?.paused === true
+            socket.emit(paused ? "game:resume" : "game:pause", { roomCode: room.room_code })
           }}
           mode={mode}
           modeConfig={modeConfig}

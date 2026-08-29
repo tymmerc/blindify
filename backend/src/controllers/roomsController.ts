@@ -11,6 +11,7 @@ import { bootstrapGameState, getGameState, clearGame } from "../services/realtim
 import { startRoundAndBroadcast } from "../services/realtimeOrchestrator";
 import { GameMode, type RoundTrack } from "../types/game";
 import { initStreamerGame } from "../services/streamerOrchestrator";
+import { activeLinkIds } from "./linksController";
 import {
   hydratePreviewUrl,
   collectPlayableSources,
@@ -84,7 +85,7 @@ async function syncPlaylistTracks(userId: number, playlistId: string, accessToke
            album_cover=EXCLUDED.album_cover,
            duration_ms=EXCLUDED.duration_ms,
            metadata=EXCLUDED.metadata,
-           user_id=EXCLUDED.user_id`,
+           user_id=COALESCE(audio_sources.user_id, EXCLUDED.user_id)`,
         ["spotify", track.id, userId, track.name, artist, cover, track.duration_ms ?? null, metadata]
       );
     }
@@ -127,7 +128,7 @@ async function syncTopTracks(
          album_cover=EXCLUDED.album_cover,
          duration_ms=EXCLUDED.duration_ms,
          metadata=EXCLUDED.metadata,
-         user_id=EXCLUDED.user_id`,
+         user_id=COALESCE(audio_sources.user_id, EXCLUDED.user_id)`,
       ["spotify", track.id, userId, track.name, artist, cover, track.duration_ms ?? null, metadata]
     );
   }
@@ -299,14 +300,35 @@ export const roomsController = {
       return;
     }
 
-    const { rows: participantRows } = await pool.query(
-      `SELECT rp.user_id, COALESCE(rp.nickname, u.username) AS username
-       FROM room_participants rp
-       JOIN users u ON u.id = rp.user_id
-       WHERE rp.room_id=$1
-       ORDER BY rp.joined_at ASC`,
-      [room.id]
-    );
+    let participantRows: Array<{ user_id: number; username: string | null; track_count?: number }>;
+    try {
+      participantRows = (await pool.query(
+        `SELECT rp.user_id, COALESCE(rp.nickname, u.username) AS username,
+                (SELECT count(*) FROM audio_sources a
+                  WHERE a.user_id = rp.user_id
+                    AND (
+                      NOT EXISTS (SELECT 1 FROM imported_links il WHERE il.user_id = rp.user_id)
+                      OR EXISTS (SELECT 1 FROM imported_links il2 WHERE il2.id = a.link_id AND il2.active)
+                    ))::int AS track_count
+         FROM room_participants rp
+         JOIN users u ON u.id = rp.user_id
+         WHERE rp.room_id=$1
+         ORDER BY rp.joined_at ASC`,
+        [room.id]
+      )).rows;
+    } catch (err) {
+      // Table de bibliotheque absente (base fraiche) : on repond sans compteurs
+      // plutot que d'echouer, le lobby polle cet endpoint en continu.
+      logger.error("details_track_count_failed", { error: err });
+      participantRows = (await pool.query(
+        `SELECT rp.user_id, COALESCE(rp.nickname, u.username) AS username
+         FROM room_participants rp
+         JOIN users u ON u.id = rp.user_id
+         WHERE rp.room_id=$1
+         ORDER BY rp.joined_at ASC`,
+        [room.id]
+      )).rows;
+    }
 
     const { rows: prefRows } = await pool.query<{ source_pref: string | null; playlist_pref: string | null }>(
       `SELECT source_pref, playlist_pref FROM room_participants WHERE room_id=$1 AND user_id=$2 LIMIT 1`,
@@ -875,6 +897,16 @@ export const roomsController = {
 
     // Prélever un quota par joueur pour garantir la diversité
     const perUserCount = Math.max(1, Math.ceil(room.question_count / Math.max(1, musicContributorIds.length)));
+    // Bibliotheque de liens : chaque joueur ne joue que ses cartes cochees.
+    // null = jamais passe par la bibliotheque -> tout son fonds joue (legacy).
+    const linkFilter = new Map<number, number[] | null>();
+    for (const pid of musicContributorIds) {
+      linkFilter.set(pid, await activeLinkIds(pid));
+    }
+    const linkOpts = (pid: number): { linkIds?: number[] } => {
+      const ids = linkFilter.get(pid);
+      return ids === null || ids === undefined ? {} : { linkIds: ids };
+    };
     const contribution = new Map<number, number>();
     for (const pid of musicContributorIds) {
       const pref = prefMap.get(pid);
@@ -899,6 +931,7 @@ export const roomsController = {
         timeRange: timeChoice,
         provider: poolProvider,
         ownedOnly: true,
+        ...linkOpts(pid),
       });
       for (const s of owned) s.user_id = pid; // revendique la contribution pour cette partie
       pushUnique(owned);
@@ -915,6 +948,7 @@ export const roomsController = {
           likedOnly: likedChoice,
           playlistId: playlistChoice,
           timeRange: timeChoice,
+          ...linkOpts(pid),
         });
         extra = slice.length;
         pushUnique(slice);
@@ -922,32 +956,41 @@ export const roomsController = {
       contribution.set(pid, (contribution.get(pid) ?? 0) + owned.length + extra);
     }
 
-    // Compléter avec le pool commun si besoin
+    // Compléter si besoin : joueur par joueur, en respectant les cartes cochees
+    // de chacun (l'ancien complement "pool commun" ignorait ces filtres).
     if (collected.length < room.question_count) {
-      const fill = await collectPlayableSources(musicContributorIds, room.question_count, {
-        likedOnly: false,
-        provider: poolProvider,
-      });
-      pushUnique(fill);
+      for (const pid of musicContributorIds) {
+        if (collected.length >= room.question_count) break;
+        const fill = await collectPlayableSources(pid, room.question_count - collected.length, {
+          likedOnly: false,
+          provider: poolProvider,
+          ownedOnly: true,
+          ...linkOpts(pid),
+        });
+        pushUnique(fill);
+      }
     }
 
     let sources = collected;
 
-
-    // Si toujours insuffisant, compléter avec le pool global (provider "any")
+    // Toujours insuffisant : meme complement, tous providers confondus.
     if (sources.length < room.question_count) {
-      const remaining = room.question_count - sources.length;
-      const fallback = await collectPlayableSources(musicContributorIds, remaining, {
-        likedOnly: false,
-        provider: "any",
-      });
       const existingKeys = new Set(sources.map(src => src.external_id ?? String(src.id)));
-      for (const candidate of fallback) {
-        const key = candidate.external_id ?? String(candidate.id);
-        if (existingKeys.has(key)) continue;
-        sources.push(candidate);
-        existingKeys.add(key);
+      for (const pid of musicContributorIds) {
         if (sources.length >= room.question_count) break;
+        const fallback = await collectPlayableSources(pid, room.question_count - sources.length, {
+          likedOnly: false,
+          provider: "any",
+          ownedOnly: true,
+          ...linkOpts(pid),
+        });
+        for (const candidate of fallback) {
+          const key = candidate.external_id ?? String(candidate.id);
+          if (existingKeys.has(key)) continue;
+          sources.push(candidate);
+          existingKeys.add(key);
+          if (sources.length >= room.question_count) break;
+        }
       }
     }
 
@@ -959,7 +1002,7 @@ export const roomsController = {
       // collectPlayableSources (et pas fetchAudioSources brut) : il rafraichit les
       // extraits et jette ceux sans audio. Sinon on pouvait injecter ici un titre
       // muet et la table restait 10 secondes dans le silence.
-      const personalPool = await collectPlayableSources(pid, 3, { provider: poolProvider, ownedOnly: true });
+      const personalPool = await collectPlayableSources(pid, 3, { provider: poolProvider, ownedOnly: true, ...linkOpts(pid) });
       for (const candidate of personalPool) {
         const key = candidate.external_id ?? String(candidate.id);
         if (existingKeys.has(key)) continue;
@@ -1026,6 +1069,14 @@ export const roomsController = {
 
     // Ajuster le nombre de rounds à ce qui est réellement disponible (borné par la demande)
     const effectiveRounds = Math.max(1, sources.length);
+
+    // "joué N fois" sur les cartes de la bibliotheque : on ne compte que les
+    // liens dont un titre part vraiment dans cette partie.
+    const playedLinkIds = Array.from(new Set(sources.map(src => src.link_id).filter((v): v is number => typeof v === "number")));
+    if (playedLinkIds.length) {
+      pool.query(`UPDATE imported_links SET times_played = times_played + 1 WHERE id = ANY($1::int[])`, [playedLinkIds])
+        .catch(err => logger.error("times_played_failed", { error: err }));
+    }
 
     const { rows: participantUsers } = await pool.query<{ id: number; username: string | null; avatar: string | null }>(
       `SELECT id, username, avatar FROM users WHERE id = ANY($1::int[])`,

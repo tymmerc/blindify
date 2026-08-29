@@ -17,7 +17,7 @@ const revealTimers = new Map<string, NodeJS.Timeout>();
 const advanceTimers = new Map<string, NodeJS.Timeout>();
 const READY_GRACE_MS = 10_000;
 
-function clearAdvanceTimer(roomCode: string): void {
+export function clearAdvanceTimer(roomCode: string): void {
   const t = advanceTimers.get(roomCode);
   if (t) {
     clearTimeout(t);

@@ -106,7 +106,7 @@ export async function syncSpotifyLibrary(
          album_cover=EXCLUDED.album_cover,
          duration_ms=EXCLUDED.duration_ms,
          metadata=EXCLUDED.metadata,
-         user_id=EXCLUDED.user_id
+         user_id=COALESCE(audio_sources.user_id, EXCLUDED.user_id)
        RETURNING id, provider, external_id, title, artist, album_cover, audio_url, duration_ms, metadata`,
       [
         "spotify",

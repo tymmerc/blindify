@@ -108,6 +108,8 @@ export type MultiplayerParticipant = {
   user_id: number
   username: string | null
   status?: "active" | "away" | "disconnected"
+  /** Nombre de titres que ce joueur amene (cartes actives de sa bibliotheque). */
+  track_count?: number
 }
 
 export type MultiplayerPlayerState = {
@@ -153,6 +155,8 @@ export type MultiplayerGameState = {
     ownerChoices?: number[]
   } | null
   players: Record<number, MultiplayerPlayerState>
+  /** Partie mise en pause par l'hote. */
+  paused?: boolean
   /** L'hote (source audio en mode event) est-il toujours connecte ? */
   hostConnected?: boolean
   timing: {
@@ -231,6 +235,7 @@ export interface GameState {
   totalRounds: number
   currentTrack: RoundTrack | null
   players: Record<number, PlayerState>
+  paused?: boolean
   timing: GameTiming
   config: GameConfig
 }
@@ -278,6 +283,27 @@ export type StreamerState = {
   streamerWins: number
   chatWins: number
   chatSnapshot?: { total: number; correct: number; percentCorrect: number } | null
+}
+
+export type ImportedLink = {
+  id: number
+  url: string
+  provider: string | null
+  kind: "user" | "playlist" | "legacy" | string | null
+  label: string | null
+  image_url: string | null
+  active: boolean
+  times_played: number
+  last_import_at: string
+  track_count: number
+}
+
+export type LinkDetails = {
+  link: { id: number; label: string | null; provider: string | null; kind: string | null }
+  stats: { total: string | number; playable: string | number; artists: string | number }
+  decades: Array<{ decade: number; n: string | number }>
+  covers: string[]
+  tracks: Array<{ title: string; artist: string }>
 }
 
 export type RoomSelfPreference = {

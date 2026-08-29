@@ -10,6 +10,8 @@ type ImportState = "idle" | "loading" | "syncing" | "done"
 type ProfileImportBlockProps = {
   accent?: string
   onImportingChange?: (importing: boolean) => void
+  /** Appele quand un import vient d'aboutir (pour rafraichir la bibliotheque). */
+  onImported?: () => void
   initialUrl?: string
   /** Lance l'import automatiquement au montage si initialUrl est fournie
       (cas du wizard : l'URL collee doit etre consommee, pas perdue). */
@@ -18,7 +20,7 @@ type ProfileImportBlockProps = {
   hideHeader?: boolean
 }
 
-export function ProfileImportBlock({ accent = "#c65133", onImportingChange, initialUrl, autoStart, hideHeader }: ProfileImportBlockProps) {
+export function ProfileImportBlock({ accent = "#c65133", onImportingChange, onImported, initialUrl, autoStart, hideHeader }: ProfileImportBlockProps) {
   const [url, setUrl] = useState(initialUrl ?? "")
   const [state, setState] = useState<ImportState>("idle")
   const [error, setError] = useState<string | null>(null)
@@ -50,9 +52,10 @@ export function ProfileImportBlock({ accent = "#c65133", onImportingChange, init
 
       const ids = result.playlists.map(p => p.id)
       // Quick import: 10 tracks per playlist (enough for a game)
-      const syncResult = await api.importSyncAll(result.provider, ids, 10)
+      const syncResult = await api.importSyncAll(result.provider, ids, 10, result.linkId)
       setSyncedCount(syncResult.synced)
       updateState("done")
+      if (syncResult.synced > 0) onImported?.()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erreur lors de l'import.")
       updateState("idle")

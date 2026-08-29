@@ -115,7 +115,7 @@ export default function EntryWizard() {
       const ids = (res.playlists || []).map(pl => pl.id)
       let count = 0
       if (ids.length) {
-        const sync = await api.importSyncAll(res.provider, ids, 50)
+        const sync = await api.importSyncAll(res.provider, ids, 50, res.linkId)
         count = sync.synced ?? 0
       }
       // 0 titre = echec silencieux : avant, on affichait fierement "0 titres

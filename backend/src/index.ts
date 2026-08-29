@@ -36,6 +36,8 @@ import audioSourcesRoutes from "./routes/audioSources";
 import friendsRoutes from "./routes/friends";
 import invitationsRoutes from "./routes/invitations";
 import importRoutes from "./routes/import";
+import linksRoutes from "./routes/links";
+import { ensureLinksSchema } from "./controllers/linksController";
 import quickPlayRoutes from "./routes/quickPlay";
 import challengeRoutes from "./routes/challenges";
 import { fail, ok } from "./utils/response";
@@ -301,6 +303,7 @@ app.use("/api/audio-sources", audioSourcesRoutes);
 app.use("/api/friends", friendsRoutes);
 app.use("/api/invitations", invitationsRoutes);
 app.use("/api/import", importRoutes);
+app.use("/api/links", linksRoutes);
 app.use("/api/quick-play", quickPlayRoutes);
 app.use("/api/challenges", challengeRoutes);
 app.use("/api/reports", reportsRoutes);
@@ -325,7 +328,17 @@ async function bootstrap() {
     process.exit(1);
   }
 
-  server.listen(PORT, "0.0.0.0", () => {
+  // Schema de la bibliotheque de liens des le BOOT : le poll room details y fait
+// reference, un premier deploiement sans la table crash-loopait le serveur.
+ensureLinksSchema().catch(err => logger.error("links_schema_boot_failed", { error: err }));
+
+// Filet : une rejection non geree ne doit pas tuer le serveur d'une soiree
+// (Node 22 crash par defaut). On logge fort, on continue.
+process.on("unhandledRejection", (reason) => {
+  logger.error("unhandled_rejection", { reason: String(reason) });
+});
+
+server.listen(PORT, "0.0.0.0", () => {
     logger.info(`🚀 Blindify API listening on port ${PORT}`);
   });
 }

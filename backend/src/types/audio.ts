@@ -10,5 +10,6 @@ export interface AudioSourceRow {
   album_cover: string | null;
   audio_url: string | null;
   duration_ms: number | null;
+  link_id?: number | null;
   metadata: Record<string, unknown> | null;
 }
