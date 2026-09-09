@@ -3,6 +3,7 @@ import type { Metadata } from "next"
 import Link from "next/link"
 
 export const metadata: Metadata = {
+  alternates: { canonical: "https://blindz.app/mentions-legales/" },
   title: "Mentions légales",
   description: "Éditeur, hébergeur et propriété intellectuelle du site Blindz.",
 }

@@ -1,7 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import { Users, CheckCircle2, SlidersHorizontal } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { Users, CheckCircle2, SlidersHorizontal, Fingerprint } from "lucide-react"
 import { api } from "@/lib/api"
 import { useWakeLock } from "@/lib/useWakeLock"
 import { QRCodeSVG } from "qrcode.react"
@@ -15,6 +16,7 @@ import { LobbyChat } from "./LobbyChat"
 import { LobbyRps } from "./LobbyRps"
 import { RecentPlayers } from "./RecentPlayers"
 import type { LobbyRendererProps } from "./lobbyTypes"
+import { publicPath } from "@/lib/publicPath"
 
 function EventEntry({
   intent,
@@ -32,37 +34,59 @@ function EventEntry({
   joining: LobbyRendererProps["joining"]
 }) {
   const accent = modeAccent("event")
+  const router = useRouter()
   // L'hote a deja choisi "creer" avant : on ne lui remontre pas "Rejoindre".
   const showJoin = intent !== "host"
   return (
     <div className={`grid w-full gap-4 ${showJoin ? "lg:grid-cols-2" : "mx-auto max-w-2xl"}`}>
-      {/* Organiser : l'hote choisit son role */}
+      {/* Organiser : l'hote choisit sa variante */}
       <SurfaceCard className="flex flex-col gap-4 sm:gap-6">
         <div className="space-y-2">
           <p className="text-xs uppercase tracking-[0.3em]" style={{ color: accent }}>
             Organiser
           </p>
-          <h2 className="text-3xl font-semibold leading-tight text-[#2e2014]">Lancer une partie</h2>
+          <h2 className="text-3xl font-semibold leading-tight text-[#2e2014]">Vous avez combien de téléphones ?</h2>
           <p className="text-sm text-[#6b573f]">
-            Choisis ton rôle. Dans les deux cas, c'est ton téléphone qui diffuse la musique pour toute la table.
+            Chacun le sien, ou un seul pour toute la table. À toi de choisir.
           </p>
         </div>
-        <div className={`grid gap-2 ${!showJoin ? "sm:grid-cols-2" : ""}`}>
+
+        {/* Variante 1 : chacun son telephone (partie en reseau, l'hote diffuse) */}
+        <div className="space-y-2">
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#8a7558]">Chacun son téléphone</p>
+          <div className={`grid gap-2 ${!showJoin ? "sm:grid-cols-2" : ""}`}>
+            <button
+              type="button"
+              onClick={() => onHost(true)}
+              className="flex flex-col items-start gap-0.5 rounded-xl border-2 border-[#2e2014] bg-[#ece1c8] px-4 py-3 text-left transition hover:translate-x-[1px] hover:translate-y-[1px] hover:bg-[#e0d4ba]"
+            >
+              <span className="font-semibold text-[#2e2014]">Je joue aussi</span>
+              <span className="text-xs text-[#6b573f]">Tu réponds avec les autres et tu gères la partie.</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onHost(false)}
+              className="flex flex-col items-start gap-0.5 rounded-xl border-2 border-[#2e2014] bg-[#ece1c8] px-4 py-3 text-left transition hover:translate-x-[1px] hover:translate-y-[1px] hover:bg-[#e0d4ba]"
+            >
+              <span className="font-semibold text-[#2e2014]">Je présente seulement</span>
+              <span className="text-xs text-[#6b573f]">Ton tel au centre de la table : musique et résultats. Tu ne réponds pas.</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Variante 2 : un seul telephone (buzzer local, doigts sur l'ecran) */}
+        <div className="space-y-2">
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#8a7558]">Un seul téléphone</p>
           <button
             type="button"
-            onClick={() => onHost(true)}
-            className="flex flex-col items-start gap-0.5 rounded-xl border-2 border-[#2e2014] bg-[#ece1c8] px-4 py-3 text-left transition hover:translate-x-[1px] hover:translate-y-[1px] hover:bg-[#e0d4ba]"
+            onClick={() => router.push("/buzzer")}
+            className="flex w-full items-center gap-3 rounded-xl border-2 border-[#2e2014] bg-[#ece1c8] px-4 py-3 text-left transition hover:translate-x-[1px] hover:translate-y-[1px] hover:bg-[#e0d4ba]"
           >
-            <span className="font-semibold text-[#2e2014]">Je joue aussi</span>
-            <span className="text-xs text-[#6b573f]">Tu réponds avec les autres et tu gères la partie.</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => onHost(false)}
-            className="flex flex-col items-start gap-0.5 rounded-xl border-2 border-[#2e2014] bg-[#ece1c8] px-4 py-3 text-left transition hover:translate-x-[1px] hover:translate-y-[1px] hover:bg-[#e0d4ba]"
-          >
-            <span className="font-semibold text-[#2e2014]">Je présente seulement</span>
-            <span className="text-xs text-[#6b573f]">Ton tel au centre de la table : musique et résultats. Tu ne réponds pas.</span>
+            <Fingerprint className="h-6 w-6 shrink-0" style={{ color: accent }} />
+            <span className="min-w-0">
+              <span className="block font-semibold text-[#2e2014]">Un seul tel, buzzer</span>
+              <span className="block text-xs text-[#6b573f]">Tous les doigts sur l'écran, le premier qui lâche répond.</span>
+            </span>
           </button>
         </div>
       </SurfaceCard>
@@ -120,7 +144,9 @@ function EventLobby(props: LobbyRendererProps) {
     void api.updateRoomConfig(props.room.room_code, payload).catch(() => {})
   }
   const roomCode = (props.room?.room_code ?? props.joinCode ?? "").toUpperCase() || "-----"
-  const joinUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/blindify/?join=${roomCode}`
+  // Le QR pointe sur le wizard (/jouer/), la racine etant desormais la landing.
+  // publicPath gere le basePath : /blindify/jouer/ sur dev, /jouer/ sur blindz.app.
+  const joinUrl = `${typeof window !== "undefined" ? window.location.origin : ""}${publicPath("/jouer/")}?join=${roomCode}`
   const playerCount = filteredParticipants.length
   const rpsPlayers = filteredParticipants.map(p => ({ userId: p.user_id, username: p.username }))
   const rps = props.rps
@@ -215,7 +241,28 @@ function EventLobby(props: LobbyRendererProps) {
           <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#8a7558]">Code de la salle</p>
         </div>
 
-        {/* Mini-jeu d'attente sous le QR */}
+        {/* Joueurs connectes : juste sous le QR, dans la colonne de gauche */}
+        <div className="order-2 rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-5 shadow-[4px_4px_0_rgba(46,32,20,.18)]">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="m-0 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>
+              <Users className="h-4 w-4" /> Joueurs
+            </p>
+            <span className="font-display text-base font-bold text-[#2e2014]">{playerCount.toString().padStart(2, "0")}</span>
+          </div>
+          <ParticipantPanel
+            participants={filteredParticipants}
+            scores={filteredScores}
+            title="Connectés"
+            compact
+            modeConfig={props.modeConfig}
+            variant="large"
+          />
+          {playerCount === 0 && (
+            <p className="mt-2 text-center text-sm italic text-[#8a7558]">En attente des joueurs...</p>
+          )}
+        </div>
+
+        {/* Mini-jeu d'attente sous les joueurs */}
         {rps ? (
           <div className="order-3">
             <LobbyRps
@@ -238,27 +285,7 @@ function EventLobby(props: LobbyRendererProps) {
 
       {/* Colonne droite : régie (joueurs + lancer) + chat qui remplit */}
       <div className="contents lg:flex lg:min-w-0 lg:flex-col lg:gap-6">
-        <div className="order-2 flex flex-col gap-4">
-          <div className="rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-5 shadow-[4px_4px_0_rgba(46,32,20,.18)]">
-            <div className="mb-3 flex items-center justify-between">
-              <p className="m-0 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>
-                <Users className="h-4 w-4" /> Joueurs
-              </p>
-              <span className="font-display text-base font-bold text-[#2e2014]">{playerCount.toString().padStart(2, "0")}</span>
-            </div>
-            <ParticipantPanel
-              participants={filteredParticipants}
-              scores={filteredScores}
-              title="Connectés"
-              compact
-              modeConfig={props.modeConfig}
-              variant="large"
-            />
-            {playerCount === 0 && (
-              <p className="mt-2 text-center text-sm italic text-[#8a7558]">En attente des joueurs...</p>
-            )}
-          </div>
-
+        <div className="order-4 flex flex-col gap-4">
           {/* Ta musique : cases cochees = ce qui joue ce soir */}
           <div className="rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-4 shadow-[4px_4px_0_rgba(46,32,20,.18)]">
             <p className="m-0 mb-3 text-[11px] font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>
@@ -345,7 +372,7 @@ function EventLobby(props: LobbyRendererProps) {
 
         {/* Chat : remplit l'espace restant de la colonne sur desktop */}
         {props.onSendChat ? (
-          <div className="order-4 h-[42vh] min-h-[300px] lg:h-auto lg:min-h-[320px] lg:flex-1">
+          <div className="order-5 h-[42vh] min-h-[300px] lg:h-auto lg:min-h-[320px] lg:flex-1">
             <LobbyChat
               messages={props.chatMessages ?? []}
               onSend={props.onSendChat}

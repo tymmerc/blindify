@@ -1,42 +1,54 @@
-# Blindify - Design Brief
+# Blindz - Design Brief
+
+Mis a jour le 31/08/2026. L'ancien brief (mood "futuriste", violet, glassmorphism,
+Space Grotesk) decrivait une direction abandonnee au printemps : il ne correspondait
+plus a l'app. Source de verite de la DA : `frontend/src/app/globals.css` (tokens) et
+`frontend/tailwind.config.ts`.
 
 ## Projet
-- **Type** : SaaS / Web App (music blind test game)
-- **Mood** : Futuriste
-- **Reference** : https://github.com/aki91253/blindtest-bash
+- **Type** : Web app (blind test avec les playlists des joueurs) + landing statique
+- **Mood** : Editorial-analogique ("Club analogique") : papier, encre, pochette de disque
 
-## Palette
-- Background : `#0a0e17` (dark blue-tinted)
-- Surface : `rgba(14, 18, 32, 0.45)` (glass panels)
-- Surface strong : `rgba(14, 18, 32, 0.65)`
-- Border : `rgba(148, 163, 184, 0.08)` / hover `rgba(148, 163, 184, 0.18)`
-- Text primary : `#E0E8F0`
-- Text muted : `#8896b0`
-- Primary accent : `#a855f7` (purple)
-- Mode accents : Friends `#ec4899` (pink), Event `#8b5cf6` (violet), Streamer `#f97316` (orange)
-- Gradient : `from-[#a855f7] to-[#ec4899]`
+## Palette : celle du logo (`public/logo-mark.png`, la cle de sol)
+- Papier (fond) : `#f4ecdb` ; papier profond (surfaces) : `#ece1c8` ; puits : `#efe5d0`
+- Encre espresso (texte, traits, ombres, blocs sombres) : `#2e2014`
+- Les 4 couleurs de la cle de sol, en BLOCS et en accents, jamais en texte petit sur papier :
+  vermillon `#cc4830` (CTA, italiques cles), ambre `#d88418` (bloc, accents sur encre),
+  sauge `#789084` (decoratif : plateau du disque, pastilles ; contraste insuffisant pour du texte),
+  bleu acier `#486090` (bloc avec texte creme).
+- Regle de lisibilite (feedback Tym 05/09 : "trop terne, uniforme, monotone" -> blocs colores,
+  mais "plus de contraste" -> le texte courant est TOUJOURS encre pleine sur papier/ambre, ou
+  creme sur encre/bleu ; les etiquettes 11px sont en encre + pastille de couleur).
+- L'ancien terracotta `#c65133` / or `#e0a32e` de l'app restent dans les ecrans de jeu ;
+  la landing utilise les valeurs exactes du logo.
+- Grain papier global (body::after, mix-blend multiply), ombres dures decalees `4px 4px 0 #2e2014`
 
-## Fonts
-- Display / Body : **Space Grotesk** (via next/font/google)
-- Labels / Mono : **JetBrains Mono** (via next/font/google)
-- Labels styling : `font-mono text-[11px] uppercase tracking-[0.1em]`
+## Typo
+- Display : **Fraunces** (serif), gros et serre. H1 landing : 2.9rem mobile / 4rem sm / 6rem desktop, leading 1.02.
+  Italiques terracotta sur le mot cle (`<em>` : "vos", "Ici, non.").
+- UI / texte : **Karla**
+- Etiquettes : **JetBrains Mono**, 11px, uppercase, tracking 0.26em, en encre + pastille de couleur.
+  Elles DISENT ce qu'il y a dans la section ("Ce qui change", "Les modes de jeu", "En trois etapes").
+  Pas de metaphore vinyle "Face A / Face B" : Tym ne l'a pas comprise, personne ne la comprendra.
+- Chargement via next/font/google dans `layout.tsx`
+
+## Motion
+- Presente, PILOTEE par le scroll, jamais de fade-in au scroll.
+- Landing : le disque du hero tourne avec `scrollY`, le bras se pose en entrant dans
+  "comment ca marche" (framer-motion `useScroll`/`useTransform`, respecte
+  `prefers-reduced-motion`). Les 3 modes en split-screen epingle (`position: sticky`,
+  scene SVG qui change via IntersectionObserver ; bandeau compact colle sur mobile).
+- App : platine et bras animes dans les ecrans de jeu (AnalogVinyl, TheaterGameView).
 
 ## Layout
-- Glassmorphism panels (backdrop-blur + semi-transparent bg + subtle borders)
-- Glow effects on interactive elements (accent-colored box-shadows on hover)
-- Dark blue-tinted backgrounds (NOT pure black)
-- Rounded-xl buttons (not rounded-full)
-- Grid-based info cards
+- Asymetrique, grandes marges, sections separees par un trait d'encre `border-t-2`
+  alternant papier / papier profond. Pas de grille de 3 cartes identiques, pas de navbar
+  collante, un seul CTA fort par ecran.
+- Boutons : rectangle `rounded-md`, bordure encre 2px, ombre dure, qui "s'enfonce" au hover
+  (`translate 2px` + ombre reduite). Classes globales `.btn-primary` / `.btn-neon`.
 
-## Composants cles
-- Glass panels (SurfaceCard) : blur + transparent bg + border
-- Glow buttons : accent-colored bg/border with hover shadow
-- Mono labels : JetBrains Mono uppercase for badges, stats, categories
-- Bottom nav : glass backdrop with 4 items
-
-## Pages preservees
-- `/modes` : page de selection de mode (NON modifiee)
-
-## Direction artistique
-Inspiree du repo blindtest-bash : glassmorphisme, typo Space Grotesk + JetBrains Mono, neon glows, dark-first.
-Adaptee aux couleurs existantes de Blindify (purple primary, pink/violet/orange mode accents).
+## Pages
+- `/` : landing serveur (texte pre-rendu pour les moteurs et les IA), `frontend/src/app/page.tsx`
+- `/jouer/` : le wizard de jeu (pseudo, lien, creer/rejoindre). Les QR `/?join=CODE` y sont rediriges.
+- `/faq/` : modele de page de contenu (JSON-LD FAQPage)
+- `/modes`, lobbies, jeu : composants dans `frontend/src/app/multiplayer/` et `components/game/`

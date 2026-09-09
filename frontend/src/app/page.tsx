@@ -1,444 +1,290 @@
-"use client"
-
-import { useEffect, useRef, useState } from "react"
-import { useRouter } from "next/navigation"
-import { ArrowLeft, ArrowRight, Plus, LogIn, Check, ExternalLink, Loader2 } from "lucide-react"
-import { api } from "@/lib/api"
+import type { Metadata } from "next"
+import Link from "next/link"
 import { publicPath } from "@/lib/publicPath"
+import { ScrollVinyl } from "@/components/home/ScrollVinyl"
+import { ModesStage } from "@/components/home/ModesStage"
+import { SiteHeader, SiteFooter } from "@/components/home/SiteChrome"
 
-const NAME_KEY = "blindify_nickname"
-const URL_KEY = "blindify_profile_url"
+// Landing de blindz.app. Composant SERVEUR : tout le texte est dans le HTML
+// pre-rendu (export statique), c'est ce que lisent Google, Bing, Brave et
+// donc ChatGPT, Claude, Perplexity. Les seuls ilots client sont le disque
+// pilote par le scroll et le split-screen des modes.
+// Le wizard de jeu (pseudo, lien, creer/rejoindre) vit sur /jouer/.
+//
+// Palette : celle du logo (cle de sol) : vermillon, ambre, sauge, bleu acier,
+// sur encre et papier. Chaque bloc prend une couleur, le texte reste toujours
+// en encre pleine ou en creme pour la lisibilite (contrastes verifies AA).
+//
+// Veracite : chaque chiffre et chaque promesse ci-dessous a ete verifie contre
+// le code (limites de salle roomsController, scoring realtimeGame, buzzer
+// local, cookie invite d'un an). Ne pas gonfler.
 
-type Step = "nom" | "musique" | "action" | "code"
+const TITLE = "blindz.app · Le blind test avec vos playlists Spotify et Deezer"
+const DESC =
+  "blindz.app génère un blind test avec les playlists Spotify ou Deezer des joueurs, sans pack imposé ni quiz à préparer. À table, sur un seul tel ou à distance, gratuit et sans compte."
 
-function Shell({ dots, index, onBack, wide, children }: { dots: number; index: number; onBack: (() => void) | null; wide?: boolean; children: React.ReactNode }) {
+export const metadata: Metadata = {
+  title: { absolute: TITLE },
+  description: DESC,
+  alternates: { canonical: "https://blindz.app/" },
+  openGraph: { title: TITLE, description: DESC, url: "https://blindz.app/", type: "website", locale: "fr_FR" },
+  twitter: { card: "summary", title: TITLE, description: DESC },
+}
+
+// Couleurs du logo
+const INK = "#2e2014"
+const CREAM = "#f4ecdb"
+const VERMILION = "#cc4830"
+const AMBER = "#d88418"
+const BLUE = "#486090"
+
+// Etiquette de section : encre + pastille de couleur (lisible a 11px, la
+// couleur est portee par la pastille, pas par le texte).
+function Tag({ color, children, light }: { color: string; children: React.ReactNode; light?: boolean }) {
   return (
-    <div className="flex min-h-dvh flex-col px-5 pt-6 pb-8 sm:min-h-screen sm:flex-row sm:items-center sm:justify-center sm:py-10">
-      <div className={`mx-auto flex w-full max-w-md flex-1 flex-col sm:block sm:flex-none ${wide ? "lg:max-w-4xl" : ""}`}>
-        <div className="flex h-8 shrink-0 items-center justify-between sm:mb-8 sm:h-auto">
-          <img
-            src={publicPath("/logo-mark.png")}
-            alt="Blindz"
-            className="h-8 w-8 object-contain sm:h-10 sm:w-10"
-          />
-          {onBack ? (
-            <button
-              type="button"
-              onClick={onBack}
-              className="flex items-center gap-1 rounded-full border-[1.5px] border-[#2e2014] bg-[#ece1c8] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb] sm:gap-1.5 sm:px-3 sm:py-1.5 sm:text-[11px] sm:tracking-[0.14em]"
-            >
-              <ArrowLeft size={11} />
-              Retour
-            </button>
-          ) : (
-            <span />
-          )}
-        </div>
-        <div className="mb-10 mt-8 flex shrink-0 items-center justify-center gap-1.5 sm:mt-0">
-          {Array.from({ length: dots }).map((_, i) => (
-            <span
-              key={i}
-              className="h-1.5 rounded-full transition-all"
-              style={{ width: i === index ? 26 : 8, background: i <= index ? "#c65133" : "rgba(46,32,20,.22)" }}
-            />
-          ))}
-        </div>
-        <div className="flex flex-1 flex-col justify-center animate-in fade-in slide-in-from-right-4 duration-300 sm:block sm:flex-none">{children}</div>
-        {/* Lien decouvrable par les crawlers (le sitemap ne suffit pas toujours) */}
-        <p className="mt-6 shrink-0 text-center text-[11px] text-[#b3a182]">
-          <a href="/faq/" className="underline hover:text-[#6b573f]">Questions fréquentes</a>
-        </p>
-      </div>
-    </div>
+    <p className={`flex items-center gap-2 font-mono text-[11px] font-bold uppercase tracking-[0.26em] ${light ? "text-[#f4ecdb]" : "text-[#2e2014]"}`}>
+      <span aria-hidden className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: color }} />
+      {children}
+    </p>
   )
 }
 
-export default function EntryWizard() {
-  const router = useRouter()
-  const [step, setStep] = useState<Step>("nom")
-  const [name, setName] = useState("")
-  const [url, setUrl] = useState("")
-  const [importing, setImporting] = useState(false)
-  const [synced, setSynced] = useState<number | null>(null)
-  const [importError, setImportError] = useState<string | null>(null)
-  const [going, setGoing] = useState(false)
-  const [code, setCode] = useState("")
-  const [codeError, setCodeError] = useState<string | null>(null)
-  const [joinParam, setJoinParam] = useState("") // ?join=CODE (scan du QR "Autour d'une table")
-  const [tuto, setTuto] = useState<null | "spotify" | "deezer">(null)
-  const nameRef = useRef<HTMLInputElement>(null)
-  const codeRef = useRef<HTMLInputElement>(null)
+// Les QR "Autour d'une table" (affiches imprimees comprises) pointent /?join=CODE.
+// Redirection en script inline, AVANT l'hydratation React : pas de flash de la
+// landing, pas de code perdu si on tape "Jouer" trop vite. publicPath gere le
+// basePath (dev /blindify, prod racine).
+const JOUER = publicPath("/jouer/")
+const JOIN_REDIRECT = `(function(){try{var m=/[?&]join=([A-Za-z0-9]+)/.exec(location.search);if(m){location.replace(${JSON.stringify(JOUER)}+"?join="+m[1].toUpperCase())}}catch(e){}})();`
 
-  useEffect(() => {
-    let active = true
-    let storedName = ""
-    try {
-      storedName = localStorage.getItem(NAME_KEY) ?? ""
-      setName(storedName)
-      setUrl(localStorage.getItem(URL_KEY) ?? "")
-    } catch { /* ignore */ }
-    try {
-      const j = (new URLSearchParams(window.location.search).get("join") ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "")
-      if (j) { setJoinParam(j); setCode(j) }
-    } catch { /* ignore */ }
-    ;(async () => {
-      try { await api.ensureUserSession(storedName.trim() || "Joueur") } catch { /* ignore */ }
-    })()
-    return () => { active = false }
-  }, [])
+const MODES = [
+  {
+    key: "table",
+    num: "01",
+    color: VERMILION,
+    title: "Autour d'une table",
+    max: "Jusqu'à 12 joueurs",
+    body:
+      "Un écran au milieu, la télé ou un PC, qui diffuse la musique et affiche les scores. Chacun scanne le QR code et répond depuis son téléphone. Ceux qui arrivent en retard voient un écran d'attente et entrent tout seuls à la fin de la partie en cours.",
+  },
+  {
+    key: "untel",
+    num: "02",
+    color: AMBER,
+    title: "Un seul téléphone",
+    max: "Jusqu'à 5 joueurs",
+    body:
+      "Pas un tel pour tout le monde ? Chacun pose un doigt sur l'écran. La musique démarre quand toutes les zones sont tenues, et le premier qui lâche prend le téléphone, se cache des autres et tape sa réponse. S'il se plante, on passe au suivant sans révéler le titre. Ici on joue sur la musique importée sur ce téléphone, et s'il n'y a rien d'importé, sur le fonds commun de tout ce que les joueurs de blindz.app ont déjà ramené. Pas de « qui a mis quoi » dans ce mode : un seul tel, une seule bibliothèque.",
+  },
+  {
+    key: "distance",
+    num: "03",
+    color: BLUE,
+    title: "À distance",
+    max: "Jusqu'à 12 joueurs",
+    body:
+      "Tu crées la partie, tu envoies un code à 6 caractères, et tout le monde joue de chez soi. Il y a un chat pour se chambrer, et un pierre-feuille-ciseaux pour patienter en attendant les retardataires.",
+  },
+] as const
 
-  useEffect(() => {
-    const t = setTimeout(() => {
-      if (step === "nom") nameRef.current?.focus()
-      if (step === "code") codeRef.current?.focus()
-    }, 120)
-    return () => clearTimeout(t)
-  }, [step])
+// hover:text-* obligatoire : globals.css a un `a:hover { color: terracotta }`
+// global qui rendait le texte invisible sur le fond vermillon au survol.
+const CTA =
+  "inline-block rounded-md border-2 border-[#2e2014] px-7 py-4 font-display text-xl font-bold shadow-[4px_4px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#2e2014] hover:text-[#f4ecdb] hover:bg-[#b83f29]"
 
-  useEffect(() => {
-    try { if (name.trim()) localStorage.setItem(NAME_KEY, name.trim()) } catch { /* ignore */ }
-  }, [name])
-
-  const ensureName = async () => {
-    try { if (name.trim()) localStorage.setItem(NAME_KEY, name.trim()) } catch { /* ignore */ }
-    try { await api.ensureUserSession(name.trim() || "Joueur") } catch { /* ignore */ }
-  }
-
-  // Importe la musique puis affiche la confirmation. Le meme bouton sert ensuite a continuer.
-  const doImport = async () => {
-    const link = url.trim()
-    if (!link) { setStep("action"); return }
-    setImporting(true)
-    setImportError(null)
-    try {
-      const res = await api.importPlaylists(link)
-      const ids = (res.playlists || []).map(pl => pl.id)
-      let count = 0
-      if (ids.length) {
-        const sync = await api.importSyncAll(res.provider, ids, 50, res.linkId)
-        count = sync.synced ?? 0
-      }
-      // 0 titre = echec silencieux : avant, on affichait fierement "0 titres
-      // importes" en vert et on continuait, le joueur croyait avoir sa musique.
-      if (count === 0) {
-        setImportError(
-          ids.length === 0
-            ? "Aucune playlist publique trouvée sur ce profil. Vérifie que tes playlists sont publiques, ou colle le lien d'une playlist."
-            : "Aucun titre n'a pu être récupéré pour l'instant. Réessaie dans un moment."
-        )
-        setImporting(false)
-        return
-      }
-      setSynced(count)
-      try { localStorage.setItem(URL_KEY, link) } catch { /* ignore */ }
-      // Enchaine tout seul sur l'etape suivante (court instant pour voir la confirmation)
-      // -> plus besoin d'un 2e clic sur "Continuer".
-      setImporting(false)
-      // Apres import : en mode normal on avance a l'etape action, en mode join on rejoint direct.
-      setTimeout(() => { if (joinParam) { void handleJoin() } else { setStep("action") } }, 1150)
-      return
-    } catch {
-      setImportError("Lien invalide ou profil privé. Vérifie le lien.")
-    }
-    setImporting(false)
-  }
-
-  // CRÉER : on va choisir le mode
-  const handlePaste = async () => {
-    try {
-      const text = await navigator.clipboard.readText()
-      if (text && text.trim()) {
-        setUrl(text.trim())
-        setSynced(null)
-        setImportError(null)
-      }
-    } catch {
-      // Presse-papier non accessible (permission refusee / navigateur) : on ignore.
-    }
-  }
-
-  const handleCreate = async () => {
-    if (going) return
-    setGoing(true)
-    await ensureName()
-    router.push("/modes")
-  }
-
-  // REJOINDRE : on résout le mode de la room depuis le code, sans jamais voir les modes
-  const handleJoin = async () => {
-    if (going) return
-    const c = code.toUpperCase().replace(/[^A-Z0-9]/g, "")
-    if (c.length < 4) { setCodeError("Entre un code valide."); return }
-    setGoing(true)
-    setCodeError(null)
-    await ensureName()
-    try {
-      const { room } = await api.roomDetails(c)
-      const roomMode = (room as { mode?: string }).mode || "friends"
-      const nick = name.trim() ? `&nickname=${encodeURIComponent(name.trim())}` : ""
-      router.push(`/multiplayer?mode=${roomMode}&code=${encodeURIComponent(c)}${nick}`)
-    } catch {
-      setGoing(false)
-      setCodeError("Salle introuvable. Vérifie le code.")
-    }
-  }
-
-  // ── Étape 1 : Nom ──
-  if (step === "nom") {
-    const ok = name.trim().length >= 2
-    return (
-      <Shell dots={3} index={0} onBack={null}>
-        <div className="space-y-3 text-center">
-          {/* Phrase de positionnement (SEO + les visiteurs comprennent direct) */}
-          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#c65133]">
-            Le blind test avec tes propres musiques
-          </p>
-          <h1 className="font-display text-3xl font-semibold text-[#2e2014] sm:text-4xl">
-            Comment tu t'<em className="font-medium italic text-[#c65133]">appelles</em> ?
-          </h1>
-          <p className="text-sm text-[#6b573f]">C'est le nom que les autres verront.</p>
-        </div>
-        <div className="mt-10 space-y-6">
-          <input
-            ref={nameRef}
-            value={name}
-            onChange={e => setName(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter" && ok) setStep("musique") }}
-            placeholder="Ton nom"
-            maxLength={24}
-            className="w-full border-0 border-b-2 border-[#2e2014] bg-transparent px-2 py-3 text-center font-display text-2xl text-[#2e2014] outline-none placeholder:italic placeholder:text-[#b3a182] focus:border-[#c65133]"
-            autoComplete="off"
-          />
-          <button
-            type="button"
-            disabled={!ok}
-            onClick={() => setStep("musique")}
-            className="flex w-full items-center justify-center gap-2 rounded-md border-2 border-[#2e2014] bg-[#c65133] px-5 py-4 text-sm font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#2e2014] disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            Continuer
-            <ArrowRight size={15} />
-          </button>
-        </div>
-      </Shell>
-    )
-  }
-
-  // ── Étape 2 : Musique (un seul bouton : importe puis continue) ──
-  if (step === "musique") {
-    const trimmedUrl = url.trim()
-    const hasContent = trimmedUrl.length > 0
-    const linkValid = /^https?:\/\/(open\.spotify\.com\/(playlist|user)\/|(www\.)?deezer\.com\/(\w\w\/)?(playlist|profile)\/)/i.test(trimmedUrl)
-    // Tout texte non vide doit etre un lien valide. Champ vide = on peut continuer sans musique.
-    const formatError = hasContent && !linkValid
-    const needsImport = linkValid && synced === null
-    // En mode scan QR (joinParam) on rejoint directement, sinon on choisit creer/rejoindre.
-    const proceed = joinParam ? handleJoin : () => setStep("action")
-    const onPrimary = () => {
-      if (formatError) return // lien invalide : on bloque (clic ET Entree)
-      if (needsImport) { doImport(); return }
-      proceed()
-    }
-    return (
-      <Shell dots={3} index={1} onBack={() => setStep("nom")} wide>
-        <div className="space-y-3 text-center">
-          <h1 className="font-display text-3xl font-semibold text-[#2e2014] sm:text-4xl">
-            Ta <em className="font-medium italic text-[#c65133]">musique</em>
-          </h1>
-          <p className="text-sm text-[#6b573f]">Colle ton lien Spotify ou Deezer pour jouer avec tes propres titres.</p>
-        </div>
-        {/* Sur PC : saisie a gauche, aides/tutos en colonne a droite. Mobile : pile inchangee. */}
-        <div className="mt-9 lg:grid lg:grid-cols-[minmax(0,1fr)_320px] lg:grid-rows-[auto_1fr] lg:items-start lg:gap-x-10">
-          <div className="relative lg:col-start-1 lg:row-start-1">
-            <input
-              value={url}
-              onChange={e => { setUrl(e.target.value); setSynced(null); setImportError(null) }}
-              onKeyDown={e => { if (e.key === "Enter") onPrimary() }}
-              placeholder="https://open.spotify.com/..."
-              className="w-full rounded-md border-2 border-[#2e2014] bg-[#efe5d0] py-5 pl-4 pr-24 text-base text-[#2e2014] outline-none transition placeholder:italic placeholder:text-[#b3a182] focus:border-[#c65133]"
-              autoComplete="off"
-              inputMode="url"
-            />
-            <button
-              type="button"
-              onClick={handlePaste}
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md border-2 border-[#2e2014] bg-[#ece1c8] px-3 py-2 text-[13px] font-bold text-[#2e2014] shadow-[2px_2px_0_#2e2014] transition active:translate-x-[1px] active:translate-y-[1px] active:shadow-[1px_1px_0_#2e2014]"
-            >
-              Coller
-            </button>
-          </div>
-
-          <div className="mt-5 space-y-2.5 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:mt-0 lg:rounded-md lg:border-[1.5px] lg:border-[rgba(46,32,20,.25)] lg:bg-[#ece1c8] lg:p-5">
-            <p className="text-center text-[12px] text-[#6b573f]">Besoin de ton lien&nbsp;?</p>
-            <div className="flex flex-wrap justify-center gap-2">
-              {/* Nouvel onglet : on ne perd JAMAIS le wizard Blindz derriere. Le rebond
-                  app<->web est le comportement de Spotify/Deezer, pas le notre. */}
-              <a
-                href="https://open.spotify.com/collection/playlists"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 rounded-full border-[1.5px] border-[#2e2014] bg-[#ece1c8] px-3 py-1.5 text-[12px] font-bold text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
-              >
-                Ouvrir Spotify <ExternalLink className="h-3 w-3" />
-              </a>
-              <a
-                href="https://www.deezer.com/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 rounded-full border-[1.5px] border-[#2e2014] bg-[#ece1c8] px-3 py-1.5 text-[12px] font-bold text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
-              >
-                Ouvrir Deezer <ExternalLink className="h-3 w-3" />
-              </a>
-            </div>
-            <div className="flex justify-center gap-4 text-[12px] font-semibold">
-              <button type="button" onClick={() => setTuto(t => (t === "spotify" ? null : "spotify"))} className="underline decoration-[1.5px] underline-offset-2 text-[#6b573f] transition hover:text-[#2e2014]">
-                Comment copier mon lien Spotify&nbsp;?
-              </button>
-            </div>
-            <div className="flex justify-center text-[12px] font-semibold">
-              <button type="button" onClick={() => setTuto(t => (t === "deezer" ? null : "deezer"))} className="underline decoration-[1.5px] underline-offset-2 text-[#6b573f] transition hover:text-[#2e2014]">
-                Comment copier mon lien Deezer&nbsp;?
-              </button>
-            </div>
-            {tuto && (
-              <ol className="mx-auto max-w-sm space-y-1.5 rounded-xl border-[1.5px] border-[#2e2014] bg-[#ece1c8] p-4 text-left text-[13px] text-[#6b573f]">
-                {(tuto === "spotify"
-                  ? [
-                      "Ouvre Spotify et va sur ton profil (ton nom en haut).",
-                      "Touche les trois points ··· puis « Partager ».",
-                      "Choisis « Copier le lien du profil ».",
-                      "Reviens ici et colle le lien au-dessus.",
-                    ]
-                  : [
-                      "Ouvre Deezer et va sur ton profil.",
-                      "Touche « Partager » (ou les trois points ···).",
-                      "Choisis « Copier le lien ».",
-                      "Reviens ici et colle le lien au-dessus.",
-                    ]
-                ).map((s, i) => (
-                  <li key={i} className="flex gap-2">
-                    <span className="font-bold text-[#c65133]">{i + 1}.</span>
-                    <span>{s}</span>
-                  </li>
-                ))}
-              </ol>
-            )}
-          </div>
-
-          <div className="mt-5 space-y-4 lg:col-start-1 lg:row-start-2">
-          {importError && <p className="text-center text-[12px] font-bold text-[#9c2f1d]">{importError}</p>}
-          {formatError && !importError && <p className="text-center text-[12px] font-bold text-[#9c2f1d]">Lien non reconnu. Mets un lien de playlist ou profil Spotify ou Deezer.</p>}
-
-          {/* Le bouton SE TRANSFORME en confirmation verte quand l'import reussit (anim) */}
-          <button
-            type="button"
-            disabled={importing || going || formatError}
-            onClick={onPrimary}
-            className={`flex w-full items-center justify-center gap-2 overflow-hidden rounded-md border-2 border-[#2e2014] px-5 py-4 text-base font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] transition-all duration-300 disabled:cursor-default ${
-              synced !== null
-                ? "scale-[1.02] bg-[#7d9471] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#2e2014]"
-                : "bg-[#c65133] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#2e2014] disabled:opacity-60"
-            }`}
-          >
-            {synced !== null ? (
-              // Reste cliquable : si on revient en arriere apres l'auto-avance, ce
-              // bouton sert de "Continuer" (sinon on etait coince sur cette etape).
-              <span key="done" className="flex items-center gap-2 duration-300 animate-in fade-in zoom-in-95">
-                <Check size={18} className="duration-500 animate-in zoom-in spin-in-45" />
-                {synced} titre{synced > 1 ? "s" : ""} importé{synced > 1 ? "s" : ""} · Continuer
-                <ArrowRight size={16} />
-              </span>
-            ) : importing ? (
-              <span className="animate-pulse">Import en cours...</span>
-            ) : going ? (
-              <span>Connexion...</span>
-            ) : (
-              <span className="flex items-center gap-2">
-                {needsImport ? "Importer ma musique" : joinParam ? "Rejoindre la partie" : "Continuer"}
-                <ArrowRight size={16} />
-              </span>
-            )}
-          </button>
-          <p className="text-center text-[11px] text-[#8a7558]">
-            Pas de lien ? Tu peux continuer : il suffit qu&apos;une personne ramène une playlist (2 joueurs minimum).
-          </p>
-          </div>
-        </div>
-      </Shell>
-    )
-  }
-
-  // ── Étape 3 : Créer ou Rejoindre ──
-  if (step === "action") {
-    return (
-      <Shell dots={3} index={2} onBack={() => setStep("musique")}>
-        <div className="space-y-3 text-center">
-          <h1 className="font-display text-3xl font-semibold text-[#2e2014] sm:text-4xl">
-            Tu veux <em className="font-medium italic text-[#c65133]">jouer</em> comment ?
-          </h1>
-          <p className="text-sm text-[#6b573f]">Lance une nouvelle partie, ou rejoins celle d'un ami.</p>
-        </div>
-        <div className="mt-10 space-y-3">
-          <button
-            type="button"
-            disabled={going}
-            onClick={handleCreate}
-            className={`flex w-full items-center justify-between gap-3 rounded-md border-2 border-[#2e2014] bg-[#c65133] px-5 py-4 text-left font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#2e2014] disabled:cursor-default disabled:opacity-100 ${going ? "animate-pulse" : ""}`}
-          >
-            {going ? (
-              <span className="flex w-full items-center justify-center gap-2">
-                <Loader2 size={18} className="animate-spin" /> Création de la partie...
-              </span>
-            ) : (
-              <>
-                <span className="flex items-center gap-3"><Plus size={18} /> Créer une partie</span>
-                <ArrowRight size={16} />
-              </>
-            )}
-          </button>
-          <button
-            type="button"
-            disabled={going}
-            onClick={() => setStep("code")}
-            className="flex w-full items-center justify-between gap-3 rounded-md border-2 border-[#2e2014] bg-[#ece1c8] px-5 py-4 text-left font-bold text-[#2e2014] shadow-[4px_4px_0_rgba(46,32,20,.22)] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgba(46,32,20,.22)] disabled:opacity-50"
-          >
-            <span className="flex items-center gap-3"><LogIn size={18} /> Rejoindre avec un code</span>
-            <ArrowRight size={16} />
-          </button>
-        </div>
-      </Shell>
-    )
-  }
-
-  // ── Étape 4 : Code (rejoindre) ──
+export default function HomePage() {
   return (
-    <Shell dots={4} index={3} onBack={() => { setCode(""); setCodeError(null); setStep("action") }}>
-      <div className="space-y-3 text-center">
-        <h1 className="font-display text-3xl font-semibold text-[#2e2014] sm:text-4xl">
-          Le <em className="font-medium italic text-[#c65133]">code</em> de la partie
-        </h1>
-        <p className="text-sm text-[#6b573f]">Demande-le à la personne qui a créé la partie.</p>
-      </div>
-      <div className="mt-10 space-y-4">
-        <input
-          ref={codeRef}
-          value={code}
-          onChange={e => { setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8)); setCodeError(null) }}
-          onKeyDown={e => { if (e.key === "Enter") handleJoin() }}
-          placeholder="CODE"
-          className="w-full rounded-md border-2 border-[#2e2014] bg-[#efe5d0] px-4 py-4 text-center font-display text-3xl font-semibold uppercase tracking-[0.4em] text-[#2e2014] outline-none placeholder:text-base placeholder:tracking-[0.2em] placeholder:italic placeholder:text-[#b3a182] focus:border-[#c65133]"
-          autoComplete="off"
-        />
-        {codeError && <p className="text-center text-[12px] font-bold text-[#9c2f1d]">{codeError}</p>}
-        <button
-          type="button"
-          disabled={going || code.trim().length < 4}
-          onClick={handleJoin}
-          className="flex w-full items-center justify-center gap-2 rounded-md border-2 border-[#2e2014] bg-[#c65133] px-5 py-4 text-sm font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#2e2014] disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          {going ? "Connexion..." : "Rejoindre"}
-          {!going && <ArrowRight size={15} />}
-        </button>
-      </div>
-    </Shell>
+    <div className="min-h-screen text-[#2e2014]">
+      <script dangerouslySetInnerHTML={{ __html: JOIN_REDIRECT }} />
+
+      <SiteHeader />
+
+      {/* ── Hero : texte a gauche, disque sur son plateau sauge a droite ── */}
+      <section className="mx-auto grid max-w-6xl items-center gap-12 px-5 pb-[6rem] pt-[4.5rem] sm:px-8 lg:grid-cols-[1.15fr_0.85fr] lg:gap-8 lg:pt-[6rem]">
+        <div>
+          <Tag color={VERMILION}>Blind test entre potes</Tag>
+          <h1 className="mt-5 font-display text-[2.9rem] font-semibold leading-[1.02] sm:text-[4rem] lg:text-[6rem]">
+            Le blind test avec <em className="font-medium italic text-[#cc4830]">vos</em> playlists.
+          </h1>
+          <p className="mt-7 max-w-[34rem] text-[1.1rem] leading-relaxed sm:text-[1.2rem]">
+            Chacun colle le lien de son Spotify ou de son Deezer, et la partie se génère toute seule à
+            partir de ce que vous écoutez vraiment. Rien à préparer, pas de playlist imposée, et en
+            bonus il faut deviner qui a mis quoi.
+          </p>
+          <div className="mt-9 flex flex-wrap items-center gap-6">
+            <Link href="/jouer/" className={`${CTA} bg-[#cc4830] text-[#f4ecdb]`}>
+              Jouer, c'est gratuit
+            </Link>
+            <a
+              href="#comment-ca-marche"
+              className="border-b-2 border-[#2e2014] pb-0.5 text-[13px] font-bold uppercase tracking-[0.14em] transition hover:border-[#cc4830] hover:text-[#cc4830]"
+            >
+              Comment ça marche
+            </a>
+          </div>
+          <p className="mt-6 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[11px] font-bold uppercase tracking-[0.12em] sm:tracking-[0.16em]">
+            <span className="text-[#cc4830]">Sans compte</span>
+            <span className="text-[#d88418]">Sans installation</span>
+            <span className="text-[#486090]">iPhone, Android, PC</span>
+          </p>
+        </div>
+        <div className="relative">
+          <ScrollVinyl />
+        </div>
+      </section>
+
+      {/* ── Pourquoi c'est pas un blind test comme les autres : bloc encre ── */}
+      <section className="border-t-2 border-[#2e2014] bg-[#2e2014] text-[#f4ecdb]">
+        <div className="mx-auto grid max-w-6xl gap-12 px-5 py-[5.5rem] sm:px-8 lg:grid-cols-[0.9fr_1.1fr] lg:gap-20">
+          <div>
+            <Tag color={AMBER} light>Ce qui change</Tag>
+            <h2 className="mt-5 font-display text-[2.2rem] font-semibold leading-[1.08] sm:text-[2.8rem] lg:text-[3.4rem]">
+              Les autres te font choisir un pack « années 80 » ou préparer ton quiz à la main.{" "}
+              <em className="font-medium italic text-[#d88418]">Ici, non.</em>
+            </h2>
+          </div>
+          <dl className="divide-y-2 divide-[rgba(244,236,219,.22)] lg:pt-10">
+            <div className="py-6 first:pt-0">
+              <dt className="font-display text-xl font-semibold text-[#d88418]">Vos morceaux, pas les nôtres</dt>
+              <dd className="mt-2 text-[1.05rem] leading-relaxed">
+                Dans les parties à plusieurs téléphones, la partie est construite uniquement avec les
+                musiques des joueurs présents. Si personne n'a ramené de rap, il n'y aura pas de rap. Si
+                ton pote n'écoute que de la variété, tout le monde va le savoir.
+              </dd>
+            </div>
+            <div className="py-6">
+              <dt className="font-display text-xl font-semibold text-[#d88418]">Zéro préparation</dt>
+              <dd className="mt-2 text-[1.05rem] leading-relaxed">
+                Pas de morceaux à sélectionner, pas de questions à écrire. Un pseudo, un lien, et
+                c'est parti. Le temps de sortir les verres, la partie est prête.
+              </dd>
+            </div>
+            <div className="py-6 last:pb-0">
+              <dt className="font-display text-xl font-semibold text-[#d88418]">Le vrai jeu, c'est de deviner qui a mis quoi</dt>
+              <dd className="mt-2 text-[1.05rem] leading-relaxed">
+                Trouver le titre et l'artiste rapporte des points, et deviner lequel de tes potes écoute
+                ça en boucle en rapporte un de plus. C'est là que la table se marre. La vitesse ne sert
+                qu'à départager les ex æquo.
+              </dd>
+            </div>
+          </dl>
+        </div>
+      </section>
+
+      {/* ── Trois facons de jouer : split-screen epingle, une couleur par mode ── */}
+      <section className="border-t-2 border-[#2e2014] bg-[#ece1c8]">
+        <div className="mx-auto max-w-6xl px-5 py-[5.5rem] sm:px-8">
+          <Tag color={VERMILION}>Les modes de jeu</Tag>
+          <h2 className="mb-14 mt-5 max-w-[30rem] font-display text-[2.2rem] font-semibold leading-[1.08] sm:text-[2.8rem] lg:text-[3.4rem]">
+            Trois façons de jouer, selon où vous êtes et combien de téléphones il y a.
+          </h2>
+          <ModesStage>
+            {MODES.map(m => (
+              <article
+                key={m.key}
+                data-mode={m.key}
+                className="border-t-2 border-[#2e2014] py-12 first:border-t-0 first:pt-0 lg:py-[6rem] lg:first:pt-0"
+              >
+                <p className="flex items-center gap-3 font-mono text-[11px] font-bold uppercase tracking-[0.2em]">
+                  <span className="rounded-sm px-2 py-1 text-[#f4ecdb]" style={{ background: m.color }}>{m.num}</span>
+                  <span>{m.max}</span>
+                </p>
+                <h3 className="mt-4 font-display text-[1.9rem] font-semibold leading-tight sm:text-[2.4rem]">
+                  {m.title}
+                </h3>
+                <p className="mt-4 max-w-[32rem] text-[1.05rem] leading-relaxed">{m.body}</p>
+              </article>
+            ))}
+          </ModesStage>
+          <p className="mt-12 max-w-[40rem] border-t-2 border-[#2e2014] pt-6 text-[1.05rem] leading-relaxed">
+            Et tout seul ? Il y a aussi un <strong>mode solo</strong> : tu devines les morceaux de ta propre
+            bibliothèque (ou du fonds commun si tu n'as rien importé), pour t'entraîner ou tuer dix minutes
+            dans le train. Il est dans le menu des modes une fois que tu as mis ton pseudo.
+          </p>
+        </div>
+      </section>
+
+      {/* ── Comment ca marche : bloc bleu ── */}
+      <section id="comment-ca-marche" className="border-t-2 border-[#2e2014] bg-[#486090] text-[#f4ecdb]">
+        <div className="mx-auto max-w-6xl px-5 py-[5.5rem] sm:px-8">
+          <Tag color={CREAM} light>En trois étapes</Tag>
+          <h2 className="mt-5 font-display text-[2.2rem] font-semibold leading-[1.08] sm:text-[2.8rem] lg:text-[3.4rem]">
+            Comment ça marche
+          </h2>
+          <ol className="mt-12 grid gap-10 lg:grid-cols-3 lg:gap-12">
+            {[
+              {
+                n: "1",
+                t: "Un pseudo",
+                b: "Pas de compte, pas de mot de passe. En créer un sert surtout à retrouver ton historique sur un autre appareil.",
+              },
+              {
+                n: "2",
+                t: "Un lien",
+                b: "Celui de ton profil Spotify ou Deezer, ou d'une playlist publique. Les deux peuvent se mélanger dans la même partie, il faut juste que ce soit public.",
+              },
+              {
+                n: "3",
+                t: "On joue",
+                b: "À plusieurs téléphones, la partie est générée à partir des playlists de tout le monde : extraits courts, réponse au clavier, un point pour le titre, un pour l'artiste, un pour le bon coupable, et la vitesse départage en cas d'égalité.",
+              },
+            ].map(step => (
+              <li key={step.n} className="border-t-2 border-[rgba(244,236,219,.45)] pt-5">
+                <span className="font-display text-5xl font-medium italic">{step.n}</span>
+                <h3 className="mt-3 font-display text-2xl font-semibold">{step.t}</h3>
+                <p className="mt-2 text-[1.05rem] leading-relaxed">{step.b}</p>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </section>
+
+      {/* ── Les petits trucs qui comptent : bloc ambre ── */}
+      <section className="border-t-2 border-[#2e2014] bg-[#d88418] text-[#2e2014]">
+        <div className="mx-auto grid max-w-6xl gap-10 px-5 py-[4.5rem] sm:px-8 lg:grid-cols-[0.9fr_1.1fr] lg:gap-20">
+          <div>
+            <Tag color={INK}>Bon à savoir</Tag>
+            <h2 className="mt-5 font-display text-[1.9rem] font-semibold leading-[1.1] sm:text-[2.4rem]">
+              Les petits trucs qui comptent
+            </h2>
+          </div>
+          <ul className="space-y-5 lg:pt-3">
+            {[
+              "La correction est tolérante : les fautes de frappe, les accents, le « feat. » oublié ou le titre et l'artiste inversés, ça passe.",
+              "Ça tourne dans le navigateur, sur iPhone, Android ou PC. Tu peux l'ajouter à l'écran d'accueil, ça s'ouvre comme une app.",
+              "Ton historique de parties est gardé un an sans compte, tant que tu restes sur le même navigateur. Un compte sert à le retrouver ailleurs.",
+              "C'est gratuit. Pas de version pro, pas de pub.",
+            ].map(line => (
+              <li key={line} className="flex gap-4 text-[1.05rem] leading-relaxed">
+                <span aria-hidden className="mt-[0.6rem] h-2.5 w-2.5 shrink-0 rounded-sm bg-[#2e2014]" />
+                <span>{line}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+
+      {/* ── Fin de face : on lance ? ── */}
+      <section className="border-t-2 border-[#2e2014]">
+        <div className="mx-auto max-w-6xl px-5 py-[6rem] sm:px-8">
+          <Tag color={VERMILION}>Prêt ?</Tag>
+          <h2 className="mt-5 font-display text-[3rem] font-semibold leading-[1] sm:text-[4.2rem] lg:text-[5.4rem]">
+            On lance ?
+          </h2>
+          <div className="mt-9 flex flex-wrap items-center gap-6">
+            <Link href="/jouer/" className={`${CTA} bg-[#cc4830] text-[#f4ecdb]`}>
+              Jouer maintenant
+            </Link>
+            <Link
+              href="/faq/"
+              className="border-b-2 border-[#2e2014] pb-0.5 text-[13px] font-bold uppercase tracking-[0.14em] transition hover:border-[#cc4830] hover:text-[#cc4830]"
+            >
+              Une question ? La FAQ
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      <SiteFooter />
+    </div>
   )
 }

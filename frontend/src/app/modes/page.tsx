@@ -171,7 +171,7 @@ function ModeSelectionContent() {
   const searchParams = useSearchParams()
   const { mode, setMode, isGuest, setGuest } = useMode()
   const [selection, setSelection] = useState<Mode | null>(mode)
-  const [picking, setPicking] = useState<Mode | "solo" | "buzzer" | null>(null)
+  const [picking, setPicking] = useState<Mode | "solo" | null>(null)
   const [showHelp, setShowHelp] = useState(false)
 
   const fallbackRoute = useMemo(() => searchParams.get("from") || "/modes", [searchParams])
@@ -212,12 +212,6 @@ function ModeSelectionContent() {
     if (picking) return
     setPicking("solo")
     setTimeout(() => router.push("/solo"), 520)
-  }
-
-  const handleBuzzer = () => {
-    if (picking) return
-    setPicking("buzzer")
-    setTimeout(() => router.push("/buzzer"), 520)
   }
 
   return (
@@ -263,15 +257,6 @@ function ModeSelectionContent() {
             rpm="33⅓ RPM · STÉRÉO"
             picking={picking === "solo"}
             onClick={handleSolo}
-          />
-          <VinylSleeve
-            title="Un seul tel"
-            subtitle="Tous les doigts sur un téléphone : le premier qui lâche répond."
-            accent="#5b7d99"
-            posture="En vrai"
-            rpm="78 RPM · MONO"
-            picking={picking === "buzzer"}
-            onClick={handleBuzzer}
           />
         </div>
 

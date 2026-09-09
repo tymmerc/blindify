@@ -36,17 +36,17 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 }
 
-const SEO_TITLE = "Blindz · Le blind test avec VOS musiques, entre potes"
+const SEO_TITLE = "blindz.app · Le blind test avec VOS musiques, entre potes"
 const SEO_DESC =
   "Le blind test avec VOS propres musiques. Importe tes playlists Spotify ou Deezer, devine les titres entre potes, autour d'une table ou à distance. Gratuit, rien à installer."
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://blindz.app"),
-  applicationName: "Blindz",
+  applicationName: "blindz.app",
   title: {
     default: SEO_TITLE,
     // Les pages internes deviennent "… · Blindz" ; l'accueil garde le titre complet.
-    template: "%s · Blindz",
+    template: "%s · blindz.app",
   },
   description: SEO_DESC,
   keywords: [
@@ -62,11 +62,13 @@ export const metadata: Metadata = {
     "blind test Spotify",
     "blind test Deezer",
   ],
-  alternates: { canonical: "https://blindz.app/" },
+  // Pas de canonical global : herite par toutes les pages, il declarait /faq/,
+  // /mentions-legales/ etc. comme des copies de la home (desindexation). Chaque
+  // page de contenu pose le sien (metadataBase resout les chemins relatifs).
   manifest: publicPath("/manifest.webmanifest"),
   appleWebApp: {
     capable: true,
-    title: "Blindz",
+    title: "blindz.app",
     statusBarStyle: "default",
   },
   icons: {
@@ -78,7 +80,7 @@ export const metadata: Metadata = {
     apple: publicPath("/apple-touch-icon.png"),
   },
   openGraph: {
-    siteName: "Blindz",
+    siteName: "blindz.app",
     title: SEO_TITLE,
     description: SEO_DESC,
     url: "https://blindz.app/",
@@ -114,21 +116,47 @@ export default function RootLayout({
             }`,
           }}
         />
-        {/* Donnees structurees : Google comprend que Blindz est un jeu de blind test. */}
+        {/* Nom de site pour les resultats de recherche (le "blindz.app" a cote du
+            favicon) : Google le lit dans un WebSite avec name + alternateName. */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "WebSite",
+              name: "blindz.app",
+              alternateName: ["Blindz app"],
+              url: "https://blindz.app/",
+              inLanguage: "fr",
+            }),
+          }}
+        />
+        {/* Donnees structurees : Google comprend que blindz.app est un jeu de blind test. */}
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
             __html: JSON.stringify({
               "@context": "https://schema.org",
               "@type": "WebApplication",
-              name: "Blindz",
-              alternateName: "Blindz - Blind test",
+              name: "blindz.app",
+              alternateName: ["Blindz app", "blindz.app blind test"],
               url: "https://blindz.app/",
               description: SEO_DESC,
               applicationCategory: "GameApplication",
               operatingSystem: "Web",
               inLanguage: "fr",
               offers: { "@type": "Offer", price: "0", priceCurrency: "EUR" },
+              // Ce qui differencie Blindz, en clair pour les moteurs et les IA.
+              featureList: [
+                "Blind test généré automatiquement à partir des playlists Spotify ou Deezer des joueurs",
+                "Aucun quiz à préparer, aucune playlist imposée",
+                "Deviner qui a ajouté chaque morceau",
+                "Mode autour d'une table avec écran central et QR code, jusqu'à 12 joueurs",
+                "Mode un seul téléphone à doigt posé, jusqu'à 5 joueurs",
+                "Mode à distance avec code à 6 caractères et chat, jusqu'à 12 joueurs",
+                "Spotify et Deezer mélangés dans la même partie",
+                "Gratuit, sans compte, dans le navigateur",
+              ],
             }),
           }}
         />

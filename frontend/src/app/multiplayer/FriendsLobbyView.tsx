@@ -11,6 +11,7 @@ import { ProfileImportBlock } from "@/components/import/ProfileImportBlock"
 import { MusicLibrary } from "@/components/import/MusicLibrary"
 import { LobbyChat } from "./LobbyChat"
 import { LobbyRps } from "./LobbyRps"
+import { publicPath } from "@/lib/publicPath"
 
 /* Component-scoped animations matching the analog mockup. */
 const lobbyAnimations = `
@@ -229,7 +230,8 @@ function FriendsLobby({
   const copyLink = () => {
     if (!roomCode) return
     const origin = typeof window !== "undefined" ? window.location.origin : ""
-    void doCopy(`${origin}/blindify/friends/?join=${roomCode}`, setCopiedLink)
+    // publicPath gere le basePath (le /blindify/ en dur cassait sur blindz.app).
+    void doCopy(`${origin}${publicPath("/friends/")}?join=${roomCode}`, setCopiedLink)
   }
 
   // Chat mobile : ouverture + compteur de non-lus

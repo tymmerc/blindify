@@ -3,6 +3,7 @@ import type { Metadata } from "next"
 import Link from "next/link"
 
 export const metadata: Metadata = {
+  alternates: { canonical: "https://blindz.app/confidentialite/" },
   title: "Politique de confidentialité",
   description:
     "Comment Blindz collecte, utilise et protège tes données. Pas de revente, pas de tracking publicitaire.",
