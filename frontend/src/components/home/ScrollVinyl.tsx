@@ -1,6 +1,8 @@
 "use client"
 
+import Image from "next/image"
 import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion"
+import { publicPath } from "@/lib/publicPath"
 
 // Le disque du hero est PILOTE par le scroll : on descend, il tourne ; on
 // remonte, il revient. Le bras de lecture se pose sur le sillon a mesure
@@ -30,13 +32,21 @@ export function ScrollVinyl() {
         style={{ background: GROOVES, rotate: reduce ? 0 : rotate }}
         className="absolute inset-0 rounded-full border-[3px] border-[#2e2014]"
       >
-        <div className="absolute inset-[33%] rounded-full border-[3px] border-[#2e2014] bg-[#cc4830]">
-          {/* Au-dessus du trou, pas dessous : sinon le texte est mange par le trou */}
-          <span className="absolute left-0 right-0 top-[19%] text-center font-mono text-[8px] font-bold lowercase tracking-[0.1em] text-[#f4ecdb]">
-            blindz.app
-          </span>
+        {/* Etiquette : anneau vermillon, puis pastille creme portant le logo.
+            Le creme est obligatoire, le B de la cle de sol est noir et
+            disparaitrait sur le vermillon. Le logo remplace le trou central :
+            il tourne avec le disque, comme une vraie etiquette. */}
+        <div className="absolute inset-[33%] grid place-items-center rounded-full border-[3px] border-[#2e2014] bg-[#cc4830]">
+          <div className="grid h-[68%] w-[68%] place-items-center rounded-full border-2 border-[#2e2014] bg-[#f4ecdb]">
+            <Image
+              src={publicPath("/logo-mark.png")}
+              alt=""
+              width={512}
+              height={512}
+              className="h-[78%] w-[78%] object-contain"
+            />
+          </div>
         </div>
-        <div className="absolute inset-[48%] rounded-full border-2 border-[#2e2014] bg-[#f4ecdb]" />
       </motion.div>
       {/* Bras de lecture : pivot en haut a droite */}
       <div aria-hidden className="pointer-events-none absolute -right-[2%] -top-[6%] h-[36%] w-[36%]">
