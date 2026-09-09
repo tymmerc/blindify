@@ -86,6 +86,38 @@ const MODES = [
   },
 ] as const
 
+// Les questions posees avant de jouer. Reponses courtes : la version longue est
+// sur /faq/, qui reste la seule page a porter le JSON-LD FAQPage.
+// Verifie contre le code : cookie invite d'un an (authController), hotes acceptes
+// par parseProfileUrl (open.spotify.com et deezer.com seulement, donc les liens
+// courts spotify.link / link.deezer.com sont refuses), buzzer a 5 doigts.
+const FAQ_TEASER = [
+  {
+    q: "Il faut créer un compte ?",
+    a: "Non. Un pseudo, un lien, et tu joues. L'historique de tes parties tient un an sur le même navigateur, le compte sert seulement à le retrouver sur un autre appareil.",
+  },
+  {
+    q: "C'est vraiment gratuit ?",
+    a: "Oui, tout est gratuit. Pas de version payante, pas de pub, rien à installer : ça se joue dans le navigateur.",
+  },
+  {
+    q: "Spotify et Deezer dans la même partie ?",
+    a: "Oui, chacun ramène ce qu'il veut et les extraits se mélangent. La seule condition, c'est que le profil ou la playlist soit public.",
+  },
+  {
+    q: "Mon lien ne passe pas, pourquoi ?",
+    a: "Presque toujours parce que la playlist est privée, et ça se change en trente secondes. L'autre cause classique, ce sont les liens courts du bouton Partager (spotify.link, link.deezer.com) : ouvre-les et copie l'adresse complète.",
+  },
+  {
+    q: "On n'a pas un téléphone chacun.",
+    a: "Le mode un seul tel est fait pour ça, jusqu'à 5 joueurs : tout le monde pose un doigt sur l'écran, et le premier qui lâche prend le téléphone pour répondre.",
+  },
+  {
+    q: "C'est l'ancien Blindz, celui qui avait fermé ?",
+    a: "Non. blindz.fr est un autre site, plus ancien, sans lien avec nous. blindz.app est né en 2026 et ne marche pas pareil : il n'y a rien à préparer, la partie sort de vos playlists.",
+  },
+] as const
+
 // hover:text-* obligatoire : globals.css a un `a:hover { color: terracotta }`
 // global qui rendait le texte invisible sur le fond vermillon au survol.
 const CTA =
@@ -260,6 +292,37 @@ export default function HomePage() {
               </li>
             ))}
           </ul>
+        </div>
+      </section>
+
+      {/* ── FAQ : les questions qu'on pose vraiment avant de lancer ──
+          Reponses courtes ici, versions completes sur /faq/ (qui garde le
+          JSON-LD FAQPage : une seule source pour les moteurs). */}
+      <section className="border-t-2 border-[#2e2014] bg-[#ece1c8]">
+        {/* Ordre du DOM : titre, questions, bouton. Sur mobile on lit donc les
+            questions AVANT le bouton ; sur desktop la grille explicite remet le
+            bouton sous le titre, dans la colonne de gauche. */}
+        <div className="mx-auto grid max-w-6xl gap-12 px-5 py-[5.5rem] sm:px-8 lg:grid-cols-[0.9fr_1.1fr] lg:grid-rows-[auto_1fr] lg:gap-x-20 lg:gap-y-0">
+          <div className="lg:col-start-1 lg:row-start-1">
+            <Tag color={BLUE}>Questions fréquentes</Tag>
+            <h2 className="mt-5 font-display text-[2.2rem] font-semibold leading-[1.08] sm:text-[2.8rem] lg:text-[3.4rem]">
+              Ce qu'on nous demande avant de lancer une partie
+            </h2>
+          </div>
+          <dl className="divide-y-2 divide-[rgba(46,32,20,.2)] lg:col-start-2 lg:row-start-1 lg:row-span-2">
+            {FAQ_TEASER.map(item => (
+              <div key={item.q} className="py-6 first:pt-0 last:pb-0">
+                <dt className="font-display text-xl font-semibold text-[#cc4830]">{item.q}</dt>
+                <dd className="mt-2 text-[1.05rem] leading-relaxed">{item.a}</dd>
+              </div>
+            ))}
+          </dl>
+          <Link
+            href="/faq/"
+            className="justify-self-start rounded-md border-2 border-[#2e2014] px-6 py-3 font-display text-lg font-bold shadow-[4px_4px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:bg-[#2e2014] hover:text-[#f4ecdb] hover:shadow-[2px_2px_0_#2e2014] lg:col-start-1 lg:row-start-2 lg:mt-8 lg:self-start"
+          >
+            Toutes les questions
+          </Link>
         </div>
       </section>
 

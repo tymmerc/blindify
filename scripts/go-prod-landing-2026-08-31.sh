@@ -34,7 +34,9 @@ echo "$H" | grep -q "Zéro préparation" && echo "  [ok] angle différenciant pr
 echo "$H" | grep -q "Comment tu t" && { echo "  !! le wizard est encore sur /"; exit 1; } || echo "  [ok] wizard retiré de /"
 J="$(curl -sf -m 30 https://blindz.app/jouer/)"
 echo "$J" | grep -q "Comment tu t" && echo "  [ok] wizard servi sur /jouer/" || { echo "  !! wizard absent de /jouer/"; exit 1; }
-curl -sf -m 30 https://blindz.app/sitemap.xml | grep -q "2026-09-04" && echo "  [ok] sitemap a jour (lastmod de la landing)" || echo "  !! sitemap pas a jour"
+S="$(curl -sf -m 30 https://blindz.app/sitemap.xml)"
+[ "$(echo "$S" | grep -c "<loc>")" -ge 9 ] && echo "  [ok] sitemap complet ($(echo "$S" | grep -c "<loc>") URL)" || echo "  !! sitemap incomplet"
+echo "$S" | grep -q "blindz.app/faq/" && echo "  [ok] FAQ dans le sitemap" || echo "  !! FAQ absente du sitemap"
 curl -sf -m 30 https://blindz.app/faq/ | grep -q 'rel="canonical" href="https://blindz.app/faq/"' && echo "  [ok] canonical propre sur /faq/" || echo "  !! canonical de /faq/ incorrect"
 grep -q "Le blind test avec" /opt/blindify/frontend/out/index.html && echo "  [ok] out/index.html contient le texte (ce que lisent les IA)"
 echo "DEPLOIEMENT TERMINE. Lancer ensuite :"

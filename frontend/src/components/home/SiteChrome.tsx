@@ -23,7 +23,12 @@ export function SiteHeader() {
         blindz.app
       </Link>
       <nav aria-label="Navigation principale" className="flex items-center gap-5 text-[12px] font-bold uppercase tracking-[0.14em]">
-        <Link href="/faq/" className="transition hover:text-[#cc4830]">
+        {/* FAQ en pastille bordee : en texte nu elle passait inapercue a cote
+            du bouton Jouer. Bordure fine pour ne pas concurrencer le CTA. */}
+        <Link
+          href="/faq/"
+          className="rounded-md border-[1.5px] border-[#2e2014] px-3 py-2 transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+        >
           FAQ
         </Link>
         {/* hover:text-* obligatoire : globals.css a un a:hover global en terracotta. */}

@@ -1,25 +1,50 @@
 import type { Metadata } from "next"
 import Link from "next/link"
+import { SiteFooter, SiteHeader } from "@/components/home/SiteChrome"
+import { Tag, VERMILION, faqJsonLd, webPageJsonLd } from "@/components/home/Guide"
 
 // Page FAQ : redigee pour repondre aux questions telles qu'on les pose vraiment
 // (a un moteur de recherche ou a une IA). Chaque question colle a une requete
 // conversationnelle reelle ; le JSON-LD FAQPage permet aux moteurs de la citer.
+// C'est la SEULE page qui porte le FAQPage : la landing n'a que des reponses
+// courtes, sans balisage, pour ne pas dupliquer la source.
+//
+// Meme habillage que la landing et les guides (SiteChrome) : on y entre depuis
+// n'importe quelle page et on en ressort vers les guides.
+
+const URL = "https://blindz.app/faq/"
+const TITLE = "FAQ · Blind test avec vos playlists, entre amis"
+const DESC =
+  "Comment faire un blind test avec ses propres playlists Spotify ou Deezer, sans compte, sur téléphone, entre amis ou avec un seul tel. Toutes les réponses."
+const UPDATED = "2026-09-09"
 
 export const metadata: Metadata = {
-  title: "FAQ · Blind test avec vos playlists, entre amis",
-  description:
-    "Comment faire un blind test avec ses propres playlists Spotify ou Deezer, sans compte, sur téléphone, entre amis ou avec un seul tel. Toutes les réponses.",
-  alternates: { canonical: "https://blindz.app/faq/" },
+  title: TITLE,
+  description: DESC,
+  alternates: { canonical: URL },
+  openGraph: { title: TITLE, description: DESC, url: URL, type: "website", locale: "fr_FR" },
 }
 
 const FAQ: Array<{ q: string; a: string }> = [
   {
-    q: "blindz.app, c'est le retour de l'ancien site Blindz qui a fermé en 2021 ?",
-    a: "Non. Blindz (blindz.fr) est un autre site, plus ancien, où l'on crée et personnalise des blind tests entre amis ; il avait été hors ligne un long moment après l'incendie du datacenter OVH de Strasbourg en 2021. blindz.app est un projet indépendant, lancé en 2026, sans aucun lien avec cette équipe. Le principe est différent aussi : ici il n'y a rien à créer ni à personnaliser, la partie est générée automatiquement à partir des playlists Spotify ou Deezer des joueurs, et on devine qui a ramené chaque morceau.",
-  },
-  {
     q: "Comment faire un blind test avec mes propres playlists, pas des playlists imposées ?",
     a: "C'est exactement le principe de blindz.app : chaque joueur colle le lien de son profil Spotify ou Deezer (ou d'une playlist publique), et la partie est générée uniquement à partir de VOS musiques. Pas de playlists toutes faites \"années 80\" ou \"hits du moment\" : vous jouez sur les morceaux que vous écoutez vraiment, et une partie du jeu consiste à deviner qui a ramené quel titre.",
+  },
+  {
+    q: "Faut-il créer un compte pour jouer ?",
+    a: "Non. Tu choisis un pseudo, tu colles un lien de playlist, et tu joues. Ton historique de parties est gardé un an sans inscription, tant que tu restes sur le même navigateur. Créer un compte (pseudo + mot de passe) sert uniquement à retrouver ton historique sur un autre appareil.",
+  },
+  {
+    q: "C'est gratuit ? Il faut installer une application ?",
+    a: "blindz.app est gratuit et fonctionne dans le navigateur, sur iPhone, Android et PC, rien à installer. Tu peux l'ajouter à ton écran d'accueil pour l'ouvrir comme une app.",
+  },
+  {
+    q: "Est-ce que ça marche avec Spotify ET Deezer en même temps ?",
+    a: "Oui. Dans une même partie, un joueur peut importer sa musique depuis Spotify et un autre depuis Deezer : les extraits sont mélangés et tout le monde joue ensemble. Il suffit que les playlists ou le profil soient publics.",
+  },
+  {
+    q: "Mon lien de playlist n'est pas accepté, qu'est-ce qui cloche ?",
+    a: "Deux causes dans presque tous les cas. Soit la playlist est privée : passe-la en publique dans Spotify ou Deezer, ça prend trente secondes. Soit tu as collé un lien court du bouton Partager (spotify.link, link.deezer.com), qui n'est pas reconnu : ouvre-le dans ton navigateur et copie l'adresse complète, celle qui commence par open.spotify.com ou www.deezer.com.",
   },
   {
     q: "Comment organiser un blind test en soirée, autour d'une table ?",
@@ -30,83 +55,86 @@ const FAQ: Array<{ q: string; a: string }> = [
     a: "Oui, c'est le mode \"Un seul tel\" : tout le monde pose un doigt sur l'écran du même téléphone, la musique démarre quand toutes les zones sont tenues, et le premier qui lâche prend le tel, se cache et tape sa réponse. S'il se trompe, le téléphone passe au deuxième qui a lâché, sans révéler la réponse. Jusqu'à 5 joueurs, zéro configuration.",
   },
   {
-    q: "Faut-il créer un compte pour jouer ?",
-    a: "Non. Tu choisis un pseudo, tu colles un lien de playlist, et tu joues. Ton historique de parties est gardé un an sans inscription, tant que tu restes sur le même navigateur. Créer un compte (pseudo + mot de passe) sert uniquement à retrouver ton historique sur un autre appareil.",
-  },
-  {
-    q: "Est-ce que ça marche avec Spotify ET Deezer en même temps ?",
-    a: "Oui. Dans une même partie, un joueur peut importer sa musique depuis Spotify et un autre depuis Deezer : les extraits sont mélangés et tout le monde joue ensemble. Il suffit que les playlists ou le profil soient publics.",
-  },
-  {
     q: "Comment jouer à distance avec des amis ?",
     a: "Le mode \"À distance\" : tu crées une partie, tu partages le code à 6 caractères, et chacun joue depuis chez lui sur son écran, avec le chat intégré et un pierre-feuille-ciseaux pour patienter dans le salon. Jusqu'à 12 joueurs.",
-  },
-  {
-    q: "C'est gratuit ? Il faut installer une application ?",
-    a: "blindz.app est gratuit et fonctionne dans le navigateur, sur iPhone, Android et PC, rien à installer. Tu peux l'ajouter à ton écran d'accueil pour l'ouvrir comme une app.",
   },
   {
     q: "Comment le jeu reconnaît-il mes réponses ?",
     a: "Tu tapes le titre (et l'artiste en bonus) : la correction est tolérante aux fautes de frappe, aux accents, aux \"feat.\" et aux inversions titre/artiste. Trouver le titre ET l'artiste rapporte plus de points, et la vitesse départage les égalités.",
   },
+  {
+    q: "blindz.app, c'est le retour de l'ancien site Blindz qui a fermé en 2021 ?",
+    a: "Non. Blindz (blindz.fr) est un autre site, plus ancien, où l'on crée et personnalise des blind tests entre amis ; il avait été hors ligne un long moment après l'incendie du datacenter OVH de Strasbourg en 2021. blindz.app est un projet indépendant, lancé en 2026, sans aucun lien avec cette équipe. Le principe est différent aussi : ici il n'y a rien à créer ni à personnaliser, la partie est générée automatiquement à partir des playlists Spotify ou Deezer des joueurs, et on devine qui a ramené chaque morceau.",
+  },
 ]
 
 export default function FaqPage() {
-  const jsonLd = {
-    "@context": "https://schema.org",
-    "@type": "FAQPage",
-    mainEntity: FAQ.map(item => ({
-      "@type": "Question",
-      name: item.q,
-      acceptedAnswer: { "@type": "Answer", text: item.a },
-    })),
-  }
-
   return (
-    <div className="min-h-screen text-[#2e2014] pb-20">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-      <div className="mx-auto max-w-2xl px-5 pt-10">
-        <div className="mb-8">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2 rounded-full border-[1.5px] border-[#2e2014] bg-[#ece1c8] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
-          >
-            Retour à l'accueil
-          </Link>
-        </div>
+    <div className="min-h-screen text-[#2e2014]">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd(FAQ)) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(webPageJsonLd(URL, TITLE, DESC, UPDATED)) }}
+      />
 
-        <div className="mb-10 space-y-2">
-          <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-[#c65133]">FAQ</p>
-          <h1 className="font-display text-4xl font-semibold md:text-5xl">
-            Le blind test avec <em className="font-medium italic text-[#c65133]">vos</em> musiques
-          </h1>
-          <p className="text-base text-[#6b573f]">
-            Pas de playlists imposées, pas de compte obligatoire : un blind test généré à partir de ce que
-            vous écoutez vraiment, en soirée ou à distance.
-          </p>
-        </div>
+      <SiteHeader />
 
-        <div className="space-y-4">
-          {FAQ.map(item => (
-            <section
-              key={item.q}
-              className="rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-5 shadow-[4px_4px_0_rgba(46,32,20,.18)]"
+      <header className="mx-auto max-w-4xl px-5 pb-[3rem] pt-[4rem] sm:px-8 lg:pt-[5rem]">
+        <Tag color={VERMILION}>Questions fréquentes</Tag>
+        <h1 className="mt-5 font-display text-[2.4rem] font-semibold leading-[1.04] sm:text-[3.2rem] lg:text-[4rem]">
+          Le blind test avec <em className="font-medium italic text-[#cc4830]">vos</em> musiques
+        </h1>
+        <p className="mt-6 max-w-[38rem] text-[1.1rem] leading-relaxed sm:text-[1.2rem]">
+          Pas de playlists imposées, pas de compte obligatoire : un blind test généré à partir de ce que
+          vous écoutez vraiment, en soirée ou à distance. Les réponses aux questions qu'on nous pose le
+          plus souvent.
+        </p>
+      </header>
+
+      <section className="border-t-2 border-[#2e2014] bg-[#ece1c8]">
+        <div className="mx-auto max-w-4xl px-5 py-[4rem] sm:px-8">
+          <dl className="divide-y-2 divide-[rgba(46,32,20,.2)]">
+            {FAQ.map(item => (
+              <div key={item.q} className="py-6 first:pt-0 last:pb-0">
+                <dt className="font-display text-[1.35rem] font-semibold leading-snug text-[#cc4830]">
+                  {item.q}
+                </dt>
+                <dd className="mt-2 text-[1.05rem] leading-relaxed">{item.a}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      </section>
+
+      <section className="border-t-2 border-[#2e2014]">
+        <div className="mx-auto max-w-4xl px-5 py-[4.5rem] sm:px-8">
+          <Tag color={VERMILION}>Prêt ?</Tag>
+          <h2 className="mt-5 font-display text-[2.4rem] font-semibold leading-[1] sm:text-[3.4rem]">
+            On lance ?
+          </h2>
+          <div className="mt-8 flex flex-wrap items-center gap-6">
+            <Link
+              href="/jouer/"
+              className="inline-block rounded-md border-2 border-[#2e2014] bg-[#cc4830] px-7 py-4 font-display text-xl font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:bg-[#b83f29] hover:text-[#f4ecdb] hover:shadow-[2px_2px_0_#2e2014]"
             >
-              <h2 className="m-0 font-display text-xl font-semibold leading-snug">{item.q}</h2>
-              <p className="mt-2 text-[15px] leading-relaxed text-[#4a3a26]">{item.a}</p>
-            </section>
-          ))}
+              Lancer un blind test
+            </Link>
+            <Link
+              href="/"
+              className="border-b-2 border-[#2e2014] pb-0.5 text-[13px] font-bold uppercase tracking-[0.14em] transition hover:border-[#cc4830] hover:text-[#cc4830]"
+            >
+              Retour à l'accueil
+            </Link>
+          </div>
+          {/* Pas de nav "A lire aussi" ici : le pied de page juste en dessous
+              porte deja exactement les memes cinq liens. */}
         </div>
+      </section>
 
-        <div className="mt-10 text-center">
-          <Link
-            href="/jouer/"
-            className="inline-block rounded-md border-2 border-[#2e2014] bg-[#c65133] px-6 py-4 font-display text-lg font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:text-[#f4ecdb] hover:shadow-[2px_2px_0_#2e2014]"
-          >
-            Lancer un blind test
-          </Link>
-        </div>
-      </div>
+      <SiteFooter />
     </div>
   )
 }
