@@ -15,6 +15,26 @@ import type { GameState } from "./realtimeGame";
  * functions never throw — failures are logged, never surfaced to players.
  */
 
+/**
+ * Sort une room de l'etat 'in_progress' en base au game over. Le multi
+ * classique le fait dans persistGameResults ; le mode streamer n'a pas de
+ * persistance de scores mais doit quand meme finaliser la room, sinon elle
+ * reste zombie 'in_progress' (comme les 440 d'avant le fix) et un game:sync
+ * tardif afficherait un faux "partie interrompue". Fire-and-forget.
+ */
+export async function markMultiplayerRoomFinished(roomCode: string): Promise<void> {
+  try {
+    await pool.query(
+      `UPDATE multiplayer_rooms
+       SET status='finished', completed_at=COALESCE(completed_at, NOW())
+       WHERE room_code=$1 AND status='in_progress'`,
+      [roomCode],
+    );
+  } catch (err) {
+    logger.error("mark_room_finished_failed", { roomCode, error: err });
+  }
+}
+
 function reactionMs(answerAt: number | null | undefined, startAt: number | null): number | null {
   if (!answerAt || !startAt) return null;
   return Math.max(0, answerAt - startAt);
@@ -104,6 +124,15 @@ export async function persistGameResults(state: GameState, sessionId: number | u
        SET state = 'finished', ended_at = COALESCE(ended_at, NOW()), current_round = $2
        WHERE id = $1 AND state <> 'finished'`,
       [sessionId, state.totalRounds],
+    );
+    // La room sort de "in_progress" en base : sans ca, elle servait le corrige
+    // via /state pour toujours et s'accumulait en zombie (440 en prod avant ce
+    // fix). Le "rejouer" la repasse en waiting puis in_progress normalement.
+    await pool.query(
+      `UPDATE multiplayer_rooms
+       SET status = 'finished', completed_at = COALESCE(completed_at, NOW())
+       WHERE room_code = $1 AND status = 'in_progress'`,
+      [state.roomCode],
     );
     logger.info("multiplayer_game_persisted", { roomCode: state.roomCode, sessionId, players: Object.keys(state.players).length });
   } catch (err) {

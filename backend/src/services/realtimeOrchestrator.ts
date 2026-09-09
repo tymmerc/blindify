@@ -1,9 +1,10 @@
 import type { Server as IOServer } from "socket.io";
 import { logger } from "../utils/logger";
 import {
-  clearGame,
+  clearGameIfFinished,
   gameStateSnapshot,
   getSessionId,
+  redactedGuessingTrack,
   revealRound,
   startNextRound,
   type GameState,
@@ -58,7 +59,8 @@ function emitRoundStart(io: IOServer, state: GameState) {
   io.to(state.roomCode).emit("game:round:start", {
     roomCode: state.roomCode,
     round: state.currentRound,
-    track: state.currentTrack,
+    // Caviarde : la reponse ne part sur le fil qu'au reveal.
+    track: state.phase === "GUESSING" ? redactedGuessingTrack(state.currentTrack) : state.currentTrack,
     timing: state.timing,
   });
 }
@@ -73,6 +75,9 @@ async function emitRoundReveal(io: IOServer, state: GameState) {
     round: state.currentRound,
     timing: state.timing,
     players: state.players,
+    // La reponse complete arrive AVEC le reveal : les clients n'ont recu
+    // qu'une piste caviardee pendant la manche.
+    track: state.currentTrack,
   });
 }
 
@@ -160,7 +165,10 @@ export function broadcastGameOver(io: IOServer, roomCode: string) {
   void persistGameResults(snapshot, getSessionId(roomCode));
   revealTimers.delete(roomCode);
   clearAdvanceTimer(roomCode);
-  clearGame(roomCode);
+  // L'etat FINISHED reste en memoire une minute : les clients recuperent
+  // l'ecran de resultats via /state (playlist complete) pendant cette fenetre.
+  // clearGameIfFinished ne touche pas une revanche relancee entre-temps.
+  setTimeout(() => clearGameIfFinished(roomCode), 60_000).unref?.();
   // Clean up the guard after a short delay to avoid memory leak.
   // unref so this housekeeping timer never keeps the process alive.
   setTimeout(() => finishedRooms.delete(roomCode), 10_000).unref?.();

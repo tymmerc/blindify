@@ -399,10 +399,91 @@ export function revealRound(roomCode: string): GameState | undefined {
   return ctx.state;
 }
 
+/**
+ * Piste caviardee pour la phase GUESSING. Le fil (socket comme REST) ne doit
+ * JAMAIS porter la reponse avant le reveal : un joueur qui ouvre l'onglet
+ * Reseau aurait le corrige. On ne garde que ce qu'il faut pour jouer la
+ * manche : l'extrait audio et les candidats du "qui a ajoute ?" (le bon y est
+ * noye parmi les leurres, c'est le principe du jeu). La pochette est retiree
+ * aussi : meme floutee cote client, elle serait deblurable en CSS.
+ */
+export function redactedGuessingTrack(track: RoundTrack): RoundTrack {
+  return {
+    round: track.round,
+    trackId: "hidden",
+    title: "",
+    artist: "",
+    previewUrl: track.previewUrl,
+    albumCover: null,
+    metadata: null,
+    ownerChoices: track.ownerChoices,
+  };
+}
+
+/**
+ * Vue PUBLIQUE de l'etat : c'est elle qui part sur le reseau. Pendant le
+ * GUESSING, la piste courante est caviardee (voir redactedGuessingTrack).
+ * L'etat interne complet reste accessible via getGameState pour la logique
+ * serveur (scoring, persistance).
+ */
 export function gameStateSnapshot(roomCode: string): GameState | undefined {
   const ctx = games.get(roomCode);
   if (!ctx) return undefined;
-  return ctx.state;
+  const state = ctx.state;
+  if (state.phase === "GUESSING") {
+    // Deux fuites a caviarder pendant la manche :
+    // 1. la piste courante (titre/artiste/pochette) -> redactedGuessingTrack.
+    // 2. le TEXTE tape par chaque joueur : broadcastState part apres chaque
+    //    game:answer, donc sans ca tout le monde lisait en direct la reponse
+    //    de celui qui a repondu en premier (typiquement le proprietaire du
+    //    morceau, qui reconnait sa propre musique). On garde hasAnswered
+    //    (utile a l'UI "X/Y ont repondu") mais on masque le contenu et le
+    //    verdict jusqu'au reveal.
+    const players: GameState["players"] = {};
+    for (const [id, p] of Object.entries(state.players)) {
+      players[Number(id)] = {
+        ...p,
+        lastGuess: undefined,
+        lastGuessTitle: null,
+        lastGuessArtist: null,
+        lastSourceGuess: null,
+        lastVerdict: undefined,
+        lastGained: undefined,
+      };
+    }
+    return {
+      ...state,
+      currentTrack: state.currentTrack ? redactedGuessingTrack(state.currentTrack) : null,
+      players,
+    };
+  }
+  return state;
+}
+
+/**
+ * Numero de la derniere manche dont la reponse a le droit de sortir du serveur.
+ * Source unique de verite du caviardage cote REST (state, roundsSummary...).
+ * - partie finie (room 'finished' ou phase FINISHED) : tout est revelable.
+ * - pas d'etat memoire : rien (0).
+ * - GUESSING : jusqu'a la manche PRECEDENTE (la courante est en jeu).
+ * - REVEAL : jusqu'a la manche courante incluse.
+ */
+export function revealedRoundCeiling(roomCode: string, roomStatus?: string | null): number {
+  const state = games.get(roomCode)?.state;
+  if (roomStatus === "finished" || state?.phase === "FINISHED") return Number.MAX_SAFE_INTEGER;
+  if (!state) return 0;
+  return state.phase === "GUESSING" ? state.currentRound - 1 : state.currentRound;
+}
+
+/**
+ * Libere la partie en memoire seulement si elle est bien terminee. Sert au
+ * nettoyage differe apres le game over : on garde l'etat FINISHED une minute
+ * pour que les clients recuperent l'ecran de resultats via /state, sans
+ * risquer d'effacer une revanche deja relancee entre-temps.
+ */
+export function clearGameIfFinished(roomCode: string): void {
+  const ctx = games.get(roomCode);
+  if (ctx && ctx.state.phase === "FINISHED") games.delete(roomCode);
 }
 
 // --- string matching helpers ---

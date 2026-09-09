@@ -188,8 +188,9 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     playerJoined?: (payload: { userId: number; username?: string | null; roomCode: string }) => void
     gameState?: (payload: MultiplayerGameState | StreamerState) => void
     roundStart?: (payload: { roomCode: string; round: number; track: MultiplayerGameState["currentTrack"]; timing: { startAt: number | null; revealAt: number | null } }) => void
-    roundReveal?: (payload: { roomCode: string; round: number; players: MultiplayerGameState["players"]; timing: { startAt: number | null; revealAt: number | null } }) => void
+    roundReveal?: (payload: { roomCode: string; round: number; players: MultiplayerGameState["players"]; timing: { startAt: number | null; revealAt: number | null }; track?: MultiplayerGameState["currentTrack"] }) => void
     gameOver?: (payload: { roomCode: string; players: MultiplayerGameState["players"] }) => void
+    gameLost?: (payload: { roomCode: string }) => void
     roomError?: (payload: { code?: string; message?: string }) => void
   }>({})
   const roomRef = useRef<MultiplayerRoom | null>(null)
@@ -310,6 +311,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
           socket.off("game:over", handlersRef.current.gameOver)
           socket.off("game:game:over", handlersRef.current.gameOver)
         }
+        if (handlersRef.current.gameLost) socket.off("game:lost", handlersRef.current.gameLost)
         if (handlersRef.current.roomError) socket.off("room:error", handlersRef.current.roomError)
       }
       disconnectSocket()
@@ -636,6 +638,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         socket.off("game:over", handlersRef.current.gameOver)
         socket.off("game:game:over", handlersRef.current.gameOver)
       }
+      if (handlersRef.current.gameLost) socket.off("game:lost", handlersRef.current.gameLost)
       if (handlersRef.current.roomError) socket.off("room:error", handlersRef.current.roomError)
 
       const presenceHandler = (payload: RoomPresenceEvent) => {
@@ -742,6 +745,9 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         round: number
         players: MultiplayerGameState["players"]
         timing: { startAt: number | null; revealAt: number | null }
+        // Le serveur caviarde la piste pendant la manche (anti-triche) :
+        // la version complete (titre/artiste/pochette) arrive AVEC le reveal.
+        track?: MultiplayerGameState["currentTrack"]
       }) => {
         if (payload.roomCode !== roomCode) {
           return
@@ -756,6 +762,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
             ...multi,
             phase: "REVEAL",
             currentRound: payload.round,
+            currentTrack: payload.track ?? multi.currentTrack,
             players: payload.players,
             timing: payload.timing,
           }
@@ -785,6 +792,16 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         dispatchLobby({ type: "results" })
       }
 
+      // Le serveur a perdu la partie en memoire (redemarrage en pleine soiree).
+      // Sans ce signal, tout le monde restait fige sur l'ecran de jeu.
+      const gameLostHandler = (payload: { roomCode: string }) => {
+        if (payload.roomCode !== roomCode) return
+        showNotice("La partie a été interrompue côté serveur. L'hôte peut en relancer une.")
+        setGameState(null)
+        setView("landing")
+        dispatchLobby({ type: viewToLobbyAction("landing") })
+      }
+
       // Chat listener is owned by the useRoomChat hook at component top-level.
 
       socket.on("room:presence", presenceHandler)
@@ -795,6 +812,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       socket.on("game:round:reveal", roundRevealHandler)
       socket.on("game:over", gameOverHandler)
       socket.on("game:game:over", gameOverHandler)
+      socket.on("game:lost", gameLostHandler)
 
       const roomErrorHandler = (payload: { code?: string; message?: string }) => {
         const msg = payload?.message || "Une action a ete refusee par le serveur."
@@ -824,6 +842,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         roundStart: roundStartHandler,
         roundReveal: roundRevealHandler,
         gameOver: gameOverHandler,
+        gameLost: gameLostHandler,
         roomError: roomErrorHandler,
       }
 

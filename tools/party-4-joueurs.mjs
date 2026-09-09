@@ -1,5 +1,6 @@
 import { chromium, devices } from "@playwright/test"
 import fs from "fs"
+import { execSync } from "child_process"
 
 const B = "https://dev.tymmerc.eu/blindify"
 const KEY = fs.readFileSync("/opt/blindify/.e2e-bypass-key", "utf8").trim()
@@ -55,13 +56,28 @@ const probe = p => p.evaluate(() => {
 const hostCtx = await mk({ viewport: { width: 1440, height: 900 } })
 const host = await hostCtx.newPage()
 wire(host, "HOTE")
+// Seed SQL, plus JAMAIS de vrai import Deezer : (1) Akamai bloque l'IP du VPS
+// apres quelques imports E2E, (2) la regle "premier importeur garde le titre"
+// rend un re-import du meme profil VIDE (les morceaux appartiennent aux guests
+// des runs precedents), donc le start echouait sur "aucune playlist importee".
+const seedLibrary = (userId, n) => execSync(
+  `docker exec blindify-postgres psql -U blindify -d blindify -qc "INSERT INTO audio_sources (provider, external_id, user_id, title, artist, album_cover, audio_url, duration_ms, metadata) SELECT provider, 'e2e-' || md5(random()::text || id::text), ${userId}, title, artist, album_cover, audio_url, duration_ms, metadata FROM audio_sources WHERE user_id = 3103 AND audio_url IS NOT NULL AND audio_url <> '' LIMIT ${n}"`)
+const grabUserId = page => new Promise(resolve => {
+  page.on("response", async r => {
+    if (/\/api\/auth\/(guest|me)/.test(r.url())) {
+      try { const d = await r.json(); const id = d?.data?.user?.id; if (id) resolve(id) } catch { /* pas ce call */ }
+    }
+  })
+})
+const hostIdP = grabUserId(host)
 await host.goto(`${B}/`, { waitUntil: "networkidle", timeout: 90000 })
 await host.locator("input").first().fill("Tymeo")
 await host.getByRole("button", { name: /continuer/i }).click()
-await host.locator('input[placeholder^="https://"]').fill("https://www.deezer.com/profile/2529")
-await host.getByRole("button", { name: /importer ma musique/i }).click()
-await host.getByText(/titres? importés?/).waitFor({ timeout: 90000 })
-say("import hote:", (await host.getByText(/titres? importés?/).first().innerText()).replace(/\s+/g, " "))
+// URL laissee vide -> Continuer passe l'ecran d'import
+await host.getByRole("button", { name: /^continuer$/i }).click({ timeout: 20000 })
+const hostId = await hostIdP
+seedLibrary(hostId, 20)
+say(`hote guest ${hostId} seede avec 20 titres (copie SQL de 3103)`)
 await host.getByText("Créer une partie").click()
 await host.waitForURL(/\/modes/, { timeout: 40000 })
 await host.getByText("Autour d'une table").first().click()
@@ -178,7 +194,11 @@ for (const { name, page } of [{ name: "Tymeo", page: host }, ...players]) {
   say(`  ${name}: podium=${st.podium} manches vues=[${[...st.rounds].sort((a, c) => a - c)}] reponses=${st.answered.size}`)
   if (!st.podium) bad(`${name} n'atteint pas l'ecran de fin`)
   if (st.rounds.size < ROUNDS) bad(`${name} n'a vu que ${st.rounds.size} manches sur ${ROUNDS}`)
-  if (name !== "Tymeo" && st.answered.size < ROUNDS) bad(`${name} n'a pu repondre qu'a ${st.answered.size} manches sur ${ROUNDS}`)
+  // Max recharge sa page en pleine manche quand CHAOS est actif : rater LA
+  // manche du rechargement est le comportement produit voulu (deconnecte,
+  // score garde, retour a la manche suivante), pas un bug.
+  const minAnswers = CHAOS && name === "Max" ? ROUNDS - 1 : ROUNDS
+  if (name !== "Tymeo" && st.answered.size < minAnswers) bad(`${name} n'a pu repondre qu'a ${st.answered.size} manches sur ${ROUNDS}`)
   if (name === "Tymeo") say("    podium hote:", txt.replace(/\s+/g, " ").slice(0, 220))
 }
 
@@ -188,3 +208,6 @@ say("  incidents audio:", audioLog.length ? "\n    " + audioLog.join("\n    ") :
 say(`\n=== ${problems.length === 0 ? "AUCUN PROBLEME" : problems.length + " PROBLEME(S)"} ===`)
 problems.forEach(p => say("  - " + p))
 await b.close()
+// menage : les bibliotheques synthetiques ne doivent pas s'accumuler en base
+try { execSync(`docker exec blindify-postgres psql -U blindify -d blindify -qc "DELETE FROM audio_sources WHERE external_id LIKE 'e2e-%'"`) } catch { /* tant pis */ }
+process.exit(problems.length ? 1 : 0)

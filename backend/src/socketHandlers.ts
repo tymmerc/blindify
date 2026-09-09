@@ -2,6 +2,7 @@ import type { Server, Socket } from "socket.io";
 import { pool } from "./config/db";
 import {
   gameStateSnapshot,
+  redactedGuessingTrack,
   getGameState as getRealtimeState,
   allAnswerablePlayers,
   markReady as markReadyState,
@@ -17,7 +18,7 @@ import {
   getGameMode,
   getSessionId,
 } from "./services/realtimeGame";
-import { persistRoundResponses } from "./services/gamePersistence";
+import { persistRoundResponses, markMultiplayerRoomFinished } from "./services/gamePersistence";
 import * as lobbyRps from "./services/lobbyRps";
 import { validRoomCode, clampText, toIntOrNull, MAX_GUESS_LEN, MAX_CHAT_LEN } from "./utils/socketValidation";
 import {
@@ -46,8 +47,40 @@ import {
   getStreamerSnapshot,
   cleanupStreamer,
 } from "./services/streamerOrchestrator";
+import { publicStreamerState } from "./services/streamerGame";
 import { GameMode } from "./types/game";
 import { logger } from "./utils/logger";
+
+// ---------------------------------------------------------------------------
+// Anti-flood par socket
+// ---------------------------------------------------------------------------
+// Fenetre glissante simple, en memoire. But : empecher un client (bugge ou
+// malveillant) de marteler les events qui touchent la base ou qui broadcast
+// a toute la salle. Les limites sont larges pour un humain, serrees pour un
+// script.
+
+type EventBucket = { count: number; windowStart: number };
+const eventBuckets = new Map<string, EventBucket>();
+
+function allowEvent(socketId: string, event: string, limit: number, windowMs: number): boolean {
+  const key = `${socketId}:${event}`;
+  const now = Date.now();
+  const bucket = eventBuckets.get(key);
+  if (!bucket || now - bucket.windowStart >= windowMs) {
+    eventBuckets.set(key, { count: 1, windowStart: now });
+    return true;
+  }
+  bucket.count += 1;
+  return bucket.count <= limit;
+}
+
+// Balayage periodique des fenetres mortes (sockets partis, events calmes).
+setInterval(() => {
+  const cutoff = Date.now() - 60_000;
+  for (const [key, bucket] of eventBuckets) {
+    if (bucket.windowStart < cutoff) eventBuckets.delete(key);
+  }
+}, 60_000).unref?.();
 
 // ---------------------------------------------------------------------------
 // Cookie / Session helpers
@@ -266,6 +299,7 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
       const roomCode = validRoomCode(payload?.roomCode);
       logger.debug(`room:join request from user ${currentUser.id} (${currentUser.username}) for room ${roomCode}, socketId=${socket.id}`);
       if (!roomCode) return;
+      if (!allowEvent(socket.id, "join", 6, 10_000)) return;
       const access = await requireRoomAccess(roomCode, currentUser.id);
       if (!access) {
         logger.debug(`room:join DENIED for user ${currentUser.id} - no access`);
@@ -368,6 +402,17 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
           ack?.({ ok: false, reason: "invalid_room" });
           return;
         }
+        if (!allowEvent(socket.id, "answer", 8, 2_000)) {
+          ack?.({ ok: false, reason: "rate_limited" });
+          return;
+        }
+        // Deja repondu cette manche : inutile de refaire tout le chemin
+        // (2 requetes DB par emit sinon). On confirme, la reponse est notee.
+        const earlyState = getRealtimeState(roomCode);
+        if (earlyState?.phase === "GUESSING" && earlyState.players?.[currentUser.id]?.hasAnswered) {
+          ack?.({ ok: true });
+          return;
+        }
         const guess = clampText(payload?.guess, MAX_GUESS_LEN);
         const guessTitle = clampText(payload?.guessTitle, MAX_GUESS_LEN);
         const guessArtist = clampText(payload?.guessArtist, MAX_GUESS_LEN);
@@ -451,6 +496,9 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
               round: revealed.currentRound,
               timing: revealed.timing,
               players: revealed.players,
+              // La reponse complete n'arrive qu'avec le reveal (piste
+              // caviardee pendant la manche).
+              track: revealed.currentTrack,
             });
             // Persist this round's answers on the early-reveal path too
             // (the timer path persists in the orchestrator).
@@ -506,7 +554,8 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
         io.to(roomCode).emit("game:round:start", {
           roomCode,
           round: state.currentRound,
-          track: state.currentTrack,
+          // Caviarde : la reponse ne part sur le fil qu'au reveal.
+          track: redactedGuessingTrack(state.currentTrack),
           timing: state.timing,
         });
         scheduleReveal(io, roomCode, state.timing.revealAt);
@@ -523,8 +572,49 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
 
     socket.on("game:sync", async ({ roomCode }: { roomCode: string }) => {
       if (!roomCode) return;
+      if (!allowEvent(socket.id, "sync", 4, 5_000)) return;
       const state = getRealtimeState(roomCode);
-      if (!state) return;
+      if (!state) {
+        // Une partie STREAMER vit dans une autre map memoire : si elle est
+        // encore la, le backend n'a PAS redemarre, game:sync ne la concerne pas
+        // (les clients streamer emettent quand meme game:sync a la reconnexion).
+        // Sans ce garde, une simple reconnexion de viewer tuait la partie live.
+        if (getStreamerSnapshot(roomCode)) return;
+        // Sinon : backend redemarre en pleine partie, l'etat memoire est perdu
+        // et les clients resteraient figes sur l'ecran de jeu pour toujours. On
+        // leur signale la perte et on solde la room en base pour que la table
+        // puisse relancer une partie proprement.
+        try {
+          const safeCode = validRoomCode(roomCode);
+          if (!safeCode) return;
+          // started_at > 15s : evite le faux positif de la fenetre de lancement
+          // (la room passe 'in_progress' en base juste AVANT que l'etat memoire
+          // soit cree ; un game:sync dans cet interstice ne doit pas tuer la
+          // partie qui demarre). Un vrai redemarrage a un started_at ancien.
+          const { rows } = await pool.query(
+            `SELECT id, status FROM multiplayer_rooms
+             WHERE room_code=$1
+               AND status='in_progress'
+               AND started_at < NOW() - INTERVAL '15 seconds'
+             LIMIT 1`,
+            [safeCode]
+          );
+          if (rows[0]) {
+            await pool.query(
+              `UPDATE multiplayer_rooms
+               SET status='finished', completed_at=COALESCE(completed_at, NOW())
+               WHERE id=$1 AND status='in_progress'`,
+              [rows[0].id]
+            );
+            io.to(safeCode).emit("game:lost", { roomCode: safeCode });
+            socket.emit("game:lost", { roomCode: safeCode });
+            logger.info("game_lost_after_restart", { roomCode: safeCode });
+          }
+        } catch (err) {
+          logger.error("game_sync_lost_check_failed", { error: err });
+        }
+        return;
+      }
       // Ensure this socket is still in the room (may have lost membership on reconnect)
       if (!socket.rooms.has(roomCode)) {
         logger.debug(`game:sync socket ${socket.id} not in room ${roomCode}, re-joining`);
@@ -542,6 +632,9 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
             round: updated.currentRound,
             timing: updated.timing,
             players: updated.players,
+            // Meme contrat que le chemin orchestrateur : la reponse complete
+            // n'arrive qu'avec le reveal (piste caviardee avant).
+            track: updated.currentTrack,
           });
           broadcastState(io, roomCode);
           if (updated.phase === "FINISHED") {
@@ -565,6 +658,7 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
       if (!roomCode) return;
       const text = clampText(payload?.message, MAX_CHAT_LEN);
       if (!text) return;
+      if (!allowEvent(socket.id, "chat", 5, 3_000)) return;
       // Only members of the room may broadcast into it.
       const access = await requireRoomAccess(roomCode, currentUser.id);
       if (!access) return;
@@ -583,6 +677,7 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
       if (!roomCode) return;
       const targetUserId = toIntOrNull(payload?.targetUserId);
       if (!targetUserId || targetUserId === currentUser.id) return;
+      if (!allowEvent(socket.id, "rps", 10, 5_000)) return;
       const access = await requireRoomAccess(roomCode, currentUser.id);
       if (!access) return;
       const match = lobbyRps.createMatch(
@@ -635,6 +730,7 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
       const roomCode = validRoomCode(payload?.roomCode);
       if (!roomCode || typeof payload?.matchId !== "string") return;
       if (!lobbyRps.isValidMove(payload?.move)) return;
+      if (!allowEvent(socket.id, "rps", 10, 5_000)) return;
       const access = await requireRoomAccess(roomCode, currentUser.id);
       if (!access) return;
       const res = lobbyRps.recordMove(roomCode, payload.matchId, currentUser.id, payload.move);
@@ -776,6 +872,8 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
                 round: revealed.currentRound,
                 timing: revealed.timing,
                 players: revealed.players,
+                // Meme contrat : la reponse complete n'arrive qu'au reveal.
+                track: revealed.currentTrack,
               });
               if (revealed.phase === "FINISHED") {
                 broadcastGameOver(io, roomCode);
@@ -814,7 +912,12 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
         const streamerState = getStreamerSnapshot(roomCode);
         if (streamerState && streamerState.hostUserId === currentUser.id) {
           cleanupStreamer(roomCode);
-          io.to(roomCode).emit("state:sync", { ...streamerState, phase: "GAME_OVER" });
+          // La room doit sortir de 'in_progress' en base (comme au game over
+          // normal) sinon elle reste zombie.
+          void markMultiplayerRoomFinished(roomCode);
+          // Caviarde : la manche pouvait etre en cours (GUESSING_CHAT), on ne
+          // divulgue pas la reponse en partant.
+          io.to(roomCode).emit("state:sync", { ...publicStreamerState(streamerState), phase: "GAME_OVER" });
         }
       }
     });

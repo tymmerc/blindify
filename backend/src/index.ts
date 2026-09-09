@@ -332,6 +332,101 @@ async function bootstrap() {
 // reference, un premier deploiement sans la table crash-loopait le serveur.
 ensureLinksSchema().catch(err => logger.error("links_schema_boot_failed", { error: err }));
 
+// Index manquants sur les colonnes FK les plus sollicitees : sans eux, chaque
+// suppression en cascade (sessions, rooms, invites) declenche des seq scans.
+// IF NOT EXISTS : idempotent, tables petites, cout de creation negligeable.
+async function ensurePerformanceIndexes(): Promise<void> {
+  const statements = [
+    `CREATE INDEX IF NOT EXISTS idx_audio_sources_link_id ON audio_sources(link_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_game_rounds_audio_source ON game_rounds(audio_source_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_user_sessions_user ON user_sessions(user_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_user_sessions_expires ON user_sessions(expires_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_game_participants_user ON game_participants(user_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_round_responses_user ON round_responses(user_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_room_participants_user ON room_participants(user_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_multiplayer_rooms_host ON multiplayer_rooms(host_user_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_multiplayer_rooms_status ON multiplayer_rooms(status)`,
+    `CREATE INDEX IF NOT EXISTS idx_multiplayer_rooms_session ON multiplayer_rooms(session_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_room_invitations_from ON room_invitations(from_user)`,
+    `CREATE INDEX IF NOT EXISTS idx_likes_audio_source ON likes(audio_source_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_uploads_user ON uploads(user_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_uploads_audio_source ON uploads(audio_source_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_bug_reports_user ON bug_reports(user_id)`,
+  ];
+  for (const sql of statements) {
+    try {
+      await pool.query(sql);
+    } catch (err) {
+      logger.error("ensure_index_failed", { sql, error: err });
+    }
+  }
+}
+ensurePerformanceIndexes().catch(err => logger.error("ensure_indexes_boot_failed", { error: err }));
+
+// ── Janitor periodique : la base ne doit plus gonfler sans fin ──
+// Sessions expirees, rooms zombies, historique de jeu ancien, et invites morts
+// qui gardaient la propriete de morceaux partages (une ligne audio_sources est
+// unique par chanson pour TOUTE la plateforme : on DETACHE, on ne supprime
+// jamais physiquement, pour que le prochain importeur reclame le morceau).
+const JANITOR_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const DEAD_GUEST_FILTER = `
+      SELECT u.id FROM users u
+      WHERE u.provider = 'guest'
+        AND u.created_at < NOW() - INTERVAL '30 days'
+        AND NOT EXISTS (
+          SELECT 1 FROM user_sessions s
+          WHERE s.user_id = u.id AND s.expires_at > NOW())
+        AND NOT EXISTS (
+          SELECT 1 FROM room_participants rp
+          JOIN multiplayer_rooms r ON r.id = rp.room_id
+          WHERE rp.user_id = u.id AND r.created_at > NOW() - INTERVAL '30 days')
+        AND NOT EXISTS (
+          SELECT 1 FROM multiplayer_rooms mr
+          WHERE mr.host_user_id = u.id AND mr.created_at > NOW() - INTERVAL '30 days')
+      LIMIT 500`;
+
+async function runJanitor(): Promise<void> {
+  const step = async (label: string, sql: string): Promise<void> => {
+    try {
+      const res = await pool.query(sql);
+      if (res.rowCount) logger.info("janitor", { step: label, rows: res.rowCount });
+    } catch (err) {
+      logger.error("janitor_step_failed", { step: label, error: err });
+    }
+  };
+  await step("expired_sessions",
+    `DELETE FROM user_sessions WHERE expires_at < NOW() - INTERVAL '1 day'`);
+  await step("zombie_rooms",
+    `UPDATE multiplayer_rooms
+     SET status='finished', completed_at=COALESCE(completed_at, NOW())
+     WHERE status='in_progress'
+       AND COALESCE(started_at, created_at) < NOW() - INTERVAL '24 hours'`);
+  await step("old_rooms",
+    `DELETE FROM multiplayer_rooms
+     WHERE status IN ('finished', 'waiting')
+       AND created_at < NOW() - INTERVAL '7 days'`);
+  await step("stale_game_sessions",
+    `UPDATE game_sessions
+     SET state='abandoned', ended_at=COALESCE(ended_at, NOW())
+     WHERE state='in_progress'
+       AND started_at < NOW() - INTERVAL '24 hours'`);
+  // La FAQ promet un historique retrouvable pendant UN AN avec un compte
+  // (/games/history lit game_sessions) : retention 400 jours, pas moins.
+  await step("old_game_sessions",
+    `DELETE FROM game_sessions
+     WHERE started_at < NOW() - INTERVAL '400 days'`);
+  await step("dead_guest_tracks",
+    `UPDATE audio_sources SET user_id = NULL, link_id = NULL
+     WHERE user_id IN (${DEAD_GUEST_FILTER})`);
+  await step("dead_guests",
+    `DELETE FROM users
+     WHERE id IN (${DEAD_GUEST_FILTER})
+       AND NOT EXISTS (SELECT 1 FROM audio_sources a WHERE a.user_id = users.id)`);
+}
+setInterval(() => { void runJanitor(); }, JANITOR_INTERVAL_MS).unref?.();
+// Premiere passe peu apres le boot (laisse la creation des index passer avant).
+setTimeout(() => { void runJanitor(); }, 2 * 60 * 1000).unref?.();
+
 // Filet : une rejection non geree ne doit pas tuer le serveur d'une soiree
 // (Node 22 crash par defaut). On logge fort, on continue.
 process.on("unhandledRejection", (reason) => {

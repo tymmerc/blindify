@@ -1,11 +1,14 @@
-version: '3.8'
-
 services:
   # PostgreSQL Database
   postgres:
     image: postgres:15-alpine
     container_name: blindify-postgres
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       POSTGRES_DB: blindify
       POSTGRES_USER: blindify
@@ -28,6 +31,11 @@ services:
     image: redis:7-alpine
     container_name: blindify-redis
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-}
     ports:
       # Use a non-default host port to avoid conflicts with local Redis instances
@@ -49,6 +57,11 @@ services:
       dockerfile: Dockerfile
     container_name: blindify-backend
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     depends_on:
       postgres:
         condition: service_healthy
@@ -56,7 +69,7 @@ services:
         condition: service_healthy
     environment:
       NODE_ENV: production
-      LOG_LEVEL: debug
+      LOG_LEVEL: info
       E2E_BYPASS_KEY: ${E2E_BYPASS_KEY:-}
       PORT: 3000
       DATABASE_URL: postgres://blindify:${DB_PASSWORD:-blindify_pass}@postgres:5432/blindify
@@ -83,32 +96,6 @@ services:
       timeout: 10s
       retries: 3
 
-  # Frontend (Next.js)
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
-        NEXT_PUBLIC_SOCKET_URL: ${NEXT_PUBLIC_SOCKET_URL}
-    container_name: blindify-frontend
-    restart: unless-stopped
-    depends_on:
-      - backend
-    environment:
-      NODE_ENV: production
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
-      NEXT_PUBLIC_SOCKET_URL: ${NEXT_PUBLIC_SOCKET_URL}
-    ports:
-      - "127.0.0.1:3001:80"
-    networks:
-      - blindify-network
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:80"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
   # Nginx Reverse Proxy (optional)
   nginx:
     image: nginx:alpine
@@ -116,7 +103,6 @@ services:
     restart: unless-stopped
     depends_on:
       - backend
-      - frontend
     ports:
       - "80:80"
       - "443:443"

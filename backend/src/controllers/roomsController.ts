@@ -7,7 +7,7 @@ import { ok, fail } from "../utils/response";
 import { logger } from "../utils/logger";
 import type { MusicProvider } from "../types/user";
 import type { AudioSourceRow } from "../types/audio";
-import { bootstrapGameState, getGameState, clearGame } from "../services/realtimeGame";
+import { bootstrapGameState, getGameState, gameStateSnapshot, revealedRoundCeiling, clearGame } from "../services/realtimeGame";
 import { startRoundAndBroadcast } from "../services/realtimeOrchestrator";
 import { GameMode, type RoundTrack } from "../types/game";
 import { initStreamerGame } from "../services/streamerOrchestrator";
@@ -415,7 +415,9 @@ export const roomsController = {
       return;
     }
 
-    if (room.status !== "in_progress" || !room.session_id) {
+    // "finished" sert aussi : l'ecran de resultats recharge la playlist
+    // complete par ici une fois la partie terminee.
+    if ((room.status !== "in_progress" && room.status !== "finished") || !room.session_id) {
       ok(res, { room, session: null, tracks: [] });
       return;
     }
@@ -450,18 +452,39 @@ export const roomsController = {
        ORDER BY gr.round_index ASC`,
       [session.id]
     );
+    const gameState = gameStateSnapshot(room.room_code) ?? null;
+
+    // Caviardage anti-triche : la reponse d'une manche non revelee (titre,
+    // artiste, qui-a-ajoute, pochette, et meme l'extrait des manches futures)
+    // ne sort JAMAIS de l'API. Avant ce fix, ouvrir l'onglet Reseau au round 1
+    // donnait le corrige complet de la partie.
+    const revealedUpTo = revealedRoundCeiling(room.room_code, room.status);
+
     // Re-injecte l'attribution "qui a ajoute" dans le metadata (perdue sinon : owner_* n'est
     // calcule qu'au lancement en memoire, jamais persiste dans audio_sources.metadata).
-    const trackRows = trackRowsRaw.map((row: Record<string, unknown>) => ({
-      ...row,
-      metadata: {
-        ...((row.metadata as Record<string, unknown> | null) ?? {}),
-        owner_user_id: row.owner_user_id ?? null,
-        owner_username: row.owner_username ?? null,
-      },
-    }));
-
-    const gameState = getGameState(room.room_code) ?? null;
+    const trackRows = trackRowsRaw.map((row: Record<string, unknown>) => {
+      if (Number(row.round) > revealedUpTo) {
+        return {
+          round: row.round,
+          audioSourceId: null,
+          type: row.type,
+          track_id: null,
+          title: null,
+          artist: null,
+          album_cover: null,
+          audio_url: null,
+          metadata: { owner_user_id: null, owner_username: null },
+        };
+      }
+      return {
+        ...row,
+        metadata: {
+          ...((row.metadata as Record<string, unknown> | null) ?? {}),
+          owner_user_id: row.owner_user_id ?? null,
+          owner_username: row.owner_username ?? null,
+        },
+      };
+    });
 
     ok(res, {
       room,
@@ -494,15 +517,33 @@ export const roomsController = {
     const context = await getSessionContext(req, res, { requireConnection: false });
     if (!context) return;
 
-    const { rows: roomRows } = await pool.query<{ session_id: number | null }>(
-      `SELECT session_id FROM multiplayer_rooms WHERE room_code=$1 LIMIT 1`,
+    const { rows: roomRows } = await pool.query<{ id: number; room_code: string; status: string; session_id: number | null }>(
+      `SELECT id, room_code, status, session_id FROM multiplayer_rooms WHERE room_code=$1 LIMIT 1`,
       [code]
     );
-    const sessionId = roomRows[0]?.session_id ?? null;
-    if (!sessionId) {
+    const roomRow = roomRows[0];
+    const sessionId = roomRow?.session_id ?? null;
+    if (!roomRow || !sessionId) {
       ok(res, { rounds: [] });
       return;
     }
+
+    // Membership obligatoire : cet endpoint sert le corrige (titre/artiste par
+    // manche), il ne doit repondre qu'aux joueurs DE la salle, pas a quiconque
+    // connait le code affiche a l'ecran.
+    const { rows: member } = await pool.query(
+      `SELECT 1 FROM room_participants WHERE room_id=$1 AND user_id=$2 LIMIT 1`,
+      [roomRow.id, context.user.id]
+    );
+    if (!member.length) {
+      fail(res, "room_forbidden", "Tu n'es pas dans cette salle", 403);
+      return;
+    }
+
+    // Caviardage : en pleine partie, on ne divulgue titre/artiste que des manches
+    // deja revelees (meme regle que /state). L'ecran de fin ("piege de la soiree")
+    // recoit tout car la partie est alors terminee.
+    const revealedUpTo = revealedRoundCeiling(roomRow.room_code, roomRow.status);
 
     // ATTENTION : une ligne round_responses est creee meme pour un joueur qui n'a
     // rien tape (revealRound marque tout le monde "hasAnswered"). On ne compte donc
@@ -558,13 +599,16 @@ export const roomsController = {
         answered: Number(p.answered),
         avgMs: p.avg_ms === null ? null : Math.round(Number(p.avg_ms)),
       })),
-      rounds: rows.map(r => ({
-        round: r.round_index,
-        title: r.correct_title,
-        artist: r.correct_artist,
-        answers: Number(r.answers),
-        correct: Number(r.correct),
-      })),
+      rounds: rows.map(r => {
+        const revealed = r.round_index <= revealedUpTo;
+        return {
+          round: r.round_index,
+          title: revealed ? r.correct_title : null,
+          artist: revealed ? r.correct_artist : null,
+          answers: Number(r.answers),
+          correct: Number(r.correct),
+        };
+      }),
     });
   },
 

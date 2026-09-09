@@ -671,18 +671,29 @@ export const gamesController = {
 
       const sessionIds = sessions.map((s: { id: number }) => s.id);
 
-      const { rows: roundRows } = await pool.query(
-        `SELECT
-           gr.session_id,
-           a.title,
-           a.artist,
-           a.album_cover
-         FROM game_rounds gr
-         LEFT JOIN audio_sources a ON a.id = gr.audio_source_id
-         WHERE gr.session_id = ANY($1::int[])
-         ORDER BY gr.session_id, gr.round_index`,
-        [sessionIds]
-      );
+      // Anti-triche : on ne divulgue la tracklist (titre/artiste ordonnes) que
+      // des parties TERMINEES. Sinon un joueur d'une partie en cours lisait ici
+      // la feuille de reponses ordonnee de la manche a venir (l'historique
+      // remonte sa propre session in_progress en tete). Les manches restent
+      // caviardees jusqu'a la fin, comme sur /state et les trames socket.
+      const finishedSessionIds = sessions
+        .filter((s: { state: string }) => s.state !== "in_progress")
+        .map((s: { id: number }) => s.id);
+
+      const { rows: roundRows } = finishedSessionIds.length
+        ? await pool.query(
+            `SELECT
+               gr.session_id,
+               a.title,
+               a.artist,
+               a.album_cover
+             FROM game_rounds gr
+             LEFT JOIN audio_sources a ON a.id = gr.audio_source_id
+             WHERE gr.session_id = ANY($1::int[])
+             ORDER BY gr.session_id, gr.round_index`,
+            [finishedSessionIds]
+          )
+        : { rows: [] as Array<{ session_id: number; title: string | null; artist: string | null; album_cover: string | null }> };
 
       const tracksBySession = new Map<number, Array<{ title: string; artist: string; album_cover: string | null }>>();
       for (const row of roundRows) {
