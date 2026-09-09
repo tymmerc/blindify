@@ -1,6 +1,7 @@
 import Link from "next/link"
 import type { ReactNode } from "react"
 import { GUIDES, SiteFooter, SiteHeader } from "@/components/home/SiteChrome"
+import { FaqAccordion } from "@/components/home/FaqAccordion"
 
 // Gabarit des guides (pages de contenu SEO/GEO). Composants SERVEUR : le texte
 // est dans le HTML exporte. Meme systeme visuel que la landing : palette du
@@ -144,17 +145,10 @@ export function Steps({ items, light }: { items: Array<{ t: string; b: ReactNode
   )
 }
 
+/** Les questions d'un guide, repliees comme sur la landing et sur /faq/.
+ *  Toujours utilisee dans une Section de ton clair (paper). */
 export function FaqList({ items }: { items: Array<{ q: string; a: string }> }) {
-  return (
-    <dl className="divide-y-2 divide-[rgba(46,32,20,.18)]">
-      {items.map(item => (
-        <div key={item.q} className="py-5 first:pt-0 last:pb-0">
-          <dt className="font-display text-xl font-semibold">{item.q}</dt>
-          <dd className="mt-2 leading-relaxed">{item.a}</dd>
-        </div>
-      ))}
-    </dl>
-  )
+  return <FaqAccordion items={items} />
 }
 
 export function faqJsonLd(items: Array<{ q: string; a: string }>) {

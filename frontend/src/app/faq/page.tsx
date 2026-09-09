@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { SiteFooter, SiteHeader } from "@/components/home/SiteChrome"
 import { Tag, VERMILION, faqJsonLd, webPageJsonLd } from "@/components/home/Guide"
+import { FaqAccordion } from "@/components/home/FaqAccordion"
 
 // Page FAQ : redigee pour repondre aux questions telles qu'on les pose vraiment
 // (a un moteur de recherche ou a une IA). Chaque question colle a une requete
@@ -96,16 +97,7 @@ export default function FaqPage() {
 
       <section className="border-t-2 border-[#2e2014] bg-[#ece1c8]">
         <div className="mx-auto max-w-4xl px-5 py-[4rem] sm:px-8">
-          <dl className="divide-y-2 divide-[rgba(46,32,20,.2)]">
-            {FAQ.map(item => (
-              <div key={item.q} className="py-6 first:pt-0 last:pb-0">
-                <dt className="font-display text-[1.35rem] font-semibold leading-snug text-[#cc4830]">
-                  {item.q}
-                </dt>
-                <dd className="mt-2 text-[1.05rem] leading-relaxed">{item.a}</dd>
-              </div>
-            ))}
-          </dl>
+          <FaqAccordion items={FAQ} />
         </div>
       </section>
 

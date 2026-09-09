@@ -4,6 +4,7 @@ import { publicPath } from "@/lib/publicPath"
 import { ScrollVinyl } from "@/components/home/ScrollVinyl"
 import { ModesStage } from "@/components/home/ModesStage"
 import { SiteHeader, SiteFooter } from "@/components/home/SiteChrome"
+import { FaqAccordion } from "@/components/home/FaqAccordion"
 
 // Landing de blindz.app. Composant SERVEUR : tout le texte est dans le HTML
 // pre-rendu (export statique), c'est ce que lisent Google, Bing, Brave et
@@ -309,14 +310,9 @@ export default function HomePage() {
               Ce qu'on nous demande avant de lancer une partie
             </h2>
           </div>
-          <dl className="divide-y-2 divide-[rgba(46,32,20,.2)] lg:col-start-2 lg:row-start-1 lg:row-span-2">
-            {FAQ_TEASER.map(item => (
-              <div key={item.q} className="py-6 first:pt-0 last:pb-0">
-                <dt className="font-display text-xl font-semibold text-[#cc4830]">{item.q}</dt>
-                <dd className="mt-2 text-[1.05rem] leading-relaxed">{item.a}</dd>
-              </div>
-            ))}
-          </dl>
+          <div className="lg:col-start-2 lg:row-start-1 lg:row-span-2">
+            <FaqAccordion items={FAQ_TEASER} />
+          </div>
           <Link
             href="/faq/"
             className="justify-self-start rounded-md border-2 border-[#2e2014] px-6 py-3 font-display text-lg font-bold shadow-[4px_4px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:bg-[#2e2014] hover:text-[#f4ecdb] hover:shadow-[2px_2px_0_#2e2014] lg:col-start-1 lg:row-start-2 lg:mt-8 lg:self-start"
