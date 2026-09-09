@@ -34,7 +34,7 @@ const grabUserId = page => new Promise(resolve => {
 const hostCtx = await mk({ viewport: { width: 1440, height: 900 } })
 const host = await hostCtx.newPage()
 const hostIdP = grabUserId(host)
-await host.goto(`${B}/`, { waitUntil: "networkidle", timeout: 90000 })
+await host.goto(`${B}/jouer/`, { waitUntil: "networkidle", timeout: 90000 })
 await host.locator("input").first().fill("Tymeo")
 await host.getByRole("button", { name: /continuer/i }).click()
 // URL vide -> Continuer -> ecran Creer/Rejoindre

@@ -51,7 +51,7 @@ const grabUserId = page => new Promise(resolve => {
   })
 })
 const hostIdP = grabUserId(host)
-await host.goto(`${B}/`, { waitUntil: "networkidle", timeout: 90000 })
+await host.goto(`${B}/jouer/`, { waitUntil: "networkidle", timeout: 90000 })
 await host.locator("input").first().fill("Tymeo")
 await host.getByRole("button", { name: /continuer/i }).click()
 await host.getByRole("button", { name: /^continuer$/i }).click({ timeout: 20000 })

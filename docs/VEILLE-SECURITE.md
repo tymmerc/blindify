@@ -98,12 +98,41 @@ et pire, un seul client peut consommer le quota commun et faire refuser les
 requêtes de tous les autres. C'est un risque de disponibilité autant qu'un trou
 de protection.
 
-**Décidé.** Reporté, pas corrigé. La correction touche l'infrastructure, pas le
-code applicatif, et demande un accord explicite avant intervention. Trois pistes à
-départager : activer le mode transparent de sslh, faire écouter nginx directement
-sur 443 en déplaçant le multiplexage, ou faire lire au backend l'en-tête réel via
-un `keyGenerator` dédié. La troisième est la moins invasive mais ne vaut que si la
-chaîne en amont est fiable et non contournable depuis l'extérieur.
+**Décidé.** Corrigé le jour même, sur accord de l'exploitant. Les trois pistes
+envisagées au moment de la découverte ont toutes été écartées après vérification,
+et une quatrième a été retenue.
+
+- **Protocole PROXY dans sslh** : impossible. Testé, la version installée
+  (sslh-fork 1.22c-1) ne connaît pas l'option `proxyprotocol` et l'ignore en
+  silence, sans message d'erreur. Un test fonctionnel a confirmé qu'aucun en-tête
+  n'était émis, le flux TLS arrivant brut.
+- **Mode transparent de sslh** : écarté. Il casse les connexions qu'une machine
+  ouvre vers son propre nom public, or deux tâches planifiées de surveillance et
+  toute la chaîne de déploiement et de test de ce projet passent par là.
+- **Lecture d'un en-tête côté application** : impossible, il n'existait aucun
+  en-tête à lire. L'adresse réelle était perdue dès le premier saut.
+- **Retenue : nginx remplace sslh.** Le module `stream` de nginx multiplexe le
+  port 443 avec `ssl_preread`, qui distingue un ClientHello TLS d'une bannière
+  SSH. Le TLS part vers le bloc HTTPS local avec un en-tête PROXY, le SSH passe
+  par un étage intermédiaire qui retire cet en-tête avant de le livrer à un
+  démon qui ne saurait pas le lire. Aucune règle de pare-feu, aucun changement de
+  routage, un démon de moins à maintenir, et le tout réversible par configuration.
+
+**Vérifié après bascule.** HTTPS répond sur les quatre domaines du serveur, la
+redirection depuis le port 80 fonctionne, SSH par le port 443 négocie normalement
+(version distante annoncée par OpenSSH), la surveillance planifiée passe, et
+surtout l'adresse réelle du client apparaît maintenant dans les journaux nginx
+comme dans l'en-tête transmis au backend, là où l'on lisait `127.0.0.1`.
+
+**Conséquence sur le code.** Les commentaires du limiteur de débit décrivaient la
+situation d'avant et ont été corrigés. La valeur de 60 requêtes par minute est
+conservée, mais pour une raison différente et toujours valable : une soirée se
+joue derrière une seule box, donc une douzaine de joueurs partagent une adresse
+publique et s'inscrivent en rafale.
+
+**Reste à surveiller.** Le paramètre `trust proxy` du backend vaut 1, ce qui est
+correct avec un seul intermédiaire. Toute couche ajoutée devant nginx demandera de
+revoir cette valeur, faute de quoi un client pourrait forger son adresse.
 
 ### Sujets ouverts, à instruire dans les prochaines entrées
 

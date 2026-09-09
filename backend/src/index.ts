@@ -194,16 +194,22 @@ const apiLimiter = rateLimit({
 
 const authLimiter = rateLimit({
   windowMs: 60_000,
-  // 60/min et non 15 : derriere sslh tous les clients partagent 127.0.0.1,
-  // la limite est donc GLOBALE (2 soirees simultanees depassaient 15 invites/min).
+  // 60/min : depuis le 2026-09-09 la limite est bien PAR ADRESSE IP. sslh a ete
+  // remplace par le multiplexage natif de nginx (ssl_preread + protocole PROXY),
+  // donc la vraie adresse du client arrive jusqu'ici. Avant, tout le monde
+  // partageait 127.0.0.1 et la limite etait globale.
+  // On garde 60 et non 15 pour une autre raison, toujours valable : une soiree
+  // se joue derriere UNE box, donc douze joueurs partagent une seule adresse
+  // publique et leurs inscriptions arrivent en rafale.
   max: 60,
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, error: { code: "rate_limited", message: "Trop de requêtes. Réessaye dans 1 minute." } },
   // Bypass E2E par secret partagé (E2E_BYPASS_KEY) : la suite sérielle crée
-  // >15 sessions invité/min et cascadait en 429. Un header d'origine IP est
-  // impossible ici : sslh (non-transparent) est devant nginx, donc TOUTES les
-  // requêtes arrivent en 127.0.0.1. Le secret n'est connu que des tests locaux.
+  // >15 sessions invité/min et cascadait en 429. On garde le secret plutôt
+  // qu'une exemption par adresse : les tests tournent sur le VPS lui-même, leur
+  // adresse est donc celle du serveur, et l'exempter ouvrirait la porte à tout
+  // ce qui sort de cette machine.
   skip: req => {
     const key = process.env.E2E_BYPASS_KEY;
     return Boolean(key) && req.headers["x-e2e-key"] === key;
