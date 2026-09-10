@@ -72,7 +72,7 @@ export async function seedLibrary(userId, n = 12) {
   if (!lot.length) throw new Error("reserve de titres epuisee")
   const vals = lot.map(t =>
     `('deezer','${t.id}',${userId},${sq(t.title)},${sq(t.artist?.name ?? "?")},` +
-    `${sq(t.album?.cover_medium ?? "")},${sq(t.preview)},${(t.duration ?? 30) * 1000},'{}'::jsonb)`
+    `${sq(t.album?.cover_medium ?? "")},${sq(t.preview)},${(t.duration ?? 30) * 1000},'{\"e2e\":true}'::jsonb)`
   ).join(",")
   psql(
     `INSERT INTO audio_sources (provider, external_id, user_id, title, artist, album_cover, audio_url, duration_ms, metadata) ` +
@@ -88,7 +88,12 @@ export async function seedLibrary(userId, n = 12) {
  *  Deezer, l'ancien filtre `external_id LIKE 'e2e-%'` ne matche plus rien. */
 export function cleanupSeeded(userIds = [...seedes]) {
   const ids = userIds.filter(Boolean).join(",")
-  if (!ids) return
-  psql(`DELETE FROM audio_sources WHERE user_id IN (${ids})`)
+  if (ids) psql(`DELETE FROM audio_sources WHERE user_id IN (${ids})`)
+  // Ceinture et bretelles : les titres portent un marqueur dans metadata, donc
+  // un run interrompu (Ctrl-C, timeout, plantage) se rattrape au run suivant.
+  // Sans ce marqueur ils seraient indiscernables des titres de vrais joueurs,
+  // puisqu'ils ont desormais de VRAIS identifiants Deezer.
+  psql(`DELETE FROM audio_sources a WHERE a.metadata->>'e2e' = 'true'
+        AND NOT EXISTS (SELECT 1 FROM game_rounds gr WHERE gr.audio_source_id = a.id)`)
   seedes.clear()
 }

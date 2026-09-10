@@ -5,6 +5,7 @@ import fs from "fs"
 import { execSync } from "child_process"
 import { createRequire } from "module"
 const requireFront = createRequire("/opt/blindify/frontend/package.json")
+import { seedLibrary, cleanupSeeded } from "./seed-library.mjs"
 const { io } = requireFront("socket.io-client")
 
 const PROD = process.argv[2] === "prod"
@@ -35,35 +36,8 @@ if (!token || !userId) { bad(`session invite refusee (${guest.status} ${JSON.str
 okk(`session invite obtenue (utilisateur ${userId})`)
 
 // Bibliotheque ensemencee en SQL : jamais d'import Deezer reel depuis le VPS.
-// Ensemencement avec de VRAIS identifiants Deezer.
-//
-// Pourquoi pas la copie de lignes existantes, comme font les autres outils :
-// l'index unique porte sur (provider, external_id) au niveau de TOUTE la table,
-// pas par utilisateur. Copier une ligne oblige donc a brouiller l'identifiant,
-// et le serveur ne peut alors plus rafraichir l'extrait quand l'URL en cache
-// expire (signature exp=, 403 au bout de quelques jours). Le lancement de partie
-// jette ces titres et echoue en "insufficient_tracks". C'est ce qui a fait
-// pourrir soiree.mjs et anticheat-e2e.mjs en silence.
-const MOTS = ["rock", "pop francaise", "rap", "jazz", "electro", "chanson"]
-const candidats = []
-for (const q of MOTS) {
-  const r = await fetch(`https://api.deezer.com/search/track?q=${encodeURIComponent(q)}&limit=25`).then(r => r.json()).catch(() => null)
-  for (const t of r?.data ?? []) if (t.id && t.preview) candidats.push(t)
-}
-const deja = new Set(psql(`SELECT external_id FROM audio_sources WHERE provider='deezer'`).split("\n"))
-const libres = candidats.filter(t => !deja.has(String(t.id)))
-if (libres.length < 24) { bad(`pas assez de titres neufs chez Deezer (${libres.length})`); process.exit(1) }
-
-// Guillemets simples doubles pour SQL. Surtout PAS la notation $$ de Postgres :
-// la commande passe par un shell, qui remplacerait $$ par son numero de processus.
-const sq = v => "'" + String(v ?? "").replace(/'/g, "''").replace(/\$/g, "") + "'"
-const seed = (uid, lot) => {
-  const vals = lot.map(t => `('deezer','${t.id}',${uid},${sq(t.title)},${sq(t.artist?.name ?? "?")},${sq(t.album?.cover_medium ?? "")},${sq(t.preview)},${(t.duration ?? 30) * 1000},'{}'::jsonb)`).join(",")
-  psql(`INSERT INTO audio_sources (provider, external_id, user_id, title, artist, album_cover, audio_url, duration_ms, metadata) VALUES ${vals} ON CONFLICT (provider, external_id) DO NOTHING`)
-}
-const lotA = libres.slice(0, 12)
-seed(userId, lotA)
-okk(`${lotA.length} morceaux ensemences pour le premier joueur (vrais identifiants Deezer)`)
+const nA = await seedLibrary(userId, 12)
+okk(`${nA} morceaux ensemences pour le premier joueur (vrais identifiants Deezer)`)
 
 const room = await api("/api/rooms/create", { method: "POST", token, body: { mode: "friends", questionCount: 1 } })
 const code = room.data?.roomCode || room.data?.room?.room_code
@@ -75,8 +49,7 @@ okk(`salon cree : ${code}`)
 const g2 = await api("/api/auth/guest", { method: "POST" })
 const t2 = g2.data?.sessionToken, u2 = g2.data?.user?.id
 if (!t2) { bad("second invite refuse"); process.exit(1) }
-const lotB = libres.slice(12, 24)
-seed(u2, lotB)
+await seedLibrary(u2, 12)
 const j2 = await api(`/api/rooms/${code}/join`, { method: "POST", token: t2 })
 j2.status < 400 ? okk(`second joueur entre dans le salon (utilisateur ${u2})`) : bad(`entree du second joueur refusee (${j2.status})`)
 const sock2 = io(ORIGIN, { path: SOCKET_PATH, auth: { token: t2 }, extraHeaders: { "X-E2E-Key": KEY }, transports: ["websocket"] })
@@ -104,7 +77,7 @@ sid ? okk(`session de jeu creee en base (id ${sid})`) : bad("aucune session en b
 
 // Menage : on ne laisse ni salon ni faux morceaux derriere nous.
 sock.close(); sock2.close()
-psql(`DELETE FROM audio_sources WHERE user_id IN (${userId}, ${u2})`)
+cleanupSeeded([userId, u2])
 psql(`UPDATE multiplayer_rooms SET status='finished' WHERE room_code='${code}'`)
 okk("nettoyage fait")
 console.log(problems.length ? `\n${problems.length} probleme(s)` : "\nLe moteur de jeu tourne a travers le nouveau chemin 443")
