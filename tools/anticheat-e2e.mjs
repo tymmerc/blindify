@@ -12,6 +12,8 @@ import { execSync } from "child_process"
 import { createRequire } from "module"
 
 const requireFront = createRequire("/opt/blindify/frontend/package.json")
+// Ensemencement partage : vrais identifiants Deezer, donc extraits rafraichissables.
+import { seedLibrary, cleanupSeeded } from "./seed-library.mjs"
 const { io } = requireFront("socket.io-client")
 
 const IS_PROD = process.argv[2] === "prod"
@@ -29,10 +31,6 @@ const psql = sql => execSync(
   `docker exec blindify-postgres psql -U blindify -d blindify -qAt -c "${sql.replace(/"/g, '\\"').replace(/\n/g, " ")}"`
 ).toString().trim()
 
-const seedLibrary = (userId, n) => psql(
-  `INSERT INTO audio_sources (provider, external_id, user_id, title, artist, album_cover, audio_url, duration_ms, metadata)
-   SELECT provider, 'e2e-' || md5(random()::text || id::text), ${userId}, title, artist, album_cover, audio_url, duration_ms, metadata
-   FROM audio_sources WHERE user_id = 3103 AND audio_url IS NOT NULL AND audio_url <> '' LIMIT ${n}`)
 
 const grabUserId = page => new Promise(resolve => {
   page.on("response", async r => {
@@ -54,7 +52,7 @@ await host.locator("input").first().fill("Tymeo")
 await host.getByRole("button", { name: /continuer/i }).click()
 await host.getByRole("button", { name: /^continuer$/i }).click({ timeout: 20000 })
 const hostId = await hostIdP
-seedLibrary(hostId, 12)
+await seedLibrary(hostId, 12)
 await host.getByText(/créer une partie/i).click()
 await host.waitForURL(/\/modes/, { timeout: 40000 })
 await host.getByText("Autour d'une table").first().click()
@@ -80,7 +78,7 @@ for (const name of ["Lea", "Max"]) {
   await p.locator("input").first().fill(name)
   await p.getByRole("button", { name: /continuer/i }).click()
   const uid = await idP
-  seedLibrary(uid, 12)
+  await seedLibrary(uid, 12)
   await p.getByRole("button", { name: /rejoindre la partie/i }).click().catch(() => {})
   await p.getByText("Tu es dans la partie").waitFor({ timeout: 90000 })
   players.push({ name, ctx, page: p, uid })
@@ -271,5 +269,5 @@ say(`\n=== ${problems.length ? problems.length + " PROBLEME(S)" : "AUCUN PROBLEM
 problems.forEach(p => say("  - " + p))
 spy.close()
 await b.close()
-try { psql("DELETE FROM audio_sources WHERE external_id LIKE 'e2e-%'") } catch { /* tant pis */ }
+try { cleanupSeeded() } catch { /* tant pis */ }
 process.exit(problems.length ? 1 : 0)

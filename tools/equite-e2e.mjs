@@ -14,15 +14,13 @@ const b = await chromium.launch({ args: ["--autoplay-policy=no-user-gesture-requ
 const mk = async o => { const c = await b.newContext(o); await c.setExtraHTTPHeaders({ "X-E2E-Key": KEY }); return c }
 
 import { execSync } from "child_process"
+import { seedLibrary as seedLibraryPartagee, cleanupSeeded } from "./seed-library.mjs"
 // Seed SQL : copie des titres DEJA hydrates (URLs fraiches) vers le compte de
 // test, avec des external_id synthetiques pour ne pas voler la propriete des
 // vrais comptes. Zero appel Deezer : le VPS est rate-limite par Akamai.
-const seedLibrary = (userId, fromUserId, n) => {
-  const sql = `INSERT INTO audio_sources (provider, external_id, user_id, title, artist, album_cover, audio_url, duration_ms, metadata)
-    SELECT provider, 'e2e-' || md5(random()::text || id::text), ${userId}, title, artist, album_cover, audio_url, duration_ms, metadata
-    FROM audio_sources WHERE user_id = ${fromUserId} AND audio_url IS NOT NULL AND audio_url <> '' LIMIT ${n};`
-  execSync(`docker exec blindify-postgres psql -U blindify -d blindify -qc "${sql.replace(/"/g, '\\"').replace(/\n/g, " ")}"`)
-}
+// Le parametre fromUserId n'a plus de sens : on ne copie plus de lignes, on
+// prend des titres neufs sur l'API Deezer (voir seed-library.mjs).
+const seedLibrary = (userId, _fromUserId, n) => seedLibraryPartagee(userId, n)
 const grabUserId = page => new Promise(resolve => {
   page.on("response", async r => {
     if (/\/api\/auth\/(guest|me)/.test(r.url())) {
@@ -40,7 +38,7 @@ await host.getByRole("button", { name: /continuer/i }).click()
 // URL vide -> Continuer -> ecran Creer/Rejoindre
 await host.getByRole("button", { name: /^continuer$/i }).click({ timeout: 20000 })
 const hostId = await hostIdP
-seedLibrary(hostId, 3103, 20)
+await seedLibrary(hostId, 3103, 20)
 say(`hote guest ${hostId} seede avec 20 titres (copie de 3101)`) 
 await host.getByText(/créer une partie/i).click()
 await host.waitForURL(/\/modes/, { timeout: 40000 })
@@ -64,7 +62,7 @@ for (const [name, seedFrom] of [["Lea", 3103], ["Max", null]]) {
   await p.getByRole("button", { name: /continuer/i }).click()
   if (seedFrom) {
     const uid = await idP
-    seedLibrary(uid, seedFrom, 20)
+    await seedLibrary(uid, seedFrom, 20)
     say(`  ${name}: guest ${uid} seede avec 20 titres (copie de ${seedFrom})`)
   }
   await p.getByRole("button", { name: /rejoindre la partie/i }).click().catch(() => {})
@@ -119,6 +117,6 @@ say(`\n=== ${problems.length ? problems.length + " PROBLEME(S)" : "AUCUN PROBLEM
 problems.forEach(p => say("  - " + p))
 await b.close()
 // menage : les bibliotheques synthetiques ne doivent pas s'accumuler en base
-try { execSync(`docker exec blindify-postgres psql -U blindify -d blindify -qc "DELETE FROM audio_sources WHERE external_id LIKE 'e2e-%'"`) } catch { /* tant pis */ }
+try { cleanupSeeded() } catch { /* tant pis */ }
 process.exit(problems.length ? 1 : 0)
 

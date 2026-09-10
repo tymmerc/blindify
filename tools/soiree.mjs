@@ -4,6 +4,8 @@
 import { chromium, devices } from "@playwright/test"
 import fs from "fs"
 import { execSync } from "child_process"
+// Ensemencement partage : vrais identifiants Deezer, donc extraits rafraichissables.
+import { seedLibrary, cleanupSeeded } from "./seed-library.mjs"
 
 const B = process.argv[2] === "prod" ? "https://blindz.app" : "https://dev.tymmerc.eu/blindify"
 const KEY = fs.readFileSync("/opt/blindify/.e2e-bypass-key", "utf8").trim()
@@ -37,12 +39,6 @@ const probe = p => p.evaluate(() => {
 const hostCtx = await mk({ viewport: { width: 1440, height: 900 } })
 const host = await hostCtx.newPage()
 wire(host, "HOTE")
-// Seed SQL, jamais de vrai import Deezer : (1) Akamai bloque l'IP du VPS,
-// (2) la regle "premier importeur garde le titre" rend un re-import du profil
-// VIDE (les titres appartiennent aux guests des runs precedents) -> le start
-// echouait sur "aucune playlist importee".
-const seedLibrary = (userId, n) => execSync(
-  `docker exec blindify-postgres psql -U blindify -d blindify -qc "INSERT INTO audio_sources (provider, external_id, user_id, title, artist, album_cover, audio_url, duration_ms, metadata) SELECT provider, 'e2e-' || md5(random()::text || id::text), ${userId}, title, artist, album_cover, audio_url, duration_ms, metadata FROM audio_sources WHERE user_id = 3103 AND audio_url IS NOT NULL AND audio_url <> '' LIMIT ${n}"`)
 const grabUserId = page => new Promise(resolve => {
   page.on("response", async r => {
     if (/\/api\/auth\/(guest|me)/.test(r.url())) {
@@ -56,8 +52,8 @@ await host.locator("input").first().fill("Tymeo")
 await host.getByRole("button", { name: /continuer/i }).click()
 await host.getByRole("button", { name: /^continuer$/i }).click({ timeout: 20000 })
 const hostId = await hostIdP
-seedLibrary(hostId, 20)
-say(`hote guest ${hostId} seede (SQL, copie de 3103)`)
+await seedLibrary(hostId, 20)
+say(`hote guest ${hostId} seede (titres Deezer neufs)`)
 await host.getByText("Créer une partie").click()
 await host.waitForURL(/\/modes/, { timeout: 40000 })
 await host.getByText("Autour d'une table").first().click()
@@ -80,7 +76,7 @@ for (const name of ["Megane", "Max", "Lea"]) {
   await p.locator("input").first().fill(name)
   await p.getByRole("button", { name: /continuer/i }).click()
   const uid = await idP
-  seedLibrary(uid, 20)
+  await seedLibrary(uid, 20)
   await p.getByRole("button", { name: /rejoindre la partie/i }).click().catch(() => {})
   await p.getByText("Tu es dans la partie").waitFor({ timeout: 90000 })
   players.push({ name, page: p })
@@ -183,5 +179,5 @@ say(`\n=== ${problems.length ? problems.length + " PROBLEME(S)" : "AUCUN PROBLEM
 problems.forEach(p => say("  - " + p))
 await b.close()
 // menage : les bibliotheques synthetiques ne doivent pas s'accumuler en base
-try { execSync(`docker exec blindify-postgres psql -U blindify -d blindify -qc "DELETE FROM audio_sources WHERE external_id LIKE 'e2e-%'"`) } catch { /* tant pis */ }
+try { cleanupSeeded() } catch { /* tant pis */ }
 process.exit(problems.length ? 1 : 0)
