@@ -31,6 +31,73 @@ une semaine vide datée vaut mieux qu'un trou dans le journal.
 
 ---
 
+## 2026-09-23 - Deux semaines sans veille, et une CVE dans Express
+
+### D'abord, le trou
+
+Aucune entrée entre le 9 et le 23 septembre. Deux semaines sautées. C'est écrit
+ici plutôt que comblé après coup, parce qu'un journal qu'on rattrape ne vaut
+rien. Le rythme hebdomadaire n'a pas tenu tout seul, il faut un rappel.
+
+### Sources consultées
+
+`npm audit` sur les deux paquets du dépôt, avis GitHub sur les dépendances,
+et relecture de l'état de la chaîne d'exposition corrigée le 9.
+
+### Ce qui concerne Blindz
+
+**Deux CVE dans `qs`, la bibliothèque qui analyse les paramètres d'URL, tirée
+par Express.** Une permet de contourner la limite de taille des tableaux par un
+jeu de virgules dans les clés entre crochets, l'autre ouvre un déni de service
+via une valeur contrôlée par l'attaquant. Les deux sont de gravité moyenne, mais
+elles touchent du code qui s'exécute sur chaque requête entrante d'un serveur
+public. Le déni de service est le plus gênant, d'autant qu'on vient justement de
+réparer la limitation de débit.
+
+### Vérifié dans le code
+
+- Versions installées avant correction : `express@4.22.2`, `body-parser@1.20.6`,
+  `qs@6.15.3`.
+- Après : `express@4.22.3`, `body-parser@1.20.8`, `qs@6.16.0`. Ce sont des
+  montées de version corrective à l'intérieur d'Express 4, sans rupture d'API.
+- `npm audit --omit=dev` sur le backend ne remonte plus rien.
+- Le backend compile (`npm run build`), l'instance de développement redémarre et
+  répond.
+
+**Restent deux vulnérabilités dans les dépendances de DÉVELOPPEMENT seulement**,
+`@vitest/mocker` (moyenne) et `minimatch` (élevée). Elles ne partent jamais en
+production, l'image Docker n'installe que les dépendances de production. Pas
+d'urgence, mais à traiter quand la chaîne d'intégration continue sera en place,
+puisqu'elle fera tourner ces outils.
+
+Côté frontend, trois alertes autour de `postcss` et `postcss-selector-parser`,
+toutes sur des outils de compilation. Le site est un export statique : ce code ne
+s'exécute jamais chez le visiteur, seulement sur la machine de build, sur nos
+propres fichiers. Risque considéré comme négligeable, noté pour mémoire.
+
+### Décidé
+
+Correction appliquée au dépôt, **pas encore déployée**. Mettre à jour Express en
+production demande de reconstruire l'image Docker du backend, donc de couper
+brièvement les parties en cours. Ça attend un accord explicite, et ça ira bien
+avec le prochain déploiement plutôt que tout seul.
+
+### Contrôle de l'existant
+
+La correction du 9 septembre tient. Le port 443 est toujours multiplexé par
+nginx, sslh reste masqué, les quatre sites répondent, et le journal du
+multiplexeur montre bien des adresses de clients réels, pas `127.0.0.1`.
+
+### Sujets ouverts, inchangés depuis l'ouverture
+
+Toujours aucun scan de dépendances automatisé, aucune analyse statique, aucun
+scan de secrets, et surtout aucune base de test : les tests d'intégration du
+backend tapent la base de production. Ce dernier point bloque toute mise en place
+d'intégration continue et devient le premier chantier de la semaine du 28
+septembre.
+
+---
+
 ## 2026-09-09 - Ouverture du journal
 
 ### Inventaire rétrospectif
