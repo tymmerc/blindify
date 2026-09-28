@@ -133,8 +133,15 @@ export const authController = {
 
   async guest(req: Request, res: Response): Promise<void> {
     try {
-      const nickname = typeof req.body?.nickname === "string" ? req.body.nickname : null;
+      // Pseudo obligatoire cote interface, mais on ne REFUSE pas ici : bloquer
+      // la creation de session casserait l'entree en pleine soiree si un
+      // parcours oublie de le passer. On garantit seulement qu'un nom vide ou
+      // trop court devient un identifiant UNIQUE, jamais un homonyme. Avant,
+      // le client envoyait "Joueur" et la base a accumule 97 comptes portant
+      // ce meme nom, impossibles a distinguer.
+      const brut = typeof req.body?.nickname === "string" ? req.body.nickname.trim() : "";
       const providerId = crypto.randomUUID();
+      const nickname = brut.length >= 2 ? brut.slice(0, 40) : null;
 
       const { rows } = await pool.query<AuthenticatedUser>(
         `INSERT INTO users (provider, provider_id, username, email, avatar)

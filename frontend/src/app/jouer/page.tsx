@@ -81,8 +81,13 @@ export default function EntryWizard() {
       const j = (new URLSearchParams(window.location.search).get("join") ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "")
       if (j) { setJoinParam(j); setCode(j) }
     } catch { /* ignore */ }
+    // On ne cree AUCUN compte tant que le pseudo n'est pas connu. Avant, la
+    // simple ouverture de la page fabriquait un invite nomme "Joueur" : 97
+    // comptes anonymes en base, indiscernables les uns des autres. Un visiteur
+    // qui revient (pseudo en memoire) retrouve bien sa session tout de suite.
     ;(async () => {
-      try { await api.ensureUserSession(storedName.trim() || "Joueur") } catch { /* ignore */ }
+      if (!storedName.trim()) return
+      try { await api.ensureUserSession(storedName.trim()) } catch { /* ignore */ }
     })()
     return () => { active = false }
   }, [])
@@ -99,9 +104,13 @@ export default function EntryWizard() {
     try { if (name.trim()) localStorage.setItem(NAME_KEY, name.trim()) } catch { /* ignore */ }
   }, [name])
 
+  // Le pseudo est obligatoire : le bouton du premier ecran reste desactive
+  // sous deux caracteres, et on ne cree jamais de session sans lui.
   const ensureName = async () => {
-    try { if (name.trim()) localStorage.setItem(NAME_KEY, name.trim()) } catch { /* ignore */ }
-    try { await api.ensureUserSession(name.trim() || "Joueur") } catch { /* ignore */ }
+    const pseudo = name.trim()
+    if (!pseudo) return
+    try { localStorage.setItem(NAME_KEY, pseudo) } catch { /* ignore */ }
+    try { await api.ensureUserSession(pseudo) } catch { /* ignore */ }
   }
 
   // Importe la musique puis affiche la confirmation. Le meme bouton sert ensuite a continuer.
@@ -203,7 +212,7 @@ export default function EntryWizard() {
             ref={nameRef}
             value={name}
             onChange={e => setName(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter" && ok) setStep("musique") }}
+            onKeyDown={e => { if (e.key === "Enter" && ok) { void ensureName(); setStep("musique") } }}
             placeholder="Ton nom"
             maxLength={24}
             className="w-full border-0 border-b-2 border-[#2e2014] bg-transparent px-2 py-3 text-center font-display text-2xl text-[#2e2014] outline-none placeholder:italic placeholder:text-[#b3a182] focus:border-[#c65133]"
@@ -212,7 +221,10 @@ export default function EntryWizard() {
           <button
             type="button"
             disabled={!ok}
-            onClick={() => setStep("musique")}
+            /* On enregistre le joueur des que son pseudo est valide. Attendre
+               l'etape suivante laissait sans identite quiconque saute l'import
+               de musique, et le pseudo est deja connu ici. */
+            onClick={() => { void ensureName(); setStep("musique") }}
             className="flex w-full items-center justify-center gap-2 rounded-md border-2 border-[#2e2014] bg-[#c65133] px-5 py-4 text-sm font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#2e2014] disabled:cursor-not-allowed disabled:opacity-40"
           >
             Continuer

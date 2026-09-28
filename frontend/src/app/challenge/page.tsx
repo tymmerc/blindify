@@ -88,7 +88,7 @@ function ChallengeContent() {
   }, [challenge])
 
   const handleStart = useCallback(() => {
-    const name = playerName.trim() || "Joueur"
+    const name = playerName.trim()
     setCurrentPlayerName(name)
     setPhase("playing")
   }, [playerName])
@@ -97,7 +97,7 @@ function ChallengeContent() {
     if (!code) return
     try {
       const result = await clientApi.completeChallenge(code, {
-        playerName: currentPlayerName || "Joueur",
+        playerName: currentPlayerName,
         score: stats.points,
         correct: stats.correct,
         total: stats.rounds,
@@ -218,7 +218,8 @@ function ChallengeContent() {
             <button
               type="button"
               onClick={handleStart}
-              disabled={!user}
+              /* Pseudo obligatoire : un classement sans nom ne sert a personne. */
+              disabled={!user || playerName.trim().length < 2}
               className="btn-neon w-full justify-center text-sm disabled:cursor-not-allowed disabled:opacity-40"
             >
               {user ? "Relever le défi" : "Chargement..."}

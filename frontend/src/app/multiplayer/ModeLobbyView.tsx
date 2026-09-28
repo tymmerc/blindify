@@ -254,7 +254,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
           // Le login n'est JAMAIS un barrage : si la creation echoue (429, reseau),
           // on reessaie tout seul au lieu de rediriger vers /auth/login.
           try {
-            const guest = await api.ensureUserSession(initialNickname || "Joueur")
+            const guest = await api.ensureUserSession(initialNickname?.trim() || undefined)
             if (!active) return
             if (guest) {
               setGuest(true)

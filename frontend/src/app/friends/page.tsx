@@ -169,7 +169,7 @@ function FriendsEntryContent() {
 
     // Ensure guest session exists before navigating to multiplayer
     try {
-      await api.ensureUserSession(nickname.trim() || "Joueur")
+      await api.ensureUserSession(nickname.trim() || undefined)
     } catch {
       // Session creation failed - continue anyway, ModeLobbyView will retry
     }
@@ -304,7 +304,7 @@ function FriendsEntryContent() {
               if (navigating) return
               setNavigating(true)
               setMode("friends")
-              try { await api.ensureUserSession(nickname.trim() || "Joueur") } catch {}
+              try { await api.ensureUserSession(nickname.trim() || undefined) } catch {}
               const nicknameParam = nickname.trim() ? `&nickname=${encodeURIComponent(nickname.trim())}` : ""
               const profileParam = profileUrl.trim() ? `&profileUrl=${encodeURIComponent(profileUrl.trim())}` : ""
               await router.push(`/multiplayer?mode=friends&intent=host${nicknameParam}${profileParam}`)
