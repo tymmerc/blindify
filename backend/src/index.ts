@@ -370,10 +370,20 @@ async function ensurePerformanceIndexes(): Promise<void> {
 ensurePerformanceIndexes().catch(err => logger.error("ensure_indexes_boot_failed", { error: err }));
 
 // ── Janitor periodique : la base ne doit plus gonfler sans fin ──
-// Sessions expirees, rooms zombies, historique de jeu ancien, et invites morts
-// qui gardaient la propriete de morceaux partages (une ligne audio_sources est
-// unique par chanson pour TOUTE la plateforme : on DETACHE, on ne supprime
-// jamais physiquement, pour que le prochain importeur reclame le morceau).
+//
+// Ce qu'on nettoie : sessions expirees, rooms zombies, historique tres ancien,
+// et les COQUILLES VIDES, c'est-a-dire les invites crees puis jamais utilises.
+//
+// Ce qu'on ne touche PLUS (corrige le 28/09/2026) : un invite qui a
+// REELLEMENT joue, ou qui a importe un lien ou de la musique, est garde pour
+// toujours, meme sans compte. Son pseudo, son lien et ses morceaux sont la
+// seule trace de son passage, et un joueur sans compte a autant droit a son
+// historique qu'un autre.
+//
+// Avant cette correction, la regle ne regardait que les rooms des 30 derniers
+// jours, or le janitor supprime lui-meme ces rooms : la protection s'evaporait
+// et un vrai joueur disparaissait a 31 jours. Constate sur une soiree de 17
+// parties du 28/08 dont il ne reste aucun nom.
 const JANITOR_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const DEAD_GUEST_FILTER = `
       SELECT u.id FROM users u
@@ -389,6 +399,14 @@ const DEAD_GUEST_FILTER = `
         AND NOT EXISTS (
           SELECT 1 FROM multiplayer_rooms mr
           WHERE mr.host_user_id = u.id AND mr.created_at > NOW() - INTERVAL '30 days')
+        AND NOT EXISTS (
+          SELECT 1 FROM game_participants gp WHERE gp.user_id = u.id)
+        AND NOT EXISTS (
+          SELECT 1 FROM game_sessions gs WHERE gs.host_user_id = u.id)
+        AND NOT EXISTS (
+          SELECT 1 FROM imported_links il WHERE il.user_id = u.id)
+        AND NOT EXISTS (
+          SELECT 1 FROM audio_sources a WHERE a.user_id = u.id)
       LIMIT 500`;
 
 async function runJanitor(): Promise<void> {
@@ -421,13 +439,12 @@ async function runJanitor(): Promise<void> {
   await step("old_game_sessions",
     `DELETE FROM game_sessions
      WHERE started_at < NOW() - INTERVAL '400 days'`);
-  await step("dead_guest_tracks",
-    `UPDATE audio_sources SET user_id = NULL, link_id = NULL
-     WHERE user_id IN (${DEAD_GUEST_FILTER})`);
+  // Plus d'etape "dead_guest_tracks" : le filtre epargne desormais tout invite
+  // qui possede de la musique, donc il n'y a plus rien a detacher. Detacher
+  // puis supprimer revenait a effacer le joueur pour contourner sa propre
+  // protection.
   await step("dead_guests",
-    `DELETE FROM users
-     WHERE id IN (${DEAD_GUEST_FILTER})
-       AND NOT EXISTS (SELECT 1 FROM audio_sources a WHERE a.user_id = users.id)`);
+    `DELETE FROM users WHERE id IN (${DEAD_GUEST_FILTER})`);
 }
 setInterval(() => { void runJanitor(); }, JANITOR_INTERVAL_MS).unref?.();
 // Premiere passe peu apres le boot (laisse la creation des index passer avant).
