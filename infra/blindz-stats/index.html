@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Blindz · tableau de bord</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500&display=swap">
+<style>
+  :root {
+    color-scheme: dark;
+    --ink: #2e2014; --cream: #f4ecdb; --paper: #ece1c8;
+    --verm: #cc4830; --amber: #d88418; --sage: #789084; --blue: #486090;
+    --bg: #17100a; --surface: #211710; --line: #35271a; --line-2: #4a3726;
+    --txt: #f4ecdb; --txt-2: #c3b49b; --txt-3: #8d7c64;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--txt);
+    font-family: "IBM Plex Sans", system-ui, sans-serif; font-size: 15px; line-height: 1.55;
+    padding: max(env(safe-area-inset-top), 0px) 0 max(env(safe-area-inset-bottom), 0px);
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; padding-inline: 18px; padding-block: 26px 60px; }
+  h1, h2 { font-family: Archivo, sans-serif; margin: 0; letter-spacing: -0.015em; text-wrap: balance; }
+  h1 { font-size: clamp(1.7rem, 5vw, 2.4rem); font-weight: 700; }
+  h2 { font-size: 1.05rem; font-weight: 600; }
+  .mono { font-family: "IBM Plex Mono", monospace; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  header {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    border-bottom: 1px solid var(--line); padding-bottom: 18px; margin-bottom: 24px;
+  }
+  .logo { width: 42px; height: 42px; border-radius: 9px; background: var(--cream); display: grid; place-items: center; flex: none; }
+  .logo img { width: 31px; height: 31px; object-fit: contain; display: block; }
+  .htxt { flex: 1 1 220px; }
+  .maj { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--txt-3); text-transform: uppercase; letter-spacing: .1em; }
+  .bar4 { display: flex; height: 4px; border-radius: 2px; overflow: hidden; width: 100%; margin-bottom: 18px; }
+  .bar4 i { flex: 1; }
+
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(138px, 1fr)); gap: 10px; }
+  .tile { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 13px 14px; }
+  .tile .v { font-family: Archivo, sans-serif; font-size: 1.6rem; font-weight: 700; line-height: 1.05; font-variant-numeric: tabular-nums; }
+  .tile .k { font-size: 12.5px; color: var(--txt-2); margin-top: 3px; }
+  .tile.hi .v { color: var(--amber); }
+
+  section { margin-top: 34px; }
+  .shead { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+  .shead .sub { font-size: 12.5px; color: var(--txt-3); }
+
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+  .panel.tight { padding: 0; overflow: hidden; }
+
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+
+  svg.chart { display: block; width: 100%; height: auto; }
+
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  th, td { text-align: left; padding: 9px 13px; border-bottom: 1px solid var(--line); }
+  thead th { font-family: "IBM Plex Mono", monospace; font-size: 10px; text-transform: uppercase;
+    letter-spacing: .1em; color: var(--txt-3); background: #1a120c; white-space: nowrap; }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.n { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .scroll { overflow-x: auto; }
+  table.min { min-width: 560px; }
+
+  .pill { display: inline-block; font-family: "IBM Plex Mono", monospace; font-size: 10px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .07em; padding: 2px 7px; border-radius: 4px;
+    background: #2c1f14; color: var(--txt-2); border: 1px solid var(--line-2); white-space: nowrap; }
+  .pill.v { background: #3a1d15; color: #f0947f; border-color: #6b3325; }
+  .pill.a { background: #3a2a12; color: #e8ab5c; border-color: #6d4d1c; }
+  .pill.b { background: #1b2635; color: #92aed6; border-color: #33486b; }
+  .pill.s { background: #1e2a26; color: #9cb5aa; border-color: #37504a; }
+
+  .retour { border: 1px solid var(--line); border-left: 3px solid var(--amber); border-radius: 8px;
+    background: var(--surface); padding: 13px 15px; margin-bottom: 10px; }
+  .retour .meta { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--txt-3); margin-bottom: 5px; }
+  .retour .msg { font-size: 14.5px; }
+  .vide { color: var(--txt-3); font-size: 14px; padding: 8px 0; }
+
+  footer { margin-top: 44px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--txt-3); }
+  a { color: var(--amber); }
+  :focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="bar4">
+    <i style="background:var(--verm)"></i><i style="background:var(--amber)"></i>
+    <i style="background:var(--sage)"></i><i style="background:var(--blue)"></i>
+  </div>
+
+  <header>
+    <span class="logo"><img src="logo.png" alt=""></span>
+    <div class="htxt">
+      <h1>Tableau de bord</h1>
+      <p class="maj" id="maj">chargement</p>
+    </div>
+  </header>
+
+  <div id="app"><p class="vide">Chargement des données...</p></div>
+
+  <footer>
+    Lecture seule sur la base de production, régénéré toutes les heures.
+    Page privée, non indexée. <a href="https://blindz.app" target="_blank" rel="noopener">blindz.app</a>
+  </footer>
+</div>
+
+<script>
+const $ = (h) => { const t = document.createElement("template"); t.innerHTML = h.trim(); return t.content; };
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const nb = (n) => Number(n ?? 0).toLocaleString("fr-FR");
+
+const COUL = { verm: "#cc4830", amber: "#d88418", sage: "#789084", blue: "#486090" };
+const modePill = (m) => ({ solo: "s", friends: "b", event: "v", streamer: "a", challenge: "a" }[m] || "");
+
+/* Courbe des parties par jour. Aires empilees inutiles ici : une seule serie,
+   donc une aire simple avec les pics annotes. */
+function courbe(donnees) {
+  if (!donnees.length) return '<p class="vide">Aucune partie sur la période.</p>';
+  const W = 900, H = 200, P = { t: 14, r: 12, b: 26, l: 34 };
+  const max = Math.max(...donnees.map(d => d.n));
+  const t0 = new Date(donnees[0].j).getTime();
+  const t1 = new Date(donnees[donnees.length - 1].j).getTime();
+  const span = Math.max(t1 - t0, 1);
+  const x = (j) => P.l + (new Date(j).getTime() - t0) / span * (W - P.l - P.r);
+  const y = (n) => H - P.b - (n / max) * (H - P.t - P.b);
+  const pts = donnees.map(d => `${x(d.j).toFixed(1)},${y(d.n).toFixed(1)}`).join(" ");
+  const aire = `${P.l},${H - P.b} ${pts} ${x(donnees[donnees.length - 1].j).toFixed(1)},${H - P.b}`;
+  const ticks = [0, Math.round(max / 2), max].filter((v, i, a) => a.indexOf(v) === i);
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Parties par jour">
+    ${ticks.map(v => `<g><line x1="${P.l}" x2="${W - P.r}" y1="${y(v)}" y2="${y(v)}" stroke="#35271a" stroke-width="1"/>
+      <text x="${P.l - 7}" y="${y(v) + 4}" text-anchor="end" font-family="IBM Plex Mono" font-size="10" fill="#8d7c64">${v}</text></g>`).join("")}
+    <polygon points="${aire}" fill="${COUL.amber}" opacity="0.16"/>
+    <polyline points="${pts}" fill="none" stroke="${COUL.amber}" stroke-width="2" stroke-linejoin="round"/>
+    ${donnees.filter(d => d.n === max).map(d => `<circle cx="${x(d.j)}" cy="${y(d.n)}" r="4" fill="${COUL.amber}"/>
+      <text x="${x(d.j)}" y="${y(d.n) - 9}" text-anchor="middle" font-family="IBM Plex Mono" font-size="10" fill="${COUL.amber}">${d.n}</text>`).join("")}
+    <text x="${P.l}" y="${H - 8}" font-family="IBM Plex Mono" font-size="10" fill="#8d7c64">${donnees[0].j}</text>
+    <text x="${W - P.r}" y="${H - 8}" text-anchor="end" font-family="IBM Plex Mono" font-size="10" fill="#8d7c64">${donnees[donnees.length - 1].j}</text>
+  </svg>`;
+}
+
+/* Barres horizontales, pour les repartitions courtes (modes, fournisseurs). */
+function barres(lignes, couleur) {
+  if (!lignes.length) return '<p class="vide">Rien à afficher.</p>';
+  const max = Math.max(...lignes.map(l => l.n));
+  return `<div style="display:grid;gap:9px">${lignes.map(l => `
+    <div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px">
+        <span>${esc(l.label)}</span><span class="mono num" style="color:var(--txt-2)">${nb(l.n)}${l.suffixe || ""}</span>
+      </div>
+      <div style="height:8px;background:#2c1f14;border-radius:4px;overflow:hidden">
+        <div style="height:100%;width:${(l.n / max * 100).toFixed(1)}%;background:${couleur};border-radius:4px"></div>
+      </div>
+    </div>`).join("")}</div>`;
+}
+
+function anneau(pourcent, couleur, libelle) {
+  const r = 46, c = 2 * Math.PI * r;
+  return `<svg class="chart" viewBox="0 0 130 130" style="max-width:150px;margin:0 auto" role="img" aria-label="${esc(libelle)} ${pourcent}%">
+    <circle cx="65" cy="65" r="${r}" fill="none" stroke="#2c1f14" stroke-width="13"/>
+    <circle cx="65" cy="65" r="${r}" fill="none" stroke="${couleur}" stroke-width="13" stroke-linecap="round"
+      stroke-dasharray="${(c * pourcent / 100).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 65 65)"/>
+    <text x="65" y="63" text-anchor="middle" font-family="Archivo" font-size="25" font-weight="700" fill="#f4ecdb">${pourcent}%</text>
+    <text x="65" y="82" text-anchor="middle" font-family="IBM Plex Mono" font-size="9.5" fill="#8d7c64">${esc(libelle)}</text>
+  </svg>`;
+}
+
+fetch("data.json?t=" + Date.now())
+  .then(r => { if (!r.ok) throw new Error("data.json introuvable (" + r.status + ")"); return r.json(); })
+  .then(d => {
+    document.getElementById("maj").textContent = "Données du " + d.genere_le.replace("T", " à ");
+    const r = d.resume, q = d.reponses_qualite;
+    const taux = q.total ? Math.round(q.correctes / q.total * 100) : 0;
+    const invites = r.joueurs - r.comptes;
+
+    const html = `
+      <div class="tiles">
+        <div class="tile hi"><div class="v num">${nb(r.parties)}</div><div class="k">parties jouées</div></div>
+        <div class="tile"><div class="v num">${nb(r.parties_30j)}</div><div class="k">sur 30 jours</div></div>
+        <div class="tile"><div class="v num">${nb(r.parties_7j)}</div><div class="k">sur 7 jours</div></div>
+        <div class="tile"><div class="v num">${nb(r.jour_record)}</div><div class="k">record en une journée</div></div>
+        <div class="tile"><div class="v num">${nb(r.joueurs)}</div><div class="k">joueurs, dont ${nb(r.comptes)} avec un compte</div></div>
+        <div class="tile"><div class="v num">${nb(r.manches)}</div><div class="k">manches jouées</div></div>
+        <div class="tile"><div class="v num">${nb(r.morceaux)}</div><div class="k">morceaux en bibliothèque</div></div>
+        <div class="tile"><div class="v num">${nb(r.liens)}</div><div class="k">liens de playlist importés</div></div>
+        <div class="tile"><div class="v num" style="color:var(--txt-3)">${nb(r.parties_test)}</div><div class="k">dont parties de test automatisées</div></div>
+      </div>
+
+      <section>
+        <div class="shead"><h2>Parties par jour</h2><span class="sub">120 derniers jours</span></div>
+        <div class="panel">${courbe(d.par_jour)}</div>
+      </section>
+
+      <section>
+        <div class="grid2">
+          <div>
+            <div class="shead"><h2>Modes de jeu</h2></div>
+            <div class="panel">${barres(d.par_mode.map(m => ({ label: m.mode, n: m.n })), COUL.verm)}</div>
+          </div>
+          <div>
+            <div class="shead"><h2>Qualité des réponses</h2><span class="sub">joueurs réels</span></div>
+            <div class="panel">
+              ${anneau(taux, COUL.sage, "de bonnes réponses")}
+              <div style="display:flex;justify-content:space-between;margin-top:12px;font-size:13px;color:var(--txt-2)">
+                <span>${nb(q.correctes)} bonnes sur ${nb(q.total)}</span>
+                <span class="mono num">${q.temps_median_ms ? (q.temps_median_ms / 1000).toFixed(1) + " s médian" : "temps non mesuré"}</span>
+              </div>
+              <p style="margin:10px 0 0;font-size:12px;color:var(--txt-3);line-height:1.5">
+                ${nb(q.ecartees)} réponses de robots écartées. Les scripts de test répondent toujours faux,
+                les compter ferait tomber le taux à ${Math.round(q.correctes / (q.total + q.ecartees) * 100)}%.
+                Pseudos exclus : Lea, Max, Megane, Zoe, StreamerHost, Intrus, Tymeo, et tout compte e2e_.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="grid2">
+          <div>
+            <div class="shead"><h2>D'où vient la musique</h2></div>
+            <div class="panel">${barres(d.providers.map(p => ({ label: p.provider, n: p.n })), COUL.blue)}</div>
+          </div>
+          <div>
+            <div class="shead"><h2>Inscriptions par mois</h2></div>
+            <div class="panel">${barres(d.inscriptions.slice(-8).map(i => ({ label: i.m, n: i.n })), COUL.amber)}</div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="shead"><h2>Retours des joueurs</h2><span class="sub">${d.retours.length} message${d.retours.length > 1 ? "s" : ""}</span></div>
+        ${d.retours.length
+          ? d.retours.map(x => `<div class="retour">
+              <div class="meta">${esc(x.le)} &middot; ${esc(x.pseudo || "anonyme")}${x.page ? " &middot; " + esc(x.page) : ""}</div>
+              <div class="msg">${esc(x.message)}</div>
+            </div>`).join("")
+          : '<div class="panel"><p class="vide">Aucun retour pour le moment. Le formulaire de signalement écrit dans bug_reports.</p></div>'}
+      </section>
+
+      <section>
+        <div class="shead"><h2>Joueurs les plus actifs</h2><span class="sub">d'après user_stats</span></div>
+        <div class="panel tight"><div class="scroll"><table class="min">
+          <thead><tr><th>Pseudo</th><th>Parties</th><th>Bonnes réponses</th><th>Meilleure série</th><th>XP</th><th>Dernière partie</th></tr></thead>
+          <tbody>${d.top_joueurs.map(j => `<tr>
+            <td>${esc(j.pseudo)}</td>
+            <td class="n">${nb(j.parties)}</td>
+            <td class="n">${nb(j.bonnes)} / ${nb(j.tentatives)}</td>
+            <td class="n">${nb(j.serie)}</td>
+            <td class="n">${nb(j.xp)}</td>
+            <td class="n" style="color:var(--txt-3)">${esc(j.vu_le || "?")}</td>
+          </tr>`).join("")}</tbody>
+        </table></div></div>
+      </section>
+
+      <section>
+        <div class="shead"><h2>Dernières parties</h2><span class="sub">25 plus récentes</span></div>
+        <div class="panel tight"><div class="scroll"><table class="min">
+          <thead><tr><th>Quand</th><th>Mode</th><th>Hôte</th><th>Joueurs</th><th>Manches</th><th>État</th></tr></thead>
+          <tbody>${d.dernieres_parties.map(p => `<tr>
+            <td class="n" style="color:var(--txt-2)">${esc(p.le)}</td>
+            <td><span class="pill ${modePill(p.mode)}">${esc(p.mode)}</span></td>
+            <td>${esc(p.hote)}</td>
+            <td class="n">${nb(p.joueurs)}</td>
+            <td class="n">${nb(p.manches)}</td>
+            <td><span class="pill">${esc(p.etat)}</span></td>
+          </tr>`).join("")}</tbody>
+        </table></div></div>
+      </section>`;
+
+    const app = document.getElementById("app");
+    app.innerHTML = "";
+    app.appendChild($(html));
+  })
+  .catch(e => {
+    document.getElementById("app").innerHTML =
+      '<div class="panel"><p class="vide">Impossible de charger les données : ' + esc(e.message) +
+      '<br>Relancer <code class="mono">/opt/blindify/tools/gen-stats.sh</code> sur le serveur.</p></div>';
+    document.getElementById("maj").textContent = "erreur de chargement";
+  });
+</script>
+</body>
+</html>
