@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Blindz · base de données</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500&display=swap">
+<style>
+  :root {
+    color-scheme: dark;
+    --cream: #f4ecdb; --verm: #cc4830; --amber: #d88418; --sage: #789084; --blue: #486090;
+    --bg: #17100a; --surface: #211710; --surface-2: #1a120c; --line: #35271a; --line-2: #4a3726;
+    --txt: #f4ecdb; --txt-2: #c3b49b; --txt-3: #8d7c64;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--txt);
+    font-family: "IBM Plex Sans", system-ui, sans-serif; font-size: 14px; line-height: 1.5;
+    padding: max(env(safe-area-inset-top), 0px) 0 max(env(safe-area-inset-bottom), 0px);
+  }
+  .wrap { max-width: 1400px; margin: 0 auto; padding-inline: 16px; padding-block: 20px 50px; }
+  h1 { font-family: Archivo, sans-serif; font-size: 1.5rem; font-weight: 700; margin: 0; }
+  .mono { font-family: "IBM Plex Mono", monospace; }
+  .bar4 { display: flex; height: 4px; border-radius: 2px; overflow: hidden; margin-bottom: 16px; }
+  .bar4 i { flex: 1; }
+
+  header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+  header .sub { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--txt-3); text-transform: uppercase; letter-spacing: .1em; }
+  header a.retour { margin-left: auto; font-size: 12.5px; color: var(--amber); text-decoration: none; border-bottom: 1px solid currentColor; }
+
+  .cols { display: grid; grid-template-columns: 250px 1fr; gap: 14px; align-items: start; }
+  @media (max-width: 860px) { .cols { grid-template-columns: 1fr; } }
+
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+  .liste { max-height: 72vh; overflow: auto; }
+  .tbtn {
+    display: flex; justify-content: space-between; gap: 8px; width: 100%; text-align: left;
+    background: none; border: 0; border-bottom: 1px solid var(--line); color: var(--txt);
+    padding: 9px 13px; cursor: pointer; font: inherit; font-size: 13px;
+  }
+  .tbtn:hover { background: var(--surface-2); }
+  .tbtn[aria-current="true"] { background: #2c1f14; color: var(--amber); box-shadow: inset 3px 0 0 var(--amber); }
+  .tbtn span.n { font-family: "IBM Plex Mono", monospace; font-size: 11.5px; color: var(--txt-3); }
+  .tbtn:last-child { border-bottom: 0; }
+
+  .zone { padding: 14px; }
+  .titre { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+  .titre h2 { font-family: Archivo, sans-serif; font-size: 1.05rem; margin: 0; }
+  .titre .meta { font-family: "IBM Plex Mono", monospace; font-size: 11.5px; color: var(--txt-3); }
+
+  textarea {
+    width: 100%; min-height: 76px; background: var(--surface-2); color: var(--txt);
+    border: 1px solid var(--line-2); border-radius: 8px; padding: 10px 12px;
+    font-family: "IBM Plex Mono", monospace; font-size: 13px; resize: vertical;
+  }
+  .actions { display: flex; gap: 9px; align-items: center; margin-top: 9px; flex-wrap: wrap; }
+  button.go {
+    background: var(--amber); color: #2a1c0a; border: 0; border-radius: 7px; padding: 8px 15px;
+    font: inherit; font-weight: 600; font-size: 13px; cursor: pointer;
+  }
+  button.go:hover { filter: brightness(1.08); }
+  button.sec {
+    background: none; color: var(--txt-2); border: 1px solid var(--line-2); border-radius: 7px;
+    padding: 8px 13px; font: inherit; font-size: 13px; cursor: pointer;
+  }
+  button.sec:hover { border-color: var(--txt-3); color: var(--txt); }
+  .aide { font-size: 12px; color: var(--txt-3); }
+
+  .tablewrap { overflow: auto; max-height: 68vh; border: 1px solid var(--line); border-radius: 8px; margin-top: 12px; }
+  table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  th, td { text-align: left; padding: 7px 11px; border-bottom: 1px solid var(--line); white-space: nowrap;
+    max-width: 380px; overflow: hidden; text-overflow: ellipsis; }
+  thead th { position: sticky; top: 0; background: var(--surface-2); font-family: "IBM Plex Mono", monospace;
+    font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--txt-3); z-index: 1; cursor: pointer; }
+  thead th:hover { color: var(--amber); }
+  thead th .t { font-weight: 400; text-transform: none; letter-spacing: 0; color: #6d6050; margin-left: 5px; }
+  tbody tr:nth-child(odd) { background: rgba(255,255,255,.015); }
+  tbody tr:hover { background: #2a1e14; }
+  td.nul { color: #6d6050; font-style: italic; }
+  td.num { font-variant-numeric: tabular-nums; }
+
+  .pager { display: flex; gap: 9px; align-items: center; margin-top: 10px; font-size: 12.5px; color: var(--txt-2); flex-wrap: wrap; }
+  .err { background: #2e1a16; border: 1px solid #5c3128; color: #e8a293; border-radius: 8px; padding: 11px 13px; font-size: 13px; margin-top: 12px; }
+  .vide { color: var(--txt-3); padding: 14px 0; }
+  :focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="bar4">
+    <i style="background:var(--verm)"></i><i style="background:var(--amber)"></i>
+    <i style="background:var(--sage)"></i><i style="background:var(--blue)"></i>
+  </div>
+
+  <header>
+    <h1>Base de données</h1>
+    <span class="sub" id="etat">lecture seule</span>
+    <a class="retour" href="../blindz-stats/">Tableau de bord</a>
+  </header>
+
+  <div class="cols">
+    <div class="panel liste" id="tables"><p class="vide" style="padding:0 13px">Chargement...</p></div>
+
+    <div class="panel">
+      <div class="zone">
+        <div class="titre">
+          <h2 id="titre">Requête</h2>
+          <span class="meta" id="meta"></span>
+        </div>
+
+        <textarea id="sql" spellcheck="false" placeholder="SELECT username, count(*) FROM users GROUP BY 1 ORDER BY 2 DESC"></textarea>
+        <div class="actions">
+          <button class="go" id="run">Exécuter</button>
+          <button class="sec" id="clear">Effacer</button>
+          <span class="aide">Lecture seule. Une seule instruction, 500 lignes au maximum.</span>
+        </div>
+
+        <div id="sortie"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = "api";
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const nb = (n) => Number(n).toLocaleString("fr-FR");
+
+let courant = null, decalage = 0, limite = 50, tri = null, sens = "desc";
+
+const cellule = (v) => {
+  if (v === null || v === undefined) return '<td class="nul">null</td>';
+  if (typeof v === "number") return `<td class="num">${nb(v)}</td>`;
+  if (typeof v === "object") return `<td class="mono">${esc(JSON.stringify(v)).slice(0, 200)}</td>`;
+  const s = String(v);
+  return `<td${/^\d+$/.test(s) ? ' class="num"' : ""} title="${esc(s).slice(0, 300)}">${esc(s).slice(0, 300)}</td>`;
+};
+
+function tableau(d, triable) {
+  if (!d.lignes.length) return '<p class="vide">Aucune ligne.</p>';
+  const cols = d.colonnes.map(c => c.column_name);
+  return `<div class="tablewrap"><table>
+    <thead><tr>${cols.map(c => `<th ${triable ? `data-col="${esc(c)}"` : ""}>${esc(c)}${
+      triable && c === d.tri ? (d.sens === "ASC" ? " ↑" : " ↓") : ""
+    }<span class="t">${esc((d.colonnes.find(x => x.column_name === c) || {}).data_type || "")}</span></th>`).join("")}</tr></thead>
+    <tbody>${d.lignes.map(l => `<tr>${cols.map(c => cellule(l[c])).join("")}</tr>`).join("")}</tbody>
+  </table></div>`;
+}
+
+async function chargerTables() {
+  try {
+    const d = await fetch(`${API}/tables`).then(r => r.json());
+    $("tables").innerHTML = d.tables.map(t =>
+      `<button class="tbtn" data-t="${esc(t.nom)}"><span>${esc(t.nom)}</span><span class="n">${nb(t.lignes)}</span></button>`
+    ).join("");
+    $("tables").querySelectorAll(".tbtn").forEach(b =>
+      b.addEventListener("click", () => { decalage = 0; tri = null; sens = "desc"; ouvrir(b.dataset.t); }));
+    $("etat").textContent = `lecture seule · ${d.tables.length} tables`;
+  } catch (e) {
+    $("tables").innerHTML = `<div class="err" style="margin:12px">Service injoignable : ${esc(e.message)}</div>`;
+  }
+}
+
+async function ouvrir(nom) {
+  courant = nom;
+  $("tables").querySelectorAll(".tbtn").forEach(b => b.setAttribute("aria-current", String(b.dataset.t === nom)));
+  $("titre").textContent = nom;
+  $("sortie").innerHTML = '<p class="vide">Chargement...</p>';
+  const q = new URLSearchParams({ limite, decalage, sens });
+  if (tri) q.set("tri", tri);
+  try {
+    const d = await fetch(`${API}/table/${encodeURIComponent(nom)}?${q}`).then(r => r.json());
+    if (d.erreur) throw new Error(d.erreur);
+    tri = d.tri; sens = d.sens.toLowerCase();
+    $("meta").textContent = `${nb(d.total)} lignes · ${d.colonnes.length} colonnes`;
+    const debut = d.total ? decalage + 1 : 0;
+    $("sortie").innerHTML = tableau(d, true) + `
+      <div class="pager">
+        <button class="sec" id="prec" ${decalage === 0 ? "disabled" : ""}>Précédent</button>
+        <button class="sec" id="suiv" ${decalage + limite >= d.total ? "disabled" : ""}>Suivant</button>
+        <span class="mono">${nb(debut)} à ${nb(Math.min(decalage + limite, d.total))} sur ${nb(d.total)}</span>
+      </div>`;
+    const p = $("prec"), s = $("suiv");
+    if (p) p.onclick = () => { decalage = Math.max(0, decalage - limite); ouvrir(nom); };
+    if (s) s.onclick = () => { decalage += limite; ouvrir(nom); };
+    $("sortie").querySelectorAll("th[data-col]").forEach(th => th.onclick = () => {
+      if (tri === th.dataset.col) sens = sens === "asc" ? "desc" : "asc";
+      else { tri = th.dataset.col; sens = "desc"; }
+      decalage = 0; ouvrir(nom);
+    });
+    $("sql").value = `SELECT * FROM ${nom} LIMIT 50`;
+  } catch (e) {
+    $("sortie").innerHTML = `<div class="err">${esc(e.message)}</div>`;
+  }
+}
+
+async function executer() {
+  const sql = $("sql").value.trim();
+  if (!sql) return;
+  $("titre").textContent = "Requête";
+  $("meta").textContent = "";
+  $("sortie").innerHTML = '<p class="vide">Exécution...</p>';
+  try {
+    const d = await fetch(`${API}/query`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sql }),
+    }).then(r => r.json());
+    if (d.erreur) throw new Error(d.erreur);
+    $("meta").textContent = `${nb(d.total)} ligne${d.total > 1 ? "s" : ""} en ${d.ms} ms${d.tronque ? " · tronqué à 500" : ""}`;
+    $("sortie").innerHTML = tableau(d, false);
+  } catch (e) {
+    $("sortie").innerHTML = `<div class="err">${esc(e.message)}</div>`;
+  }
+}
+
+$("run").onclick = executer;
+$("clear").onclick = () => { $("sql").value = ""; $("sql").focus(); };
+$("sql").addEventListener("keydown", e => {
+  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); executer(); }
+});
+
+chargerTables();
+</script>
+</body>
+</html>

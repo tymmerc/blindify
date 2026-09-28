@@ -72,6 +72,10 @@
   .pill.a { background: #3a2a12; color: #e8ab5c; border-color: #6d4d1c; }
   .pill.b { background: #1b2635; color: #92aed6; border-color: #33486b; }
   .pill.s { background: #1e2a26; color: #9cb5aa; border-color: #37504a; }
+  /* Etats de partie : terminee en vert sauge, abandonnee en rouge eteint. */
+  .pill.fin { background: #172a20; color: #6fc596; border-color: #2c5a41; }
+  .pill.abd { background: #2e1a16; color: #cf7c6a; border-color: #5c3128; }
+  .pill.enc { background: #2e2413; color: #d9a84f; border-color: #5c4a20; }
 
   .retour { border: 1px solid var(--line); border-left: 3px solid var(--amber); border-radius: 8px;
     background: var(--surface); padding: 13px 15px; margin-bottom: 10px; }
@@ -114,6 +118,8 @@ const nb = (n) => Number(n ?? 0).toLocaleString("fr-FR");
 
 const COUL = { verm: "#cc4830", amber: "#d88418", sage: "#789084", blue: "#486090" };
 const modePill = (m) => ({ solo: "s", friends: "b", event: "v", streamer: "a", challenge: "a" }[m] || "");
+const etatPill = (e) => ({ finished: "fin", abandoned: "abd", in_progress: "enc", playing: "enc" }[e] || "");
+const etatMot = (e) => ({ finished: "terminée", abandoned: "abandonnée", in_progress: "en cours", playing: "en cours" }[e] || e);
 
 /* Courbe des parties par jour. Aires empilees inutiles ici : une seule serie,
    donc une aire simple avec les pics annotes. */
@@ -265,7 +271,7 @@ fetch("data.json?t=" + Date.now())
             <td>${esc(p.hote)}</td>
             <td class="n">${nb(p.joueurs)}</td>
             <td class="n">${nb(p.manches)}</td>
-            <td><span class="pill">${esc(p.etat)}</span></td>
+            <td><span class="pill ${etatPill(p.etat)}">${esc(etatMot(p.etat))}</span></td>
           </tr>`).join("")}</tbody>
         </table></div></div>
       </section>`;
