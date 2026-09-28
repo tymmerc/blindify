@@ -31,6 +31,68 @@ une semaine vide datée vaut mieux qu'un trou dans le journal.
 
 ---
 
+## 2026-09-28 - Des jetons d'accès Spotify en clair dans les journaux
+
+### Source
+
+Lecture du journal du conteneur backend, en construisant le relevé d'erreurs du
+tableau de bord d'administration. Trouvé en regardant le format des lignes,
+pas en cherchant une faille.
+
+### Ce qui concerne Blindz
+
+Les erreurs de l'API Spotify sont journalisées avec l'objet d'erreur axios
+entier. Cet objet contient `config.headers.Authorization`, donc **le jeton
+d'accès Spotify en clair**. Mesure : 27 lignes concernées sur 30 jours.
+
+La portée est limitée mais réelle. Ces jetons expirent en une heure et ne
+donnent accès qu'à l'API publique de Spotify avec les droits de l'application,
+pas à un compte utilisateur. Mais ils sont écrits dans les journaux du
+conteneur, que lit toute personne ayant accès au serveur, et ils partiraient
+tels quels vers n'importe quel service de collecte de journaux ajouté plus
+tard.
+
+### Vérifié dans le code
+
+- Deux sites d'appel identifiés (`profileImportService.ts` et
+  `importController.ts`), mais le motif `logger.error(..., { error: err })` est
+  présent à 40 endroits. Corriger les appels un par un aurait laissé passer les
+  suivants.
+- La correction est donc posée dans `utils/logger.ts` : un format winston qui
+  réduit les erreurs axios à ce qui sert au diagnostic (message, code, statut,
+  méthode, URL), masque les clés sensibles à tous les niveaux, et neutralise
+  les chaînes qui ressemblent à un jeton.
+
+### Piège rencontré, à retenir
+
+La première version plaçait le caviardage **en tête** de la chaîne de formats.
+Sans effet : `winston.format.splat()` réinjecte ensuite les métadonnées
+d'origine dans l'objet et écrase le travail. Le format de nettoyage doit venir
+**après** `splat()`. Constaté en traçant l'intérieur de la fonction, pas en
+lisant le code, où tout semblait correct.
+
+### Décidé
+
+Corrigé dans le dépôt et vérifié (le jeton, un mot de passe et une clé d'API de
+test ressortent tous masqués, l'URL de diagnostic est conservée). **Pas encore
+déployé** : le conteneur en production tourne toujours l'ancien code, donc les
+jetons continuent d'être écrits d'ici là. À faire partir avec le prochain
+déploiement, en même temps que la correction Express du 23/09.
+
+Les 27 lignes déjà écrites restent dans les journaux existants. Elles
+disparaîtront d'elles-mêmes avec la rotation (10 Mo, 3 fichiers), et les jetons
+concernés ont expiré depuis longtemps.
+
+### Au passage
+
+247 réponses 502 dans le journal nginx, toutes sur une heure, toutes vers des
+chemins qui n'existent pas ici (`/wp-json/...`, `/zend/.env`, `/www/phpinfo.php`).
+C'est un scanner de vulnérabilités, pas une panne. Une question reste ouverte :
+pourquoi ces chemins atteignent-ils un backend au lieu de recevoir un 404 sec.
+À instruire.
+
+---
+
 ## 2026-09-23 - Deux semaines sans veille, et une CVE dans Express
 
 ### D'abord, le trou

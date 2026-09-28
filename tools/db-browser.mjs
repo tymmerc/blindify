@@ -9,6 +9,7 @@
 // le meme mot de passe que le tableau de bord.
 
 import http from "http"
+import { execFileSync } from "child_process"
 import fs from "fs"
 import { createRequire } from "module"
 
@@ -178,6 +179,86 @@ const server = http.createServer(async (req, res) => {
         total: r.rows.length,
         ms: Date.now() - debut,
         tronque: r.rows.length >= MAX_LIGNES,
+      })
+    }
+
+    // Erreurs serveur : journal du conteneur backend et 5xx de nginx.
+    //
+    // ATTENTION, rien de brut ne sort d'ici. Les erreurs axios journalisees
+    // embarquent les en-tetes de la requete, donc le jeton d'acces Spotify en
+    // clair. On n'extrait que la date, le niveau, le nom de l'evenement et un
+    // resume court, et on caviarde par securite tout ce qui ressemble a un
+    // secret avant de repondre.
+    if (chemin === "/erreurs") {
+      const heures = Math.min(Math.max(parseInt(url.searchParams.get("heures") || "168", 10) || 168, 1), 720)
+
+      const caviarder = (t) => String(t)
+        .replace(/Bearer\s+[A-Za-z0-9._~+/=-]{12,}/gi, "Bearer [masqué]")
+        .replace(/("(?:authorization|token|password|secret|api[_-]?key)"\s*:\s*)"[^"]*"/gi, '$1"[masqué]"')
+        .replace(/\b[A-Za-z0-9_-]{40,}\b/g, "[masqué]")
+
+      let brut = ""
+      try {
+        brut = execFileSync("docker", ["logs", "--since", `${heures}h`, "blindify-backend"],
+          { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] })
+      } catch (e) {
+        brut = (e.stdout || "") + (e.stderr || "")
+      }
+
+      const LIGNE = /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s+\[[^\]]*?(error|warn|info|debug)[^\]]*?\]\s+(\S+)\s*(.*)$/
+      const evenements = new Map()
+      const recentes = []
+      let total = 0
+
+      for (const ligne of brut.split("\n")) {
+        const sansCouleur = ligne.replace(/\u001b\[[0-9;]*m/g, "")
+        const m = LIGNE.exec(sansCouleur)
+        if (!m) continue
+        const [, quand, niveau, evenement, reste] = m
+        if (niveau !== "error" && niveau !== "warn") continue
+        total++
+
+        // Resume court : on pioche quelques champs utiles, jamais le bloc entier.
+        let detail = ""
+        try {
+          const o = JSON.parse(reste)
+          const bouts = [
+            o?.error?.message || o?.message,
+            o?.error?.status ? "HTTP " + o.error.status : null,
+            o?.provider, o?.roomCode, o?.step,
+          ].filter(Boolean)
+          detail = bouts.join(" · ")
+        } catch {
+          detail = reste.slice(0, 120)
+        }
+        detail = caviarder(detail).slice(0, 180)
+
+        const e = evenements.get(evenement) || { evenement, niveau, n: 0, dernier: quand, exemple: detail }
+        e.n++; e.dernier = quand
+        if (!e.exemple && detail) e.exemple = detail
+        evenements.set(evenement, e)
+        recentes.push({ quand, niveau, evenement, detail })
+      }
+
+      // 5xx cote nginx : volume, et ce qui est vise (souvent un scanner).
+      let nginx = { total: 0, cibles: [] }
+      try {
+        const sortie = execFileSync("sh", ["-c",
+          "awk '$9 ~ /^5/ {print $9\" \"$7}' /var/log/nginx/access.log 2>/dev/null | sort | uniq -c | sort -rn | head -12"],
+          { encoding: "utf8", maxBuffer: 4 * 1024 * 1024 })
+        const l = sortie.trim().split("\n").filter(Boolean).map(x => {
+          const [, n, code, cible] = /^\s*(\d+)\s+(\d{3})\s+(.*)$/.exec(x) || []
+          return n ? { n: Number(n), code, cible: caviarder(cible).slice(0, 80) } : null
+        }).filter(Boolean)
+        nginx = { total: l.reduce((s2, x) => s2 + x.n, 0), cibles: l }
+      } catch { /* journal nginx illisible, on n'affiche rien */ }
+
+      return json(res, 200, {
+        heures,
+        total,
+        evenements: [...evenements.values()].sort((a, b) => b.n - a.n),
+        recentes: recentes.slice(-40).reverse(),
+        nginx,
       })
     }
 

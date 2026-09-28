@@ -444,6 +444,9 @@ fetch("data.json?t=" + Date.now())
         </div></div>
       </div>
 
+      <div class="bloc" id="erreurs"><div class="shead"><h2>Erreurs serveur</h2><span class="sub">chargement</span></div>
+        <div class="panel"><p class="vide">Lecture du journal...</p></div></div>
+
       <div class="bloc">
         <div class="shead"><h2>Retours des joueurs</h2><span class="sub">${d.retours.length} message${d.retours.length > 1 ? "s" : ""}</span></div>
         ${d.retours.length
@@ -474,12 +477,71 @@ fetch("data.json?t=" + Date.now())
       </div></div>`;
 
     const v = $("v-vue"); v.innerHTML = ""; v.appendChild(frag(html));
+    chargerErreurs();
   })
   .catch(e => {
     $("v-vue").innerHTML = '<div class="err">Impossible de charger les statistiques : ' + esc(e.message) +
       '<br>Relancer <span class="mono">/opt/blindify/tools/gen-stats.sh</span> sur le serveur.</div>';
     $("maj").textContent = "erreur de chargement";
   });
+
+/* =========================== erreurs serveur =========================== */
+/* Le journal est lu en direct par le service, pas fige dans data.json : une
+   erreur qui vient de tomber doit apparaitre tout de suite. Le service ne
+   renvoie jamais de ligne brute, il caviarde (les erreurs axios embarquent le
+   jeton d'acces Spotify en clair dans les en-tetes). */
+async function chargerErreurs() {
+  const hote = $("erreurs");
+  if (!hote) return;
+  try {
+    const d = await fetch(`${API}/erreurs?heures=720`).then(r => r.json());
+    if (d.erreur) throw new Error(d.erreur);
+    const jours = Math.round(d.heures / 24);
+    const scan = d.nginx.cibles.filter(c => /\.env|php|wp-|\.git|admin/i.test(c.cible)).length;
+
+    hote.innerHTML = `
+      <div class="shead"><h2>Erreurs serveur</h2><span class="sub">${jours} derniers jours, lu en direct</span></div>
+      <div class="g2">
+        <div class="panel">
+          <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:11px">
+            <span class="num" style="font-family:Archivo;font-size:1.9rem;font-weight:700;color:${d.total ? C.ko : C.ok}">${nb(d.total)}</span>
+            <span style="font-size:12.5px;color:var(--txt-3)">erreur${d.total > 1 ? "s" : ""} et avertissement${d.total > 1 ? "s" : ""} applicatifs</span>
+          </div>
+          ${d.evenements.length
+            ? rang(d.evenements.map(e => ({ label:e.evenement, n:e.n })), C.ko, d.total) +
+              `<div class="champs" style="margin-top:11px">${d.evenements.map(e => `<div class="champ">
+                 <span>${esc(e.evenement)}</span>
+                 <span class="ty">${esc(e.exemple || "")}</span>
+                 <span class="ty">${esc(e.dernier.slice(5, 16))}</span></div>`).join("")}</div>`
+            : '<p class="vide">Aucune erreur applicative sur la période.</p>'}
+        </div>
+        <div class="panel">
+          <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:11px">
+            <span class="num" style="font-family:Archivo;font-size:1.9rem;font-weight:700;color:${d.nginx.total ? C.amber : C.ok}">${nb(d.nginx.total)}</span>
+            <span style="font-size:12.5px;color:var(--txt-3)">réponses 5xx du serveur web</span>
+          </div>
+          ${d.nginx.cibles.length
+            ? rang(d.nginx.cibles.map(c => ({ label:c.code + " " + c.cible, n:c.n })), C.amber) +
+              (scan ? `<p class="aide" style="margin-top:10px">Ces adresses n'existent pas dans Blindz. C'est un scanner
+                 de vulnérabilités qui teste des chemins de WordPress et de fichiers de configuration.
+                 Du bruit, pas une panne, mais ça vaut de vérifier pourquoi ces chemins atteignent un backend
+                 au lieu de renvoyer 404.</p>` : "")
+            : '<p class="vide">Aucune réponse 5xx dans le journal courant.</p>'}
+        </div>
+      </div>
+      ${d.recentes.length ? `<div class="panel tight" style="margin-top:11px"><div class="scroll"><table class="min">
+        <thead><tr><th>Quand</th><th>Niveau</th><th>Événement</th><th>Détail</th></tr></thead>
+        <tbody>${d.recentes.slice(0, 15).map(r => `<tr>
+          <td class="n" style="color:var(--txt-2)">${esc(r.quand.slice(5, 16))}</td>
+          <td><span class="pill ${r.niveau === "error" ? "abd" : "a"}">${esc(r.niveau)}</span></td>
+          <td class="mono">${esc(r.evenement)}</td>
+          <td style="color:var(--txt-2)">${esc(r.detail)}</td></tr>`).join("")}</tbody>
+      </table></div></div>` : ""}`;
+  } catch (e) {
+    hote.innerHTML = `<div class="shead"><h2>Erreurs serveur</h2></div>
+      <div class="panel"><p class="vide">Journal illisible : ${esc(e.message)}</p></div>`;
+  }
+}
 
 /* ============================== données ============================== */
 const API = "api";
