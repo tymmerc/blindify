@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Blindz · administration</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500&display=swap">
+<style>
+  :root {
+    color-scheme: dark;
+    --cream: #f4ecdb; --verm: #cc4830; --amber: #d88418; --sage: #789084; --blue: #486090;
+    --bg: #17100a; --surface: #211710; --surface-2: #1a120c; --line: #35271a; --line-2: #4a3726;
+    --txt: #f4ecdb; --txt-2: #c3b49b; --txt-3: #8d7c64;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--txt);
+    font-family: "IBM Plex Sans", system-ui, sans-serif; font-size: 15px; line-height: 1.55;
+    padding: max(env(safe-area-inset-top), 0px) 0 max(env(safe-area-inset-bottom), 0px);
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1400px; margin: 0 auto; padding-inline: 18px; padding-block: 22px 60px; }
+  h1, h2 { font-family: Archivo, sans-serif; margin: 0; letter-spacing: -0.015em; text-wrap: balance; }
+  h1 { font-size: clamp(1.5rem, 4.5vw, 2rem); font-weight: 700; }
+  h2 { font-size: 1.05rem; font-weight: 600; }
+  .mono { font-family: "IBM Plex Mono", monospace; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  .bar4 { display: flex; height: 4px; border-radius: 2px; overflow: hidden; margin-bottom: 18px; }
+  .bar4 i { flex: 1; }
+
+  header { display: flex; align-items: center; gap: 13px; flex-wrap: wrap; margin-bottom: 16px; }
+  .logo { width: 42px; height: 42px; border-radius: 9px; background: var(--cream); display: grid; place-items: center; flex: none; }
+  .logo img { width: 31px; height: 31px; object-fit: contain; display: block; }
+  .htxt { flex: 1 1 200px; }
+  .maj { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--txt-3); text-transform: uppercase; letter-spacing: .1em; }
+
+  /* Onglets */
+  nav.onglets { display: flex; gap: 6px; border-bottom: 1px solid var(--line); margin-bottom: 22px; flex-wrap: wrap; }
+  nav.onglets button {
+    background: none; border: 0; border-bottom: 2px solid transparent; color: var(--txt-3);
+    font: inherit; font-size: 14px; font-weight: 500; padding: 9px 14px; cursor: pointer; margin-bottom: -1px;
+  }
+  nav.onglets button:hover { color: var(--txt-2); }
+  nav.onglets button[aria-selected="true"] { color: var(--amber); border-bottom-color: var(--amber); }
+
+  /* ---- Vue d'ensemble ---- */
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(138px, 1fr)); gap: 10px; }
+  .tile { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 13px 14px; }
+  .tile .v { font-family: Archivo, sans-serif; font-size: 1.6rem; font-weight: 700; line-height: 1.05; font-variant-numeric: tabular-nums; }
+  .tile .k { font-size: 12.5px; color: var(--txt-2); margin-top: 3px; }
+  .tile.hi .v { color: var(--amber); }
+
+  section.bloc { margin-top: 32px; }
+  .shead { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 11px; flex-wrap: wrap; }
+  .shead .sub { font-size: 12.5px; color: var(--txt-3); }
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+  .panel.tight { padding: 0; overflow: hidden; }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+  .grid2 > * { min-width: 0; }
+  svg.chart { display: block; width: 100%; height: auto; }
+
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  th, td { text-align: left; padding: 9px 13px; border-bottom: 1px solid var(--line); }
+  thead th { font-family: "IBM Plex Mono", monospace; font-size: 10px; text-transform: uppercase;
+    letter-spacing: .1em; color: var(--txt-3); background: var(--surface-2); white-space: nowrap; }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.n { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .scroll { overflow-x: auto; }
+  table.min { min-width: 560px; }
+
+  .pill { display: inline-block; font-family: "IBM Plex Mono", monospace; font-size: 10px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .07em; padding: 2px 7px; border-radius: 4px;
+    background: #2c1f14; color: var(--txt-2); border: 1px solid var(--line-2); white-space: nowrap; }
+  .pill.v { background: #3a1d15; color: #f0947f; border-color: #6b3325; }
+  .pill.a { background: #3a2a12; color: #e8ab5c; border-color: #6d4d1c; }
+  .pill.b { background: #1b2635; color: #92aed6; border-color: #33486b; }
+  .pill.s { background: #1e2a26; color: #9cb5aa; border-color: #37504a; }
+  .pill.fin { background: #172a20; color: #6fc596; border-color: #2c5a41; }
+  .pill.abd { background: #2e1a16; color: #cf7c6a; border-color: #5c3128; }
+  .pill.enc { background: #2e2413; color: #d9a84f; border-color: #5c4a20; }
+
+  .retour { border: 1px solid var(--line); border-left: 3px solid var(--amber); border-radius: 8px;
+    background: var(--surface); padding: 13px 15px; margin-bottom: 10px; }
+  .retour .meta { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--txt-3); margin-bottom: 5px; }
+  .vide { color: var(--txt-3); font-size: 14px; padding: 8px 0; }
+
+  /* ---- Base de donnees ---- */
+  .cols { display: grid; grid-template-columns: 248px minmax(0, 1fr); gap: 14px; align-items: start; }
+  /* Sans min-width 0, une colonne de grille refuse de passer sous la largeur de
+     son contenu : la table large poussait toute la page en debordement. */
+  .cols > * { min-width: 0; }
+  .zone { min-width: 0; }
+  @media (max-width: 860px) { .cols { grid-template-columns: 1fr; } }
+  .liste { max-height: 70vh; overflow: auto; }
+  .tbtn {
+    display: flex; justify-content: space-between; gap: 8px; width: 100%; text-align: left;
+    background: none; border: 0; border-bottom: 1px solid var(--line); color: var(--txt);
+    padding: 9px 13px; cursor: pointer; font: inherit; font-size: 13px;
+  }
+  .tbtn:hover { background: var(--surface-2); }
+  .tbtn[aria-current="true"] { background: #2c1f14; color: var(--amber); box-shadow: inset 3px 0 0 var(--amber); }
+  .tbtn span.n { font-family: "IBM Plex Mono", monospace; font-size: 11.5px; color: var(--txt-3); }
+  .tbtn:last-child { border-bottom: 0; }
+  .zone { padding: 14px; }
+  .titre { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+  .titre h2 { font-size: 1.05rem; }
+  .titre .meta { font-family: "IBM Plex Mono", monospace; font-size: 11.5px; color: var(--txt-3); }
+  textarea {
+    width: 100%; min-height: 74px; background: var(--surface-2); color: var(--txt);
+    border: 1px solid var(--line-2); border-radius: 8px; padding: 10px 12px;
+    font-family: "IBM Plex Mono", monospace; font-size: 13px; resize: vertical;
+  }
+  .actions { display: flex; gap: 9px; align-items: center; margin-top: 9px; flex-wrap: wrap; }
+  button.go { background: var(--amber); color: #2a1c0a; border: 0; border-radius: 7px; padding: 8px 15px;
+    font: inherit; font-weight: 600; font-size: 13px; cursor: pointer; }
+  button.go:hover { filter: brightness(1.08); }
+  button.sec { background: none; color: var(--txt-2); border: 1px solid var(--line-2); border-radius: 7px;
+    padding: 8px 13px; font: inherit; font-size: 13px; cursor: pointer; }
+  button.sec:hover { border-color: var(--txt-3); color: var(--txt); }
+  button.sec:disabled { opacity: .4; cursor: default; }
+  .aide { font-size: 12px; color: var(--txt-3); }
+  .tablewrap { overflow: auto; max-height: 64vh; border: 1px solid var(--line); border-radius: 8px; margin-top: 12px; }
+  .tablewrap table { font-size: 12.5px; }
+  .tablewrap th, .tablewrap td { padding: 7px 11px; white-space: nowrap; max-width: 380px; overflow: hidden; text-overflow: ellipsis; }
+  .tablewrap thead th { position: sticky; top: 0; z-index: 1; cursor: pointer; }
+  .tablewrap thead th:hover { color: var(--amber); }
+  .tablewrap thead th .t { font-weight: 400; text-transform: none; letter-spacing: 0; color: #6d6050; margin-left: 5px; }
+  .tablewrap tbody tr:nth-child(odd) { background: rgba(255,255,255,.015); }
+  .tablewrap tbody tr:hover { background: #2a1e14; }
+  td.nul { color: #6d6050; font-style: italic; }
+  .pager { display: flex; gap: 9px; align-items: center; margin-top: 10px; font-size: 12.5px; color: var(--txt-2); flex-wrap: wrap; }
+  .err { background: #2e1a16; border: 1px solid #5c3128; color: #e8a293; border-radius: 8px; padding: 11px 13px; font-size: 13px; margin-top: 12px; }
+
+  footer { margin-top: 42px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--txt-3); }
+  a { color: var(--amber); }
+  :focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="bar4">
+    <i style="background:var(--verm)"></i><i style="background:var(--amber)"></i>
+    <i style="background:var(--sage)"></i><i style="background:var(--blue)"></i>
+  </div>
+
+  <header>
+    <span class="logo"><img src="logo.png" alt=""></span>
+    <div class="htxt">
+      <h1>Administration Blindz</h1>
+      <p class="maj" id="maj">chargement</p>
+    </div>
+  </header>
+
+  <nav class="onglets" role="tablist">
+    <button role="tab" id="t-stats" aria-selected="true" aria-controls="v-stats">Vue d'ensemble</button>
+    <button role="tab" id="t-base" aria-selected="false" aria-controls="v-base">Base de données</button>
+  </nav>
+
+  <div id="v-stats" role="tabpanel" aria-labelledby="t-stats">
+    <p class="vide">Chargement des données...</p>
+  </div>
+
+  <div id="v-base" role="tabpanel" aria-labelledby="t-base" hidden>
+    <div class="cols">
+      <div class="panel liste" id="tables"><p class="vide" style="padding:0 13px">Chargement...</p></div>
+      <div class="panel">
+        <div class="zone">
+          <div class="titre"><h2 id="dbtitre">Requête</h2><span class="meta" id="dbmeta"></span></div>
+          <textarea id="sql" spellcheck="false" placeholder="SELECT username, count(*) FROM users GROUP BY 1 ORDER BY 2 DESC"></textarea>
+          <div class="actions">
+            <button class="go" id="run">Exécuter</button>
+            <button class="sec" id="clear">Effacer</button>
+            <span class="aide">Lecture seule. Une instruction, 500 lignes au maximum. Ctrl+Entrée pour lancer.</span>
+          </div>
+          <div id="dbsortie"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Lecture seule sur la base de production. Statistiques régénérées toutes les heures, base consultée en direct.
+    Page privée, non indexée. <a href="https://blindz.app" target="_blank" rel="noopener">blindz.app</a>
+  </footer>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const frag = (h) => { const t = document.createElement("template"); t.innerHTML = h.trim(); return t.content; };
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const nb = (n) => Number(n ?? 0).toLocaleString("fr-FR");
+const COUL = { verm: "#cc4830", amber: "#d88418", sage: "#789084", blue: "#486090" };
+
+/* ============================ onglets ============================ */
+function montrer(nom) {
+  const stats = nom !== "base";
+  $("v-stats").hidden = !stats;
+  $("v-base").hidden = stats;
+  $("t-stats").setAttribute("aria-selected", String(stats));
+  $("t-base").setAttribute("aria-selected", String(!stats));
+  history.replaceState(null, "", stats ? "#vue" : "#base");
+  if (!stats) chargerTables();
+}
+$("t-stats").onclick = () => montrer("vue");
+$("t-base").onclick = () => montrer("base");
+
+/* ========================= vue d'ensemble ========================= */
+const modePill = (m) => ({ solo: "s", friends: "b", event: "v", streamer: "a", challenge: "a" }[m] || "");
+const etatPill = (e) => ({ finished: "fin", abandoned: "abd", in_progress: "enc", playing: "enc" }[e] || "");
+const etatMot = (e) => ({ finished: "terminée", abandoned: "abandonnée", in_progress: "en cours", playing: "en cours" }[e] || e);
+
+function courbe(donnees) {
+  if (!donnees.length) return '<p class="vide">Aucune partie sur la période.</p>';
+  const W = 900, H = 200, P = { t: 14, r: 12, b: 26, l: 34 };
+  const max = Math.max(...donnees.map(d => d.n));
+  const t0 = new Date(donnees[0].j).getTime(), t1 = new Date(donnees[donnees.length - 1].j).getTime();
+  const span = Math.max(t1 - t0, 1);
+  const x = (j) => P.l + (new Date(j).getTime() - t0) / span * (W - P.l - P.r);
+  const y = (n) => H - P.b - (n / max) * (H - P.t - P.b);
+  const pts = donnees.map(d => `${x(d.j).toFixed(1)},${y(d.n).toFixed(1)}`).join(" ");
+  const aire = `${P.l},${H - P.b} ${pts} ${x(donnees[donnees.length - 1].j).toFixed(1)},${H - P.b}`;
+  const ticks = [0, Math.round(max / 2), max].filter((v, i, a) => a.indexOf(v) === i);
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Parties par jour">
+    ${ticks.map(v => `<line x1="${P.l}" x2="${W - P.r}" y1="${y(v)}" y2="${y(v)}" stroke="#35271a"/>
+      <text x="${P.l - 7}" y="${y(v) + 4}" text-anchor="end" font-family="IBM Plex Mono" font-size="10" fill="#8d7c64">${v}</text>`).join("")}
+    <polygon points="${aire}" fill="${COUL.amber}" opacity="0.16"/>
+    <polyline points="${pts}" fill="none" stroke="${COUL.amber}" stroke-width="2" stroke-linejoin="round"/>
+    ${donnees.filter(d => d.n === max).map(d => `<circle cx="${x(d.j)}" cy="${y(d.n)}" r="4" fill="${COUL.amber}"/>
+      <text x="${x(d.j)}" y="${y(d.n) - 9}" text-anchor="middle" font-family="IBM Plex Mono" font-size="10" fill="${COUL.amber}">${d.n}</text>`).join("")}
+    <text x="${P.l}" y="${H - 8}" font-family="IBM Plex Mono" font-size="10" fill="#8d7c64">${donnees[0].j}</text>
+    <text x="${W - P.r}" y="${H - 8}" text-anchor="end" font-family="IBM Plex Mono" font-size="10" fill="#8d7c64">${donnees[donnees.length - 1].j}</text>
+  </svg>`;
+}
+
+function barres(lignes, couleur) {
+  if (!lignes.length) return '<p class="vide">Rien à afficher.</p>';
+  const max = Math.max(...lignes.map(l => l.n));
+  return `<div style="display:grid;gap:9px">${lignes.map(l => `
+    <div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px">
+        <span>${esc(l.label)}</span><span class="mono num" style="color:var(--txt-2)">${nb(l.n)}</span>
+      </div>
+      <div style="height:8px;background:#2c1f14;border-radius:4px;overflow:hidden">
+        <div style="height:100%;width:${(l.n / max * 100).toFixed(1)}%;background:${couleur};border-radius:4px"></div>
+      </div>
+    </div>`).join("")}</div>`;
+}
+
+function anneau(pourcent, couleur, libelle) {
+  const r = 46, c = 2 * Math.PI * r;
+  return `<svg class="chart" viewBox="0 0 130 130" style="max-width:150px;margin:0 auto" role="img" aria-label="${esc(libelle)} ${pourcent}%">
+    <circle cx="65" cy="65" r="${r}" fill="none" stroke="#2c1f14" stroke-width="13"/>
+    <circle cx="65" cy="65" r="${r}" fill="none" stroke="${couleur}" stroke-width="13" stroke-linecap="round"
+      stroke-dasharray="${(c * pourcent / 100).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 65 65)"/>
+    <text x="65" y="63" text-anchor="middle" font-family="Archivo" font-size="25" font-weight="700" fill="#f4ecdb">${pourcent}%</text>
+    <text x="65" y="82" text-anchor="middle" font-family="IBM Plex Mono" font-size="9.5" fill="#8d7c64">${esc(libelle)}</text>
+  </svg>`;
+}
+
+fetch("data.json?t=" + Date.now())
+  .then(r => { if (!r.ok) throw new Error("data.json introuvable (" + r.status + ")"); return r.json(); })
+  .then(d => {
+    $("maj").textContent = "Données du " + d.genere_le.replace("T", " à ");
+    const r = d.resume, q = d.reponses_qualite;
+    const taux = q.total ? Math.round(q.correctes / q.total * 100) : 0;
+    const html = `
+      <div class="tiles">
+        <div class="tile hi"><div class="v num">${nb(r.parties)}</div><div class="k">parties jouées</div></div>
+        <div class="tile"><div class="v num">${nb(r.parties_30j)}</div><div class="k">sur 30 jours</div></div>
+        <div class="tile"><div class="v num">${nb(r.parties_7j)}</div><div class="k">sur 7 jours</div></div>
+        <div class="tile"><div class="v num">${nb(r.jour_record)}</div><div class="k">record en une journée</div></div>
+        <div class="tile"><div class="v num">${nb(r.joueurs)}</div><div class="k">joueurs, dont ${nb(r.comptes)} avec un compte</div></div>
+        <div class="tile"><div class="v num">${nb(r.manches)}</div><div class="k">manches jouées</div></div>
+        <div class="tile"><div class="v num">${nb(r.morceaux)}</div><div class="k">morceaux en bibliothèque</div></div>
+        <div class="tile"><div class="v num">${nb(r.liens)}</div><div class="k">liens de playlist importés</div></div>
+      </div>
+
+      <section class="bloc">
+        <div class="shead"><h2>Parties par jour</h2><span class="sub">120 derniers jours</span></div>
+        <div class="panel">${courbe(d.par_jour)}</div>
+      </section>
+
+      <section class="bloc"><div class="grid2">
+        <div>
+          <div class="shead"><h2>Modes de jeu</h2></div>
+          <div class="panel">${barres(d.par_mode.map(m => ({ label: m.mode, n: m.n })), COUL.verm)}</div>
+        </div>
+        <div>
+          <div class="shead"><h2>Qualité des réponses</h2><span class="sub">${nb(q.total)} réponses</span></div>
+          <div class="panel">
+            ${anneau(taux, COUL.sage, "de bonnes réponses")}
+            <div style="display:flex;justify-content:space-between;margin-top:12px;font-size:13px;color:var(--txt-2)">
+              <span>${nb(q.correctes)} bonnes sur ${nb(q.total)}</span>
+              <span class="mono num">${q.temps_median_ms ? (q.temps_median_ms / 1000).toFixed(1) + " s médian" : "temps non mesuré"}</span>
+            </div>
+          </div>
+        </div>
+      </div></section>
+
+      <section class="bloc"><div class="grid2">
+        <div>
+          <div class="shead"><h2>D'où vient la musique</h2></div>
+          <div class="panel">${barres(d.providers.map(p => ({ label: p.provider, n: p.n })), COUL.blue)}</div>
+        </div>
+        <div>
+          <div class="shead"><h2>Inscriptions par mois</h2></div>
+          <div class="panel">${barres(d.inscriptions.slice(-8).map(i => ({ label: i.m, n: i.n })), COUL.amber)}</div>
+        </div>
+      </div></section>
+
+      <section class="bloc">
+        <div class="shead"><h2>Retours des joueurs</h2><span class="sub">${d.retours.length} message${d.retours.length > 1 ? "s" : ""}</span></div>
+        ${d.retours.length
+          ? d.retours.map(x => `<div class="retour">
+              <div class="meta">${esc(x.le)} &middot; ${esc(x.pseudo || "anonyme")}${x.page ? " &middot; " + esc(x.page) : ""}</div>
+              <div>${esc(x.message)}</div></div>`).join("")
+          : '<div class="panel"><p class="vide">Aucun retour pour le moment. Le formulaire de signalement écrit dans bug_reports.</p></div>'}
+      </section>
+
+      <section class="bloc">
+        <div class="shead"><h2>Joueurs les plus actifs</h2><span class="sub">d'après user_stats</span></div>
+        <div class="panel tight"><div class="scroll"><table class="min">
+          <thead><tr><th>Pseudo</th><th>Parties</th><th>Bonnes réponses</th><th>Meilleure série</th><th>XP</th><th>Dernière partie</th></tr></thead>
+          <tbody>${d.top_joueurs.map(j => `<tr>
+            <td>${esc(j.pseudo)}</td><td class="n">${nb(j.parties)}</td>
+            <td class="n">${nb(j.bonnes)} / ${nb(j.tentatives)}</td><td class="n">${nb(j.serie)}</td>
+            <td class="n">${nb(j.xp)}</td><td class="n" style="color:var(--txt-3)">${esc(j.vu_le || "?")}</td>
+          </tr>`).join("")}</tbody>
+        </table></div></div>
+      </section>
+
+      <section class="bloc">
+        <div class="shead"><h2>Dernières parties</h2><span class="sub">25 plus récentes</span></div>
+        <div class="panel tight"><div class="scroll"><table class="min">
+          <thead><tr><th>Quand</th><th>Mode</th><th>Hôte</th><th>Joueurs</th><th>Manches</th><th>État</th></tr></thead>
+          <tbody>${d.dernieres_parties.map(p => `<tr>
+            <td class="n" style="color:var(--txt-2)">${esc(p.le)}</td>
+            <td><span class="pill ${modePill(p.mode)}">${esc(p.mode)}</span></td>
+            <td>${esc(p.hote)}</td><td class="n">${nb(p.joueurs)}</td><td class="n">${nb(p.manches)}</td>
+            <td><span class="pill ${etatPill(p.etat)}">${esc(etatMot(p.etat))}</span></td>
+          </tr>`).join("")}</tbody>
+        </table></div></div>
+      </section>`;
+    const v = $("v-stats"); v.innerHTML = ""; v.appendChild(frag(html));
+  })
+  .catch(e => {
+    $("v-stats").innerHTML = '<div class="err">Impossible de charger les statistiques : ' + esc(e.message) +
+      '<br>Relancer <span class="mono">/opt/blindify/tools/gen-stats.sh</span> sur le serveur.</div>';
+    $("maj").textContent = "erreur de chargement";
+  });
+
+/* ========================= base de donnees ========================= */
+const API = "api";
+let courant = null, decalage = 0, limite = 50, tri = null, sens = "desc", tablesChargees = false;
+
+const cellule = (v) => {
+  if (v === null || v === undefined) return '<td class="nul">null</td>';
+  if (typeof v === "number") return `<td class="n">${nb(v)}</td>`;
+  if (typeof v === "object") return `<td class="mono">${esc(JSON.stringify(v)).slice(0, 200)}</td>`;
+  const s = String(v);
+  return `<td${/^\d+$/.test(s) ? ' class="n"' : ""} title="${esc(s).slice(0, 300)}">${esc(s).slice(0, 300)}</td>`;
+};
+
+function tableau(d, triable) {
+  if (!d.lignes.length) return '<p class="vide">Aucune ligne.</p>';
+  const cols = d.colonnes.map(c => c.column_name);
+  return `<div class="tablewrap"><table>
+    <thead><tr>${cols.map(c => `<th ${triable ? `data-col="${esc(c)}"` : ""}>${esc(c)}${
+      triable && c === d.tri ? (d.sens === "ASC" ? " ↑" : " ↓") : ""
+    }<span class="t">${esc((d.colonnes.find(x => x.column_name === c) || {}).data_type || "")}</span></th>`).join("")}</tr></thead>
+    <tbody>${d.lignes.map(l => `<tr>${cols.map(c => cellule(l[c])).join("")}</tr>`).join("")}</tbody>
+  </table></div>`;
+}
+
+async function chargerTables() {
+  if (tablesChargees) return;
+  tablesChargees = true;
+  try {
+    const d = await fetch(`${API}/tables`).then(r => r.json());
+    $("tables").innerHTML = d.tables.map(t =>
+      `<button class="tbtn" data-t="${esc(t.nom)}"><span>${esc(t.nom)}</span><span class="n">${nb(t.lignes)}</span></button>`).join("");
+    $("tables").querySelectorAll(".tbtn").forEach(b =>
+      b.addEventListener("click", () => { decalage = 0; tri = null; sens = "desc"; ouvrir(b.dataset.t); }));
+  } catch (e) {
+    tablesChargees = false;
+    $("tables").innerHTML = `<div class="err" style="margin:12px">Service injoignable : ${esc(e.message)}</div>`;
+  }
+}
+
+async function ouvrir(nom) {
+  courant = nom;
+  $("tables").querySelectorAll(".tbtn").forEach(b => b.setAttribute("aria-current", String(b.dataset.t === nom)));
+  $("dbtitre").textContent = nom;
+  $("dbsortie").innerHTML = '<p class="vide">Chargement...</p>';
+  const q = new URLSearchParams({ limite, decalage, sens });
+  if (tri) q.set("tri", tri);
+  try {
+    const d = await fetch(`${API}/table/${encodeURIComponent(nom)}?${q}`).then(r => r.json());
+    if (d.erreur) throw new Error(d.erreur);
+    tri = d.tri; sens = d.sens.toLowerCase();
+    $("dbmeta").textContent = `${nb(d.total)} lignes · ${d.colonnes.length} colonnes`;
+    $("dbsortie").innerHTML = tableau(d, true) + `
+      <div class="pager">
+        <button class="sec" id="prec" ${decalage === 0 ? "disabled" : ""}>Précédent</button>
+        <button class="sec" id="suiv" ${decalage + limite >= d.total ? "disabled" : ""}>Suivant</button>
+        <span class="mono">${nb(d.total ? decalage + 1 : 0)} à ${nb(Math.min(decalage + limite, d.total))} sur ${nb(d.total)}</span>
+      </div>`;
+    const p = $("prec"), s = $("suiv");
+    if (p) p.onclick = () => { decalage = Math.max(0, decalage - limite); ouvrir(nom); };
+    if (s) s.onclick = () => { decalage += limite; ouvrir(nom); };
+    $("dbsortie").querySelectorAll("th[data-col]").forEach(th => th.onclick = () => {
+      if (tri === th.dataset.col) sens = sens === "asc" ? "desc" : "asc";
+      else { tri = th.dataset.col; sens = "desc"; }
+      decalage = 0; ouvrir(nom);
+    });
+    $("sql").value = `SELECT * FROM ${nom} LIMIT 50`;
+  } catch (e) {
+    $("dbsortie").innerHTML = `<div class="err">${esc(e.message)}</div>`;
+  }
+}
+
+async function executer() {
+  const sql = $("sql").value.trim();
+  if (!sql) return;
+  $("dbtitre").textContent = "Requête";
+  $("dbmeta").textContent = "";
+  $("dbsortie").innerHTML = '<p class="vide">Exécution...</p>';
+  try {
+    const d = await fetch(`${API}/query`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sql }),
+    }).then(r => r.json());
+    if (d.erreur) throw new Error(d.erreur);
+    $("dbmeta").textContent = `${nb(d.total)} ligne${d.total > 1 ? "s" : ""} en ${d.ms} ms${d.tronque ? " · tronqué à 500" : ""}`;
+    $("dbsortie").innerHTML = tableau(d, false);
+  } catch (e) {
+    $("dbsortie").innerHTML = `<div class="err">${esc(e.message)}</div>`;
+  }
+}
+
+$("run").onclick = executer;
+$("clear").onclick = () => { $("sql").value = ""; $("sql").focus(); };
+$("sql").addEventListener("keydown", e => {
+  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); executer(); }
+});
+
+if (location.hash === "#base") montrer("base");
+</script>
+</body>
+</html>

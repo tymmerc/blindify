@@ -3,7 +3,7 @@
 # Lit la base de PRODUCTION en LECTURE SEULE et ecrit un JSON servi par nginx
 # sur dev.tymmerc.eu/blindz-stats/ (protege par mot de passe).
 set -euo pipefail
-DEST=/opt/dev/blindz-stats
+DEST=/opt/dev/blindz
 mkdir -p "$DEST"
 TMP="$(mktemp)"
 docker exec -i blindify-postgres psql -U blindify -d blindify -qAt \
