@@ -32,3 +32,6 @@ frontend/e2e/*.zip
 # Secret local de bypass des rate-limits pour E2E
 .e2e-bypass-key
 maquettes/shots/
+
+# Lien vers les modules du frontend, pour la resolution des outils E2E
+tools/node_modules

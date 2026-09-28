@@ -20,6 +20,7 @@ import http from "http";
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
+import { ensureResponseSchema } from "./services/gamePersistence";
 import slowDown from "express-slow-down";
 import cookieSession from "cookie-session";
 import dotenv from "dotenv";
@@ -337,6 +338,7 @@ async function bootstrap() {
   // Schema de la bibliotheque de liens des le BOOT : le poll room details y fait
 // reference, un premier deploiement sans la table crash-loopait le serveur.
 ensureLinksSchema().catch(err => logger.error("links_schema_boot_failed", { error: err }));
+ensureResponseSchema().catch(err => logger.error("response_schema_boot_failed", { error: err }));
 
 // Index manquants sur les colonnes FK les plus sollicitees : sans eux, chaque
 // suppression en cascade (sessions, rooms, invites) declenche des seq scans.

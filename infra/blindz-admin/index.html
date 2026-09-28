@@ -146,7 +146,7 @@
   .manche .t { display:flex; justify-content:space-between; gap:10px; padding:8px 11px; background:var(--surface-2); font-size:12.5px; }
   .manche .t b { font-weight:600; }
   .manche .r { display:flex; justify-content:space-between; gap:10px; padding:5px 11px; font-size:12px; border-top:1px solid var(--line); }
-  .manche .r .ok { color:var(--ok); } .manche .r .ko { color:var(--ko); }
+  .manche .r .ok { color:var(--ok); } .manche .r .ko { color:var(--ko); } .manche .r .proche { color:var(--amber); }
 
   /* ---- base (inchangé) ---- */
   .cols { display:grid; grid-template-columns:240px minmax(0,1fr); gap:12px; align-items:start; }
@@ -347,6 +347,11 @@ function agg(sessions) {
     jouees: sessions.filter(s => s.repondues > 0).length,
     reponses: sessions.reduce((t, s) => t + s.reponses, 0),
     bonnes: sessions.reduce((t, s) => t + s.bonnes, 0),
+    // Verdict fin et devinette "qui a mis quoi" : colonnes du 28/09/2026,
+    // absentes (0) sur tout ce qui précède.
+    proches: sessions.reduce((t, s) => t + (s.proches || 0), 0),
+    devinettes: sessions.reduce((t, s) => t + (s.devinettes || 0), 0),
+    devinettesJustes: sessions.reduce((t, s) => t + (s.devinettes_justes || 0), 0),
     delai: median(sessions.map(s => s.delai_s)),
     duree: median(sessions.filter(s => s.etat === "finished").map(s => s.duree_s)),
     parJour: new Map(), parMode: new Map(), parHeure: Array(24).fill(0), parJsem: Array(7).fill(0), taille: new Map(), fidelite: new Map(),
@@ -454,6 +459,9 @@ function rendre() {
   const tauxFin = pct(a.finies, a.parties), tauxFinPrev = b ? pct(b.finies, b.parties) : null;
   const tauxBon = pct(a.bonnes, a.reponses), tauxBonPrev = b ? pct(b.bonnes, b.reponses) : null;
   const avantInstr = D.couverture.premiere_reponse && f.debut < new Date(D.couverture.premiere_reponse);
+  const pv = D.couverture.premier_verdict;
+  const noteVerdict = !pv ? "Pas encore mesuré en production : le serveur n'enregistre le verdict fin et la devinette que depuis le code du 28/09/2026."
+    : f.debut < new Date(pv) ? `Mesuré depuis le ${fmtJ(pv)} seulement : avant cette date, une réponse proche est comptée comme fausse.` : "";
   const listeSessions = (jourFiltre ? cur.filter(s => jour(s.debut) === jourFiltre) : cur).slice().reverse();
   const titresDurs = D.titres.filter(t => t.reponses >= 3).sort((x, y) => (x.bonnes / x.reponses) - (y.bonnes / y.reponses)).slice(0, 8);
   const titresJoues = D.titres.slice(0, 8);
@@ -488,6 +496,15 @@ function rendre() {
       <div><div class="shead"><h2>Modes</h2></div><div class="panel${petit(a.parties)}">${rang([...a.parMode].map(([m, n]) => ({ label:m, n })).sort((x, y) => y.n - x.n), C.blue)}</div></div>
       <div><div class="shead"><h2>Fidélité</h2><span class="sub">parties par joueur</span></div><div class="panel${petit(a.joueurs)}">
         ${rang(["1 partie","2 à 3","4 à 9","10 et plus"].filter(k => a.fidelite.has(k)).map(k => ({ label:k, n:a.fidelite.get(k) })), C.sage)}</div></div>
+    </div></div>
+
+    <div class="bloc"><div class="g2">
+      <div><div class="shead"><h2>Finesse des réponses</h2><span class="sub">juste = titre et artiste · proche = l'un des deux</span></div><div class="panel${petit(a.reponses)}">
+        ${noteVerdict ? `<p class="aide" style="margin:0 0 10px">${noteVerdict}</p>` : ""}
+        ${rang([{ label:"Juste", n:a.bonnes }, { label:"Proche", n:a.proches }, { label:"Faux", n:Math.max(0, a.reponses - a.bonnes - a.proches) }], C.sage, a.reponses)}</div></div>
+      <div><div class="shead"><h2>Qui a mis quoi</h2><span class="sub">le joueur a-t-il pointé le bon propriétaire du morceau</span></div><div class="panel${petit(a.devinettes)}">
+        ${a.devinettes ? anneau(pct(a.devinettesJustes, a.devinettes), C.amber, "devinettes justes") + `<p class="aide" style="text-align:center;margin:6px 0 0">${nb(a.devinettesJustes)} juste${a.devinettesJustes > 1 ? "s" : ""} sur ${nb(a.devinettes)} tentative${a.devinettes > 1 ? "s" : ""}</p>`
+          : `<p class="vide">${pv ? "Aucune devinette enregistrée sur la période." : "Pas encore mesuré : la devinette n'est enregistrée que depuis le code du 28/09/2026, pas encore en production."}</p>`}</div></div>
     </div></div>
 
     <div class="bloc"><div class="g3">
@@ -564,8 +581,8 @@ async function ouvrirPartie(id) {
         : '<p class="aide" style="margin:0 0 12px">Aucun participant enregistré pour cette partie (antérieure à l\'instrumentation).</p>'}
       ${d.manches.map(m => { const rs = parManche.get(m.id) || []; return `<div class="manche">
         <div class="t"><span><b>${m.manche}.</b> ${esc(m.titre)} <span class="aide">· ${esc(m.artiste)}</span></span><span class="aide">${esc(m.proprietaire)}</span></div>
-        ${rs.length ? rs.map(r => `<div class="r"><span>${esc(r.joueur || "?")} <span class="aide">${r.guess_title ? "« " + esc(r.guess_title) + " »" : "sans réponse"}${r.guess_artist ? " · " + esc(r.guess_artist) : ""}</span></span>
-          <span class="${r.bonne ? "ok" : "ko"}">${r.bonne ? "✓" : "✗"}${r.ms != null ? ` <span class="aide">${(r.ms / 1000).toFixed(1)} s</span>` : ""}${r.points ? ` <span class="aide">+${r.points}</span>` : ""}</span></div>`).join("")
+        ${rs.length ? rs.map(r => { const proche = r.verdict === "close"; return `<div class="r"><span>${esc(r.joueur || "?")} <span class="aide">${r.guess_title ? "« " + esc(r.guess_title) + " »" : "sans réponse"}${r.guess_artist ? " · " + esc(r.guess_artist) : ""}</span>${r.devine != null ? ` <span class="aide">· a pointé ${esc(r.devine_qui || "?")} ${r.devine ? "✓" : "✗"}</span>` : ""}</span>
+          <span class="${proche ? "proche" : r.bonne ? "ok" : "ko"}" title="${proche ? "proche : titre ou artiste, pas les deux" : ""}">${proche ? "≈" : r.bonne ? "✓" : "✗"}${r.ms != null ? ` <span class="aide">${(r.ms / 1000).toFixed(1)} s</span>` : ""}${r.points ? ` <span class="aide">+${r.points}</span>` : ""}</span></div>`; }).join("")
           : '<div class="r"><span class="aide">aucune réponse enregistrée</span></div>'}</div>`; }).join("")}`;
     t.querySelector(".fermer").onclick = fermer;
   } catch (e) {

@@ -110,8 +110,10 @@ const server = http.createServer(async (req, res) => {
          WHERE gr.session_id=$1 ORDER BY gr.round_index`, [id])
       const { rows: reponses } = await lire(
         `SELECT r.round_id, u.username AS joueur, r.guess_title, r.guess_artist, r.is_correct AS bonne,
-                r.response_time_ms AS ms, r.score_delta AS points
+                r.response_time_ms AS ms, r.score_delta AS points,
+                r.verdict, r.source_correct AS devine, ud.username AS devine_qui
          FROM round_responses r JOIN game_rounds gr ON gr.id=r.round_id LEFT JOIN users u ON u.id=r.user_id
+         LEFT JOIN users ud ON ud.id=r.source_guess
          WHERE gr.session_id=$1 ORDER BY gr.round_index, r.created_at`, [id])
       const { rows: participants } = await lire(
         `SELECT u.username AS joueur, p.score, p.accuracy, p.best_streak AS serie

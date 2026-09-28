@@ -35,6 +35,23 @@ export async function markMultiplayerRoomFinished(roomCode: string): Promise<voi
   }
 }
 
+/**
+ * Colonnes ajoutees le 28/09/2026 a round_responses, idempotent au boot comme
+ * ensureLinksSchema. Avant, le serveur SAVAIT a la revelation le verdict fin
+ * (correct / proche / faux) et si le joueur avait devine qui a mis le morceau,
+ * mais n'ecrivait qu'un booleen "juste". Le "proche" et toute la mecanique
+ * "qui a mis quoi", pourtant la signature du jeu, n'etaient mesures nulle part.
+ */
+export async function ensureResponseSchema(): Promise<void> {
+  await pool.query(`
+    ALTER TABLE round_responses
+      ADD COLUMN IF NOT EXISTS verdict TEXT,
+      ADD COLUMN IF NOT EXISTS source_guess INTEGER,
+      ADD COLUMN IF NOT EXISTS source_owner INTEGER,
+      ADD COLUMN IF NOT EXISTS source_correct BOOLEAN
+  `);
+}
+
 function reactionMs(answerAt: number | null | undefined, startAt: number | null): number | null {
   if (!answerAt || !startAt) return null;
   return Math.max(0, answerAt - startAt);
@@ -57,17 +74,31 @@ export async function persistRoundResponses(state: GameState, sessionId: number 
     if (!roundId) return;
 
     const startAt = state.timing.startAt;
+    // Le proprietaire du morceau tel que le serveur l'a juge a la revelation.
+    // On le fige ici plutot que de le rejoindre plus tard via audio_sources :
+    // cette propriete se detache quand le compte disparait, et 181 manches
+    // reelles avaient deja perdu la leur.
+    const ownerRaw = (state.currentTrack?.metadata as Record<string, unknown> | null | undefined)?.owner_user_id;
+    const sourceOwner = typeof ownerRaw === "number" ? ownerRaw : Number.isFinite(Number(ownerRaw)) && ownerRaw != null ? Number(ownerRaw) : null;
     for (const player of Object.values(state.players)) {
       if (!player.hasAnswered) continue;
+      const sourceGuess = player.lastSourceGuess ?? null;
+      // Meme regle que computeScore : un point si la devinette vise le vrai proprietaire.
+      const sourceCorrect = sourceOwner != null && sourceGuess != null ? sourceOwner === sourceGuess : null;
       await pool.query(
-        `INSERT INTO round_responses (round_id, user_id, guess_title, guess_artist, is_correct, response_time_ms, score_delta)
-         VALUES ($1,$2,$3,$4,$5,$6,$7)
+        `INSERT INTO round_responses (round_id, user_id, guess_title, guess_artist, is_correct, response_time_ms, score_delta,
+                                      verdict, source_guess, source_owner, source_correct)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
          ON CONFLICT (round_id, user_id) DO UPDATE SET
            guess_title = EXCLUDED.guess_title,
            guess_artist = EXCLUDED.guess_artist,
            is_correct = EXCLUDED.is_correct,
            response_time_ms = EXCLUDED.response_time_ms,
-           score_delta = EXCLUDED.score_delta`,
+           score_delta = EXCLUDED.score_delta,
+           verdict = EXCLUDED.verdict,
+           source_guess = EXCLUDED.source_guess,
+           source_owner = EXCLUDED.source_owner,
+           source_correct = EXCLUDED.source_correct`,
         [
           roundId,
           player.userId,
@@ -76,6 +107,10 @@ export async function persistRoundResponses(state: GameState, sessionId: number 
           player.lastVerdict === "correct",
           reactionMs(player.answerAt, startAt),
           player.lastGained ?? 0,
+          player.lastVerdict ?? null,
+          sourceGuess,
+          sourceOwner,
+          sourceCorrect,
         ],
       );
     }

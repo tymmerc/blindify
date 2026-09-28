@@ -13,14 +13,18 @@ SELECT json_build_object(
   -- les participants depuis septembre. À afficher avant tout chiffre.
   'couverture', (SELECT json_build_object(
       'premiere_reponse', (SELECT to_char(min(created_at),'YYYY-MM-DD') FROM round_responses),
-      'premier_participant', (SELECT to_char(min(g.started_at),'YYYY-MM-DD') FROM game_participants p JOIN game_sessions g ON g.id=p.session_id)
+      'premier_participant', (SELECT to_char(min(g.started_at),'YYYY-MM-DD') FROM game_participants p JOIN game_sessions g ON g.id=p.session_id),
+      -- Verdict fin (correct / proche / faux) et devinette "qui a mis quoi" :
+      -- colonnes ajoutées le 28/09/2026, rien avant.
+      'premier_verdict', (SELECT to_char(min(created_at),'YYYY-MM-DD') FROM round_responses WHERE verdict IS NOT NULL)
   )),
 
   -- Une ligne par partie, avec tout ce qui se calcule en jointure.
   'sessions', (SELECT coalesce(json_agg(json_build_object(
       'id', id, 'mode', mode, 'etat', etat, 'debut', debut, 'fin', fin, 'hote', hote,
       'joueurs', joueurs, 'manches', manches, 'repondues', repondues, 'reponses', reponses,
-      'bonnes', bonnes, 'delai_s', delai_s, 'duree_s', duree_s, 'test', test
+      'bonnes', bonnes, 'proches', proches, 'devinettes', devinettes, 'devinettes_justes', devinettes_justes,
+      'delai_s', delai_s, 'duree_s', duree_s, 'test', test
     ) ORDER BY debut), '[]'::json) FROM (
       SELECT g.id,
              coalesce(g.mode,'?') AS mode,
@@ -33,12 +37,17 @@ SELECT json_build_object(
              (SELECT count(DISTINCT r.round_id) FROM round_responses r JOIN game_rounds gr ON gr.id=r.round_id WHERE gr.session_id=g.id)::int AS repondues,
              (SELECT count(*) FROM round_responses r JOIN game_rounds gr ON gr.id=r.round_id WHERE gr.session_id=g.id)::int AS reponses,
              (SELECT count(*) FROM round_responses r JOIN game_rounds gr ON gr.id=r.round_id WHERE gr.session_id=g.id AND r.is_correct)::int AS bonnes,
+             -- "Proche" = le joueur avait le titre OU l'artiste, pas les deux.
+             (SELECT count(*) FROM round_responses r JOIN game_rounds gr ON gr.id=r.round_id WHERE gr.session_id=g.id AND r.verdict='close')::int AS proches,
+             -- Devinette "qui a mis ce morceau" : combien de fois tentée, combien de fois juste.
+             (SELECT count(*) FROM round_responses r JOIN game_rounds gr ON gr.id=r.round_id WHERE gr.session_id=g.id AND r.source_guess IS NOT NULL)::int AS devinettes,
+             (SELECT count(*) FROM round_responses r JOIN game_rounds gr ON gr.id=r.round_id WHERE gr.session_id=g.id AND r.source_correct)::int AS devinettes_justes,
              (SELECT EXTRACT(EPOCH FROM min(r.created_at) - g.started_at)::int FROM round_responses r JOIN game_rounds gr ON gr.id=r.round_id WHERE gr.session_id=g.id) AS delai_s,
              CASE WHEN g.ended_at IS NOT NULL THEN EXTRACT(EPOCH FROM g.ended_at - g.started_at)::int END AS duree_s,
              -- Parties lancees par les personas des scripts E2E (soiree, anticheat...).
-             (u.username LIKE 'e2e\_%' ESCAPE '\' OR u.username IN ('Lea','Max','Megane','Zoe','StreamerHost','Intrus','Tymeo')
+             (u.username LIKE 'e2e\_%' ESCAPE '\' OR u.username IN ('Lea','Max','Megane','Zoe','StreamerHost','Intrus','Tymeo','VerifA','VerifB')
               OR EXISTS (SELECT 1 FROM game_participants p2 JOIN users u2 ON u2.id=p2.user_id
-                         WHERE p2.session_id=g.id AND (u2.username IN ('Lea','Max','Megane','Zoe') OR u2.username LIKE 'e2e\_%' ESCAPE '\'))) AS test
+                         WHERE p2.session_id=g.id AND (u2.username IN ('Lea','Max','Megane','Zoe','VerifA','VerifB') OR u2.username LIKE 'e2e\_%' ESCAPE '\'))) AS test
       FROM game_sessions g LEFT JOIN users u ON u.id=g.host_user_id
       WHERE g.started_at IS NOT NULL) s),
 
@@ -49,12 +58,13 @@ SELECT json_build_object(
   -- Les morceaux : combien de fois joués, combien de fois trouvés. Le vrai
   -- baromètre de difficulté, et ce que personne ne trouve jamais.
   'titres', (SELECT coalesce(json_agg(json_build_object(
-      'titre', titre, 'artiste', artiste, 'joue', joue, 'reponses', reponses, 'bonnes', bonnes
+      'titre', titre, 'artiste', artiste, 'joue', joue, 'reponses', reponses, 'bonnes', bonnes, 'proches', proches
     ) ORDER BY joue DESC, bonnes ASC), '[]'::json) FROM (
       SELECT gr.correct_title AS titre, gr.correct_artist AS artiste,
              count(DISTINCT gr.id)::int AS joue,
              count(r.id)::int AS reponses,
-             count(r.id) FILTER (WHERE r.is_correct)::int AS bonnes
+             count(r.id) FILTER (WHERE r.is_correct)::int AS bonnes,
+             count(r.id) FILTER (WHERE r.verdict='close')::int AS proches
       FROM game_rounds gr LEFT JOIN round_responses r ON r.round_id=gr.id
       WHERE gr.correct_title IS NOT NULL
       GROUP BY 1,2 HAVING count(DISTINCT gr.id) >= 2
@@ -69,7 +79,7 @@ SELECT json_build_object(
       FROM user_stats s JOIN users u ON u.id=s.user_id
       -- Les personas des scripts E2E jouent tous les jours et repondent toujours
       -- faux : sans ce filtre ils trustent le classement.
-      WHERE NOT (u.username LIKE 'e2e\_%' ESCAPE '\' OR u.username IN ('Lea','Max','Megane','Zoe','StreamerHost','Intrus','Tymeo'))
+      WHERE NOT (u.username LIKE 'e2e\_%' ESCAPE '\' OR u.username IN ('Lea','Max','Megane','Zoe','StreamerHost','Intrus','Tymeo','VerifA','VerifB'))
       ORDER BY s.total_games DESC NULLS LAST LIMIT 20) j),
 
   'inscriptions', (SELECT coalesce(json_agg(json_build_object('j', j, 'n', n, 'comptes', comptes) ORDER BY j), '[]'::json) FROM (
