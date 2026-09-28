@@ -52,26 +52,50 @@ SELECT json_build_object(
       'abandon',  count(*) FILTER (WHERE state = 'abandoned')
   ) FROM game_sessions g),
 
-  -- Ou decroche-t-on ? Part des manches reellement jouees avant l'abandon.
-  -- C'est la mesure actionnable : "63 % d'abandon" ne dit pas quoi corriger,
-  -- "ils lachent des la premiere manche" si.
-  'abandon_progression', (SELECT coalesce(json_agg(json_build_object('tranche', tranche, 'n', n) ORDER BY ordre), '[]'::json) FROM (
-      SELECT CASE WHEN pct = 0 THEN 'aucune manche'
-                  WHEN pct <= 25 THEN 'moins du quart'
-                  WHEN pct <= 50 THEN 'jusqu a la moitie'
-                  WHEN pct <= 75 THEN 'jusqu aux trois quarts'
-                  ELSE 'presque au bout' END AS tranche,
-             CASE WHEN pct = 0 THEN 1 WHEN pct <= 25 THEN 2 WHEN pct <= 50 THEN 3
-                  WHEN pct <= 75 THEN 4 ELSE 5 END AS ordre,
-             count(*) AS n
-      FROM (
-        SELECT g.id,
-               round(100.0 * coalesce((SELECT count(DISTINCT r.round_id) FROM round_responses r
-                                        JOIN game_rounds gr ON gr.id = r.round_id
-                                        WHERE gr.session_id = g.id), 0)
-                     / nullif(g.total_rounds, 0)) AS pct
-        FROM game_sessions g WHERE g.state = 'abandoned'
-      ) q WHERE pct IS NOT NULL GROUP BY 1, 2) ap),
+  -- COUVERTURE DES DONNEES. A lire avant tout le reste : les reponses ne sont
+  -- enregistrees que depuis le 04/09/2026, et les participants depuis
+  -- septembre. Tout ce qui precede n'a que son etat, pas son deroule. Sans
+  -- cette precision on conclut "les parties ne demarrent jamais" alors qu'on
+  -- regarde simplement une periode sans instrumentation.
+  'couverture', (SELECT json_build_object(
+      'premiere_reponse', (SELECT to_char(min(created_at),'YYYY-MM-DD') FROM round_responses),
+      'parties_instrumentees', (SELECT count(*) FROM game_sessions g
+          WHERE g.started_at >= (SELECT min(created_at)::date FROM round_responses)),
+      'parties_avant', (SELECT count(*) FROM game_sessions g
+          WHERE g.started_at < (SELECT min(created_at)::date FROM round_responses))
+  )),
+
+  -- DELAI AVANT LA PREMIERE REPONSE. Le temps entre le lancement de la partie
+  -- et la toute premiere reponse d'un joueur. Court, la partie prend ; long ou
+  -- absent, le salon n'accroche pas. Restreint aux parties instrumentees.
+  'demarrage', (SELECT json_build_object(
+      'avec_reponse', count(*) FILTER (WHERE premiere IS NOT NULL),
+      'sans_reponse', count(*) FILTER (WHERE premiere IS NULL),
+      'median_s', coalesce(percentile_disc(0.5) WITHIN GROUP (ORDER BY delai) FILTER (WHERE premiere IS NOT NULL), 0)::int,
+      'min_s', coalesce(min(delai), 0)::int,
+      'max_s', coalesce(max(delai), 0)::int,
+      'tranches', (SELECT coalesce(json_agg(json_build_object('tranche', tr, 'n', n) ORDER BY ordre), '[]'::json) FROM (
+          SELECT CASE WHEN d < 15 THEN 'moins de 15 s'
+                      WHEN d < 30 THEN '15 a 30 s'
+                      WHEN d < 60 THEN '30 a 60 s'
+                      ELSE 'plus d une minute' END AS tr,
+                 CASE WHEN d < 15 THEN 1 WHEN d < 30 THEN 2 WHEN d < 60 THEN 3 ELSE 4 END AS ordre,
+                 count(*) AS n
+          FROM (SELECT EXTRACT(EPOCH FROM min(r.created_at) - g.started_at) AS d
+                FROM game_sessions g
+                JOIN game_rounds gr ON gr.session_id = g.id
+                JOIN round_responses r ON r.round_id = gr.id
+                GROUP BY g.id, g.started_at) x
+          WHERE d IS NOT NULL GROUP BY 1, 2) y)
+  ) FROM (
+      SELECT g.id,
+             (SELECT min(r.created_at) FROM game_rounds gr JOIN round_responses r ON r.round_id = gr.id
+               WHERE gr.session_id = g.id) AS premiere,
+             EXTRACT(EPOCH FROM (SELECT min(r.created_at) FROM game_rounds gr JOIN round_responses r ON r.round_id = gr.id
+               WHERE gr.session_id = g.id) - g.started_at) AS delai
+      FROM game_sessions g
+      WHERE g.started_at >= (SELECT min(created_at)::date FROM round_responses)
+  ) z),
 
   'par_jour', (SELECT coalesce(json_agg(json_build_object('j', j, 'n', n) ORDER BY j), '[]'::json) FROM (
       SELECT started_at::date AS j, count(*) AS n FROM game_sessions
