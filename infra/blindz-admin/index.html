@@ -9,141 +9,165 @@
 <style>
   :root {
     color-scheme: dark;
-    --cream: #f4ecdb; --verm: #cc4830; --amber: #d88418; --sage: #789084; --blue: #486090;
-    --bg: #17100a; --surface: #211710; --surface-2: #1a120c; --line: #35271a; --line-2: #4a3726;
-    --txt: #f4ecdb; --txt-2: #c3b49b; --txt-3: #8d7c64;
+    --cream:#f4ecdb; --verm:#cc4830; --amber:#d88418; --sage:#789084; --blue:#486090;
+    --bg:#15100b; --surface:#1e1610; --surface-2:#191209; --line:#2f241a; --line-2:#453626;
+    --txt:#f4ecdb; --txt-2:#bfb09a; --txt-3:#897b66;
+    --ok:#5fbf8c; --ko:#e0796a;
   }
-  * { box-sizing: border-box; }
+  * { box-sizing:border-box; }
+  /* Obligatoire : la regle du navigateur pour [hidden] a une specificite plus
+     faible que .cols { display:grid }, donc la vue masquee restait affichee. */
+  [hidden] { display:none !important; }
   body {
-    margin: 0; background: var(--bg); color: var(--txt);
-    font-family: "IBM Plex Sans", system-ui, sans-serif; font-size: 15px; line-height: 1.55;
-    padding: max(env(safe-area-inset-top), 0px) 0 max(env(safe-area-inset-bottom), 0px);
-    -webkit-font-smoothing: antialiased;
+    margin:0; background:var(--bg); color:var(--txt);
+    font-family:"IBM Plex Sans",system-ui,sans-serif; font-size:14.5px; line-height:1.5;
+    padding:max(env(safe-area-inset-top),0px) 0 max(env(safe-area-inset-bottom),0px);
+    -webkit-font-smoothing:antialiased;
   }
-  .wrap { max-width: 1400px; margin: 0 auto; padding-inline: 18px; padding-block: 22px 60px; }
-  h1, h2 { font-family: Archivo, sans-serif; margin: 0; letter-spacing: -0.015em; text-wrap: balance; }
-  h1 { font-size: clamp(1.5rem, 4.5vw, 2rem); font-weight: 700; }
-  h2 { font-size: 1.05rem; font-weight: 600; }
-  .mono { font-family: "IBM Plex Mono", monospace; }
-  .num { font-variant-numeric: tabular-nums; }
+  .wrap { max-width:1440px; margin:0 auto; padding-inline:18px; padding-block:20px 60px; }
+  h1,h2,h3 { font-family:Archivo,sans-serif; margin:0; letter-spacing:-.015em; text-wrap:balance; }
+  h1 { font-size:clamp(1.4rem,4vw,1.9rem); font-weight:700; }
+  h2 { font-size:.95rem; font-weight:600; }
+  h3 { font-size:.85rem; font-weight:600; }
+  .mono { font-family:"IBM Plex Mono",monospace; }
+  .num { font-variant-numeric:tabular-nums; }
 
-  .bar4 { display: flex; height: 4px; border-radius: 2px; overflow: hidden; margin-bottom: 18px; }
-  .bar4 i { flex: 1; }
+  .bar4 { display:flex; height:3px; border-radius:2px; overflow:hidden; margin-bottom:16px; }
+  .bar4 i { flex:1; }
 
-  header { display: flex; align-items: center; gap: 13px; flex-wrap: wrap; margin-bottom: 16px; }
-  .logo { width: 42px; height: 42px; border-radius: 9px; background: var(--cream); display: grid; place-items: center; flex: none; }
-  .logo img { width: 31px; height: 31px; object-fit: contain; display: block; }
-  .htxt { flex: 1 1 200px; }
-  .maj { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--txt-3); text-transform: uppercase; letter-spacing: .1em; }
+  header { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
+  .logo { width:38px; height:38px; border-radius:9px; background:var(--cream); display:grid; place-items:center; flex:none; }
+  .logo img { width:28px; height:28px; object-fit:contain; display:block; }
+  .htxt { flex:1 1 200px; }
+  .maj { font-family:"IBM Plex Mono",monospace; font-size:10.5px; color:var(--txt-3); text-transform:uppercase; letter-spacing:.1em; }
 
-  /* Onglets */
-  nav.onglets { display: flex; gap: 6px; border-bottom: 1px solid var(--line); margin-bottom: 22px; flex-wrap: wrap; }
+  nav.onglets { display:flex; gap:4px; border-bottom:1px solid var(--line); margin-bottom:20px; flex-wrap:wrap; }
   nav.onglets button {
-    background: none; border: 0; border-bottom: 2px solid transparent; color: var(--txt-3);
-    font: inherit; font-size: 14px; font-weight: 500; padding: 9px 14px; cursor: pointer; margin-bottom: -1px;
+    background:none; border:0; border-bottom:2px solid transparent; color:var(--txt-3);
+    font:inherit; font-size:13.5px; font-weight:500; padding:8px 13px; cursor:pointer; margin-bottom:-1px;
   }
-  nav.onglets button:hover { color: var(--txt-2); }
-  nav.onglets button[aria-selected="true"] { color: var(--amber); border-bottom-color: var(--amber); }
+  nav.onglets button:hover { color:var(--txt-2); }
+  nav.onglets button[aria-selected="true"] { color:var(--amber); border-bottom-color:var(--amber); }
+  nav.sous { border-bottom:0; margin-bottom:14px; gap:2px; }
+  nav.sous button { font-size:12.5px; padding:5px 11px; border:1px solid var(--line-2); border-radius:6px; margin:0; }
+  nav.sous button[aria-selected="true"] { background:#2f2213; color:var(--amber); border-color:#6b5223; }
 
-  /* ---- Vue d'ensemble ---- */
-  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(138px, 1fr)); gap: 10px; }
-  .tile { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 13px 14px; }
-  .tile .v { font-family: Archivo, sans-serif; font-size: 1.6rem; font-weight: 700; line-height: 1.05; font-variant-numeric: tabular-nums; }
-  .tile .k { font-size: 12.5px; color: var(--txt-2); margin-top: 3px; }
-  .tile.hi .v { color: var(--amber); }
+  /* ---------- KPI ---------- */
+  .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(178px,1fr)); gap:10px; }
+  .kpi { background:var(--surface); border:1px solid var(--line); border-radius:11px; padding:14px 15px; }
+  .kpi .lib { font-size:12px; color:var(--txt-3); display:flex; justify-content:space-between; align-items:center; gap:6px; }
+  .kpi .v { font-family:Archivo,sans-serif; font-size:1.75rem; font-weight:700; line-height:1.1; font-variant-numeric:tabular-nums; margin-top:4px; }
+  .kpi .cmp { font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--txt-3); margin-top:3px; }
+  .delta { font-family:"IBM Plex Mono",monospace; font-size:11px; font-weight:600; padding:1px 6px; border-radius:4px; white-space:nowrap; }
+  .delta.up { background:#14301f; color:var(--ok); }
+  .delta.down { background:#331a15; color:var(--ko); }
+  .delta.flat { background:#2a2016; color:var(--txt-3); }
 
-  section.bloc { margin-top: 32px; }
-  .shead { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 11px; flex-wrap: wrap; }
-  .shead .sub { font-size: 12.5px; color: var(--txt-3); }
-  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
-  .panel.tight { padding: 0; overflow: hidden; }
-  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
-  .grid2 > * { min-width: 0; }
-  svg.chart { display: block; width: 100%; height: auto; }
+  /* ---------- panneaux ---------- */
+  .bloc { margin-top:26px; }
+  .shead { display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-bottom:9px; flex-wrap:wrap; }
+  .shead .sub { font-size:12px; color:var(--txt-3); }
+  .panel { background:var(--surface); border:1px solid var(--line); border-radius:11px; padding:15px; }
+  .panel.tight { padding:0; overflow:hidden; }
+  .g2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(290px,1fr)); gap:11px; }
+  .g3 { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:11px; }
+  .g2>*,.g3>* { min-width:0; }
+  svg.chart { display:block; width:100%; height:auto; }
 
-  table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
-  th, td { text-align: left; padding: 9px 13px; border-bottom: 1px solid var(--line); }
-  thead th { font-family: "IBM Plex Mono", monospace; font-size: 10px; text-transform: uppercase;
-    letter-spacing: .1em; color: var(--txt-3); background: var(--surface-2); white-space: nowrap; }
-  tbody tr:last-child td { border-bottom: 0; }
-  td.n { font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .scroll { overflow-x: auto; }
-  table.min { min-width: 560px; }
+  .constat { background:linear-gradient(180deg,#33201a,#2a1a14); border:1px solid #6b3325; border-left:3px solid var(--verm);
+    border-radius:11px; padding:15px 17px; }
+  .constat .t { font-family:Archivo,sans-serif; font-weight:600; font-size:.95rem; color:#f0a08c; margin-bottom:5px; }
+  .constat p { margin:0; font-size:13.5px; color:var(--txt-2); }
+  .constat b { color:var(--txt); }
 
-  .pill { display: inline-block; font-family: "IBM Plex Mono", monospace; font-size: 10px; font-weight: 600;
-    text-transform: uppercase; letter-spacing: .07em; padding: 2px 7px; border-radius: 4px;
-    background: #2c1f14; color: var(--txt-2); border: 1px solid var(--line-2); white-space: nowrap; }
-  .pill.v { background: #3a1d15; color: #f0947f; border-color: #6b3325; }
-  .pill.a { background: #3a2a12; color: #e8ab5c; border-color: #6d4d1c; }
-  .pill.b { background: #1b2635; color: #92aed6; border-color: #33486b; }
-  .pill.s { background: #1e2a26; color: #9cb5aa; border-color: #37504a; }
-  .pill.fin { background: #172a20; color: #6fc596; border-color: #2c5a41; }
-  .pill.abd { background: #2e1a16; color: #cf7c6a; border-color: #5c3128; }
-  .pill.enc { background: #2e2413; color: #d9a84f; border-color: #5c4a20; }
+  /* listes classees, facon outil d'analyse */
+  .rang { display:grid; gap:2px; }
+  .rang .l { position:relative; display:flex; justify-content:space-between; align-items:center; gap:10px;
+    padding:7px 10px; border-radius:6px; font-size:13px; overflow:hidden; }
+  .rang .l .fond { position:absolute; inset:0 auto 0 0; border-radius:6px; opacity:.24; }
+  .rang .l span { position:relative; }
+  .rang .l .d { font-family:"IBM Plex Mono",monospace; color:var(--txt-2); font-variant-numeric:tabular-nums; }
+  .rang .l .pc { color:var(--txt-3); font-size:11.5px; margin-left:7px; }
 
-  .retour { border: 1px solid var(--line); border-left: 3px solid var(--amber); border-radius: 8px;
-    background: var(--surface); padding: 13px 15px; margin-bottom: 10px; }
-  .retour .meta { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--txt-3); margin-bottom: 5px; }
-  .vide { color: var(--txt-3); font-size: 14px; padding: 8px 0; }
+  table { border-collapse:collapse; width:100%; font-size:13px; }
+  th,td { text-align:left; padding:8px 12px; border-bottom:1px solid var(--line); }
+  thead th { font-family:"IBM Plex Mono",monospace; font-size:10px; text-transform:uppercase;
+    letter-spacing:.1em; color:var(--txt-3); background:var(--surface-2); white-space:nowrap; }
+  tbody tr:last-child td { border-bottom:0; }
+  td.n { font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .scroll { overflow-x:auto; }
+  table.min { min-width:540px; }
 
-  /* ---- Base de donnees ---- */
-  .cols { display: grid; grid-template-columns: 248px minmax(0, 1fr); gap: 14px; align-items: start; }
-  /* Sans min-width 0, une colonne de grille refuse de passer sous la largeur de
-     son contenu : la table large poussait toute la page en debordement. */
-  .cols > * { min-width: 0; }
-  .zone { min-width: 0; }
-  @media (max-width: 860px) { .cols { grid-template-columns: 1fr; } }
-  .liste { max-height: 70vh; overflow: auto; }
-  .tbtn {
-    display: flex; justify-content: space-between; gap: 8px; width: 100%; text-align: left;
-    background: none; border: 0; border-bottom: 1px solid var(--line); color: var(--txt);
-    padding: 9px 13px; cursor: pointer; font: inherit; font-size: 13px;
-  }
-  .tbtn:hover { background: var(--surface-2); }
-  .tbtn[aria-current="true"] { background: #2c1f14; color: var(--amber); box-shadow: inset 3px 0 0 var(--amber); }
-  .tbtn span.n { font-family: "IBM Plex Mono", monospace; font-size: 11.5px; color: var(--txt-3); }
-  .tbtn:last-child { border-bottom: 0; }
-  .zone { padding: 14px; }
-  .titre { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
-  .titre h2 { font-size: 1.05rem; }
-  .titre .meta { font-family: "IBM Plex Mono", monospace; font-size: 11.5px; color: var(--txt-3); }
-  textarea {
-    width: 100%; min-height: 74px; background: var(--surface-2); color: var(--txt);
-    border: 1px solid var(--line-2); border-radius: 8px; padding: 10px 12px;
-    font-family: "IBM Plex Mono", monospace; font-size: 13px; resize: vertical;
-  }
-  .actions { display: flex; gap: 9px; align-items: center; margin-top: 9px; flex-wrap: wrap; }
-  button.go { background: var(--amber); color: #2a1c0a; border: 0; border-radius: 7px; padding: 8px 15px;
-    font: inherit; font-weight: 600; font-size: 13px; cursor: pointer; }
-  button.go:hover { filter: brightness(1.08); }
-  button.sec { background: none; color: var(--txt-2); border: 1px solid var(--line-2); border-radius: 7px;
-    padding: 8px 13px; font: inherit; font-size: 13px; cursor: pointer; }
-  button.sec:hover { border-color: var(--txt-3); color: var(--txt); }
-  button.sec:disabled { opacity: .4; cursor: default; }
-  .aide { font-size: 12px; color: var(--txt-3); }
-  .tablewrap { overflow: auto; max-height: 64vh; border: 1px solid var(--line); border-radius: 8px; margin-top: 12px; }
-  .tablewrap table { font-size: 12.5px; }
-  .tablewrap th, .tablewrap td { padding: 7px 11px; white-space: nowrap; max-width: 380px; overflow: hidden; text-overflow: ellipsis; }
-  .tablewrap thead th { position: sticky; top: 0; z-index: 1; cursor: pointer; }
-  .tablewrap thead th:hover { color: var(--amber); }
-  .tablewrap thead th .t { font-weight: 400; text-transform: none; letter-spacing: 0; color: #6d6050; margin-left: 5px; }
-  .tablewrap tbody tr:nth-child(odd) { background: rgba(255,255,255,.015); }
-  .tablewrap tbody tr:hover { background: #2a1e14; }
-  td.nul { color: #6d6050; font-style: italic; }
-  .pager { display: flex; gap: 9px; align-items: center; margin-top: 10px; font-size: 12.5px; color: var(--txt-2); flex-wrap: wrap; }
-  .err { background: #2e1a16; border: 1px solid #5c3128; color: #e8a293; border-radius: 8px; padding: 11px 13px; font-size: 13px; margin-top: 12px; }
+  .pill { display:inline-block; font-family:"IBM Plex Mono",monospace; font-size:9.5px; font-weight:600;
+    text-transform:uppercase; letter-spacing:.07em; padding:2px 6px; border-radius:4px;
+    background:#2c1f14; color:var(--txt-2); border:1px solid var(--line-2); white-space:nowrap; }
+  .pill.v { background:#3a1d15; color:#f0947f; border-color:#6b3325; }
+  .pill.a { background:#3a2a12; color:#e8ab5c; border-color:#6d4d1c; }
+  .pill.b { background:#1b2635; color:#92aed6; border-color:#33486b; }
+  .pill.s { background:#1e2a26; color:#9cb5aa; border-color:#37504a; }
+  .pill.fin { background:#172a20; color:var(--ok); border-color:#2c5a41; }
+  .pill.abd { background:#2e1a16; color:var(--ko); border-color:#5c3128; }
+  .pill.enc { background:#2e2413; color:#d9a84f; border-color:#5c4a20; }
+  .pill.pk { background:#2f2213; color:var(--amber); border-color:#6b5223; }
+  .pill.fk { background:#1b2635; color:#92aed6; border-color:#33486b; }
 
-  footer { margin-top: 42px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--txt-3); }
-  a { color: var(--amber); }
-  :focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+  .retour { border:1px solid var(--line); border-left:3px solid var(--amber); border-radius:8px;
+    background:var(--surface); padding:12px 14px; margin-bottom:9px; }
+  .retour .meta { font-family:"IBM Plex Mono",monospace; font-size:10.5px; color:var(--txt-3); margin-bottom:4px; }
+  .vide { color:var(--txt-3); font-size:13.5px; padding:8px 0; }
+
+  /* ---------- base ---------- */
+  .cols { display:grid; grid-template-columns:240px minmax(0,1fr); gap:12px; align-items:start; }
+  @media (max-width:860px) { .cols { grid-template-columns:1fr; } }
+  .cols>* { min-width:0; }
+  .liste { max-height:70vh; overflow:auto; }
+  .tbtn { display:flex; justify-content:space-between; gap:8px; width:100%; text-align:left;
+    background:none; border:0; border-bottom:1px solid var(--line); color:var(--txt);
+    padding:8px 12px; cursor:pointer; font:inherit; font-size:12.5px; }
+  .tbtn:hover { background:var(--surface-2); }
+  .tbtn[aria-current="true"] { background:#2f2213; color:var(--amber); box-shadow:inset 3px 0 0 var(--amber); }
+  .tbtn .n { font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--txt-3); }
+  .tbtn:last-child { border-bottom:0; }
+  .zone { padding:13px; min-width:0; }
+  .titre { display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:9px; }
+  .titre .meta { font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--txt-3); }
+  textarea { width:100%; min-height:70px; background:var(--surface-2); color:var(--txt);
+    border:1px solid var(--line-2); border-radius:8px; padding:10px 12px;
+    font-family:"IBM Plex Mono",monospace; font-size:12.5px; resize:vertical; }
+  .actions { display:flex; gap:8px; align-items:center; margin-top:8px; flex-wrap:wrap; }
+  button.go { background:var(--amber); color:#2a1c0a; border:0; border-radius:7px; padding:7px 14px;
+    font:inherit; font-weight:600; font-size:12.5px; cursor:pointer; }
+  button.go:hover { filter:brightness(1.08); }
+  button.sec { background:none; color:var(--txt-2); border:1px solid var(--line-2); border-radius:7px;
+    padding:7px 12px; font:inherit; font-size:12.5px; cursor:pointer; }
+  button.sec:hover { border-color:var(--txt-3); color:var(--txt); }
+  button.sec:disabled { opacity:.4; cursor:default; }
+  .aide { font-size:11.5px; color:var(--txt-3); }
+  .tablewrap { overflow:auto; max-height:62vh; border:1px solid var(--line); border-radius:8px; margin-top:11px; }
+  .tablewrap table { font-size:12px; }
+  .tablewrap th,.tablewrap td { padding:6px 10px; white-space:nowrap; max-width:360px; overflow:hidden; text-overflow:ellipsis; }
+  .tablewrap thead th { position:sticky; top:0; z-index:1; cursor:pointer; }
+  .tablewrap thead th:hover { color:var(--amber); }
+  .tablewrap thead th .t { font-weight:400; text-transform:none; letter-spacing:0; color:#6d6050; margin-left:5px; }
+  .tablewrap tbody tr:nth-child(odd) { background:rgba(255,255,255,.015); }
+  .tablewrap tbody tr:hover { background:#2a1e14; }
+  td.nul { color:#6d6050; font-style:italic; }
+  .pager { display:flex; gap:8px; align-items:center; margin-top:9px; font-size:12px; color:var(--txt-2); flex-wrap:wrap; }
+  .err { background:#2e1a16; border:1px solid #5c3128; color:#e8a293; border-radius:8px; padding:10px 12px; font-size:12.5px; margin-top:11px; }
+
+  .champs { display:grid; gap:1px; background:var(--line); border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+  .champ { display:grid; grid-template-columns:1fr auto auto; gap:8px; align-items:center;
+    background:var(--surface); padding:6px 11px; font-size:12.5px; }
+  .champ .ty { font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--txt-3); }
+
+  footer { margin-top:38px; padding-top:14px; border-top:1px solid var(--line); font-size:12px; color:var(--txt-3); }
+  a { color:var(--amber); }
+  :focus-visible { outline:2px solid var(--amber); outline-offset:2px; }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div class="bar4">
-    <i style="background:var(--verm)"></i><i style="background:var(--amber)"></i>
-    <i style="background:var(--sage)"></i><i style="background:var(--blue)"></i>
-  </div>
+  <div class="bar4"><i style="background:var(--verm)"></i><i style="background:var(--amber)"></i><i style="background:var(--sage)"></i><i style="background:var(--blue)"></i></div>
 
   <header>
     <span class="logo"><img src="logo.png" alt=""></span>
@@ -154,17 +178,20 @@
   </header>
 
   <nav class="onglets" role="tablist">
-    <button role="tab" id="t-stats" aria-selected="true" aria-controls="v-stats">Vue d'ensemble</button>
-    <button role="tab" id="t-base" aria-selected="false" aria-controls="v-base">Base de données</button>
+    <button role="tab" id="t-vue" aria-selected="true">Vue d'ensemble</button>
+    <button role="tab" id="t-base" aria-selected="false">Base de données</button>
   </nav>
 
-  <div id="v-stats" role="tabpanel" aria-labelledby="t-stats">
-    <p class="vide">Chargement des données...</p>
-  </div>
+  <div id="v-vue"><p class="vide">Chargement...</p></div>
 
-  <div id="v-base" role="tabpanel" aria-labelledby="t-base" hidden>
-    <div class="cols">
-      <div class="panel liste" id="tables"><p class="vide" style="padding:0 13px">Chargement...</p></div>
+  <div id="v-base" hidden>
+    <nav class="onglets sous" role="tablist">
+      <button role="tab" id="s-donnees" aria-selected="true">Données</button>
+      <button role="tab" id="s-schema" aria-selected="false">Schéma</button>
+    </nav>
+
+    <div id="v-donnees" class="cols">
+      <div class="panel liste" id="tables"><p class="vide" style="padding:0 12px">Chargement...</p></div>
       <div class="panel">
         <div class="zone">
           <div class="titre"><h2 id="dbtitre">Requête</h2><span class="meta" id="dbmeta"></span></div>
@@ -172,16 +199,21 @@
           <div class="actions">
             <button class="go" id="run">Exécuter</button>
             <button class="sec" id="clear">Effacer</button>
-            <span class="aide">Lecture seule. Une instruction, 500 lignes au maximum. Ctrl+Entrée pour lancer.</span>
+            <span class="aide">Lecture seule. Une instruction, 500 lignes. Ctrl+Entrée.</span>
           </div>
           <div id="dbsortie"></div>
         </div>
       </div>
     </div>
+
+    <div id="v-schema" hidden class="cols">
+      <div class="panel liste" id="stables"><p class="vide" style="padding:0 12px">Chargement...</p></div>
+      <div class="panel"><div class="zone" id="ssortie"><p class="vide">Choisis une table à gauche.</p></div></div>
+    </div>
   </div>
 
   <footer>
-    Lecture seule sur la base de production. Statistiques régénérées toutes les heures, base consultée en direct.
+    Lecture seule sur la base de production. Statistiques régénérées toutes les heures, base et schéma consultés en direct.
     Page privée, non indexée. <a href="https://blindz.app" target="_blank" rel="noopener">blindz.app</a>
   </footer>
 </div>
@@ -189,178 +221,264 @@
 <script>
 const $ = (id) => document.getElementById(id);
 const frag = (h) => { const t = document.createElement("template"); t.innerHTML = h.trim(); return t.content; };
-const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
 const nb = (n) => Number(n ?? 0).toLocaleString("fr-FR");
-const COUL = { verm: "#cc4830", amber: "#d88418", sage: "#789084", blue: "#486090" };
+const C = { verm:"#cc4830", amber:"#d88418", sage:"#789084", blue:"#486090", ok:"#5fbf8c", ko:"#e0796a" };
 
-/* ============================ onglets ============================ */
-function montrer(nom) {
-  const stats = nom !== "base";
-  $("v-stats").hidden = !stats;
-  $("v-base").hidden = stats;
-  $("t-stats").setAttribute("aria-selected", String(stats));
-  $("t-base").setAttribute("aria-selected", String(!stats));
-  history.replaceState(null, "", stats ? "#vue" : "#base");
-  if (!stats) chargerTables();
+/* ============================== onglets ============================== */
+function vue(nom) {
+  const v = nom !== "base";
+  $("v-vue").hidden = !v; $("v-base").hidden = v;
+  $("t-vue").setAttribute("aria-selected", String(v));
+  $("t-base").setAttribute("aria-selected", String(!v));
+  history.replaceState(null, "", v ? "#vue" : "#base");
+  if (!v) chargerTables();
 }
-$("t-stats").onclick = () => montrer("vue");
-$("t-base").onclick = () => montrer("base");
+$("t-vue").onclick = () => vue("vue");
+$("t-base").onclick = () => vue("base");
 
-/* ========================= vue d'ensemble ========================= */
-const modePill = (m) => ({ solo: "s", friends: "b", event: "v", streamer: "a", challenge: "a" }[m] || "");
-const etatPill = (e) => ({ finished: "fin", abandoned: "abd", in_progress: "enc", playing: "enc" }[e] || "");
-const etatMot = (e) => ({ finished: "terminée", abandoned: "abandonnée", in_progress: "en cours", playing: "en cours" }[e] || e);
+function sousVue(nom) {
+  const d = nom !== "schema";
+  $("v-donnees").hidden = !d; $("v-schema").hidden = d;
+  $("s-donnees").setAttribute("aria-selected", String(d));
+  $("s-schema").setAttribute("aria-selected", String(!d));
+  if (!d) chargerSchema();
+}
+$("s-donnees").onclick = () => sousVue("donnees");
+$("s-schema").onclick = () => sousVue("schema");
 
-function courbe(donnees) {
+/* ========================== briques graphiques ========================== */
+function delta(v, avant) {
+  if (!avant) return v ? '<span class="delta up">nouveau</span>' : '<span class="delta flat">pas de repère</span>';
+  const p = Math.round((v - avant) / avant * 100);
+  const cl = p > 0 ? "up" : p < 0 ? "down" : "flat";
+  return `<span class="delta ${cl}">${p > 0 ? "+" : ""}${p} %</span>`;
+}
+
+function serie(donnees) {
   if (!donnees.length) return '<p class="vide">Aucune partie sur la période.</p>';
-  const W = 900, H = 200, P = { t: 14, r: 12, b: 26, l: 34 };
+  const W = 900, H = 210, P = { t:16, r:14, b:28, l:36 };
   const max = Math.max(...donnees.map(d => d.n));
-  const t0 = new Date(donnees[0].j).getTime(), t1 = new Date(donnees[donnees.length - 1].j).getTime();
+  const t0 = new Date(donnees[0].j).getTime(), t1 = new Date(donnees.at(-1).j).getTime();
   const span = Math.max(t1 - t0, 1);
   const x = (j) => P.l + (new Date(j).getTime() - t0) / span * (W - P.l - P.r);
   const y = (n) => H - P.b - (n / max) * (H - P.t - P.b);
   const pts = donnees.map(d => `${x(d.j).toFixed(1)},${y(d.n).toFixed(1)}`).join(" ");
-  const aire = `${P.l},${H - P.b} ${pts} ${x(donnees[donnees.length - 1].j).toFixed(1)},${H - P.b}`;
-  const ticks = [0, Math.round(max / 2), max].filter((v, i, a) => a.indexOf(v) === i);
+  const ticks = [...new Set([0, Math.round(max / 2), max])];
   return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Parties par jour">
-    ${ticks.map(v => `<line x1="${P.l}" x2="${W - P.r}" y1="${y(v)}" y2="${y(v)}" stroke="#35271a"/>
-      <text x="${P.l - 7}" y="${y(v) + 4}" text-anchor="end" font-family="IBM Plex Mono" font-size="10" fill="#8d7c64">${v}</text>`).join("")}
-    <polygon points="${aire}" fill="${COUL.amber}" opacity="0.16"/>
-    <polyline points="${pts}" fill="none" stroke="${COUL.amber}" stroke-width="2" stroke-linejoin="round"/>
-    ${donnees.filter(d => d.n === max).map(d => `<circle cx="${x(d.j)}" cy="${y(d.n)}" r="4" fill="${COUL.amber}"/>
-      <text x="${x(d.j)}" y="${y(d.n) - 9}" text-anchor="middle" font-family="IBM Plex Mono" font-size="10" fill="${COUL.amber}">${d.n}</text>`).join("")}
-    <text x="${P.l}" y="${H - 8}" font-family="IBM Plex Mono" font-size="10" fill="#8d7c64">${donnees[0].j}</text>
-    <text x="${W - P.r}" y="${H - 8}" text-anchor="end" font-family="IBM Plex Mono" font-size="10" fill="#8d7c64">${donnees[donnees.length - 1].j}</text>
+    ${ticks.map(v => `<line x1="${P.l}" x2="${W-P.r}" y1="${y(v)}" y2="${y(v)}" stroke="#2f241a"/>
+      <text x="${P.l-7}" y="${y(v)+4}" text-anchor="end" font-family="IBM Plex Mono" font-size="10" fill="#897b66">${v}</text>`).join("")}
+    <polygon points="${P.l},${H-P.b} ${pts} ${x(donnees.at(-1).j).toFixed(1)},${H-P.b}" fill="${C.amber}" opacity=".15"/>
+    <polyline points="${pts}" fill="none" stroke="${C.amber}" stroke-width="2" stroke-linejoin="round"/>
+    ${donnees.filter(d => d.n === max).map(d => `<circle cx="${x(d.j)}" cy="${y(d.n)}" r="3.5" fill="${C.amber}"/>
+      <text x="${x(d.j)}" y="${y(d.n)-9}" text-anchor="middle" font-family="IBM Plex Mono" font-size="10" fill="${C.amber}">${d.n}</text>`).join("")}
+    <text x="${P.l}" y="${H-8}" font-family="IBM Plex Mono" font-size="10" fill="#897b66">${donnees[0].j}</text>
+    <text x="${W-P.r}" y="${H-8}" text-anchor="end" font-family="IBM Plex Mono" font-size="10" fill="#897b66">${donnees.at(-1).j}</text>
   </svg>`;
 }
 
-function barres(lignes, couleur) {
+/** Liste classée avec barre de fond et part en pourcentage.
+ *  `base` force le dénominateur : dans un entonnoir, chaque étape se lit par
+ *  rapport à la première, pas par rapport à la somme des étapes. */
+function rang(lignes, couleur, base) {
   if (!lignes.length) return '<p class="vide">Rien à afficher.</p>';
+  const tot = base || lignes.reduce((s, l) => s + l.n, 0);
   const max = Math.max(...lignes.map(l => l.n));
-  return `<div style="display:grid;gap:9px">${lignes.map(l => `
-    <div>
-      <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px">
-        <span>${esc(l.label)}</span><span class="mono num" style="color:var(--txt-2)">${nb(l.n)}</span>
-      </div>
-      <div style="height:8px;background:#2c1f14;border-radius:4px;overflow:hidden">
-        <div style="height:100%;width:${(l.n / max * 100).toFixed(1)}%;background:${couleur};border-radius:4px"></div>
-      </div>
+  return `<div class="rang">${lignes.map(l => `
+    <div class="l">
+      <span class="fond" style="width:${(l.n/max*100).toFixed(1)}%;background:${couleur}"></span>
+      <span>${esc(l.label)}</span>
+      <span class="d">${nb(l.n)}<span class="pc">${tot ? Math.round(l.n/tot*100) : 0} %</span></span>
     </div>`).join("")}</div>`;
 }
 
-function anneau(pourcent, couleur, libelle) {
-  const r = 46, c = 2 * Math.PI * r;
-  return `<svg class="chart" viewBox="0 0 130 130" style="max-width:150px;margin:0 auto" role="img" aria-label="${esc(libelle)} ${pourcent}%">
-    <circle cx="65" cy="65" r="${r}" fill="none" stroke="#2c1f14" stroke-width="13"/>
-    <circle cx="65" cy="65" r="${r}" fill="none" stroke="${couleur}" stroke-width="13" stroke-linecap="round"
-      stroke-dasharray="${(c * pourcent / 100).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 65 65)"/>
-    <text x="65" y="63" text-anchor="middle" font-family="Archivo" font-size="25" font-weight="700" fill="#f4ecdb">${pourcent}%</text>
-    <text x="65" y="82" text-anchor="middle" font-family="IBM Plex Mono" font-size="9.5" fill="#8d7c64">${esc(libelle)}</text>
+/** Bandeau horaire : une colonne par heure, intensité selon le volume. */
+function bandeau(donnees, cles, etiquette, couleur) {
+  const m = new Map(donnees.map(d => [d[cles], d.n]));
+  const max = Math.max(1, ...donnees.map(d => d.n));
+  const items = etiquette.map((lib, i) => ({ lib, n: m.get(etiquette.idx ? etiquette.idx[i] : i) || 0 }));
+  return `<div style="display:grid;grid-template-columns:repeat(${items.length},1fr);gap:2px">
+    ${items.map(it => `<div title="${esc(it.lib)} : ${it.n}" style="text-align:center">
+      <div style="height:46px;display:flex;align-items:flex-end">
+        <div style="width:100%;height:${Math.max(3, it.n/max*100)}%;background:${couleur};opacity:${it.n ? .35 + .65*it.n/max : .12};border-radius:3px 3px 0 0"></div>
+      </div>
+      <div class="mono" style="font-size:9px;color:var(--txt-3);margin-top:3px">${esc(it.lib)}</div>
+    </div>`).join("")}
+  </div>`;
+}
+
+function anneau(pc, couleur, lib) {
+  const r = 44, c = 2 * Math.PI * r;
+  return `<svg class="chart" viewBox="0 0 126 126" style="max-width:140px;margin:0 auto" role="img" aria-label="${esc(lib)} ${pc}%">
+    <circle cx="63" cy="63" r="${r}" fill="none" stroke="#2c1f14" stroke-width="12"/>
+    <circle cx="63" cy="63" r="${r}" fill="none" stroke="${couleur}" stroke-width="12" stroke-linecap="round"
+      stroke-dasharray="${(c*pc/100).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 63 63)"/>
+    <text x="63" y="61" text-anchor="middle" font-family="Archivo" font-size="24" font-weight="700" fill="#f4ecdb">${pc}%</text>
+    <text x="63" y="79" text-anchor="middle" font-family="IBM Plex Mono" font-size="9" fill="#897b66">${esc(lib)}</text>
   </svg>`;
 }
 
+const modePill = (m) => ({ solo:"s", friends:"b", event:"v", streamer:"a", challenge:"a" }[m] || "");
+const etatPill = (e) => ({ finished:"fin", abandoned:"abd", in_progress:"enc", playing:"enc" }[e] || "");
+const etatMot = (e) => ({ finished:"terminée", abandoned:"abandonnée", in_progress:"en cours", playing:"en cours" }[e] || e);
+
+/* ============================ vue d'ensemble ============================ */
 fetch("data.json?t=" + Date.now())
   .then(r => { if (!r.ok) throw new Error("data.json introuvable (" + r.status + ")"); return r.json(); })
   .then(d => {
     $("maj").textContent = "Données du " + d.genere_le.replace("T", " à ");
-    const r = d.resume, q = d.reponses_qualite;
+    const k = d.kpi, t = d.totaux, q = d.reponses_qualite, e = d.entonnoir;
     const taux = q.total ? Math.round(q.correctes / q.total * 100) : 0;
+    const pcFin = e.creees ? Math.round(e.finies / e.creees * 100) : 0;
+    const zero = (d.abandon_progression.find(x => x.tranche === "aucune manche") || { n: 0 }).n;
+    const pcZero = e.abandon ? Math.round(zero / e.abandon * 100) : 0;
+
+    const kpi = (lib, o, suffixe = "") => `
+      <div class="kpi">
+        <div class="lib">${lib} ${delta(o.valeur, o.avant)}</div>
+        <div class="v num">${nb(o.valeur)}${suffixe}</div>
+        <div class="cmp">30 jours avant : ${nb(o.avant)}${suffixe}</div>
+      </div>`;
+
     const html = `
-      <div class="tiles">
-        <div class="tile hi"><div class="v num">${nb(r.parties)}</div><div class="k">parties jouées</div></div>
-        <div class="tile"><div class="v num">${nb(r.parties_30j)}</div><div class="k">sur 30 jours</div></div>
-        <div class="tile"><div class="v num">${nb(r.parties_7j)}</div><div class="k">sur 7 jours</div></div>
-        <div class="tile"><div class="v num">${nb(r.jour_record)}</div><div class="k">record en une journée</div></div>
-        <div class="tile"><div class="v num">${nb(r.joueurs)}</div><div class="k">joueurs, dont ${nb(r.comptes)} avec un compte</div></div>
-        <div class="tile"><div class="v num">${nb(r.manches)}</div><div class="k">manches jouées</div></div>
-        <div class="tile"><div class="v num">${nb(r.morceaux)}</div><div class="k">morceaux en bibliothèque</div></div>
-        <div class="tile"><div class="v num">${nb(r.liens)}</div><div class="k">liens de playlist importés</div></div>
+      <div class="kpis">
+        ${kpi("Parties", k.parties)}
+        ${kpi("Joueurs actifs", k.joueurs)}
+        ${kpi("Réponses", k.reponses)}
+        ${kpi("Parties terminées", k.taux_fin, " %")}
       </div>
 
-      <section class="bloc">
-        <div class="shead"><h2>Parties par jour</h2><span class="sub">120 derniers jours</span></div>
-        <div class="panel">${courbe(d.par_jour)}</div>
-      </section>
+      ${zero ? `<div class="bloc"><div class="constat">
+        <div class="t">Le problème le plus coûteux</div>
+        <p><b>${nb(zero)} des ${nb(e.abandon)} parties abandonnées n'ont eu aucune manche jouée</b>, soit ${pcZero} %.
+        Ce n'est pas de l'ennui en cours de partie, c'est que la partie ne démarre jamais : on crée un salon,
+        et personne ne répond à une seule question. Le levier est dans le salon, pas dans le jeu.</p>
+      </div></div>` : ""}
 
-      <section class="bloc"><div class="grid2">
+      <div class="bloc">
+        <div class="shead"><h2>Parties par jour</h2><span class="sub">120 derniers jours</span></div>
+        <div class="panel">${serie(d.par_jour)}</div>
+      </div>
+
+      <div class="bloc"><div class="g2">
+        <div>
+          <div class="shead"><h2>Devenir des parties</h2><span class="sub">depuis le début</span></div>
+          <div class="panel">
+            ${rang([
+              { label:"Créées", n:e.creees },
+              { label:"Au moins une manche", n:e.jouees },
+              { label:"Terminées", n:e.finies },
+              { label:"Abandonnées", n:e.abandon },
+            ], C.verm, e.creees)}
+            <p class="aide" style="margin-top:10px">Une partie sur ${e.finies ? (e.creees/e.finies).toFixed(1) : "?"} va jusqu'au bout.</p>
+          </div>
+        </div>
+        <div>
+          <div class="shead"><h2>Où ça décroche</h2><span class="sub">parties abandonnées</span></div>
+          <div class="panel">${rang(d.abandon_progression.map(x => ({ label:x.tranche, n:x.n })), C.ko, e.abandon)}</div>
+        </div>
+      </div></div>
+
+      <div class="bloc"><div class="g2">
+        <div>
+          <div class="shead"><h2>À quelle heure on joue</h2></div>
+          <div class="panel">${bandeau(d.par_heure, "h", Object.assign([...Array(24).keys()].map(h => String(h)), {}), C.amber)}</div>
+        </div>
+        <div>
+          <div class="shead"><h2>Quel jour</h2></div>
+          <div class="panel">${bandeau(d.par_jsem, "d", Object.assign(["lun","mar","mer","jeu","ven","sam","dim"], { idx:[1,2,3,4,5,6,7] }), C.blue)}</div>
+        </div>
+      </div></div>
+
+      <div class="bloc"><div class="g3">
         <div>
           <div class="shead"><h2>Modes de jeu</h2></div>
-          <div class="panel">${barres(d.par_mode.map(m => ({ label: m.mode, n: m.n })), COUL.verm)}</div>
+          <div class="panel">${rang(d.par_mode.map(m => ({ label:m.mode, n:m.n })), C.verm)}</div>
         </div>
+        <div>
+          <div class="shead"><h2>Fidélité</h2></div>
+          <div class="panel">${rang(d.fidelite.map(f => ({ label:f.tranche, n:f.n })), C.sage)}</div>
+        </div>
+        <div>
+          <div class="shead"><h2>Joueurs par partie</h2></div>
+          <div class="panel">${rang(d.taille_parties.map(x => ({ label:(x.joueurs >= 6 ? "6 et plus" : x.joueurs + " joueur" + (x.joueurs > 1 ? "s" : "")), n:x.n })), C.blue)}</div>
+        </div>
+      </div></div>
+
+      <div class="bloc"><div class="g2">
         <div>
           <div class="shead"><h2>Qualité des réponses</h2><span class="sub">${nb(q.total)} réponses</span></div>
           <div class="panel">
-            ${anneau(taux, COUL.sage, "de bonnes réponses")}
-            <div style="display:flex;justify-content:space-between;margin-top:12px;font-size:13px;color:var(--txt-2)">
+            ${anneau(taux, C.sage, "de bonnes réponses")}
+            <div style="display:flex;justify-content:space-between;margin-top:10px;font-size:12.5px;color:var(--txt-2)">
               <span>${nb(q.correctes)} bonnes sur ${nb(q.total)}</span>
-              <span class="mono num">${q.temps_median_ms ? (q.temps_median_ms / 1000).toFixed(1) + " s médian" : "temps non mesuré"}</span>
+              <span class="mono num">${q.temps_median_ms ? (q.temps_median_ms/1000).toFixed(1) + " s médian" : "non mesuré"}</span>
             </div>
           </div>
         </div>
-      </div></section>
-
-      <section class="bloc"><div class="grid2">
         <div>
           <div class="shead"><h2>D'où vient la musique</h2></div>
-          <div class="panel">${barres(d.providers.map(p => ({ label: p.provider, n: p.n })), COUL.blue)}</div>
+          <div class="panel">${rang(d.providers.map(p => ({ label:p.provider, n:p.n })), C.blue)}</div>
         </div>
-        <div>
-          <div class="shead"><h2>Inscriptions par mois</h2></div>
-          <div class="panel">${barres(d.inscriptions.slice(-8).map(i => ({ label: i.m, n: i.n })), COUL.amber)}</div>
-        </div>
-      </div></section>
+      </div></div>
 
-      <section class="bloc">
+      <div class="bloc">
+        <div class="shead"><h2>Totaux depuis le début</h2></div>
+        <div class="panel"><div class="g3" style="gap:14px">
+          ${[["parties", t.parties], ["joueurs", t.joueurs], ["comptes", t.comptes], ["manches", t.manches],
+             ["morceaux", t.morceaux], ["record en un jour", t.jour_record]]
+            .map(([l, v]) => `<div><div class="mono num" style="font-size:1.25rem;font-weight:600">${nb(v)}</div>
+              <div style="font-size:12px;color:var(--txt-3)">${l}</div></div>`).join("")}
+        </div></div>
+      </div>
+
+      <div class="bloc">
         <div class="shead"><h2>Retours des joueurs</h2><span class="sub">${d.retours.length} message${d.retours.length > 1 ? "s" : ""}</span></div>
         ${d.retours.length
-          ? d.retours.map(x => `<div class="retour">
-              <div class="meta">${esc(x.le)} &middot; ${esc(x.pseudo || "anonyme")}${x.page ? " &middot; " + esc(x.page) : ""}</div>
-              <div>${esc(x.message)}</div></div>`).join("")
-          : '<div class="panel"><p class="vide">Aucun retour pour le moment. Le formulaire de signalement écrit dans bug_reports.</p></div>'}
-      </section>
+          ? d.retours.map(x => `<div class="retour"><div class="meta">${esc(x.le)} &middot; ${esc(x.pseudo || "anonyme")}${x.page ? " &middot; " + esc(x.page) : ""}</div><div>${esc(x.message)}</div></div>`).join("")
+          : '<div class="panel"><p class="vide">Aucun retour. Le formulaire de signalement écrit dans bug_reports.</p></div>'}
+      </div>
 
-      <section class="bloc">
-        <div class="shead"><h2>Joueurs les plus actifs</h2><span class="sub">d'après user_stats</span></div>
-        <div class="panel tight"><div class="scroll"><table class="min">
-          <thead><tr><th>Pseudo</th><th>Parties</th><th>Bonnes réponses</th><th>Meilleure série</th><th>XP</th><th>Dernière partie</th></tr></thead>
-          <tbody>${d.top_joueurs.map(j => `<tr>
-            <td>${esc(j.pseudo)}</td><td class="n">${nb(j.parties)}</td>
-            <td class="n">${nb(j.bonnes)} / ${nb(j.tentatives)}</td><td class="n">${nb(j.serie)}</td>
-            <td class="n">${nb(j.xp)}</td><td class="n" style="color:var(--txt-3)">${esc(j.vu_le || "?")}</td>
-          </tr>`).join("")}</tbody>
-        </table></div></div>
-      </section>
+      <div class="bloc"><div class="g2">
+        <div>
+          <div class="shead"><h2>Joueurs les plus actifs</h2></div>
+          <div class="panel tight"><div class="scroll"><table class="min">
+            <thead><tr><th>Pseudo</th><th>Parties</th><th>Bonnes</th><th>Série</th><th>Vu le</th></tr></thead>
+            <tbody>${d.top_joueurs.map(j => `<tr><td>${esc(j.pseudo)}</td><td class="n">${nb(j.parties)}</td>
+              <td class="n">${nb(j.bonnes)} / ${nb(j.tentatives)}</td><td class="n">${nb(j.serie)}</td>
+              <td class="n" style="color:var(--txt-3)">${esc(j.vu_le || "?")}</td></tr>`).join("")}</tbody>
+          </table></div></div>
+        </div>
+        <div>
+          <div class="shead"><h2>Dernières parties</h2></div>
+          <div class="panel tight"><div class="scroll"><table class="min">
+            <thead><tr><th>Quand</th><th>Mode</th><th>Hôte</th><th>Joueurs</th><th>État</th></tr></thead>
+            <tbody>${d.dernieres_parties.map(p => `<tr><td class="n" style="color:var(--txt-2)">${esc(p.le)}</td>
+              <td><span class="pill ${modePill(p.mode)}">${esc(p.mode)}</span></td><td>${esc(p.hote)}</td>
+              <td class="n">${nb(p.joueurs)}</td>
+              <td><span class="pill ${etatPill(p.etat)}">${esc(etatMot(p.etat))}</span></td></tr>`).join("")}</tbody>
+          </table></div></div>
+        </div>
+      </div></div>`;
 
-      <section class="bloc">
-        <div class="shead"><h2>Dernières parties</h2><span class="sub">25 plus récentes</span></div>
-        <div class="panel tight"><div class="scroll"><table class="min">
-          <thead><tr><th>Quand</th><th>Mode</th><th>Hôte</th><th>Joueurs</th><th>Manches</th><th>État</th></tr></thead>
-          <tbody>${d.dernieres_parties.map(p => `<tr>
-            <td class="n" style="color:var(--txt-2)">${esc(p.le)}</td>
-            <td><span class="pill ${modePill(p.mode)}">${esc(p.mode)}</span></td>
-            <td>${esc(p.hote)}</td><td class="n">${nb(p.joueurs)}</td><td class="n">${nb(p.manches)}</td>
-            <td><span class="pill ${etatPill(p.etat)}">${esc(etatMot(p.etat))}</span></td>
-          </tr>`).join("")}</tbody>
-        </table></div></div>
-      </section>`;
-    const v = $("v-stats"); v.innerHTML = ""; v.appendChild(frag(html));
+    const v = $("v-vue"); v.innerHTML = ""; v.appendChild(frag(html));
   })
   .catch(e => {
-    $("v-stats").innerHTML = '<div class="err">Impossible de charger les statistiques : ' + esc(e.message) +
+    $("v-vue").innerHTML = '<div class="err">Impossible de charger les statistiques : ' + esc(e.message) +
       '<br>Relancer <span class="mono">/opt/blindify/tools/gen-stats.sh</span> sur le serveur.</div>';
     $("maj").textContent = "erreur de chargement";
   });
 
-/* ========================= base de donnees ========================= */
+/* ============================== données ============================== */
 const API = "api";
-let courant = null, decalage = 0, limite = 50, tri = null, sens = "desc", tablesChargees = false;
+let decalage = 0, limite = 50, tri = null, sens = "desc", tablesChargees = false;
 
 const cellule = (v) => {
   if (v === null || v === undefined) return '<td class="nul">null</td>';
   if (typeof v === "number") return `<td class="n">${nb(v)}</td>`;
-  if (typeof v === "object") return `<td class="mono">${esc(JSON.stringify(v)).slice(0, 200)}</td>`;
+  if (typeof v === "object") return `<td class="mono">${esc(JSON.stringify(v)).slice(0,200)}</td>`;
   const s = String(v);
-  return `<td${/^\d+$/.test(s) ? ' class="n"' : ""} title="${esc(s).slice(0, 300)}">${esc(s).slice(0, 300)}</td>`;
+  return `<td${/^\d+$/.test(s) ? ' class="n"' : ""} title="${esc(s).slice(0,300)}">${esc(s).slice(0,300)}</td>`;
 };
 
 function tableau(d, triable) {
@@ -379,18 +497,18 @@ async function chargerTables() {
   tablesChargees = true;
   try {
     const d = await fetch(`${API}/tables`).then(r => r.json());
-    $("tables").innerHTML = d.tables.map(t =>
-      `<button class="tbtn" data-t="${esc(t.nom)}"><span>${esc(t.nom)}</span><span class="n">${nb(t.lignes)}</span></button>`).join("");
-    $("tables").querySelectorAll(".tbtn").forEach(b =>
-      b.addEventListener("click", () => { decalage = 0; tri = null; sens = "desc"; ouvrir(b.dataset.t); }));
+    const boutons = d.tables.map(t => `<button class="tbtn" data-t="${esc(t.nom)}"><span>${esc(t.nom)}</span><span class="n">${nb(t.lignes)}</span></button>`).join("");
+    $("tables").innerHTML = boutons;
+    $("stables").innerHTML = boutons;
+    $("tables").querySelectorAll(".tbtn").forEach(b => b.onclick = () => { decalage = 0; tri = null; sens = "desc"; ouvrir(b.dataset.t); });
+    $("stables").querySelectorAll(".tbtn").forEach(b => b.onclick = () => dessiner(b.dataset.t));
   } catch (e) {
     tablesChargees = false;
-    $("tables").innerHTML = `<div class="err" style="margin:12px">Service injoignable : ${esc(e.message)}</div>`;
+    $("tables").innerHTML = `<div class="err" style="margin:11px">Service injoignable : ${esc(e.message)}</div>`;
   }
 }
 
 async function ouvrir(nom) {
-  courant = nom;
   $("tables").querySelectorAll(".tbtn").forEach(b => b.setAttribute("aria-current", String(b.dataset.t === nom)));
   $("dbtitre").textContent = nom;
   $("dbsortie").innerHTML = '<p class="vide">Chargement...</p>';
@@ -405,7 +523,7 @@ async function ouvrir(nom) {
       <div class="pager">
         <button class="sec" id="prec" ${decalage === 0 ? "disabled" : ""}>Précédent</button>
         <button class="sec" id="suiv" ${decalage + limite >= d.total ? "disabled" : ""}>Suivant</button>
-        <span class="mono">${nb(d.total ? decalage + 1 : 0)} à ${nb(Math.min(decalage + limite, d.total))} sur ${nb(d.total)}</span>
+        <span class="mono">${nb(d.total ? decalage+1 : 0)} à ${nb(Math.min(decalage+limite, d.total))} sur ${nb(d.total)}</span>
       </div>`;
     const p = $("prec"), s = $("suiv");
     if (p) p.onclick = () => { decalage = Math.max(0, decalage - limite); ouvrir(nom); };
@@ -424,13 +542,10 @@ async function ouvrir(nom) {
 async function executer() {
   const sql = $("sql").value.trim();
   if (!sql) return;
-  $("dbtitre").textContent = "Requête";
-  $("dbmeta").textContent = "";
+  $("dbtitre").textContent = "Requête"; $("dbmeta").textContent = "";
   $("dbsortie").innerHTML = '<p class="vide">Exécution...</p>';
   try {
-    const d = await fetch(`${API}/query`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sql }),
-    }).then(r => r.json());
+    const d = await fetch(`${API}/query`, { method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify({ sql }) }).then(r => r.json());
     if (d.erreur) throw new Error(d.erreur);
     $("dbmeta").textContent = `${nb(d.total)} ligne${d.total > 1 ? "s" : ""} en ${d.ms} ms${d.tronque ? " · tronqué à 500" : ""}`;
     $("dbsortie").innerHTML = tableau(d, false);
@@ -438,14 +553,97 @@ async function executer() {
     $("dbsortie").innerHTML = `<div class="err">${esc(e.message)}</div>`;
   }
 }
-
 $("run").onclick = executer;
 $("clear").onclick = () => { $("sql").value = ""; $("sql").focus(); };
-$("sql").addEventListener("keydown", e => {
-  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); executer(); }
-});
+$("sql").addEventListener("keydown", e => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); executer(); } });
 
-if (location.hash === "#base") montrer("base");
+/* =============================== schéma =============================== */
+let schema = null;
+
+async function chargerSchema() {
+  await chargerTables();
+  if (schema) return;
+  try {
+    schema = await fetch(`${API}/schema`).then(r => r.json());
+    $("ssortie").innerHTML = `<p class="vide">Choisis une table à gauche. ${Object.keys(schema.tables).length} tables, ${schema.relations.length} relations.</p>`;
+  } catch (e) {
+    $("ssortie").innerHTML = `<div class="err">${esc(e.message)}</div>`;
+  }
+}
+
+/** Voisinage d'une table : ce qu'elle référence à droite, qui la référence à
+ *  gauche. Un diagramme global des 24 tables serait illisible ; celui-ci tient
+ *  toujours sur un écran et répond à la vraie question, "qui touche quoi". */
+function dessiner(nom) {
+  $("stables").querySelectorAll(".tbtn").forEach(b => b.setAttribute("aria-current", String(b.dataset.t === nom)));
+  if (!schema) return;
+  const cols = schema.tables[nom] || [];
+  const sortantes = schema.relations.filter(r => r.source === nom);
+  const entrantes = schema.relations.filter(r => r.cible === nom);
+
+  const groupe = (liste, cle) => {
+    const m = new Map();
+    for (const r of liste) {
+      const k = r[cle];
+      if (!m.has(k)) m.set(k, []);
+      m.get(k).push(r);
+    }
+    return [...m.entries()];
+  };
+  const gIn = groupe(entrantes, "source"), gOut = groupe(sortantes, "cible");
+
+  const BOITE = 150, HB = 34, ESP = 12, MID_X = 330, MID_W = 210;
+  const hauteur = Math.max(gIn.length, gOut.length, 1) * (HB + ESP) + 70;
+  const cy = hauteur / 2;
+  const posY = (n, i) => cy - ((n * (HB + ESP) - ESP) / 2) + i * (HB + ESP);
+
+  const svg = `<svg class="chart" viewBox="0 0 ${MID_X + MID_W + BOITE + 60} ${hauteur}" role="img"
+      aria-label="Relations de la table ${esc(nom)}">
+    <defs><marker id="fl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#453626"/></marker></defs>
+
+    ${gIn.map(([src, rs], i) => {
+      const y = posY(gIn.length, i);
+      return `<rect x="10" y="${y}" width="${BOITE}" height="${HB}" rx="7" fill="#191209" stroke="#453626"/>
+        <text x="${10 + BOITE/2}" y="${y + 15}" text-anchor="middle" font-family="IBM Plex Sans" font-size="11.5" fill="#f4ecdb">${esc(src)}</text>
+        <text x="${10 + BOITE/2}" y="${y + 27}" text-anchor="middle" font-family="IBM Plex Mono" font-size="9" fill="#897b66">${esc(rs.map(r => r.colonne).join(", ")).slice(0,26)}</text>
+        <path d="M${10+BOITE},${y+HB/2} L${MID_X},${cy}" stroke="#453626" stroke-width="1.4" fill="none" marker-end="url(#fl)"/>`;
+    }).join("")}
+
+    <rect x="${MID_X}" y="${cy - 30}" width="${MID_W}" height="60" rx="9" fill="#2f2213" stroke="${C.amber}" stroke-width="2"/>
+    <text x="${MID_X + MID_W/2}" y="${cy - 6}" text-anchor="middle" font-family="Archivo" font-size="14" font-weight="700" fill="${C.amber}">${esc(nom)}</text>
+    <text x="${MID_X + MID_W/2}" y="${cy + 13}" text-anchor="middle" font-family="IBM Plex Mono" font-size="9.5" fill="#bfb09a">${cols.length} colonnes</text>
+
+    ${gOut.map(([cible, rs], i) => {
+      const y = posY(gOut.length, i);
+      const x = MID_X + MID_W + 50;
+      return `<path d="M${MID_X+MID_W},${cy} L${x},${y+HB/2}" stroke="#453626" stroke-width="1.4" fill="none" marker-end="url(#fl)"/>
+        <rect x="${x}" y="${y}" width="${BOITE}" height="${HB}" rx="7" fill="#191209" stroke="#453626"/>
+        <text x="${x + BOITE/2}" y="${y + 15}" text-anchor="middle" font-family="IBM Plex Sans" font-size="11.5" fill="#f4ecdb">${esc(cible)}</text>
+        <text x="${x + BOITE/2}" y="${y + 27}" text-anchor="middle" font-family="IBM Plex Mono" font-size="9" fill="#897b66">${esc(rs.map(r => r.suppression).join(", ")).slice(0,26)}</text>`;
+    }).join("")}
+
+    <text x="10" y="${hauteur - 8}" font-family="IBM Plex Mono" font-size="9.5" fill="#897b66">${gIn.length} table(s) la référencent</text>
+    <text x="${MID_X + MID_W + 50}" y="${hauteur - 8}" font-family="IBM Plex Mono" font-size="9.5" fill="#897b66">elle en référence ${gOut.length}</text>
+  </svg>`;
+
+  $("ssortie").innerHTML = `
+    <div class="titre"><h2>${esc(nom)}</h2>
+      <span class="meta">${cols.length} colonnes · ${entrantes.length} référence(s) entrante(s) · ${sortantes.length} sortante(s)</span></div>
+    <div class="panel" style="padding:10px;overflow-x:auto">${svg}</div>
+    <div class="shead" style="margin-top:16px"><h3>Colonnes</h3></div>
+    <div class="champs">${cols.map(c => `<div class="champ">
+      <span>${esc(c.nom)}${c.nullable ? "" : ' <span style="color:var(--txt-3)">requis</span>'}</span>
+      <span class="ty">${esc(c.type)}</span>
+      <span>${c.pk ? '<span class="pill pk">clé</span>' : c.fk ? '<span class="pill fk">lien</span>' : ""}</span>
+    </div>`).join("")}</div>
+    ${sortantes.length ? `<div class="shead" style="margin-top:16px"><h3>Ce que la suppression entraîne</h3></div>
+      <div class="champs">${sortantes.map(r => `<div class="champ">
+        <span>${esc(r.colonne)} <span style="color:var(--txt-3)">vers</span> ${esc(r.cible)}.${esc(r.colonne_cible)}</span>
+        <span class="ty">${esc(r.suppression)}</span><span></span></div>`).join("")}</div>` : ""}`;
+}
+
+if (location.hash === "#base") vue("base");
 </script>
 </body>
 </html>

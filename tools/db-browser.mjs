@@ -84,6 +84,56 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { tables: sortie })
     }
 
+    // Schema : tables, colonnes, cles primaires et etrangeres. Sert a dessiner
+    // le voisinage d'une table plutot qu'un diagramme global illisible.
+    if (chemin === "/schema") {
+      const { rows: cols } = await lire(
+        `SELECT table_name, column_name, data_type, is_nullable, ordinal_position
+         FROM information_schema.columns WHERE table_schema='public'
+         ORDER BY table_name, ordinal_position`
+      )
+      // information_schema masque les contraintes aux roles qui ne sont pas
+      // proprietaires des tables. Le role etant volontairement en lecture seule,
+      // on passe par le catalogue systeme, lisible par tous.
+      const { rows: contraintes } = await lire(
+        `SELECT co.contype,
+                src.relname AS source,
+                a.attname   AS colonne,
+                tgt.relname AS cible,
+                af.attname  AS colonne_cible,
+                CASE co.confdeltype WHEN 'c' THEN 'CASCADE' WHEN 'n' THEN 'SET NULL'
+                     WHEN 'r' THEN 'RESTRICT' WHEN 'd' THEN 'SET DEFAULT' ELSE 'NO ACTION' END AS suppression
+         FROM pg_constraint co
+         JOIN pg_class src ON src.oid = co.conrelid
+         JOIN pg_namespace n ON n.oid = src.relnamespace AND n.nspname = 'public'
+         LEFT JOIN pg_class tgt ON tgt.oid = co.confrelid
+         JOIN LATERAL unnest(co.conkey) WITH ORDINALITY AS k(attnum, ord) ON true
+         JOIN pg_attribute a ON a.attrelid = co.conrelid AND a.attnum = k.attnum
+         LEFT JOIN LATERAL unnest(co.confkey) WITH ORDINALITY AS fk2(attnum, ord) ON fk2.ord = k.ord
+         LEFT JOIN pg_attribute af ON af.attrelid = co.confrelid AND af.attnum = fk2.attnum
+         WHERE co.contype IN ('p','f')
+         ORDER BY src.relname, a.attname`
+      )
+      const pk = contraintes.filter(c => c.contype === "p").map(c => ({ table_name: c.source, column_name: c.colonne }))
+      const fk = contraintes.filter(c => c.contype === "f").map(c => ({
+        source: c.source, colonne: c.colonne, cible: c.cible,
+        colonne_cible: c.colonne_cible, suppression: c.suppression,
+      }))
+      const clefs = new Set(pk.map(r => r.table_name + "." + r.column_name))
+      const liens = new Set(fk.map(r => r.source + "." + r.colonne))
+      const tables = {}
+      for (const c of cols) {
+        (tables[c.table_name] ||= []).push({
+          nom: c.column_name,
+          type: c.data_type,
+          nullable: c.is_nullable === "YES",
+          pk: clefs.has(c.table_name + "." + c.column_name),
+          fk: liens.has(c.table_name + "." + c.column_name),
+        })
+      }
+      return json(res, 200, { tables, relations: fk })
+    }
+
     // Contenu d'une table, pagine.
     if (chemin.startsWith("/table/")) {
       const nom = decodeURIComponent(chemin.slice("/table/".length))
