@@ -68,6 +68,57 @@ const server = http.createServer(async (req, res) => {
   const chemin = url.pathname.replace(/^\/api/, "")
 
   try {
+    // Sante du serveur : ce qu'un exploitant regarde en premier le matin.
+    // Tout est lu en direct, rien n'est fige dans data.json.
+    if (chemin === "/sante") {
+      const sh = (cmd) => { try { return execFileSync("sh", ["-c", cmd], { encoding: "utf8", timeout: 5000 }).trim() } catch { return "" } }
+      const backend = sh("docker inspect -f '{{.State.Health.Status}} {{.State.StartedAt}}' blindify-backend")
+      const [etatBackend, demarreLe] = backend.split(" ")
+      const disque = sh("df --output=pcent,avail -BG / | tail -1").trim().replace(/%/, "").split(/\s+/)
+      const derniereSauvegarde = sh("ls -t /opt/backups/*.sql.gz 2>/dev/null | head -1 | xargs -r stat -c %Y")
+      const derniereErreur = sh("docker logs --since 168h blindify-backend 2>&1 | grep -E '\\[[^]]*error' | tail -1 | cut -c1-19")
+      const { rows: taille } = await lire(`SELECT pg_size_pretty(pg_database_size('blindify')) AS t, pg_database_size('blindify')::bigint AS o`)
+      const { rows: conn } = await lire(`SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname='blindify' AND state='active'`)
+      return json(res, 200, {
+        backend: { etat: etatBackend || "inconnu", demarre_le: demarreLe || null },
+        disque: { pourcent: Number(disque[0]) || null, libre_go: Number((disque[1] || "").replace("G", "")) || null },
+        base: { taille: taille[0]?.t, octets: Number(taille[0]?.o), requetes_actives: conn[0]?.n ?? 0 },
+        derniere_sauvegarde: derniereSauvegarde ? new Date(Number(derniereSauvegarde) * 1000).toISOString() : null,
+        derniere_erreur: derniereErreur || null,
+        stats_generees: (() => { try { return JSON.parse(fs.readFileSync("/opt/dev/blindz/data.json", "utf8")).genere_le } catch { return null } })(),
+      })
+    }
+
+    // Detail d'une partie : ses manches et qui a repondu quoi. C'est la cible
+    // du clic depuis le tableau de bord, la descente dans le concret.
+    if (chemin.startsWith("/session/")) {
+      const id = Number(chemin.slice("/session/".length))
+      if (!Number.isInteger(id) || id <= 0) return json(res, 400, { erreur: "identifiant invalide" })
+      const { rows: partie } = await lire(
+        `SELECT g.id, g.mode, g.state AS etat, g.total_rounds AS manches,
+                to_char(g.started_at,'YYYY-MM-DD HH24:MI:SS') AS debut,
+                to_char(g.ended_at,'YYYY-MM-DD HH24:MI:SS') AS fin,
+                u.username AS hote, g.room_code
+         FROM game_sessions g LEFT JOIN users u ON u.id=g.host_user_id WHERE g.id=$1`, [id])
+      if (!partie.length) return json(res, 404, { erreur: "partie inconnue" })
+      const { rows: manches } = await lire(
+        `SELECT gr.id, gr.round_index AS manche, gr.correct_title AS titre, gr.correct_artist AS artiste,
+                coalesce(uo.username, '(sans propriétaire)') AS proprietaire
+         FROM game_rounds gr
+         LEFT JOIN audio_sources a ON a.id=gr.audio_source_id
+         LEFT JOIN users uo ON uo.id=a.user_id
+         WHERE gr.session_id=$1 ORDER BY gr.round_index`, [id])
+      const { rows: reponses } = await lire(
+        `SELECT r.round_id, u.username AS joueur, r.guess_title, r.guess_artist, r.is_correct AS bonne,
+                r.response_time_ms AS ms, r.score_delta AS points
+         FROM round_responses r JOIN game_rounds gr ON gr.id=r.round_id LEFT JOIN users u ON u.id=r.user_id
+         WHERE gr.session_id=$1 ORDER BY gr.round_index, r.created_at`, [id])
+      const { rows: participants } = await lire(
+        `SELECT u.username AS joueur, p.score, p.accuracy, p.best_streak AS serie
+         FROM game_participants p LEFT JOIN users u ON u.id=p.user_id WHERE p.session_id=$1 ORDER BY p.score DESC`, [id])
+      return json(res, 200, { partie: partie[0], manches, reponses, participants })
+    }
+
     // Liste des tables avec leur nombre de lignes réel.
     if (chemin === "/tables") {
       const { rows: tables } = await lire(
