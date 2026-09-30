@@ -4,6 +4,7 @@
 import { chromium, devices } from "@playwright/test"
 import { execSync } from "child_process"
 import fs from "fs"
+import { seedLibrary, cleanupSeeded } from "./seed-library.mjs"
 
 const B = process.argv[2] === "prod" ? "https://blindz.app" : "https://dev.tymmerc.eu/blindify"
 const KEY = fs.readFileSync("/opt/blindify/.e2e-bypass-key", "utf8").trim()
@@ -24,13 +25,14 @@ psql(`CREATE TABLE IF NOT EXISTS imported_links (
   UNIQUE (user_id, normalized_url))`)
 psql(`ALTER TABLE audio_sources ADD COLUMN IF NOT EXISTS link_id INTEGER`)
 
-// Cree une carte de bibliotheque + n titres copies d'un vrai compte (URLs fraiches)
-const seedLink = (userId, label, fromUserId, n) => {
+// Cree une carte de bibliotheque + n titres Deezer reels via seed-library.
+// L'ancienne copie depuis le compte 3103 ne donnait plus rien : ce compte n'a
+// plus aucun titre, et la copie brouillait les identifiants (extraits morts).
+const seedLink = async (userId, label, n) => {
   const linkId = psql(`INSERT INTO imported_links (user_id, url, normalized_url, provider, kind, label)
-    VALUES (${userId}, 'e2e://${label}', 'e2e-${userId}-${label}', 'deezer', 'playlist', '${label}') RETURNING id`)
-  psql(`INSERT INTO audio_sources (provider, external_id, user_id, title, artist, album_cover, audio_url, duration_ms, metadata, link_id)
-    SELECT provider, 'e2e-' || md5(random()::text || id::text), ${userId}, title, artist, album_cover, audio_url, duration_ms, metadata, ${linkId}
-    FROM audio_sources WHERE user_id = ${fromUserId} AND audio_url IS NOT NULL AND audio_url <> '' AND external_id NOT LIKE 'e2e-%' LIMIT ${n}`)
+    VALUES (${userId}, 'e2e://${label}', 'e2e-${userId}-${label}', 'deezer', 'playlist', '${label}') RETURNING id`).split("\n")[0]
+  await seedLibrary(userId, n)
+  psql(`UPDATE audio_sources SET link_id = ${linkId} WHERE user_id = ${userId} AND link_id IS NULL`)
   return Number(linkId)
 }
 
@@ -56,8 +58,8 @@ const cont = host.getByRole("button", { name: /^continuer$/i })
 for (let i = 0; i < 30 && !(await cont.isEnabled().catch(() => false)); i++) await sleep(500)
 await cont.click({ timeout: 20000 })
 const hostId = await hostIdP
-const linkA = seedLink(hostId, "SoireeTest", 3103, 15)
-const linkB = seedLink(hostId, "RapExclu", 3103, 15)
+const linkA = await seedLink(hostId, "SoireeTest", 15)
+const linkB = await seedLink(hostId, "RapExclu", 15)
 say(`hote ${hostId} : cartes ${linkA} (SoireeTest) + ${linkB} (RapExclu)`)
 await host.getByText(/créer une partie/i).click()
 await host.waitForURL(/\/modes/, { timeout: 40000 })
@@ -70,7 +72,7 @@ say("room", code)
 const lobbyTxt = await host.evaluate(() => document.body.innerText)
 if (/SoireeTest/.test(lobbyTxt) && /RapExclu/.test(lobbyTxt)) say("  [ok] les 2 cartes de la bibliothèque s'affichent")
 else bad(`bibliotheque absente du lobby (${lobbyTxt.replace(/\s+/g, " ").slice(0, 160)})`)
-if (/réglages/i.test(lobbyTxt) && /durée d'une manche/i.test(lobbyTxt)) say("  [ok] panneau réglages présent dans le lobby à distance")
+if (/la partie/i.test(lobbyTxt) && /temps pour répondre/i.test(lobbyTxt)) say("  [ok] panneau réglages présent dans le lobby à distance")
 else {
   bad("panneau reglages absent du lobby a distance")
   say("  [debug] extrait:", lobbyTxt.replace(/\s+/g, " ").slice(0, 400))
@@ -95,7 +97,7 @@ await lea.goto(`${B}/?join=${code}`, { waitUntil: "networkidle", timeout: 90000 
 await lea.locator("input").first().fill("Lea")
 await lea.getByRole("button", { name: /continuer/i }).click()
 const leaId = await leaIdP
-seedLink(leaId, "PlaylistLea", 3103, 12)
+await seedLink(leaId, "PlaylistLea", 12)
 await lea.getByRole("button", { name: /rejoindre la partie/i }).click()
 await lea.getByText(/dans la partie|équipage|lobby/i).first().waitFor({ timeout: 60000 }).catch(() => {})
 await sleep(2500)
@@ -185,6 +187,6 @@ say(`\n=== ${problems.length ? problems.length + " PROBLEME(S)" : "AUCUN PROBLEM
 problems.forEach(p => say("  - " + p))
 await b.close()
 // menage
-psql(`DELETE FROM audio_sources WHERE external_id LIKE 'e2e-%'`)
+cleanupSeeded([hostId, leaId])
 psql(`DELETE FROM imported_links WHERE normalized_url LIKE 'e2e-%'`)
 process.exit(problems.length ? 1 : 0)

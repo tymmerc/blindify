@@ -49,9 +49,11 @@ export function LobbyRps({
   return (
     <div className={card}>
       <div className="mb-3 flex items-center justify-between">
-        <p className="m-0 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>
-          <Swords className="h-4 w-4" /> Pierre · Feuille · Ciseaux
+        <p className="m-0 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.22em] text-[#2e2014]">
+          <span aria-hidden className="h-2.5 w-2.5 rounded-full border-[1.5px] border-[#2e2014]" style={{ background: accent }} />
+          Pierre, feuille, ciseaux
         </p>
+        <Swords aria-hidden className="h-4 w-4 text-[#6b573f]" />
       </div>
 
       {/* Revelation du dernier duel */}

@@ -2,6 +2,8 @@
 
 import { Suspense, useState, useEffect, type FormEvent } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
+import { ArrowLeft } from "lucide-react"
+import { publicPath } from "@/lib/publicPath"
 import GameClient from "../game/GameClient"
 
 export const dynamic = "force-dynamic"
@@ -72,7 +74,7 @@ function ClassicForm() {
   return (
     <div className="flex flex-col gap-5 rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-7 shadow-[4px_4px_0_rgba(46,32,20,.18)]">
       <div className="space-y-2">
-        <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#c65133]">Face A · Classique</p>
+        <p className="m-0 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.22em] text-[#2e2014]"><span aria-hidden className="h-2.5 w-2.5 rounded-full border-[1.5px] border-[#2e2014]" style={{ background: "#c65133" }} />Classique</p>
         <div className="flex items-center gap-3 flex-wrap">
           <h2 className="font-display text-2xl font-semibold text-[#2e2014]">Blind test classique</h2>
           <span className="rounded-full border-[1.5px] border-[#2e2014] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#2e2014]">
@@ -197,7 +199,7 @@ function ChronoForm() {
   return (
     <div className="flex flex-col gap-5 rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-7 shadow-[4px_4px_0_rgba(46,32,20,.18)]">
       <div className="space-y-2">
-        <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#e0a32e]">Face A · Chrono</p>
+        <p className="m-0 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.22em] text-[#2e2014]"><span aria-hidden className="h-2.5 w-2.5 rounded-full border-[1.5px] border-[#2e2014]" style={{ background: "#e0a32e" }} />Chrono</p>
         <div className="flex items-center gap-3 flex-wrap">
           <h2 className="font-display text-2xl font-semibold text-[#2e2014]">Mode Chrono</h2>
           <span className="rounded-full border-[1.5px] border-[#e0a32e] bg-[#e0a32e] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#2e2014]">
@@ -287,7 +289,7 @@ function ChallengeForm() {
   return (
     <div className="flex flex-col gap-5 rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-7 shadow-[4px_4px_0_rgba(46,32,20,.18)]">
       <div className="space-y-2">
-        <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#7d9471]">Face A · Défi</p>
+        <p className="m-0 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.22em] text-[#2e2014]"><span aria-hidden className="h-2.5 w-2.5 rounded-full border-[1.5px] border-[#2e2014]" style={{ background: "#7d9471" }} />Défi</p>
         <div className="flex items-center gap-3 flex-wrap">
           <h2 className="font-display text-2xl font-semibold text-[#2e2014]">Rejoindre un défi</h2>
           <span className="rounded-full border-[1.5px] border-[#7d9471] bg-[#7d9471] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#f4ecdb]">
@@ -348,27 +350,30 @@ function SoloSelector() {
   const [tab, setTab] = useState<SoloTab>("classic")
 
   return (
-    <div className="min-h-screen px-4 py-10 text-[#2e2014] sm:px-6 lg:px-8">
-      <div className="mx-auto flex max-w-6xl flex-col gap-8">
+    <div className="min-h-screen px-4 py-5 text-[#2e2014] sm:px-6 sm:py-8">
+      <div className="mx-auto flex max-w-4xl flex-col gap-6">
 
-        {/* Header */}
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex-1 space-y-2">
-            <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-[#c65133]">
-              Face à la platine
-            </p>
-            <h1 className="font-display text-4xl font-semibold leading-[1.05] md:text-5xl">
-              Jouer en <em className="font-medium italic text-[#c65133]">solo</em>
-            </h1>
+        {/* En-tete commun a tous les modes (meme gabarit que les salles d'attente) */}
+        <header className="flex items-center justify-between gap-3 border-b-2 border-[#2e2014] pb-3 sm:pb-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <img src={publicPath("/logo-mark.png")} alt="blindz.app" className="h-10 w-10 shrink-0 object-contain sm:h-11 sm:w-11" />
+            <div className="min-w-0">
+              <p className="m-0 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.22em] sm:text-[11px]">
+                <span aria-hidden className="h-2.5 w-2.5 rounded-full border-[1.5px] border-[#2e2014] bg-[#a8b8c8]" />
+                Nouvelle partie
+              </p>
+              <h1 className="m-0 mt-0.5 font-display text-xl font-semibold sm:text-2xl">Solo</h1>
+            </div>
           </div>
           <button
             type="button"
             onClick={() => router.push("/modes")}
-            className="rounded-full border-[1.5px] border-[#2e2014] bg-[#ece1c8] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+            className="flex shrink-0 items-center gap-1.5 rounded-full border-[1.5px] border-[#2e2014] px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
           >
-            Retour menu
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Quitter
           </button>
-        </div>
+        </header>
 
         {/* Tabs */}
         <TabBar active={tab} onChange={setTab} />
@@ -389,7 +394,7 @@ function SoloSelector() {
               </ul>
             </InfoCard>
 
-            <InfoCard label="Pro tip" title="Bon à savoir">
+            <InfoCard label="À savoir" title="Bon à savoir">
               <ul className="space-y-2 text-sm text-[#6b573f] leading-relaxed list-disc list-inside">
                 <li>Les playlists doivent être <strong className="text-[#2e2014]">publiques</strong> pour être trouvées</li>
                 <li>Profils et playlists Spotify et Deezer sont tous supportés</li>
@@ -401,7 +406,7 @@ function SoloSelector() {
 
         {tab === "chrono" && (
           <div className="flex flex-col gap-6 lg:flex-row">
-            <InfoCard label="Rules" title="Comment ça marche">
+            <InfoCard label="Règles" title="Comment ça marche">
               <ul className="space-y-2 text-sm text-[#6b573f] leading-relaxed list-disc list-inside">
                 <li>Le chrono démarre, les titres s&apos;enchaînent automatiquement</li>
                 <li>Devine le titre et/ou l&apos;artiste le plus vite possible</li>

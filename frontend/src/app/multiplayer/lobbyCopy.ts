@@ -1,16 +1,19 @@
 import type { GameMode } from "@/lib/gameModes"
 
+// Le titre de l'en-tete des lobbys = le nom public du mode, le meme que sur la
+// page de choix des modes et la landing. Avant : "Défie tes amis", "Projection
+// en direct", "Mode Streamer", sous une etiquette "EVENT · LOBBY" en anglais.
 export const HEADER_COPY: Record<GameMode, { title: string; subtitle: string }> = {
   friends: {
-    title: "Défie tes amis",
+    title: "À distance",
     subtitle: "Crée une salle, partage le code, et affronte tes potes sur vos playlists.",
   },
   event: {
-    title: "Projection en direct",
+    title: "Autour d'une table",
     subtitle: "Un écran central diffuse la musique pendant que chacun répond depuis son téléphone.",
   },
   streamer: {
-    title: "Mode Streamer",
+    title: "Avec ta communauté",
     subtitle: "Joue en direct avec ton chat, trois formats de jeu au choix.",
   },
 }

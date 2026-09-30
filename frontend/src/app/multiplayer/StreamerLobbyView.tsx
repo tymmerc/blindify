@@ -1,11 +1,9 @@
 "use client"
 
-import { Waves, Sparkles } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { SurfaceCard } from "@/components/ui/SurfaceCard";
-import { modeAccent } from "@/lib/uiTokens";
-import { ParticipantPanel } from "./LobbyViews";
-import type { LobbyRendererProps } from "./lobbyTypes";
+import type { LobbyRendererProps } from "./lobbyTypes"
+import { BLOCK, Label, Panel, RoomCode, Roster } from "./lobbyKit"
+
+const ACCENT = "#7d9471"
 
 function StreamerEntry({
   onHost,
@@ -13,146 +11,78 @@ function StreamerEntry({
   joinCode,
   setJoinCode,
   joining,
-}: {
-  onHost: () => void;
-  onJoinSubmit: LobbyRendererProps["onJoinSubmit"];
-  joinCode: LobbyRendererProps["joinCode"];
-  setJoinCode: LobbyRendererProps["setJoinCode"];
-  joining: LobbyRendererProps["joining"];
-}) {
-  const accent = modeAccent("streamer");
+}: Pick<LobbyRendererProps, "onJoinSubmit" | "joinCode" | "setJoinCode" | "joining"> & { onHost: () => void }) {
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
-      <SurfaceCard className="flex flex-col gap-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="space-y-2">
-            <p className="text-xs uppercase tracking-[0.3em]" style={{ color: accent }}>
-              Mode Streamer
-            </p>
-            <h2 className="text-3xl font-semibold leading-tight text-[#2e2014]">Lance le flux interactif</h2>
-            <p className="text-sm text-[#6b573f]">Ton chat rejoint avec un code et répond pendant que tu gardes la main sur le rythme.</p>
-          </div>
-          <span className="rounded-full border border-[rgba(46,32,20,.22)] px-3 py-1 text-[11px] uppercase tracking-[0.3em]" style={{ borderColor: accent, color: accent }}>
-            Live
-          </span>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {["Le chat joue depuis ton live", "Tu choisis la source musicale", "Décompte visible par tous"].map(point => (
-            <span
-              key={point}
-              className="rounded-full border border-[rgba(46,32,20,.22)] bg-[#efe5d0] px-3 py-[6px] text-xs font-semibold text-[#6b573f]"
-              style={{ borderColor: accent, color: accent }}
-            >
-              {point}
-            </span>
-          ))}
-        </div>
-        <Button
-          variant="outline"
+    <div className="mx-auto grid w-full max-w-4xl gap-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+      <Panel label="Streamer" dot={ACCENT}>
+        <h2 className="mb-2 font-display text-3xl font-semibold leading-tight">Lance le flux interactif</h2>
+        <p className="mb-5 text-sm text-[#6b573f]">
+          Ton chat rejoint avec un code et répond pendant que tu gardes la main sur le rythme.
+        </p>
+        <button
+          type="button"
           onClick={onHost}
-          className="w-full justify-center gap-2 rounded-xl border border-[rgba(46,32,20,.22)] bg-[#ece1c8] px-5 py-3 text-sm font-semibold hover:bg-[#e0d4ba]"
-          style={{ borderColor: accent, color: accent }}
+          className="w-full rounded-md border-2 border-[#2e2014] bg-[#c65133] px-5 py-3.5 text-sm font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#2e2014]"
         >
-          <Sparkles className="h-4 w-4" />
-          Ouvrir la room Streamer
-        </Button>
-        <p className="text-xs text-[#6b573f]">Projette ensuite le code, le chat rejoindra depuis ses téléphones.</p>
-      </SurfaceCard>
-
-      <SurfaceCard className="space-y-3">
-        <h3 className="text-lg font-semibold text-[#2e2014]">Rejoindre le flux</h3>
-        <p className="text-sm text-[#6b573f]">Colle le code projeté, connecte Spotify, tu entres directement.</p>
-        <form onSubmit={onJoinSubmit} className="space-y-3">
+          Ouvrir la salle streamer
+        </button>
+      </Panel>
+      <Panel label="Rejoindre le flux" dot={ACCENT}>
+        <p className="mb-3 text-sm text-[#6b573f]">Entre le code affiché sur le live.</p>
+        <form onSubmit={onJoinSubmit} className="space-y-2">
           <input
             value={joinCode}
             onChange={e => setJoinCode(e.target.value.toUpperCase())}
             placeholder="CODE"
-            className="w-full rounded-xl border border-[rgba(46,32,20,.22)] bg-[#efe5d0] px-4 py-3 text-sm uppercase tracking-[0.25em] text-[#2e2014] outline-none focus:border-[rgba(46,32,20,.22)]"
+            aria-label="Code de la salle"
+            className="w-full rounded-md border-2 border-[#2e2014] bg-[#efe5d0] px-4 py-3 font-display text-sm font-bold uppercase tracking-[0.25em] text-[#2e2014] outline-none placeholder:text-[#b3a182] focus:border-[#c65133]"
           />
-          <Button
+          <button
             type="submit"
-            variant="outline"
             disabled={joining}
-            className="w-full justify-center rounded-xl border-[rgba(46,32,20,.22)] bg-[#ece1c8] px-4 py-2 text-sm font-semibold text-[#2e2014] hover:bg-[#e0d4ba] disabled:opacity-60"
-            style={{ borderColor: accent, color: accent }}
+            className="w-full rounded-md border-2 border-[#2e2014] bg-[#2e2014] px-4 py-3 text-sm font-bold text-[#f4ecdb] disabled:opacity-50"
           >
             Rejoindre
-          </Button>
+          </button>
         </form>
-      </SurfaceCard>
+      </Panel>
     </div>
-  );
+  )
 }
 
 function StreamerLobby(props: LobbyRendererProps) {
-  const accent = modeAccent("streamer");
-  const room = props.room;
-  const roomCode = (room?.room_code ?? props.joinCode ?? "").toUpperCase() || "------";
-  const audience = room ? props.participants : props.participants;
+  const code = (props.room?.room_code ?? props.joinCode ?? "").toUpperCase()
+  const n = props.participants.length
   return (
-    <SurfaceCard className="space-y-4">
-      <div className="rounded-md border-2 border-[#e0a32e] bg-[#efe5d0] px-4 py-3 text-sm font-semibold text-[#a87714]">
-        Mode Streamer en cours de développement, le lancement de partie n'est pas
-        encore disponible. Reviens bientôt !
-      </div>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="rounded-full bg-[#ece1c8] p-3">
-            <Waves className="h-5 w-5 text-[#2e2014]" />
-          </div>
-          <div>
-            <p className="text-xs uppercase tracking-[0.35em] text-[#6b573f]">Flux streamer</p>
-            <h3 className="text-2xl font-semibold text-[#2e2014]">Attente des joueurs</h3>
-            <p className="text-sm text-[#6b573f]">Projette le code, le chat rejoint et fournit la musique.</p>
-          </div>
+    <div className="mx-auto grid w-full max-w-6xl gap-5 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] lg:items-start">
+      <section className={`${BLOCK} p-5 text-[#2e2014] sm:p-7`} style={{ background: ACCENT }} data-testid="lobby-salle">
+        <Label dot="#f4ecdb">Code à afficher sur le live</Label>
+        <div className="my-5">
+          <RoomCode code={code} size="xl" />
         </div>
-        <div className="flex flex-col items-end gap-2 text-right text-xs uppercase tracking-[0.3em] text-[#6b573f]">
-          {props.hostUser ? (
-            <div className="rounded-xl border border-[rgba(46,32,20,.22)] bg-[#efe5d0] px-3 py-2 text-right text-[11px] text-[#6b573f]">
-              <p className="uppercase tracking-[0.3em] text-[#6b573f]">Hôte</p>
-              <p className="text-sm font-semibold text-[#2e2014]">{props.hostUser.username || `#${props.hostUser.user_id}`}</p>
-            </div>
-          ) : null}
-          <div>
-            <div>Code</div>
-            <div className="text-lg font-semibold tracking-[0.25em]" style={{ color: accent }}>{roomCode}</div>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
-        <SurfaceCard className="space-y-3 border-[rgba(46,32,20,.22)] bg-[#efe5d0]">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-sm text-[#2e2014]">
-              <Waves className="h-4 w-4" />
-              <span>Participants</span>
-            </div>
-            <span className="text-xs uppercase tracking-[0.3em] text-[#6b573f]">{audience.length} présent(s)</span>
-          </div>
-          <ParticipantPanel
-            participants={audience}
-            scores={props.scores}
-            title="Public connecté"
-            compact
-            modeConfig={props.modeConfig}
+        <div className="border-t-2 border-dashed border-[#2e2014]/40 pt-4">
+          <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.18em]">Public connecté · {n}</p>
+          <Roster
+            participants={props.participants}
+            hostUserId={props.room?.host_user_id ?? null}
+            currentUserId={props.currentUserId}
+            accent={ACCENT}
+            emptyLabel="Personne pour l'instant."
           />
-        </SurfaceCard>
-
-        <SurfaceCard className="space-y-3 border-[rgba(46,32,20,.22)] bg-[#efe5d0]">
-          <p className="text-xs uppercase tracking-[0.35em] text-[#6b573f]">Rappel</p>
-          <h4 className="text-xl font-semibold text-[#2e2014]">Un seul bouton : lancer</h4>
-          <p className="text-sm text-[#6b573f]">Quand tout le monde est prêt, clique sur “Lancer” depuis la vue jeu.</p>
-          <div className="rounded-xl border border-[rgba(46,32,20,.22)] bg-[#efe5d0] px-4 py-3 text-sm text-[#6b573f]">
-            <p className="text-xs uppercase tracking-[0.3em] text-[#6b573f]">Code à projeter</p>
-            <p className="mt-1 text-3xl font-semibold tracking-[0.24em] text-[#2e2014]" style={{ color: accent }}>
-              {roomCode}
-            </p>
-            <p className="mt-2 text-xs text-[#6b573f]">Les joueurs collent ce code, connectent Spotify et entrent directement.</p>
-          </div>
-        </SurfaceCard>
-      </div>
-    </SurfaceCard>
-  );
+        </div>
+      </section>
+      <Panel label="La partie" dot={ACCENT}>
+        <p className="m-0 rounded-md border-2 border-[#2e2014] bg-[#efe5d0] px-4 py-3 text-sm font-semibold text-[#2e2014]">
+          {"Le mode streamer est en cours de développement : le lancement de partie n'est pas encore disponible. Reviens bientôt !"}
+        </p>
+        {props.hostUser ? (
+          <p className="mb-0 mt-4 text-sm text-[#6b573f]">
+            Hôte : <b className="text-[#2e2014]">{props.hostUser.username || `#${props.hostUser.user_id}`}</b>
+          </p>
+        ) : null}
+      </Panel>
+    </div>
+  )
 }
 
 export function StreamerLobbyView(props: LobbyRendererProps) {
@@ -165,12 +95,10 @@ export function StreamerLobbyView(props: LobbyRendererProps) {
         setJoinCode={props.setJoinCode}
         joining={props.joining}
       />
-    );
+    )
   }
-
   if ((props.view === "hosting" || props.view === "waiting") && props.room) {
-    return <StreamerLobby {...props} />;
+    return <StreamerLobby {...props} />
   }
-
-  return null;
+  return null
 }

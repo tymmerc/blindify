@@ -48,7 +48,7 @@ await host.getByText("Je présente seulement").click()
 await host.getByText("CODE DE LA SALLE").waitFor({ timeout: 40000 })
 await host.getByRole("button", { name: "10", exact: true }).click()
 await host.getByRole("button", { name: "10s", exact: true }).click()
-const code = (await host.locator("span.h-12.w-9").allTextContents()).join("")
+const code = await host.locator("[data-code]").first().getAttribute("data-code")
 say(`room ${code}`)
 
 // deux joueurs, chacun SA musique (profils deezer differents)

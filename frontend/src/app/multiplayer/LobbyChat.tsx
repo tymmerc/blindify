@@ -17,6 +17,7 @@ export function LobbyChat({
   messages,
   onSend,
   currentUserId,
+  accent,
   onClose,
   placeholder = "dis quelque chose...",
   emptyLabel = "Le canal est ouvert. Lance la discussion !",
@@ -62,9 +63,10 @@ export function LobbyChat({
     <div className="relative flex h-full min-h-[280px] flex-col overflow-hidden rounded-md border-2 border-[#2e2014] bg-[#ece1c8] shadow-[4px_4px_0_rgba(46,32,20,.18)]">
       <style>{chatAnimation}</style>
       {/* Header */}
-      <div className="flex items-center justify-between border-b-2 border-[#2e2014] px-5 py-4">
-        <p className="m-0 text-[11px] font-bold uppercase tracking-[0.22em] text-[#c65133]">
-          Lobby · Chat
+      <div className="flex items-center justify-between border-b-2 border-[#2e2014] px-5 py-3.5">
+        <p className="m-0 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.22em] text-[#2e2014]">
+          <span aria-hidden className="h-2.5 w-2.5 rounded-full border-[1.5px] border-[#2e2014]" style={{ background: accent ?? "#c65133" }} />
+          Le chat
         </p>
         <div className="flex items-center gap-2">
           <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-[#6b573f]">

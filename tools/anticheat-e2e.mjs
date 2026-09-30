@@ -65,7 +65,7 @@ for (const n of ["5", "10"]) {
   if (await btn.count()) { await btn.first().click(); break }
 }
 await host.getByRole("button", { name: "10s", exact: true }).click().catch(() => {})
-const code = (await host.locator("span.h-12.w-9").allTextContents()).join("")
+const code = await host.locator("[data-code]").first().getAttribute("data-code")
 say(`room ${code}, hote guest ${hostId}`)
 
 // ── Deux joueuses ──

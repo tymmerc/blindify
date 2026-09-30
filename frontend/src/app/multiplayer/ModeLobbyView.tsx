@@ -1374,12 +1374,6 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     router.replace("/modes")
   }, [room, userPayload, router, mode])
 
-  const handleChangeMode = useCallback(() => {
-    setGuest(false)
-    handleLeaveRoom()
-    router.push("/modes?from=/multiplayer")
-  }, [handleLeaveRoom, router, setGuest])
-
   useEffect(() => {
     const hasCode = Boolean(initialJoinCode)
     if (!modeConfig || !mode) return
@@ -1510,9 +1504,11 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
 
   const streamerModeSelector =
     mode === "streamer" && view !== "playing" && view !== "results" ? (
-      <div className="rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-4 text-[#2e2014] shadow-[4px_4px_0_rgba(46,32,20,.18)]">
-        <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#7d9471]">Gameplay</p>
-        <h3 className="font-display text-lg font-semibold">Choisis le format</h3>
+      <div className="mx-auto w-full max-w-6xl rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-4 text-[#2e2014] shadow-[4px_4px_0_rgba(46,32,20,.18)] sm:p-5">
+        <p className="m-0 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.22em]">
+          <span aria-hidden className="h-2.5 w-2.5 rounded-full border-[1.5px] border-[#2e2014] bg-[#7d9471]" />
+          Le format
+        </p>
         <div className="mt-3 grid gap-2 md:grid-cols-3">
           {[
             { key: "viewers_only", title: "Chat avec ta musique", desc: "Le chat joue avec tes musiques", value: "viewers_only" as StreamerSubMode },
@@ -1523,7 +1519,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
               key={opt.key}
               type="button"
               onClick={() => setStreamerMode(opt.value)}
-              className={`rounded-md border-2 px-3 py-3 text-left transition ${streamerMode === opt.value ? "border-[#2e2014] bg-[#7d9471] text-[#f4ecdb] shadow-[3px_3px_0_#2e2014]" : "border-[rgba(46,32,20,.35)] bg-[#efe5d0] text-[#2e2014] hover:border-[#2e2014]"}`}
+              className={`rounded-md border-2 px-3 py-3 text-left transition ${streamerMode === opt.value ? "border-[#2e2014] bg-[#7d9471] text-[#2e2014] shadow-[3px_3px_0_#2e2014]" : "border-[rgba(46,32,20,.35)] bg-[#efe5d0] text-[#2e2014] hover:border-[#2e2014]"}`}
             >
               <p className="text-sm font-bold">{opt.title}</p>
               <p className="text-xs opacity-80">{opt.desc}</p>
@@ -1715,7 +1711,6 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       title={headerCopy.title}
       subtitle={headerCopy.subtitle}
       onLeave={handleLeaveRoom}
-      onChangeMode={handleChangeMode}
       hideHeader={view === "results" || view === "playing"}
       error={error || lobby.message}
       errorAction={error ? errorAction : null}

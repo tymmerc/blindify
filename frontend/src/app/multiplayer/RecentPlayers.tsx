@@ -37,9 +37,13 @@ export function RecentPlayers({ roomCode, accent }: { roomCode: string; accent: 
 
   return (
     <div className="rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-4 shadow-[4px_4px_0_rgba(46,32,20,.18)]">
-      <p className="mb-2.5 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>
-        <UserPlus className="h-4 w-4" /> Rejoue avec
-      </p>
+      <div className="mb-3 flex items-center justify-between">
+        <p className="m-0 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.22em] text-[#2e2014]">
+          <span aria-hidden className="h-2.5 w-2.5 rounded-full border-[1.5px] border-[#2e2014]" style={{ background: accent }} />
+          Rejoue avec
+        </p>
+        <UserPlus aria-hidden className="h-4 w-4 text-[#6b573f]" />
+      </div>
       <div className="flex flex-col gap-2">
         {players.map(p => {
           const state = invited[p.userId]

@@ -86,7 +86,7 @@ await host.getByText("Je présente seulement").click()
 await host.getByText("CODE DE LA SALLE").waitFor({ timeout: 40000 })
 await host.getByRole("button", { name: String(ROUNDS), exact: true }).click()
 await host.getByRole("button", { name: "10s", exact: true }).click()
-const code = (await host.locator("span.h-12.w-9").allTextContents()).join("")
+const code = await host.locator("[data-code]").first().getAttribute("data-code")
 say(`\n=== partie ${code} · hote presentateur + 3 joueurs · ${ROUNDS} manches${CHAOS ? " · AVEC CHAOS" : ""} ===`)
 
 const players = []
