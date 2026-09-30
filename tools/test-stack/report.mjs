@@ -7,7 +7,8 @@ import path from "node:path"
 const RUN = "/opt/blindify/.test-stack"
 const PUBLIC_DIR = "/opt/dev/blindz/tests"
 const PUBLIC_URL = "https://dev.tymmerc.eu/blindz/tests"
-const KEEP = 30
+const KEEP = 30         // campagnes completes (celles de la nuit)
+const KEEP_PARTIAL = 10 // essais partiels (--no-browser) : ils ne chassent pas l'historique
 
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]))
 const stampOf = iso => iso.replace(/[-:]/g, "").replace("T", "-").slice(0, 13)
@@ -52,8 +53,9 @@ img{max-width:220px;border:1.5px solid var(--encre);margin:6px 6px 0 0;vertical-
 </style></head><body><main>
 <p class="aide"><a href="../">toutes les campagnes</a></p>
 <h1>Campagne du ${esc(new Date(r.date).toLocaleString("fr-FR", { timeZone: "Europe/Paris" }))}</h1>
-<div class="bandeau">${r.ok ? "Tout est vert." : "Au moins un scénario a échoué."} ${r.duree_s} s · graine ${r.seed} · commit ${esc((r.commit ?? "?").slice(0, 7))}</div>
+<div class="bandeau">${r.partial ? "Essai partiel (bots seuls, sans navigateur)." : ""} ${r.ok ? "Tout est vert." : "Au moins un scénario a échoué."} ${r.duree_s} s · graine ${r.seed} · commit ${esc((r.commit ?? "?").slice(0, 7))}</div>
 <p class="aide">Pile isolée : base de test jetable, backend de test, extraits synthétiques locaux. Sorties sur Internet refusées pendant la campagne : <b>${r.egress.length}</b>${r.egress.length ? ` (${esc(r.egress[0])})` : ""}.
+Fichiers non commités au moment du test (non testés, la pile tourne sur le commit) : <b>${r.non_commite ?? "?"}</b>.
 Coupures réseau des bots rattrapées par une reprise : <b>${(r.reprises_reseau ?? []).length}</b>${(r.reprises_reseau ?? []).length ? ` (${esc(r.reprises_reseau[0])})` : ""}.</p>
 <h2>Salles de bots</h2><table>${rooms}</table>
 <h2>Navigateur</h2>${r.browser?.skipped ? '<p class="aide">Non lancé pour cette campagne.</p>' : checks}
@@ -61,11 +63,12 @@ Coupures réseau des bots rattrapées par une reprise : <b>${(r.reprises_reseau 
 }
 
 function indexPage(entries) {
-  const rowsHtml = entries.map(e => `<tr><td><span class="pill ${e.ok ? "ok" : "ko"}">${e.ok ? "vert" : "rouge"}</span></td><td><a href="${esc(e.stamp)}/">${esc(new Date(e.date).toLocaleString("fr-FR", { timeZone: "Europe/Paris" }))}</a></td><td class="aide">${e.rooms} salles · ${e.duree_s} s · ${esc(e.resume)}</td></tr>`).join("")
+  const pillOf = e => e.partial ? '<span class="pill part">partiel</span>' : `<span class="pill ${e.ok ? "ok" : "ko"}">${e.ok ? "vert" : "rouge"}</span>`
+  const rowsHtml = entries.map(e => `<tr><td>${pillOf(e)}</td><td><a href="${esc(e.stamp)}/">${esc(new Date(e.date).toLocaleString("fr-FR", { timeZone: "Europe/Paris" }))}</a></td><td class="aide">${e.rooms} salles · ${e.duree_s} s · ${esc(e.resume)}</td></tr>`).join("")
   return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Campagnes de tests</title>
 <style>body{margin:0;background:#f4ecdb;color:#2e2014;font:15px/1.5 system-ui,sans-serif}main{max-width:900px;margin:0 auto;padding:20px 16px}h1{font:600 1.7rem Georgia,serif}
 table{width:100%;border-collapse:collapse;background:#ece1c8;border:2px solid #2e2014}td{padding:9px;border-top:1px solid rgba(46,32,20,.2)}.aide{color:#6b573f;font-size:13px}
-.pill{display:inline-block;border:1.5px solid #2e2014;border-radius:99px;padding:0 8px;font-size:11px;font-weight:700;text-transform:uppercase}.ok{background:#7d9471}.ko{background:#c65133;color:#f4ecdb}a{color:#2e2014}</style></head>
+.pill{display:inline-block;border:1.5px solid #2e2014;border-radius:99px;padding:0 8px;font-size:11px;font-weight:700;text-transform:uppercase}.ok{background:#7d9471}.ko{background:#c65133;color:#f4ecdb}.part{background:#efe5d0}a{color:#2e2014}</style></head>
 <body><main><p class="aide"><a href="../">tableau de bord</a></p><h1>Campagnes de tests</h1><table>${rowsHtml || '<tr><td class="aide">Aucune campagne.</td></tr>'}</table></main></body></html>`
 }
 
@@ -85,18 +88,28 @@ export function writeReport(result) {
   fs.rmSync(cur, { recursive: true, force: true })
   fs.writeFileSync(path.join(dir, "report.json"), JSON.stringify(result, null, 2))
   fs.writeFileSync(path.join(dir, "index.html"), page(result, stamp))
-  fs.writeFileSync(path.join(PUBLIC_DIR, "latest.json"), JSON.stringify({ stamp, ok: result.ok, date: result.date }))
+  // latest.json ne suit que les campagnes completes : un essai partiel vert ne
+  // doit pas masquer une nuit rouge.
+  if (!result.partial) fs.writeFileSync(path.join(PUBLIC_DIR, "latest.json"), JSON.stringify({ stamp, ok: result.ok, date: result.date }))
 
-  // Index des campagnes, les plus recentes d'abord ; on garde les 30 dernieres.
-  const stamps = fs.readdirSync(PUBLIC_DIR).filter(n => /^\d{8}-\d{4}$/.test(n)).sort().reverse()
-  for (const old of stamps.slice(KEEP)) fs.rmSync(path.join(PUBLIC_DIR, old), { recursive: true, force: true })
-  const entries = stamps.slice(0, KEEP).map(s => {
+  // Index, les plus recentes d'abord. On garde 30 campagnes completes et 10
+  // essais partiels ; seuls des dossiers au nom horodate sont concernes.
+  const all = fs.readdirSync(PUBLIC_DIR).filter(n => /^\d{8}-\d{4}$/.test(n)).sort().reverse().map(s => {
     try {
       const r = JSON.parse(fs.readFileSync(path.join(PUBLIC_DIR, s, "report.json"), "utf8"))
-      const ko = [...r.rooms.filter(x => !x.ok).map(x => x.label), ...(r.browser?.checks ?? []).filter(c => !c.ok).map(c => c.label)]
-      return { stamp: s, ok: r.ok, date: r.date, rooms: r.rooms.length, duree_s: r.duree_s, resume: ko.length ? `en échec : ${ko.join(", ")}` : "tout vert" }
-    } catch { return null }
-  }).filter(Boolean)
+      r.partial = Boolean(r.partial ?? r.browser?.skipped) // rapports d'avant le drapeau
+      return { s, r }
+    } catch { return { s, r: null } }
+  })
+  const full = all.filter(x => x.r && !x.r.partial), partial = all.filter(x => !x.r || x.r.partial)
+  const drop = [...full.slice(KEEP), ...partial.slice(KEEP_PARTIAL)]
+  for (const x of drop) fs.rmSync(path.join(PUBLIC_DIR, x.s), { recursive: true, force: true })
+  const kept = all.filter(x => x.r && !drop.includes(x))
+  const entries = kept.map(({ s, r }) => {
+    const ko = [...r.rooms.filter(x => !x.ok).map(x => x.label), ...(r.browser?.checks ?? []).filter(c => !c.ok).map(c => c.label)]
+    return { stamp: s, ok: r.ok, partial: Boolean(r.partial), date: r.date, rooms: r.rooms.length, duree_s: r.duree_s,
+      resume: r.partial ? `bots seuls · ${ko.length ? `en échec : ${ko.join(", ")}` : "salles vertes"}` : ko.length ? `en échec : ${ko.join(", ")}` : "tout vert" }
+  })
   fs.writeFileSync(path.join(PUBLIC_DIR, "index.html"), indexPage(entries))
   return { dir, url: `${PUBLIC_URL}/${stamp}/` }
 }

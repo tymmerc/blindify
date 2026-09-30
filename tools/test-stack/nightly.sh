@@ -21,14 +21,21 @@ if [ "${1:-}" != "--dedans" ]; then
   HEAVY_WAIT=3600 /usr/local/bin/heavy "$0" --dedans >>"$LOG" 2>&1
   code=$?
   if [ "$code" -eq 75 ]; then
+    # Verrou non obtenu : la pile appartient peut-etre a un essai manuel en cours,
+    # on n'y touche pas.
     "$NODE" "$HERE/notify.mjs" "Campagne de nuit non lancee : machine occupee par une autre tache lourde, ou memoire insuffisante (voir le journal)." >>"$LOG" 2>&1
-  elif [ "$code" -eq 137 ]; then
-    "$NODE" "$HERE/notify.mjs" "Campagne de nuit tuee par le garde-fou memoire (plafond heavy depasse)." >>"$LOG" 2>&1
+  elif [ "$code" -ne 0 ]; then
+    # Tache tuee ou en echec : on s'assure que rien ne reste debout.
+    "$HERE/stack.sh" down >>"$LOG" 2>&1 || true
+    [ "$code" -eq 137 ] && "$NODE" "$HERE/notify.mjs" "Campagne de nuit tuee par le garde-fou memoire (plafond heavy depasse)." >>"$LOG" 2>&1
   fi
   exit "$code"
 fi
 
 cd "$HERE"
+# Demontage garanti, meme si la campagne est interrompue (TERM, HUP, Ctrl-C).
+trap '"$HERE/stack.sh" down >/dev/null 2>&1 || true' EXIT
+trap 'exit 130' INT TERM HUP
 echo "=== $(date '+%F %T') campagne (commit $(git -C "$ROOT" rev-parse --short HEAD))"
 # Une pile restee debout (arret brutal la veille) : on repart propre.
 ./stack.sh down >/dev/null 2>&1

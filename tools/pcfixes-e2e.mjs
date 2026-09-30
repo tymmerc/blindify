@@ -133,24 +133,31 @@ await host.screenshot({ path: `${SHOTS}/3-parti.png` })
 await hostCtx.close(); await p2Ctx.close()
 
 // ---------- 2. buzzer SANS musique importee ----------
-const bz = await mk({ ...devices["iPhone 13"] })
-const page = await bz.newPage()
-page.on("pageerror", e => bad(`BUZZER crash: ${String(e).slice(0, 120)}`))
-let soloTracks = 0
-page.on("response", async r => {
-  if (r.url().includes("/api/games/solo")) {
-    try { soloTracks = (await r.json()).data.tracks.length } catch { /* autre */ }
-  }
-})
-await page.goto(`${B}/buzzer/?tap`, { waitUntil: "networkidle", timeout: 60000 })
-await page.locator('input[placeholder="Joueur 1"]').fill("Ana")
-await page.locator('input[placeholder="Joueur 2"]').fill("Bob")
-await page.getByRole("button", { name: /lancer la partie/i }).click()
-const board = await page.getByText(/posez tous votre doigt/i).waitFor({ timeout: 60000 }).then(() => true).catch(() => false)
-if (board) say(`  [ok] buzzer demarre SANS import (fonds commun : ${soloTracks} titres)`)
-else bad(`buzzer sans import ne demarre pas (${(await page.evaluate(() => document.body.innerText)).replace(/\s+/g, " ").slice(0, 140)})`)
-await page.screenshot({ path: `${SHOTS}/4-buzzer-sans-import.png` })
-await bz.close()
+// Seulement sur la pile : sur dev, un invite sans bibliotheque pioche dans
+// TOUTE la table audio_sources de prod, et chaque extrait expire declenche une
+// recherche sur le vrai Deezer.
+if (PILE) {
+  const bz = await mk({ ...devices["iPhone 13"] })
+  const page = await bz.newPage()
+  page.on("pageerror", e => bad(`BUZZER crash: ${String(e).slice(0, 120)}`))
+  let soloTracks = 0
+  page.on("response", async r => {
+    if (r.url().includes("/api/games/solo")) {
+      try { soloTracks = (await r.json()).data.tracks.length } catch { /* autre */ }
+    }
+  })
+  await page.goto(`${B}/buzzer/?tap`, { waitUntil: "networkidle", timeout: 60000 })
+  await page.locator('input[placeholder="Joueur 1"]').fill("Ana")
+  await page.locator('input[placeholder="Joueur 2"]').fill("Bob")
+  await page.getByRole("button", { name: /lancer la partie/i }).click()
+  const board = await page.getByText(/posez tous votre doigt/i).waitFor({ timeout: 60000 }).then(() => true).catch(() => false)
+  if (board) say(`  [ok] buzzer demarre SANS import (fonds commun : ${soloTracks} titres)`)
+  else bad(`buzzer sans import ne demarre pas (${(await page.evaluate(() => document.body.innerText)).replace(/\s+/g, " ").slice(0, 140)})`)
+  await page.screenshot({ path: `${SHOTS}/4-buzzer-sans-import.png` })
+  await bz.close()
+} else {
+  say("  (buzzer sans musique : verifie uniquement sur la pile de test)")
+}
 
 if (!PILE) cleanupSeeded()
 say(`\n=== ${problems.length ? problems.length + " PROBLEME(S)" : "AUCUN PROBLEME"} ===`)

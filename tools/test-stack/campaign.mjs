@@ -84,6 +84,10 @@ const result = {
   browser,
 }
 result.ok = egress.length === 0 && rooms.every(r => r.ok) && (browser.skipped || browser.checks.every(c => c.ok))
+result.partial = Boolean(browser.skipped)
+// Ce qui n'est pas commite n'est PAS teste (la pile tourne sur le commit) : on le dit.
+result.non_commite = spawnSync("git", ["-C", ROOT, "status", "--porcelain"], { encoding: "utf8" }).stdout.split("\n").filter(Boolean).length
+result.backend_commit = fs.existsSync(`${RUN}/run/backend.commit`) ? fs.readFileSync(`${RUN}/run/backend.commit`, "utf8").trim() : null
 const where = writeReport(result)
 say(`\n${result.ok ? "CAMPAGNE VERTE" : "CAMPAGNE ROUGE"} en ${result.duree_s} s · rapport : ${where.url}`)
 if (egress.length) say(`  !! ${egress.length} tentative(s) de sortie sur Internet refusee(s) : ${egress[0]}`)

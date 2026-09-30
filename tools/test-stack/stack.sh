@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Pile de test ISOLEE de Blindz. Rien ici ne touche la base de prod.
 #
-#   stack.sh up       base neuve + backend de test + proxy local
+#   stack.sh front    copie de travail du commit courant + build du front de test
+#                     (tache lourde : via heavy). A refaire apres chaque commit.
+#   stack.sh up       base neuve + backend de test + serveur local
 #   stack.sh down     arrete tout et jette la base (elle vit en memoire)
 #   stack.sh status
-#   stack.sh front    (re)construit le front de test depuis HEAD, a lancer via heavy
 #
 # Pourquoi : le backend de dev (:3097) ecrit dans la base de PROD. Une campagne
 # de tests a l'echelle doit avoir sa propre base, son propre backend, et ne
@@ -12,8 +13,12 @@
 #
 #   base      conteneur blindz-test-postgres, 127.0.0.1:5436, donnees en tmpfs,
 #             memoire plafonnee ; schema copie de la prod (structure seule)
-#   backend   le code du depot, 127.0.0.1:3098, garde-fou no-egress.cjs
-#   proxy     127.0.0.1:3180 : front de test, API, websocket, extraits locaux
+#   backend   le COMMIT courant (copie de travail .test-stack/front), :3098.
+#             Jamais le dossier backend/ du depot : son .env vise la base de prod
+#             (dotenv le lit dans le dossier courant) et il peut contenir un
+#             fichier a moitie edite. Garde-fou no-egress.cjs : boucle locale
+#             seulement, et seulement vers la base de test et le serveur local.
+#   serveur   127.0.0.1:3180 : front de test, API, websocket, extraits, faux Deezer
 #   adresse   http://blindz-test.localhost:3180/blindify/ (Chrome resout
 #             *.localhost en boucle locale ; il faut un nom a point pour que
 #             le cookie de session soit accepte)
@@ -22,6 +27,7 @@ set -euo pipefail
 ROOT=/opt/blindify
 RUN="$ROOT/.test-stack"
 HERE="$ROOT/tools/test-stack"
+WT="$RUN/front"            # copie de travail du commit teste (front ET backend)
 NODE=/root/.nvm/versions/node/v22.21.1/bin/node
 PG=blindz-test-postgres
 PGPORT=5436
@@ -31,11 +37,27 @@ HOST=blindz-test.localhost
 mkdir -p "$RUN/logs" "$RUN/run" "$RUN/audio"; touch "$RUN/logs/egress.log"
 
 log() { echo "[stack] $*"; }
-alive() { [ -f "$RUN/run/$1.pid" ] && kill -0 "$(cat "$RUN/run/$1.pid")" 2>/dev/null; }
 wait_http() { # url, secondes
   for _ in $(seq 1 "$2"); do curl -sf -m 3 "$1" >/dev/null 2>&1 && return 0; sleep 1; done
   return 1
 }
+
+# Un pid ne suffit pas (apres un arret brutal, il peut designer un autre
+# processus) : on verifie aussi la ligne de commande.
+mark_of() { [ "$1" = backend ] && echo "$HERE/no-egress.cjs" || echo "$HERE/proxy.mjs"; }
+alive() {
+  local f="$RUN/run/$1.pid" pid
+  [ -f "$f" ] || return 1
+  pid=$(cat "$f")
+  kill -0 "$pid" 2>/dev/null && tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null | grep -qF "$(mark_of "$1")"
+}
+stop_pid() { # pid : TERM, 15 s de grace, puis KILL
+  local pid=$1
+  kill "$pid" 2>/dev/null || return 0
+  for _ in $(seq 1 15); do kill -0 "$pid" 2>/dev/null || return 0; sleep 1; done
+  kill -9 "$pid" 2>/dev/null || true
+}
+port_busy() { ss -ltnH "sport = :$1" 2>/dev/null | grep -q .; }
 
 start_db() {
   if docker ps --format '{{.Names}}' | grep -qx "$PG"; then log "base deja lancee"; return; fi
@@ -51,7 +73,7 @@ start_db() {
       && docker exec "$PG" psql -U blindify -d blindify_test -qAt -c "SELECT 1" >/dev/null 2>&1 && break
     sleep 1
   done
-  # Structure seule de la prod (aucune donnee), pour tester ce qui tourne vraiment.
+  # Structure seule de la prod (aucune donnee, lecture seule cote prod).
   docker exec blindify-postgres pg_dump -U blindify --schema-only --no-owner --no-privileges blindify \
     | docker exec -i "$PG" psql -q -U blindify -d blindify_test >"$RUN/logs/schema.log" 2>&1 || true
   local n; n=$(docker exec "$PG" psql -U blindify -d blindify_test -qAt -c "SELECT count(*) FROM pg_tables WHERE schemaname='public'")
@@ -61,6 +83,11 @@ start_db() {
 
 start_backend() {
   if alive backend; then log "backend deja lance"; return; fi
+  if port_busy "$BACKEND_PORT"; then log "ECHEC : le port $BACKEND_PORT est deja pris par un autre processus"; exit 1; fi
+  local be="$WT/backend"
+  [ -f "$be/src/index.ts" ] || { log "ECHEC : pas de copie de travail, lancer d'abord : heavy $HERE/stack.sh front"; exit 1; }
+  [ -e "$be/.env" ] && { log "ECHEC : un .env existe dans $be, il pourrait viser la prod"; exit 1; }
+  ln -sfn "$ROOT/backend/node_modules" "$be/node_modules"
   local env="$RUN/run/backend.env"
   umask 077
   cat >"$env" <<EOF
@@ -76,62 +103,87 @@ SESSION_SECRET=$(openssl rand -hex 32)
 JWT_SECRET=$(openssl rand -hex 32)
 E2E_BYPASS_KEY=$(cat "$ROOT/.e2e-bypass-key")
 NO_EGRESS_LOG=$RUN/logs/egress.log
+NO_EGRESS_ALLOW_PORTS=$PGPORT,$PROXY_PORT,$BACKEND_PORT
 DEEZER_API_BASE=http://127.0.0.1:$PROXY_PORT/deezer-stub
 EOF
+  printf 'X-E2E-Key: %s\nContent-Type: application/json\nOrigin: http://%s:%s\n' "$(cat "$ROOT/.e2e-bypass-key")" "$HOST" "$PROXY_PORT" >"$RUN/run/headers"
   umask 022
   : >"$RUN/logs/egress.log"
+  git -C "$WT" rev-parse HEAD >"$RUN/run/backend.commit"
   (
-    cd "$ROOT/backend"
+    cd "$be"
     set -a; . "$env"; set +a
+    # 9>&- : ne pas heriter du verrou de heavy (sinon un backend oublie le
+    # garderait et bloquerait toutes les taches lourdes de la machine).
     nohup "$NODE" -r "$HERE/no-egress.cjs" node_modules/ts-node/dist/bin.js --transpile-only src/index.ts \
-      >"$RUN/logs/backend.log" 2>&1 &
+      >"$RUN/logs/backend.log" 2>&1 9>&- &
     echo $! >"$RUN/run/backend.pid"
   )
-  if wait_http "http://127.0.0.1:$BACKEND_PORT/api/health" 90; then log "backend de test pret (:$BACKEND_PORT)"
-  else log "ECHEC backend, fin du journal :"; tail -20 "$RUN/logs/backend.log"; exit 1; fi
+  if ! wait_http "http://127.0.0.1:$BACKEND_PORT/api/health" 90; then
+    log "ECHEC backend, fin du journal :"; tail -20 "$RUN/logs/backend.log"; exit 1
+  fi
+  # Temoin : un invite cree par l'API doit apparaitre dans la base DE TEST.
+  # Sinon le backend ecrit ailleurs, et on l'arrete avant tout le reste.
+  local name="sonde-pile-$$"
+  curl -sf -m 10 -X POST "http://127.0.0.1:$BACKEND_PORT/api/auth/guest" -H @"$RUN/run/headers" \
+    -d "{\"nickname\":\"$name\"}" >/dev/null || true
+  if [ "$(docker exec "$PG" psql -U blindify -d blindify_test -qAt -c "SELECT count(*) FROM users WHERE username='$name'")" != "1" ]; then
+    log "ECHEC : le backend de test n'ecrit pas dans la base de test, arret immediat"
+    stop_pid "$(cat "$RUN/run/backend.pid")"; rm -f "$RUN/run/backend.pid"
+    exit 1
+  fi
+  log "backend de test pret (:$BACKEND_PORT, commit $(cut -c1-7 "$RUN/run/backend.commit"), temoin ecrit en base de test)"
 }
 
 start_proxy() {
-  if alive proxy; then log "proxy deja lance"; return; fi
+  if alive proxy; then log "serveur local deja lance"; return; fi
+  if port_busy "$PROXY_PORT"; then log "ECHEC : le port $PROXY_PORT est deja pris par un autre processus"; exit 1; fi
   "$NODE" "$HERE/catalog.mjs" "$RUN/audio" >/dev/null
-  FRONT_DIR="$RUN/front/frontend/out" AUDIO_DIR="$RUN/audio" PROXY_PORT=$PROXY_PORT BACKEND_PORT=$BACKEND_PORT \
+  FRONT_DIR="$WT/frontend/out" AUDIO_DIR="$RUN/audio" PROXY_PORT=$PROXY_PORT BACKEND_PORT=$BACKEND_PORT \
     STUB_LOG="$RUN/logs/deezer-stub.log" PUBLIC_ORIGIN="http://$HOST:$PROXY_PORT" \
-    nohup "$NODE" "$HERE/proxy.mjs" >"$RUN/logs/proxy.log" 2>&1 &
+    nohup "$NODE" "$HERE/proxy.mjs" >"$RUN/logs/proxy.log" 2>&1 9>&- &
   echo $! >"$RUN/run/proxy.pid"
-  wait_http "http://127.0.0.1:$PROXY_PORT/blindify/api/health" 20 && log "proxy pret : http://$HOST:$PROXY_PORT/blindify/"
+  wait_http "http://127.0.0.1:$PROXY_PORT/blindify/api/health" 20 && log "serveur local pret : http://$HOST:$PROXY_PORT/blindify/"
 }
 
 stop() {
   for p in proxy backend; do
-    if alive "$p"; then kill "$(cat "$RUN/run/$p.pid")" 2>/dev/null || true; fi
+    if alive "$p"; then stop_pid "$(cat "$RUN/run/$p.pid")"; fi
     rm -f "$RUN/run/$p.pid"
   done
+  # Filet : processus de la pile sans pidfile (arret brutal, redemarrage du VPS).
+  local pid
+  for pid in $(pgrep -f -- "-r $HERE/no-egress.cjs" || true) $(pgrep -f -- "$NODE $HERE/proxy.mjs" || true); do
+    [ "$pid" = "$$" ] || stop_pid "$pid"
+  done
   docker rm -f "$PG" >/dev/null 2>&1 || true
+  rm -f "$RUN/run/backend.env" "$RUN/run/headers" # contiennent la cle E2E
   log "pile arretee, base jetee"
 }
 
 build_front() {
   local head; head=$(git -C "$ROOT" rev-parse HEAD)
-  if [ -f "$RUN/front.commit" ] && [ "$(cat "$RUN/front.commit")" = "$head" ] && [ -f "$RUN/front/frontend/out/index.html" ]; then
-    log "front de test deja a jour ($head)"; return
+  if [ -f "$RUN/front.commit" ] && [ "$(cat "$RUN/front.commit")" = "$head" ] && [ -f "$WT/frontend/out/index.html" ]; then
+    log "copie de travail et front de test deja a jour ($head)"; return
   fi
   # Copie de travail separee : un build dans frontend/ ecraserait out/ (servi
   # tel quel par nginx) et le .next du serveur de dev.
-  if [ -d "$RUN/front/.git" ] || [ -f "$RUN/front/.git" ]; then
-    git -C "$RUN/front" checkout -q --detach "$head"
+  if [ -e "$WT/.git" ]; then
+    git -C "$WT" checkout -q --detach "$head"
   else
-    git -C "$ROOT" worktree add -q --detach "$RUN/front" "$head"
+    git -C "$ROOT" worktree add -q --detach "$WT" "$head"
   fi
-  ln -sfn "$ROOT/frontend/node_modules" "$RUN/front/frontend/node_modules"
-  ln -sfn "$ROOT/frontend/.node" "$RUN/front/frontend/.node"
+  ln -sfn "$ROOT/frontend/node_modules" "$WT/frontend/node_modules"
+  ln -sfn "$ROOT/frontend/.node" "$WT/frontend/.node"
+  ln -sfn "$ROOT/backend/node_modules" "$WT/backend/node_modules"
   (
-    cd "$RUN/front/frontend"
+    cd "$WT/frontend" || exit 1
     unset __NEXT_PRIVATE_STANDALONE_CONFIG
-    NEXT_PUBLIC_API_URL="http://$HOST:$PROXY_PORT/blindify" NEXT_PUBLIC_BASE_PATH=/blindify \
+    NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_API_URL="http://$HOST:$PROXY_PORT/blindify" NEXT_PUBLIC_BASE_PATH=/blindify \
       PATH="./.node/bin:$PATH" npx next build >"$RUN/logs/front-build.log" 2>&1
   ) || { log "ECHEC du build du front de test"; tail -30 "$RUN/logs/front-build.log"; exit 1; }
   echo "$head" >"$RUN/front.commit"
-  log "front de test construit ($head)"
+  log "copie de travail et front de test a jour ($head)"
 }
 
 case "${1:-status}" in

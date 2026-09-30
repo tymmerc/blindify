@@ -9,6 +9,11 @@ import http from "node:http"
 import net from "node:net"
 import fs from "node:fs"
 import path from "node:path"
+import { pipeline } from "node:stream"
+
+// Une requete mal formee ne doit jamais tuer le serveur en pleine campagne :
+// les scenarios suivants echoueraient en "connexion refusee" sans cause lisible.
+process.on("uncaughtException", err => console.error(`[proxy] exception rattrapee : ${err?.stack || err}`))
 
 const PORT = Number(process.env.PROXY_PORT || 3180)
 const BACKEND = { host: "127.0.0.1", port: Number(process.env.BACKEND_PORT || 3098) }
@@ -22,28 +27,50 @@ const TYPES = {
   ".jpg": "image/jpeg", ".webp": "image/webp", ".xml": "application/xml",
 }
 
+const plain = (res, code, text) => { if (!res.headersSent) res.writeHead(code, { "Content-Type": "text/plain" }); res.end(text) }
+// pipeline detruit le flux de lecture si le client coupe en cours de route.
+const stream = (file, res, opts) => pipeline(fs.createReadStream(file, opts), res, () => {})
+
+/** Plage HTTP -> [debut, fin] inclusifs, null si absente, false si hors fichier. */
+function parseRange(header, size) {
+  const m = header && /^bytes=(\d*)-(\d*)$/.exec(header.trim())
+  if (!m || (m[1] === "" && m[2] === "")) return null
+  let start, end
+  if (m[1] === "") { start = Math.max(0, size - Number(m[2])); end = size - 1 } // suffixe : les N derniers octets
+  else { start = Number(m[1]); end = m[2] === "" ? size - 1 : Math.min(Number(m[2]), size - 1) }
+  if (start >= size || end < start) return false
+  return [start, end]
+}
+
 function sendFile(req, res, file) {
-  fs.stat(file, (err, st) => {
-    if (err || !st.isFile()) { res.writeHead(404, { "Content-Type": "text/plain" }); res.end("introuvable"); return }
-    const type = TYPES[path.extname(file)] || "application/octet-stream"
-    const range = req.headers.range && /bytes=(\d*)-(\d*)/.exec(req.headers.range)
-    if (range) {
-      // Les lecteurs audio demandent des plages : sans 206, Chrome ne sait pas
-      // reprendre la lecture ni connaitre la duree.
-      const start = range[1] ? Number(range[1]) : 0
-      const end = range[2] ? Math.min(Number(range[2]), st.size - 1) : st.size - 1
-      res.writeHead(206, { "Content-Type": type, "Content-Range": `bytes ${start}-${end}/${st.size}`, "Accept-Ranges": "bytes", "Content-Length": end - start + 1 })
-      fs.createReadStream(file, { start, end }).pipe(res)
-      return
-    }
-    res.writeHead(200, { "Content-Type": type, "Content-Length": st.size, "Accept-Ranges": "bytes", "Cache-Control": "no-store" })
-    fs.createReadStream(file).pipe(res)
-  })
+  try {
+    fs.stat(file, (err, st) => {
+      if (err || !st.isFile()) return plain(res, 404, "introuvable")
+      const type = TYPES[path.extname(file)] || "application/octet-stream"
+      const range = parseRange(req.headers.range, st.size)
+      if (range === false) {
+        res.writeHead(416, { "Content-Range": `bytes */${st.size}` }); res.end(); return
+      }
+      if (range) {
+        // Les lecteurs audio demandent des plages : sans 206, Chrome ne sait pas
+        // reprendre la lecture ni connaitre la duree.
+        const [start, end] = range
+        res.writeHead(206, { "Content-Type": type, "Content-Range": `bytes ${start}-${end}/${st.size}`, "Accept-Ranges": "bytes", "Content-Length": end - start + 1 })
+        return stream(file, res, { start, end })
+      }
+      res.writeHead(200, { "Content-Type": type, "Content-Length": st.size, "Accept-Ranges": "bytes", "Cache-Control": "no-store" })
+      stream(file, res)
+    })
+  } catch {
+    plain(res, 400, "chemin invalide") // ex. octet nul : fs.stat leve de facon synchrone
+  }
 }
 
 /** Resolution facon export Next (trailingSlash) : /x/ -> /x/index.html. */
 function frontFile(urlPath) {
-  const rel = decodeURIComponent(urlPath.replace(/^\/blindify/, "")) || "/"
+  let rel
+  try { rel = decodeURIComponent(urlPath.replace(/^\/blindify/, "")) || "/" } catch { return null } // %, %zz...
+  if (rel.includes("\0")) return null
   const safe = path.normalize(rel).replace(/^(\.\.[/\\])+/, "")
   let file = path.join(FRONT, safe)
   if (!file.startsWith(FRONT)) return null
@@ -103,6 +130,10 @@ function deezerStub(req, res) {
 }
 
 const server = http.createServer((req, res) => {
+  try { route(req, res) } catch (e) { console.error(`[proxy] ${req.url} : ${e?.message}`); plain(res, 500, "erreur du serveur local") }
+})
+
+function route(req, res) {
   const url = req.url || "/"
   if (url.startsWith("/deezer-stub/")) return deezerStub(req, res)
   if (url.startsWith("/blindify/api/") || url.startsWith("/blindify/socket.io/")) return toBackend(req, res)
@@ -114,7 +145,7 @@ const server = http.createServer((req, res) => {
     return sendFile(req, res, file)
   }
   res.writeHead(404, { "Content-Type": "text/plain" }); res.end("introuvable")
-})
+}
 
 // Websocket : on rejoue la requete d'upgrade vers le backend et on branche les
 // deux sockets l'un sur l'autre.

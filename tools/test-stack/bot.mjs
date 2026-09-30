@@ -101,19 +101,27 @@ export class Bot {
     return { ok: true }
   }
 
+  /** Anti-triche : pendant une manche, la bonne reponse ne doit circuler dans
+   *  AUCUN message, sauf l'echo de ce que CE joueur a lui-meme tape. Le titre est
+   *  cherche partout (il est unique au catalogue), l'artiste seulement dans la
+   *  piste en cours (plusieurs morceaux partagent un artiste). */
+  inspect(evt, payload) {
+    const cur = this.current
+    if (!cur || this.reveals.has(cur.round) || !cur.truth?.title) return
+    const mine = this.intents.get(cur.round)
+    if (mine?.sentTitle === cur.truth.title) return
+    const blob = JSON.stringify(payload ?? "")
+    const track = JSON.stringify(payload?.track ?? payload?.currentTrack ?? "")
+    if (blob.includes(cur.truth.title)) this.leaks.push({ round: cur.round, evt, quoi: "titre" })
+    else if (cur.truth.artist && track.includes(cur.truth.artist)) this.leaks.push({ round: cur.round, evt, quoi: "artiste" })
+  }
+
   wire(s) {
-    const watch = (evt, payload) => {
-      // Anti-triche : pendant une manche, la bonne reponse ne doit circuler
-      // dans AUCUN message, sauf l'echo de ce que CE joueur a lui-meme tape.
-      const cur = this.current
-      if (!cur || this.reveals.has(cur.round) || !cur.truth?.title) return
-      const mine = this.intents.get(cur.round)
-      if (mine && mine.sentTitle === cur.truth.title) return
-      const blob = JSON.stringify(payload ?? "")
-      if (blob.includes(cur.truth.title)) this.leaks.push({ round: cur.round, evt })
-    }
-    s.on("game:state", p => watch("game:state", p))
-    s.on("game:round:start", p => { watch("game:round:start", p); void this.onRound(p) })
+    s.on("game:state", p => this.inspect("game:state", p))
+    // onRound pose this.current (et la verite de la NOUVELLE manche) avant son
+    // premier await : l'inspection qui suit juge donc la bonne manche. Avant,
+    // elle passait en premier et comparait a la manche deja revelee.
+    s.on("game:round:start", p => { void this.onRound(p); this.inspect("game:round:start", p) })
     s.on("game:round:reveal", p => this.onReveal(p))
     s.on("game:over", () => { this.over = true })
     s.on("room:error", e => this.errors.push(`room:error ${JSON.stringify(e).slice(0, 120)}`))

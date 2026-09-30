@@ -32,10 +32,14 @@ export function buildAudio(dir) {
   for (const t of catalog()) {
     const out = path.join(dir, t.file)
     if (fs.existsSync(out)) continue
+    // Ecrit a cote puis renomme : un ffmpeg interrompu ne laisse pas un mp3
+    // tronque que existsSync prendrait pour valide ensuite.
+    const part = `${out}.part.mp3`
     execFileSync("ffmpeg", [
-      "-loglevel", "error", "-f", "lavfi", "-i", `sine=frequency=${t.freq}:sample_rate=44100:duration=30`,
-      "-af", "volume=0.35", "-ac", "1", "-b:a", "64k", out,
+      "-y", "-loglevel", "error", "-f", "lavfi", "-i", `sine=frequency=${t.freq}:sample_rate=44100:duration=30`,
+      "-af", "volume=0.35", "-ac", "1", "-b:a", "64k", part,
     ])
+    fs.renameSync(part, out)
   }
   fs.writeFileSync(path.join(dir, "catalog.json"), JSON.stringify(catalog(), null, 2))
 }

@@ -113,7 +113,7 @@ export async function runRoom({ label, mode, hostPlays = false, players, rounds 
         }
         verifiees++
       }
-      if (b.leaks.length) bad(`${b.name} a vu la reponse avant la revelation (${b.leaks.map(l => `m${l.round} ${l.evt}`).join(", ")})`)
+      if (b.leaks.length) bad(`${b.name} a vu la reponse avant la revelation (${b.leaks.map(l => `m${l.round} ${l.quoi} dans ${l.evt}`).join(", ")})`)
       for (const e of b.errors) bad(`${b.name} : ${e}`)
     }
     const partis = bots.filter(b => b.left)

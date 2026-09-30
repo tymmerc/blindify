@@ -27,7 +27,7 @@ const CAT = catalog()
  */
 export function seedUser(userId, ks) {
   const linkId = psql(`INSERT INTO imported_links (user_id, url, normalized_url, provider, kind, label)
-    VALUES (${userId}, 'test://bibli/${userId}', 'test:${userId}', 'deezer', 'playlist', 'Bibli de test ${userId}') RETURNING id`).split("\n")[0]
+    VALUES (${Number(userId)}, 'test://bibli/${Number(userId)}', 'test:${Number(userId)}', 'deezer', 'playlist', 'Bibli de test ${Number(userId)}') RETURNING id`).split("\n")[0]
   const values = ks.map(k => {
     const t = CAT[k % CAT.length]
     return `('deezer', ${q(`test-${t.k}-${userId}`)}, ${userId}, ${q(t.title)}, ${q(t.artist)}, ${q(`${PUBLIC_ORIGIN}/test-audio/${t.file}`)}, 30000, '{"test":true,"k":${t.k}}'::jsonb, ${linkId})`
@@ -37,8 +37,18 @@ export function seedUser(userId, ks) {
   return ks.length
 }
 
-/** La verite d'une manche, telle que le serveur l'a tiree au lancement. */
+/** La verite d'une manche, telle que le serveur l'a tiree au lancement.
+ *  Memorisee : 30 bots x 5 manches feraient sinon 150 docker exec synchrones,
+ *  qui bloquent la boucle commune aux 5 salles. */
+const ORACLE = new Map()
 export function oracle(roomCode, round) {
+  const key = `${roomCode}:${round}`
+  if (ORACLE.has(key)) return ORACLE.get(key)
+  const v = oracleFromDb(roomCode, round)
+  if (v) ORACLE.set(key, v)
+  return v
+}
+function oracleFromDb(roomCode, round) {
   const r = rows(`SELECT gr.correct_title, gr.correct_artist, coalesce(a.user_id::text,''), coalesce(a.metadata->>'k','')
     FROM multiplayer_rooms m JOIN game_rounds gr ON gr.session_id = m.session_id
     LEFT JOIN audio_sources a ON a.id = gr.audio_source_id

@@ -28,15 +28,19 @@
 // On ne fait toujours AUCUN import Deezer par l'interface : c'est le chemin qui
 // declenchait les blocages Akamai.
 
-import { execSync } from "child_process"
+import { execFileSync } from "child_process"
 
-const psql = sql => execSync(
-  `docker exec blindify-postgres psql -U blindify -d blindify -qAt -c "${sql.replace(/"/g, '\\"').replace(/\n/g, " ")}"`
+// Arguments separes, SANS shell : les titres viennent de Deezer (donnees
+// tierces) et finissent dans une commande lancee en root contre la base de
+// prod. Avec l'ancien execSync, une apostrophe inverse dans un titre etait
+// executee par le shell (constate par la relecture du 30/09/2026).
+const psql = sql => execFileSync(
+  "docker", ["exec", "blindify-postgres", "psql", "-U", "blindify", "-d", "blindify", "-qAt", "-c", sql],
+  { maxBuffer: 16 * 1024 * 1024 },
 ).toString().trim()
 
-// Guillemets simples doubles. Surtout PAS la notation $$ de Postgres : la
-// commande passe par un shell, qui remplacerait $$ par son numero de processus.
-const sq = v => "'" + String(v ?? "").replace(/'/g, "''").replace(/\$/g, "") + "'"
+// Litteral SQL : apostrophes doublees (standard_conforming_strings actif).
+const sq = v => "'" + String(v ?? "").replace(/'/g, "''") + "'"
 
 const MOTS = [
   "rock", "pop francaise", "rap francais", "jazz", "electro", "chanson francaise",
