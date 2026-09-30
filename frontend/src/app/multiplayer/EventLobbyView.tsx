@@ -126,11 +126,14 @@ function EventEntry({
   )
 }
 
-function Music({ refresh, onImported, intro }: { refresh: number; onImported: () => void; intro: string }) {
+function Music({ refresh, onImported, intro, fill = false }: { refresh: number; onImported: () => void; intro: string; fill?: boolean }) {
   return (
-    <Panel label="Ta musique" dot={ACCENT} testId="lobby-musique">
+    <Panel fill={fill} label="Ta musique" dot={ACCENT} testId="lobby-musique" className="min-w-0">
       <p className="-mt-2 mb-3 text-sm text-[#6b573f]">{intro}</p>
-      <MusicLibrary accent={ACCENT} refreshSignal={refresh} />
+      {/* Une longue bibliotheque defile ici au lieu d'etirer la page. */}
+      <div className="lg:max-h-[240px] lg:overflow-y-auto lg:pr-1">
+        <MusicLibrary accent={ACCENT} refreshSignal={refresh} />
+      </div>
       <div className="mt-4 border-t-2 border-dotted border-[rgba(46,32,20,.35)] pt-4">
         <ProfileImportBlock accent={ACCENT} hideHeader onImported={onImported} />
       </div>
@@ -248,13 +251,17 @@ function EventHostLobby(props: LobbyRendererProps) {
               big
               emptyLabel="Personne pour l'instant. Les joueurs apparaissent ici dès qu'ils ont scanné."
             />
+            {code ? (
+              <RecentPlayers roomCode={code} accent={ACCENT} tone="light" exclude={props.participants.map(p => p.user_id)} />
+            ) : null}
           </div>
         </div>
       </section>
 
-      <div className="grid gap-5 lg:grid-cols-2 lg:items-start lg:gap-6">
+      {/* Les deux panneaux ont la meme hauteur : "Lancer" est cale en bas du sien. */}
+      <div className="grid gap-5 lg:grid-cols-2 lg:items-stretch lg:gap-6">
         {/* 2. LA PARTIE : la regie */}
-        <Panel label="La partie" dot={ACCENT} testId="lobby-partie" className="min-w-0">
+        <Panel fill label="La partie" dot={ACCENT} testId="lobby-partie" className="min-w-0">
           <RoundSettings room={props.room} accent={ACCENT} accentText="#2e2014" />
           <LaunchDock>
             <LaunchButton
@@ -267,19 +274,17 @@ function EventHostLobby(props: LobbyRendererProps) {
           </LaunchDock>
         </Panel>
 
-        {/* 3. TA MUSIQUE, et les amis des soirees precedentes */}
-        <div className="flex min-w-0 flex-col gap-5">
-          <Music
-            refresh={libRefresh}
-            onImported={() => setLibRefresh(x => x + 1)}
-            intro={
-              presenter
-                ? "Tu es le DJ : ta musique passe dans la partie même si tu ne réponds pas, avec celle des joueurs."
-                : "La partie pioche dans ta musique et dans celle de chaque joueur à table."
-            }
-          />
-          {code ? <RecentPlayers roomCode={code} accent={ACCENT} /> : null}
-        </div>
+        {/* 3. TA MUSIQUE ("Rejoue avec" est monte dans la banniere, a cote de "A table") */}
+        <Music
+          fill
+          refresh={libRefresh}
+          onImported={() => setLibRefresh(x => x + 1)}
+          intro={
+            presenter
+              ? "Tu es le DJ : ta musique passe dans la partie même si tu ne réponds pas, avec celle des joueurs."
+              : "La partie pioche dans ta musique et dans celle de chaque joueur à table."
+          }
+        />
       </div>
 
       {/* 4. EN ATTENDANT : le chat et pierre-feuille-ciseaux dans la bulle */}

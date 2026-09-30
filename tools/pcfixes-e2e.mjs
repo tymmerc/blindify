@@ -64,12 +64,14 @@ if (!code) { bad("pas de code de room visible cote hote"); process.exit(1) }
 const bulle = host.getByRole("button", { name: /chat et pierre-feuille-ciseaux/i })
 if (await bulle.waitFor({ timeout: 10000 }).then(() => true).catch(() => false)) {
   await bulle.click()
-  // Le chat et le jeu partagent le panneau (ils "se battent pour la place").
-  const zone = host.getByRole("region", { name: /pierre, feuille, ciseaux/i })
-  if (await zone.waitFor({ timeout: 5000 }).then(() => true).catch(() => false)) {
-    await zone.getByRole("button", { name: /pierre, feuille, ciseaux/i }).first().click()
-    say("  [ok] pierre-feuille-ciseaux dans la bulle du lobby")
-  } else bad("la bulle du lobby n'a pas de zone pierre-feuille-ciseaux")
+  // La bulle s'ouvre au clic en panneau a deux onglets.
+  const onglet = host.getByRole("tab", { name: /pierre, feuille, ciseaux/i })
+  if (await onglet.waitFor({ timeout: 5000 }).then(() => true).catch(() => false)) {
+    await onglet.click()
+    const zone = host.getByRole("tabpanel", { name: /pierre, feuille, ciseaux/i })
+    if (await zone.waitFor({ timeout: 5000 }).then(() => true).catch(() => false)) say("  [ok] pierre-feuille-ciseaux dans la bulle du lobby")
+    else bad("l'onglet pierre-feuille-ciseaux de la bulle ne montre rien")
+  } else bad("la bulle du lobby n'a pas d'onglet pierre-feuille-ciseaux")
   await host.keyboard.press("Escape")
 } else bad("pas de bulle chat / pierre-feuille-ciseaux dans le lobby a distance")
 await host.screenshot({ path: `${SHOTS}/1-lobby-hote.png` })

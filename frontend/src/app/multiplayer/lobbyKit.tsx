@@ -44,6 +44,7 @@ export function Panel({
   children,
   className = "",
   testId,
+  fill = false,
 }: {
   label?: string
   dot: string
@@ -51,9 +52,12 @@ export function Panel({
   children: ReactNode
   className?: string
   testId?: string
+  /** Prend toute la hauteur de sa rangee : deux panneaux voisins finissent au
+   *  meme niveau ("c'est pas egal en bas", Tym 30/09). */
+  fill?: boolean
 }) {
   return (
-    <section className={`${CARD} p-4 text-[#2e2014] sm:p-5 ${className}`} data-testid={testId}>
+    <section className={`${CARD} p-4 text-[#2e2014] sm:p-5 ${fill ? "flex h-full flex-col" : ""} ${className}`} data-testid={testId}>
       {label ? (
         <div className="mb-4 flex items-center justify-between gap-3">
           <Label dot={dot}>{label}</Label>
@@ -222,6 +226,7 @@ function Segmented<T extends number>({
   format,
   accent,
   accentText,
+  readOnly = false,
 }: {
   label: string
   values: T[]
@@ -230,6 +235,7 @@ function Segmented<T extends number>({
   format: (v: T) => string
   accent: string
   accentText: string
+  readOnly?: boolean
 }) {
   return (
     <div>
@@ -243,7 +249,9 @@ function Segmented<T extends number>({
               type="button"
               aria-pressed={on}
               onClick={() => onPick(v)}
-              className={`py-2 text-sm font-bold transition ${i > 0 ? "border-l-2 border-[#2e2014]" : ""} ${on ? "" : "text-[#6b573f] hover:bg-[#e0d4ba]"}`}
+              disabled={readOnly}
+              // Pas de contour bleu du navigateur : un contour encre, au clavier seulement.
+              className={`py-2 text-sm font-bold transition focus:outline-none focus-visible:relative focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-5px] focus-visible:outline-[#2e2014] ${i > 0 ? "border-l-2 border-[#2e2014]" : ""} ${on ? "" : readOnly ? "text-[#8a7558]" : "text-[#6b573f] hover:bg-[#e0d4ba]"} ${readOnly ? "cursor-default" : ""}`}
               style={on ? { background: accent, color: accentText } : undefined}
             >
               {format(v)}
@@ -257,9 +265,12 @@ function Segmented<T extends number>({
 
 /** Reglages de l'hote, sauves au clic et appliques au lancement. Etait
  *  duplique a l'identique dans les lobbys a distance et autour d'une table. */
-export function RoundSettings({ room, accent, accentText }: { room: MultiplayerRoom | null; accent: string; accentText: string }) {
-  const [rounds, setRounds] = useState<number>(room?.question_count ?? 10)
-  const [seconds, setSeconds] = useState<number>(Math.round((room?.round_duration_ms ?? 20000) / 1000))
+export function RoundSettings({ room, accent, accentText, readOnly = false }: { room: MultiplayerRoom | null; accent: string; accentText: string; readOnly?: boolean }) {
+  const [ownRounds, setRounds] = useState<number>(room?.question_count ?? 10)
+  const [ownSeconds, setSeconds] = useState<number>(Math.round((room?.round_duration_ms ?? 20000) / 1000))
+  // Invite : on affiche ce que l'hote a choisi (le salon est relu toutes les 4 s).
+  const rounds = readOnly ? room?.question_count ?? 10 : ownRounds
+  const seconds = readOnly ? Math.round((room?.round_duration_ms ?? 20000) / 1000) : ownSeconds
   const save = (payload: { questionCount?: number; roundSeconds?: number }) => {
     if (!room) return
     void api.updateRoomConfig(room.room_code, payload).catch(err => console.error("room_config_save_failed", err))
@@ -274,6 +285,7 @@ export function RoundSettings({ room, accent, accentText }: { room: MultiplayerR
         format={n => String(n)}
         accent={accent}
         accentText={accentText}
+        readOnly={readOnly}
       />
       <Segmented
         label="Temps pour répondre"
@@ -283,6 +295,7 @@ export function RoundSettings({ room, accent, accentText }: { room: MultiplayerR
         format={s => `${s}s`}
         accent={accent}
         accentText={accentText}
+        readOnly={readOnly}
       />
     </div>
   )
@@ -294,7 +307,7 @@ export function RoundSettings({ room, accent, accentText }: { room: MultiplayerR
  *  bouton "Lancer la partie". */
 export function LaunchDock({ children, flush = false }: { children: ReactNode; flush?: boolean }) {
   return (
-    <div className={`fixed inset-x-0 bottom-0 z-40 border-t-2 border-[#2e2014] bg-[#f4ecdb] px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-3 lg:static lg:z-auto lg:border-0 lg:bg-transparent lg:p-0 ${flush ? "" : "lg:mt-5"}`}>
+    <div className={`fixed inset-x-0 bottom-0 z-40 border-t-2 border-[#2e2014] bg-[#f4ecdb] px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-3 lg:static lg:z-auto lg:mt-auto lg:border-0 lg:bg-transparent lg:p-0 ${flush ? "" : "lg:pt-5"}`}>
       <div className="mx-auto max-w-xl lg:max-w-none">{children}</div>
     </div>
   )

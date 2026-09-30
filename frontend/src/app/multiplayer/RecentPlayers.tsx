@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { UserPlus, Check } from "lucide-react"
+import { Check } from "lucide-react"
 import { api } from "@/lib/api"
 
 type RecentPlayer = { userId: number; username: string | null; lastPlayed: string }
@@ -10,8 +10,24 @@ type RecentPlayer = { userId: number; username: string | null; lastPlayed: strin
  * "Rejoue avec" : les joueurs croises lors des 30 derniers jours, avec un bouton
  * pour les reinviter dans la salle courante. Rend null s'il n'y a personne
  * (premiere partie) pour ne pas encombrer le lobby.
+ *
+ * Depuis le 30/09 il vit dans la banniere de la salle, sous "qui est la" : des
+ * places en pointilles, a remplir. Avant, c'etait une carte sous la musique,
+ * que Tym trouvait mal amenee.
  */
-export function RecentPlayers({ roomCode, accent }: { roomCode: string; accent: string }) {
+export function RecentPlayers({
+  roomCode,
+  accent,
+  tone = "light",
+  exclude = [],
+}: {
+  roomCode: string
+  accent: string
+  /** Couleur de la banniere : "dark" (encre, a distance) ou "light" (or, table). */
+  tone?: "dark" | "light"
+  /** Joueurs deja dans la salle : inutile de les reinviter. */
+  exclude?: number[]
+}) {
   const [players, setPlayers] = useState<RecentPlayer[]>([])
   const [invited, setInvited] = useState<Record<number, "sending" | "done" | "error">>({})
 
@@ -19,7 +35,7 @@ export function RecentPlayers({ roomCode, accent }: { roomCode: string; accent: 
     let alive = true
     api.recentPlayers()
       .then(res => { if (alive) setPlayers(res.players ?? []) })
-      .catch(() => { /* pas bloquant : on masque simplement le bloc */ })
+      .catch(err => console.error("recent_players_failed", err)) // pas bloquant : le bloc reste masque
     return () => { alive = false }
   }, [])
 
@@ -33,40 +49,51 @@ export function RecentPlayers({ roomCode, accent }: { roomCode: string; accent: 
     }
   }
 
-  if (players.length === 0) return null
+  const shown = players.filter(p => !exclude.includes(p.userId)).slice(0, 6)
+  if (shown.length === 0) return null
+
+  const dark = tone === "dark"
+  const line = dark ? "#6b573f" : "rgba(46,32,20,.4)"
+  const chipBorder = dark ? "#e9dcc0" : "#2e2014"
+  // Sur l'or de la table, un bouton or disparaitrait : il passe a l'encre.
+  const btnBg = dark ? accent : "#2e2014"
 
   return (
-    <div className="rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-4 shadow-[4px_4px_0_rgba(46,32,20,.18)]">
-      <div className="mb-3 flex items-center justify-between">
-        <p className="m-0 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.22em] text-[#2e2014]">
-          <span aria-hidden className="h-2.5 w-2.5 rounded-full border-[1.5px] border-[#2e2014]" style={{ background: accent }} />
-          Rejoue avec
-        </p>
-        <UserPlus aria-hidden className="h-4 w-4 text-[#6b573f]" />
-      </div>
-      <div className="flex flex-col gap-2">
-        {players.map(p => {
+    <div className="mt-4 border-t-2 border-dashed pt-3" style={{ borderColor: line }}>
+      <p className="mb-2.5 text-[11px] font-bold uppercase tracking-[0.18em]">Rejoue avec</p>
+      <ul className="m-0 flex list-none flex-wrap gap-2 p-0">
+        {shown.map(p => {
           const state = invited[p.userId]
+          const name = p.username || `Joueur ${p.userId}`
           return (
-            <div key={p.userId} className="flex items-center justify-between gap-2 rounded-md border-[1.5px] border-[rgba(46,32,20,.25)] bg-[#f4ecdb] px-3 py-2">
-              <span className="min-w-0 truncate text-sm font-medium text-[#2e2014]">
-                {p.username || `Joueur ${p.userId}`}
+            <li
+              key={p.userId}
+              className="flex max-w-full items-center gap-2 rounded-full border-2 border-dashed py-1 pl-1 pr-1"
+              style={{ borderColor: chipBorder }}
+            >
+              <span
+                aria-hidden
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 border-dashed font-display text-sm font-bold"
+                style={{ borderColor: chipBorder }}
+              >
+                {name.charAt(0).toUpperCase()}
               </span>
+              <span className="min-w-0 truncate font-display text-[15px] font-semibold">{name}</span>
               <button
                 type="button"
                 onClick={() => invite(p.userId)}
                 disabled={state === "sending" || state === "done"}
-                className="flex shrink-0 items-center gap-1 rounded-full border-2 border-[#2e2014] px-3 py-1 text-xs font-bold text-[#f4ecdb] shadow-[2px_2px_0_#2e2014] transition disabled:opacity-60"
-                style={{ background: state === "done" ? "#7d9471" : accent }}
+                className="flex shrink-0 items-center gap-1 rounded-full border-2 border-[#2e2014] px-2.5 py-0.5 text-[11px] font-bold text-[#f4ecdb] transition hover:brightness-110 disabled:opacity-80"
+                style={{ background: state === "done" ? "#7d9471" : btnBg }}
               >
                 {state === "done" ? (<><Check className="h-3 w-3" /> Invité</>) :
-                 state === "sending" ? "..." :
+                 state === "sending" ? "…" :
                  state === "error" ? "Réessayer" : "Inviter"}
               </button>
-            </div>
+            </li>
           )
         })}
-      </div>
+      </ul>
     </div>
   )
 }

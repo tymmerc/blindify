@@ -8,6 +8,7 @@ import { publicPath } from "@/lib/publicPath"
 import { GAME_MODES } from "@/lib/gameModes"
 import type { LobbyRendererProps } from "./lobbyTypes"
 import { LobbyDock } from "./LobbyDock"
+import { RecentPlayers } from "./RecentPlayers"
 import {
   BLOCK,
   Label,
@@ -120,38 +121,48 @@ function FriendsLobby(props: LobbyRendererProps) {
             accent={ACCENT}
             emptyLabel="Personne pour l'instant."
           />
+          {isHost && code ? (
+            <RecentPlayers roomCode={code} accent={ACCENT} tone="dark" exclude={participants.map(p => p.user_id)} />
+          ) : null}
         </div>
       </section>
 
-      <div className="grid gap-5 lg:grid-cols-2 lg:items-start lg:gap-6">
-        {/* 2. LA PARTIE : la regie de l'hote, ou qui va lancer */}
-        <div className="min-w-0">
+      {/* Les deux panneaux ont la meme hauteur : "Lancer" est cale en bas du sien. */}
+      <div className="grid gap-5 lg:grid-cols-2 lg:items-stretch lg:gap-6">
+        {/* 2. LA PARTIE : la regie de l'hote, ou ce qu'il a choisi pour l'invite */}
+        <Panel fill label="La partie" dot={ACCENT} testId="lobby-partie" className="min-w-0">
           {isHost ? (
-            <Panel label="La partie" dot={ACCENT} testId="lobby-partie">
-              <RoundSettings room={room} accent={ACCENT} accentText="#f4ecdb" />
-              <LaunchDock>
-                <LaunchButton
-                  onStart={props.onStart}
-                  canStart={props.canStart}
-                  starting={props.starting}
-                  importing={props.importing}
-                  hint={alone ? `Il faut au moins ${MIN_PLAYERS} joueurs : envoie le lien.` : `${participants.length} joueurs dans la salle`}
-                />
-              </LaunchDock>
-            </Panel>
+            <RoundSettings room={room} accent={ACCENT} accentText="#f4ecdb" />
           ) : (
-            <LaunchDock flush>
-              <WaitingForHost hostName={hostName} accent={ACCENT} />
-            </LaunchDock>
+            <>
+              <p className="-mt-2 mb-3 text-sm text-[#6b573f]">Choisi par {hostName ?? "l'hôte"}.</p>
+              <RoundSettings room={room} accent={ACCENT} accentText="#f4ecdb" readOnly />
+            </>
           )}
-        </div>
+          <LaunchDock>
+            {isHost ? (
+              <LaunchButton
+                onStart={props.onStart}
+                canStart={props.canStart}
+                starting={props.starting}
+                importing={props.importing}
+                hint={alone ? `Il faut au moins ${MIN_PLAYERS} joueurs : envoie le lien.` : `${participants.length} joueurs dans la salle`}
+              />
+            ) : (
+              <WaitingForHost hostName={hostName} accent={ACCENT} />
+            )}
+          </LaunchDock>
+        </Panel>
 
         {/* 3. TA MUSIQUE */}
-        <Panel label="Ta musique" dot={ACCENT} testId="lobby-musique" className="min-w-0">
+        <Panel fill label="Ta musique" dot={ACCENT} testId="lobby-musique" className="min-w-0">
           <p className="-mt-2 mb-3 text-sm text-[#6b573f]">
             La partie pioche dans la musique de chaque joueur présent. Coche ce que tu amènes ce soir.
           </p>
-          <MusicLibrary accent={ACCENT} refreshSignal={libRefresh} />
+          {/* Une longue bibliotheque defile ici au lieu d'etirer la page. */}
+          <div className="lg:max-h-[240px] lg:overflow-y-auto lg:pr-1">
+            <MusicLibrary accent={ACCENT} refreshSignal={libRefresh} />
+          </div>
           <div className="mt-4 border-t-2 border-dotted border-[rgba(46,32,20,.35)] pt-4">
             <ProfileImportBlock accent={ACCENT} hideHeader onImported={() => setLibRefresh(n => n + 1)} />
           </div>
