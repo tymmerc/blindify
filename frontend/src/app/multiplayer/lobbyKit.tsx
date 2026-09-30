@@ -7,16 +7,15 @@
 //   1. LA SALLE   bloc de la couleur du mode : code (et QR), partage, qui est la
 //   2. LA PARTIE  la regie : reglages + lancer (hote), ou qui lance (invite)
 //   3. TA MUSIQUE ce que tu amenes ce soir
-//   4. EN ATTENDANT  pierre-feuille-ciseaux et chat
+//   4. EN ATTENDANT  chat et pierre-feuille-ciseaux, dans une bulle flottante
+//                    (LobbyDock.tsx) pour ne pas manger la place des blocs
 // Sur telephone le bouton Lancer vit dans une barre collee en bas de l'ecran :
 // avant, il fallait descendre sous la musique et les reglages pour le trouver.
 
-import { useEffect, useState, type ReactNode } from "react"
-import { Check, Copy, Crown, Link2, MessageCircle } from "lucide-react"
+import { useState, type ReactNode } from "react"
+import { Check, Copy, Crown, Link2 } from "lucide-react"
 import { api } from "@/lib/api"
 import type { MultiplayerParticipant, MultiplayerRoom } from "@/lib/types"
-import type { LobbyChatMessage } from "./lobbyTypes"
-import { LobbyChat } from "./LobbyChat"
 
 export const PAPER = "#f4ecdb"
 export const INK = "#2e2014"
@@ -351,72 +350,5 @@ export function WaitingForHost({ hostName, accent }: { hostName: string | null; 
         )}
       </p>
     </div>
-  )
-}
-
-/** Chat : panneau dans la colonne sur ordinateur, bouton flottant sur
- *  telephone (au-dessus de la barre Lancer quand elle existe). */
-export function ChatDock({
-  messages,
-  onSend,
-  currentUserId,
-  accent,
-  emptyLabel,
-  placeholder,
-  raised,
-  desktopHeight = "h-[320px]",
-}: {
-  messages: LobbyChatMessage[]
-  onSend: (message: string) => void
-  currentUserId: number
-  accent: string
-  emptyLabel?: string
-  placeholder?: string
-  raised: boolean
-  desktopHeight?: string
-}) {
-  const [open, setOpen] = useState(false)
-  const [seen, setSeen] = useState(0)
-  useEffect(() => { if (open) setSeen(messages.length) }, [open, messages.length])
-  const unread = Math.max(0, messages.length - seen)
-  const bottom = raised ? "bottom-[calc(96px+env(safe-area-inset-bottom))]" : "bottom-5"
-  return (
-    <>
-      <div className={`hidden lg:block ${desktopHeight}`}>
-        <LobbyChat messages={messages} onSend={onSend} currentUserId={currentUserId} accent={accent} emptyLabel={emptyLabel} placeholder={placeholder} />
-      </div>
-      <div className="lg:hidden">
-        {!open ? (
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            aria-label="Ouvrir le chat"
-            className={`fixed right-4 z-[45] flex h-14 w-14 items-center justify-center rounded-full border-2 border-[#2e2014] bg-[#2e2014] text-[#f4ecdb] shadow-[3px_3px_0_rgba(46,32,20,.35)] transition active:translate-x-[2px] active:translate-y-[2px] ${bottom}`}
-          >
-            <MessageCircle size={22} />
-            {unread > 0 ? (
-              <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full border-2 border-[#2e2014] px-1 text-[10px] font-bold text-[#2e2014]" style={{ background: accent }}>
-                {unread > 9 ? "9+" : unread}
-              </span>
-            ) : null}
-          </button>
-        ) : (
-          <>
-            <div className="fixed inset-0 z-[46] bg-[#2e2014]/20" onClick={() => setOpen(false)} />
-            <div className={`fixed right-4 z-[47] h-[min(460px,64vh)] w-[min(340px,calc(100vw-2rem))] ${bottom}`}>
-              <LobbyChat
-                messages={messages}
-                onSend={onSend}
-                currentUserId={currentUserId}
-                accent={accent}
-                emptyLabel={emptyLabel}
-                placeholder={placeholder}
-                onClose={() => setOpen(false)}
-              />
-            </div>
-          </>
-        )}
-      </div>
-    </>
   )
 }

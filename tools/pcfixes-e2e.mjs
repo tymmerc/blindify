@@ -56,14 +56,22 @@ await host.waitForURL(/\/modes/, { timeout: 40000 })
 await host.getByText("À distance").first().click()
 await host.getByText(/CODE|copie le code|invite/i).first().waitFor({ timeout: 40000 }).catch(() => {})
 await sleep(3000)
-const hostTxt = await host.evaluate(() => document.body.innerText)
 const code = (host.url().match(/code=([A-Z0-9]{6})/) || [])[1]
 say("room a distance:", code)
 if (!code) { bad("pas de code de room visible cote hote"); process.exit(1) }
 
-// RPS dans le lobby a distance ?
-if (/pierre|feuille|ciseaux|défie|defie/i.test(hostTxt)) say("  [ok] pierre-feuille-ciseaux present dans le lobby")
-else bad("pas de pierre-feuille-ciseaux dans le lobby a distance")
+// Chat et pierre-feuille-ciseaux : dans la bulle flottante du lobby depuis le 30/09.
+const bulle = host.getByRole("button", { name: /chat et pierre-feuille-ciseaux/i })
+if (await bulle.waitFor({ timeout: 10000 }).then(() => true).catch(() => false)) {
+  await bulle.click()
+  // Le chat et le jeu partagent le panneau (ils "se battent pour la place").
+  const zone = host.getByRole("region", { name: /pierre, feuille, ciseaux/i })
+  if (await zone.waitFor({ timeout: 5000 }).then(() => true).catch(() => false)) {
+    await zone.getByRole("button", { name: /pierre, feuille, ciseaux/i }).first().click()
+    say("  [ok] pierre-feuille-ciseaux dans la bulle du lobby")
+  } else bad("la bulle du lobby n'a pas de zone pierre-feuille-ciseaux")
+  await host.keyboard.press("Escape")
+} else bad("pas de bulle chat / pierre-feuille-ciseaux dans le lobby a distance")
 await host.screenshot({ path: `${SHOTS}/1-lobby-hote.png` })
 
 // joueur PC qui COLLE le code avec des espaces

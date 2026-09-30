@@ -9,9 +9,9 @@ import { MusicLibrary } from "@/components/import/MusicLibrary"
 import { ProfileImportBlock } from "@/components/import/ProfileImportBlock"
 import { publicPath } from "@/lib/publicPath"
 import type { LobbyRendererProps } from "./lobbyTypes"
-import { LobbyRps } from "./LobbyRps"
+import { LobbyDock } from "./LobbyDock"
 import { RecentPlayers } from "./RecentPlayers"
-import { BLOCK, CARD, ChatDock, Label, LaunchButton, LaunchDock, Panel, RoomCode, Roster, RoundSettings } from "./lobbyKit"
+import { BLOCK, CARD, Label, LaunchButton, LaunchDock, Panel, RoomCode, Roster, RoundSettings } from "./lobbyKit"
 
 const ACCENT = "#e0a32e"
 // Le serveur refuse de lancer sous 2 joueurs qui repondent (roomsController
@@ -138,23 +138,20 @@ function Music({ refresh, onImported, intro }: { refresh: number; onImported: ()
   )
 }
 
-function Rps({ props }: { props: LobbyRendererProps }) {
-  const rps = props.rps
-  if (!rps) return null
+/** En attendant : le chat et pierre-feuille-ciseaux dans la bulle flottante. */
+function Dock({ props, raised, placeholder, emptyLabel }: { props: LobbyRendererProps; raised: boolean; placeholder?: string; emptyLabel?: string }) {
+  if (!props.onSendChat) return null
   return (
-    <LobbyRps
-      players={props.participants.map(p => ({ userId: p.user_id, username: p.username }))}
+    <LobbyDock
+      messages={props.chatMessages ?? []}
+      onSend={props.onSendChat}
       currentUserId={props.currentUserId}
+      players={props.participants.map(p => ({ userId: p.user_id, username: p.username }))}
+      rps={props.rps}
       accent={ACCENT}
-      scoreboard={rps.scoreboard}
-      incoming={rps.incoming}
-      active={rps.active}
-      pendingTargetId={rps.pendingTargetId}
-      result={rps.result}
-      onChallenge={rps.challenge}
-      onAccept={rps.accept}
-      onDecline={rps.decline}
-      onPlay={rps.play}
+      raised={raised}
+      placeholder={placeholder}
+      emptyLabel={emptyLabel}
     />
   )
 }
@@ -164,12 +161,18 @@ function EventPlayerLobby(props: LobbyRendererProps) {
   const [libRefresh, setLibRefresh] = useState(0)
   const n = props.participants.length
   return (
-    <div className="mx-auto flex w-full max-w-xl flex-col gap-5 pb-24">
-      <section className={`${BLOCK} p-5 text-[#2e2014]`} style={{ background: ACCENT }} data-testid="lobby-salle">
-        <Label dot="#f4ecdb">{"Autour d'une table"}</Label>
-        <h2 className="mb-1 mt-3 font-display text-3xl font-semibold">Tu es dans la partie</h2>
-        <p className="m-0 text-sm">{"L'hôte lance depuis l'écran central. Garde cette page ouverte : c'est ici que tu répondras."}</p>
-        <div className="mt-4 border-t-2 border-dashed border-[#2e2014]/40 pt-4">
+    <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 pb-24 lg:pb-10">
+      <section
+        className={`${BLOCK} grid gap-4 p-5 text-[#2e2014] sm:p-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:gap-8`}
+        style={{ background: ACCENT }}
+        data-testid="lobby-salle"
+      >
+        <div className="min-w-0">
+          <Label dot="#f4ecdb">{"Autour d'une table"}</Label>
+          <h2 className="mb-1 mt-3 font-display text-3xl font-semibold">Tu es dans la partie</h2>
+          <p className="m-0 text-sm">{"L'hôte lance depuis l'écran central. Garde cette page ouverte : c'est ici que tu répondras."}</p>
+        </div>
+        <div className="min-w-0 border-t-2 border-dashed border-[#2e2014]/40 pt-4 md:border-l-2 md:border-t-0 md:pl-8 md:pt-0">
           <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.18em]">À table · {n}</p>
           <Roster
             participants={props.participants}
@@ -185,18 +188,12 @@ function EventPlayerLobby(props: LobbyRendererProps) {
         onImported={() => setLibRefresh(x => x + 1)}
         intro="Tes titres cochés passent dans la partie avec ceux des autres. Tu peux encore en ajouter."
       />
-      <Rps props={props} />
-      {props.onSendChat ? (
-        <ChatDock
-          messages={props.chatMessages ?? []}
-          onSend={props.onSendChat}
-          currentUserId={props.currentUserId}
-          accent={ACCENT}
-          raised={false}
-          placeholder="chambre les autres en attendant..."
-          emptyLabel="En attendant le lancement... balance un message !"
-        />
-      ) : null}
+      <Dock
+        props={props}
+        raised={false}
+        placeholder="chambre les autres en attendant..."
+        emptyLabel="En attendant le lancement... balance un message !"
+      />
     </div>
   )
 }
@@ -220,27 +217,28 @@ function EventHostLobby(props: LobbyRendererProps) {
       : "Cet écran diffuse la musique et les scores : pose-le au milieu de la table ou branche-le sur une télé."
 
   return (
-    <div className="mx-auto grid w-full max-w-6xl gap-5 pb-32 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] lg:items-start lg:gap-6 lg:pb-0">
-      <div className="flex min-w-0 flex-col gap-5">
-        {/* 1. LA SALLE, en affiche : c'est ce que la table regarde */}
-        <section className={`${BLOCK} p-5 text-[#2e2014] sm:p-7`} style={{ background: ACCENT }} data-testid="lobby-salle">
-          <Label dot="#f4ecdb">Rejoignez la partie</Label>
-          <h2 className="mb-5 mt-3 font-display text-2xl font-semibold leading-tight sm:text-3xl">
-            Scannez le QR, ou entrez le code sur vos téléphones.
-          </h2>
-          <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-center sm:gap-7">
-            {code ? (
-              <div className="w-full max-w-[150px] shrink-0 rounded-md border-2 border-[#2e2014] bg-white p-2.5 shadow-[4px_4px_0_#2e2014] sm:max-w-[200px] sm:p-3">
-                <QRCodeSVG value={joinUrl} size={220} bgColor="#ffffff" fgColor="#2e2014" level="M" className="h-auto w-full" />
-              </div>
-            ) : null}
-            <div className="w-full min-w-0 flex-1">
-              <RoomCode code={code} size="xl" />
-              <p className="mb-0 mt-3 text-center text-[11px] font-bold uppercase tracking-[0.22em]">Code de la salle</p>
-              <p className="m-0 mt-1 break-all text-center text-sm">{shortUrl}</p>
+    // Ossature (30/09) : l'affiche en banniere pleine largeur (ce que la table
+    // regarde), puis la regie a gauche et ta musique a droite. La bulle du chat
+    // s'ouvre en bas a droite, au-dessus de la musique : jamais sur "Lancer".
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 pb-32 lg:gap-6 lg:pb-10">
+      {/* 1. LA SALLE, en affiche */}
+      <section className={`${BLOCK} p-5 text-[#2e2014] sm:p-7`} style={{ background: ACCENT }} data-testid="lobby-salle">
+        <Label dot="#f4ecdb">Rejoignez la partie</Label>
+        <h2 className="mb-5 mt-3 font-display text-2xl font-semibold leading-tight sm:text-3xl">
+          Scannez le QR, ou entrez le code sur vos téléphones.
+        </h2>
+        <div className="grid items-center gap-6 lg:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)] lg:gap-8">
+          {code ? (
+            <div className="mx-auto w-full max-w-[150px] rounded-md border-2 border-[#2e2014] bg-white p-2.5 shadow-[4px_4px_0_#2e2014] sm:max-w-[190px] sm:p-3 lg:mx-0 lg:w-[190px]">
+              <QRCodeSVG value={joinUrl} size={220} bgColor="#ffffff" fgColor="#2e2014" level="M" className="h-auto w-full" />
             </div>
+          ) : null}
+          <div className="min-w-0">
+            <RoomCode code={code} size="xl" />
+            <p className="mb-0 mt-3 text-center text-[11px] font-bold uppercase tracking-[0.22em]">Code de la salle</p>
+            <p className="m-0 mt-1 break-all text-center text-sm">{shortUrl}</p>
           </div>
-          <div className="mt-6 border-t-2 border-dashed border-[#2e2014]/40 pt-4">
+          <div className="min-w-0 self-stretch border-t-2 border-dashed border-[#2e2014]/40 pt-4 lg:border-l-2 lg:border-t-0 lg:pl-8 lg:pt-0">
             <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.18em]">À table · {n}</p>
             <Roster
               participants={props.participants}
@@ -251,27 +249,12 @@ function EventHostLobby(props: LobbyRendererProps) {
               emptyLabel="Personne pour l'instant. Les joueurs apparaissent ici dès qu'ils ont scanné."
             />
           </div>
-        </section>
-
-        {/* Le chat reste sous l'affiche : la table le voit sur l'ecran central */}
-        {props.onSendChat ? (
-          <ChatDock
-            messages={props.chatMessages ?? []}
-            onSend={props.onSendChat}
-            currentUserId={props.currentUserId}
-            accent={ACCENT}
-            raised
-            emptyLabel="Le canal est ouvert. Les joueurs peuvent chambrer depuis leur téléphone."
-          />
-        ) : null}
-        <div className="hidden lg:block">
-          <Rps props={props} />
         </div>
-      </div>
+      </section>
 
-      <div className="flex min-w-0 flex-col gap-5">
+      <div className="grid gap-5 lg:grid-cols-2 lg:items-start lg:gap-6">
         {/* 2. LA PARTIE : la regie */}
-        <Panel label="La partie" dot={ACCENT} testId="lobby-partie">
+        <Panel label="La partie" dot={ACCENT} testId="lobby-partie" className="min-w-0">
           <RoundSettings room={props.room} accent={ACCENT} accentText="#2e2014" />
           <LaunchDock>
             <LaunchButton
@@ -284,23 +267,23 @@ function EventHostLobby(props: LobbyRendererProps) {
           </LaunchDock>
         </Panel>
 
-        {/* 3. TA MUSIQUE */}
-        <Music
-          refresh={libRefresh}
-          onImported={() => setLibRefresh(x => x + 1)}
-          intro={
-            presenter
-              ? "Tu es le DJ : ta musique passe dans la partie même si tu ne réponds pas, avec celle des joueurs."
-              : "La partie pioche dans ta musique et dans celle de chaque joueur à table."
-          }
-        />
-        {code ? <RecentPlayers roomCode={code} accent={ACCENT} /> : null}
-
-        {/* 4. EN ATTENDANT : sur ordinateur, a gauche avec le chat */}
-        <div className="lg:hidden">
-          <Rps props={props} />
+        {/* 3. TA MUSIQUE, et les amis des soirees precedentes */}
+        <div className="flex min-w-0 flex-col gap-5">
+          <Music
+            refresh={libRefresh}
+            onImported={() => setLibRefresh(x => x + 1)}
+            intro={
+              presenter
+                ? "Tu es le DJ : ta musique passe dans la partie même si tu ne réponds pas, avec celle des joueurs."
+                : "La partie pioche dans ta musique et dans celle de chaque joueur à table."
+            }
+          />
+          {code ? <RecentPlayers roomCode={code} accent={ACCENT} /> : null}
         </div>
       </div>
+
+      {/* 4. EN ATTENDANT : le chat et pierre-feuille-ciseaux dans la bulle */}
+      <Dock props={props} raised emptyLabel="Le canal est ouvert. Les joueurs peuvent chambrer depuis leur téléphone." />
     </div>
   )
 }

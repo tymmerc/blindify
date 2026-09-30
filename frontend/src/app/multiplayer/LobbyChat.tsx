@@ -21,6 +21,7 @@ export function LobbyChat({
   onClose,
   placeholder = "dis quelque chose...",
   emptyLabel = "Le canal est ouvert. Lance la discussion !",
+  bare = false,
 }: {
   messages: LobbyChatMessage[]
   onSend: (msg: string) => void
@@ -29,6 +30,8 @@ export function LobbyChat({
   onClose?: () => void
   placeholder?: string
   emptyLabel?: string
+  /** Sans cadre ni en-tete : pour vivre dans le panneau de la bulle du lobby. */
+  bare?: boolean
 }) {
   const [input, setInput] = useState("")
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -60,9 +63,10 @@ export function LobbyChat({
   }
 
   return (
-    <div className="relative flex h-full min-h-[280px] flex-col overflow-hidden rounded-md border-2 border-[#2e2014] bg-[#ece1c8] shadow-[4px_4px_0_rgba(46,32,20,.18)]">
+    <div className={bare ? "relative flex h-full min-h-0 flex-col" : "relative flex h-full min-h-[280px] flex-col overflow-hidden rounded-md border-2 border-[#2e2014] bg-[#ece1c8] shadow-[4px_4px_0_rgba(46,32,20,.18)]"}>
       <style>{chatAnimation}</style>
       {/* Header */}
+      {!bare && (
       <div className="flex items-center justify-between border-b-2 border-[#2e2014] px-5 py-3.5">
         <p className="m-0 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.22em] text-[#2e2014]">
           <span aria-hidden className="h-2.5 w-2.5 rounded-full border-[1.5px] border-[#2e2014]" style={{ background: accent ?? "#c65133" }} />
@@ -80,11 +84,12 @@ export function LobbyChat({
           ) : null}
         </div>
       </div>
+      )}
 
       {/* Messages */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-3 min-h-[110px]"
+        className={`flex flex-1 flex-col gap-3 overflow-y-auto ${bare ? "min-h-0 px-4 py-3" : "min-h-[110px] px-5 py-4"}`}
         style={{ scrollbarWidth: "thin" }}
       >
         {messages.length === 0 && (
@@ -119,7 +124,7 @@ export function LobbyChat({
       {/* Input row */}
       <form
         onSubmit={handleSubmit}
-        className="flex items-center gap-2 border-t-2 border-[#2e2014] bg-[#efe5d0] px-4 py-3"
+        className={`flex shrink-0 items-center gap-2 border-[#2e2014] bg-[#efe5d0] px-4 ${bare ? "border-t-[1.5px] pb-4 pt-2" : "border-t-2 py-3"}`}
       >
         <input
           value={input}

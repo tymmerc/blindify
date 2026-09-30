@@ -7,10 +7,9 @@ import { ProfileImportBlock } from "@/components/import/ProfileImportBlock"
 import { publicPath } from "@/lib/publicPath"
 import { GAME_MODES } from "@/lib/gameModes"
 import type { LobbyRendererProps } from "./lobbyTypes"
-import { LobbyRps } from "./LobbyRps"
+import { LobbyDock } from "./LobbyDock"
 import {
   BLOCK,
-  ChatDock,
   Label,
   LaunchButton,
   LaunchDock,
@@ -88,36 +87,67 @@ function FriendsLobby(props: LobbyRendererProps) {
   const alone = participants.length < MIN_PLAYERS
 
   return (
-    // pb : place pour la barre Lancer collee en bas sur telephone
-    <div className="mx-auto grid w-full max-w-6xl gap-5 pb-32 lg:grid-cols-[minmax(0,1fr)_minmax(0,380px)] lg:items-start lg:gap-6 lg:pb-0">
-      <div className="flex min-w-0 flex-col gap-5">
-        {/* 1. LA SALLE : le code, le partage, et qui est deja la */}
-        <section className={`${BLOCK} p-4 text-[#f4ecdb] sm:p-6`} style={{ background: "#2e2014" }} data-testid="lobby-salle">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <Label dot={ACCENT}>{isHost ? "Invite tes amis" : "Tu es dans la partie"}</Label>
-            <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#e9dcc0]">
-              {participants.length} / {maxPlayers}
-            </span>
-          </div>
+    // Ossature (30/09) : la salle en banniere pleine largeur, puis la regie a
+    // gauche et ta musique a droite. La bulle du chat s'ouvre en bas a droite,
+    // au-dessus de la musique : elle ne recouvre jamais le bouton Lancer.
+    // pb : place pour la barre Lancer collee en bas sur telephone.
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 pb-32 lg:gap-6 lg:pb-10">
+      {/* 1. LA SALLE : le code, le partage, et qui est deja la */}
+      <section
+        className={`${BLOCK} grid gap-5 p-4 text-[#f4ecdb] sm:p-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:gap-8 lg:p-7`}
+        style={{ background: "#2e2014" }}
+        data-testid="lobby-salle"
+      >
+        <div className="min-w-0">
+          <Label dot={ACCENT} className="mb-4">{isHost ? "Invite tes amis" : "Tu es dans la partie"}</Label>
           <RoomCode code={code} size="xl" />
           <p className="mb-3 mt-4 text-center text-sm text-[#e9dcc0]">
             Envoie le lien, ou donne le code à taper sur {shortUrl}
           </p>
           <ShareButtons code={code} link={link} />
-          <div className="mt-5 border-t-2 border-dashed border-[#6b573f] pt-4">
-            <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.18em] text-[#e9dcc0]">Dans la salle</p>
-            <Roster
-              participants={participants}
-              hostUserId={hostUserId}
-              currentUserId={currentUserId}
-              accent={ACCENT}
-              emptyLabel="Personne pour l'instant."
-            />
+        </div>
+        <div className="min-w-0 border-t-2 border-dashed border-[#6b573f] pt-4 lg:border-l-2 lg:border-t-0 lg:pl-8 lg:pt-0">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <p className="m-0 text-[11px] font-bold uppercase tracking-[0.18em] text-[#e9dcc0]">Dans la salle</p>
+            <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#e9dcc0]">
+              {participants.length} / {maxPlayers}
+            </span>
           </div>
-        </section>
+          <Roster
+            participants={participants}
+            hostUserId={hostUserId}
+            currentUserId={currentUserId}
+            accent={ACCENT}
+            emptyLabel="Personne pour l'instant."
+          />
+        </div>
+      </section>
+
+      <div className="grid gap-5 lg:grid-cols-2 lg:items-start lg:gap-6">
+        {/* 2. LA PARTIE : la regie de l'hote, ou qui va lancer */}
+        <div className="min-w-0">
+          {isHost ? (
+            <Panel label="La partie" dot={ACCENT} testId="lobby-partie">
+              <RoundSettings room={room} accent={ACCENT} accentText="#f4ecdb" />
+              <LaunchDock>
+                <LaunchButton
+                  onStart={props.onStart}
+                  canStart={props.canStart}
+                  starting={props.starting}
+                  importing={props.importing}
+                  hint={alone ? `Il faut au moins ${MIN_PLAYERS} joueurs : envoie le lien.` : `${participants.length} joueurs dans la salle`}
+                />
+              </LaunchDock>
+            </Panel>
+          ) : (
+            <LaunchDock flush>
+              <WaitingForHost hostName={hostName} accent={ACCENT} />
+            </LaunchDock>
+          )}
+        </div>
 
         {/* 3. TA MUSIQUE */}
-        <Panel label="Ta musique" dot={ACCENT} testId="lobby-musique">
+        <Panel label="Ta musique" dot={ACCENT} testId="lobby-musique" className="min-w-0">
           <p className="-mt-2 mb-3 text-sm text-[#6b573f]">
             La partie pioche dans la musique de chaque joueur présent. Coche ce que tu amènes ce soir.
           </p>
@@ -128,48 +158,18 @@ function FriendsLobby(props: LobbyRendererProps) {
         </Panel>
       </div>
 
-      <div className="flex min-w-0 flex-col gap-5">
-        {/* 2. LA PARTIE : la regie de l'hote, ou qui va lancer */}
-        {isHost ? (
-          <Panel label="La partie" dot={ACCENT} testId="lobby-partie">
-            <RoundSettings room={room} accent={ACCENT} accentText="#f4ecdb" />
-            <LaunchDock>
-              <LaunchButton
-                onStart={props.onStart}
-                canStart={props.canStart}
-                starting={props.starting}
-                importing={props.importing}
-                hint={alone ? `Il faut au moins ${MIN_PLAYERS} joueurs : envoie le lien.` : `${participants.length} joueurs dans la salle`}
-              />
-            </LaunchDock>
-          </Panel>
-        ) : (
-          <LaunchDock flush>
-            <WaitingForHost hostName={hostName} accent={ACCENT} />
-          </LaunchDock>
-        )}
-
-        {/* 4. EN ATTENDANT */}
-        {rps ? (
-          <LobbyRps
-            players={participants.map(p => ({ userId: p.user_id, username: p.username }))}
-            currentUserId={currentUserId}
-            accent={ACCENT}
-            scoreboard={rps.scoreboard}
-            incoming={rps.incoming}
-            active={rps.active}
-            pendingTargetId={rps.pendingTargetId}
-            result={rps.result}
-            onChallenge={rps.challenge}
-            onAccept={rps.accept}
-            onDecline={rps.decline}
-            onPlay={rps.play}
-          />
-        ) : null}
-        {onSendChat ? (
-          <ChatDock messages={chatMessages} onSend={onSendChat} currentUserId={currentUserId} accent={ACCENT} raised />
-        ) : null}
-      </div>
+      {/* 4. EN ATTENDANT : le chat et pierre-feuille-ciseaux dans la bulle */}
+      {onSendChat ? (
+        <LobbyDock
+          messages={chatMessages}
+          onSend={onSendChat}
+          currentUserId={currentUserId}
+          players={participants.map(p => ({ userId: p.user_id, username: p.username }))}
+          rps={rps}
+          accent={ACCENT}
+          raised
+        />
+      ) : null}
     </div>
   )
 }

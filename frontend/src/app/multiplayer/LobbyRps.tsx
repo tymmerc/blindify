@@ -22,6 +22,7 @@ export function LobbyRps({
   onAccept,
   onDecline,
   onPlay,
+  bare = false,
 }: {
   players: Player[]
   currentUserId: number
@@ -35,6 +36,8 @@ export function LobbyRps({
   onAccept: () => void
   onDecline: () => void
   onPlay: (move: RpsMove) => void
+  /** Sans cadre ni titre : pour vivre dans le panneau de la bulle du lobby. */
+  bare?: boolean
 }) {
   const nameFor = (id: number): string => {
     if (id === currentUserId) return "Toi"
@@ -44,10 +47,11 @@ export function LobbyRps({
   const opponents = players.filter(p => p.userId !== currentUserId)
   const pendingName = pendingTargetId != null ? nameFor(pendingTargetId) : null
 
-  const card = "rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-4 shadow-[4px_4px_0_rgba(46,32,20,.18)]"
+  const card = bare ? "" : "rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-4 shadow-[4px_4px_0_rgba(46,32,20,.18)]"
 
   return (
     <div className={card}>
+      {!bare && (
       <div className="mb-3 flex items-center justify-between">
         <p className="m-0 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.22em] text-[#2e2014]">
           <span aria-hidden className="h-2.5 w-2.5 rounded-full border-[1.5px] border-[#2e2014]" style={{ background: accent }} />
@@ -55,6 +59,7 @@ export function LobbyRps({
         </p>
         <Swords aria-hidden className="h-4 w-4 text-[#6b573f]" />
       </div>
+      )}
 
       {/* Revelation du dernier duel */}
       {result ? (
@@ -125,7 +130,7 @@ export function LobbyRps({
       ) : pendingName ? (
         <p className="py-2 text-center text-sm italic text-[#8a7558]">En attente de la réponse de {pendingName}...</p>
       ) : opponents.length === 0 ? (
-        <p className="py-2 text-center text-sm italic text-[#8a7558]">En attente d'un adversaire pour se défier...</p>
+        <p className="py-2 text-center text-sm italic text-[#8a7558]">{"En attente d'un adversaire pour se défier..."}</p>
       ) : (
         <div className="flex flex-col gap-2">
           <p className="m-0 text-xs text-[#8a7558]">Défie un joueur en attendant :</p>
