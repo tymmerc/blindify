@@ -1,10 +1,18 @@
 // Verifie les fixes PC : code colle avec espaces, sequence bras/vinyle/musique,
 // chat integre sous le classement, statut "Parti", RPS dans le lobby a distance,
 // et le buzzer sans musique importee (fonds commun).
+//
+//   node tools/pcfixes-e2e.mjs          sur dev (base de PROD) : musique ensemencee
+//                                       en SQL, JAMAIS de vrai import Deezer
+//   node tools/pcfixes-e2e.mjs --pile   sur la pile de test : le bouton d'import
+//                                       est teste pour de vrai, il interroge le
+//                                       faux Deezer local (aucun risque Akamai)
 import { chromium, devices } from "@playwright/test"
 import fs from "fs"
+import { seedLibrary, cleanupSeeded } from "./seed-library.mjs"
 
-const B = "https://dev.tymmerc.eu/blindify"
+const PILE = process.argv.includes("--pile")
+const B = PILE ? "http://blindz-test.localhost:3180/blindify" : "https://dev.tymmerc.eu/blindify"
 const KEY = fs.readFileSync("/opt/blindify/.e2e-bypass-key", "utf8").trim()
 const SHOTS = "/opt/blindify/maquettes/shots/pcfixes"
 fs.mkdirSync(SHOTS, { recursive: true })
@@ -20,12 +28,29 @@ const mk = async o => { const c = await b.newContext(o); await c.setExtraHTTPHea
 const hostCtx = await mk({ viewport: { width: 1440, height: 900 } })
 const host = await hostCtx.newPage()
 host.on("pageerror", e => bad(`HOTE crash: ${String(e).slice(0, 120)}`))
+let hostId = null
+host.on("response", async r => {
+  if (/\/api\/auth\/(guest|me)/.test(r.url())) { try { hostId = (await r.json())?.data?.user?.id ?? hostId } catch { /* autre */ } }
+})
 await host.goto(`${B}/jouer/`, { waitUntil: "networkidle", timeout: 90000 })
 await host.locator("input").first().fill("Tymeo")
 await host.getByRole("button", { name: /continuer/i }).click()
-await host.locator('input[placeholder^="https://"]').fill("https://www.deezer.com/profile/2529")
-await host.getByRole("button", { name: /importer ma musique/i }).click()
-await host.getByText(/titres? importés?/).waitFor({ timeout: 90000 })
+if (PILE) {
+  // Profil factice different a chaque passage : la regle "le premier importeur
+  // garde le titre" donnerait sinon 0 titre au second import du meme profil
+  // sur une pile deja utilisee (vu le 30/09, c'est un vrai sujet produit).
+  const profil = 3000 + Math.floor(Math.random() * 6000)
+  await host.locator('input[placeholder^="https://"]').fill(`https://www.deezer.com/profile/${profil}`)
+  await host.getByRole("button", { name: /importer ma musique/i }).click()
+  await host.getByText(/titres? importés?/).waitFor({ timeout: 90000 })
+  say("  [ok] import par l'interface (faux Deezer de la pile)")
+} else {
+  // Base de prod : plus jamais d'import Deezer reel (blocage Akamai de l'IP du VPS).
+  await host.getByRole("button", { name: /^continuer$/i }).click({ timeout: 20000 })
+  for (let i = 0; i < 40 && !hostId; i++) await sleep(250)
+  await seedLibrary(hostId, 12)
+  say(`  musique de l'hote ${hostId} ensemencee (12 titres)`)
+}
 await host.getByText("Créer une partie").click()
 await host.waitForURL(/\/modes/, { timeout: 40000 })
 await host.getByText("À distance").first().click()
@@ -127,6 +152,7 @@ else bad(`buzzer sans import ne demarre pas (${(await page.evaluate(() => docume
 await page.screenshot({ path: `${SHOTS}/4-buzzer-sans-import.png` })
 await bz.close()
 
+if (!PILE) cleanupSeeded()
 say(`\n=== ${problems.length ? problems.length + " PROBLEME(S)" : "AUCUN PROBLEME"} ===`)
 problems.forEach(p => say("  - " + p))
 await b.close()

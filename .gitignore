@@ -35,3 +35,7 @@ maquettes/shots/
 
 # Lien vers les modules du frontend, pour la resolution des outils E2E
 tools/node_modules
+tools/test-stack/node_modules
+
+# Pile de test locale (front de test, extraits synthetiques, journaux)
+.test-stack/

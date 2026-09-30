@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { DEEZER_API } from "../config/deezer";
 import { pool } from "../config/db";
 import { getSessionContext } from "../utils/session";
 import { ok, fail } from "../utils/response";
@@ -123,7 +124,7 @@ export const importController = {
       } else {
         if (parsed.provider === "deezer") {
           try {
-            const { data } = await axios.get(`https://api.deezer.com/user/${encodeURIComponent(parsed.id)}`, { timeout: 6000 });
+            const { data } = await axios.get(`${DEEZER_API}/user/${encodeURIComponent(parsed.id)}`, { timeout: 6000 });
             label = data?.name ? `Profil de ${data.name}` : null;
             imageUrl = data?.picture_medium ?? null;
           } catch { /* profil prive ou API indisponible : fallback plus bas */ }

@@ -1,8 +1,9 @@
 import axios from "axios";
+import { DEEZER_API } from "../config/deezer";
 import { logger } from "../utils/logger";
 
-const DEEZER_SEARCH_URL = "https://api.deezer.com/search";
-const DEEZER_TRACK_URL = "https://api.deezer.com/track";
+const DEEZER_SEARCH_URL = `${DEEZER_API}/search`;
+const DEEZER_TRACK_URL = `${DEEZER_API}/track`;
 
 // Deezer rate limit: 50 requests per 5 seconds
 const RATE_LIMIT_WINDOW_MS = 5_000;

@@ -1,4 +1,5 @@
 import axios from "axios";
+import { DEEZER_API } from "../config/deezer";
 import { Buffer } from "node:buffer";
 import { logger } from "../utils/logger";
 
@@ -158,7 +159,7 @@ async function fetchSinglePlaylistInfo(parsed: ParsedUrl): Promise<PublicPlaylis
 
   // Deezer
   try {
-    const { data } = await axios.get(`https://api.deezer.com/playlist/${parsed.id}`, { timeout: 10_000 });
+    const { data } = await axios.get(`${DEEZER_API}/playlist/${parsed.id}`, { timeout: 10_000 });
     if (data?.error || !data?.id) return [];
     return [{
       id: String(data.id),
@@ -200,7 +201,7 @@ async function fetchSpotifyUserPlaylists(userId: string): Promise<PublicPlaylist
 
 async function fetchDeezerUserPlaylists(userId: string): Promise<PublicPlaylist[]> {
   const playlists: PublicPlaylist[] = [];
-  let cursor: string | null = `https://api.deezer.com/user/${encodeURIComponent(userId)}/playlists?limit=100`;
+  let cursor: string | null = `${DEEZER_API}/user/${encodeURIComponent(userId)}/playlists?limit=100`;
 
   while (cursor && playlists.length < 200) {
     try {
@@ -240,7 +241,7 @@ async function getSpotifyPlaylistName(playlistId: string): Promise<string | null
 
 async function searchDeezerPlaylist(name: string): Promise<PublicPlaylist[]> {
   try {
-    const { data } = await axios.get("https://api.deezer.com/search/playlist", {
+    const { data } = await axios.get(`${DEEZER_API}/search/playlist`, {
       params: { q: name, limit: 3 },
       timeout: 10_000,
     });
@@ -308,7 +309,7 @@ async function fetchSpotifyPlaylistTracks(playlistId: string, maxTracks = 500): 
 async function fetchDeezerPlaylistTracks(playlistId: string, maxTracks = 500): Promise<ImportedTrack[]> {
   const tracks: ImportedTrack[] = [];
   const pageSize = Math.min(maxTracks, 100);
-  let cursor: string | null = `https://api.deezer.com/playlist/${encodeURIComponent(playlistId)}/tracks?limit=${pageSize}`;
+  let cursor: string | null = `${DEEZER_API}/playlist/${encodeURIComponent(playlistId)}/tracks?limit=${pageSize}`;
 
   while (cursor && tracks.length < maxTracks) {
     try {
