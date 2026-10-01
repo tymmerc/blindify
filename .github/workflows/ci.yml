@@ -1,0 +1,176 @@
+# Integration continue de Blindz : on verifie, on ne corrige jamais.
+# Chaque job part d'une machine neuve ; ils tournent en parallele, la duree
+# totale est celle du plus lent. Du moins cher au plus cher : lint et typage,
+# puis tests, puis build.
+#
+# Securite (depot public) :
+# - chaque action est epinglee par SHA de commit, version en commentaire : une
+#   etiquette comme v7 peut etre deplacee (cas tj-actions/changed-files, mars 2025) ;
+# - aucun droit par defaut, chaque job ne recoit que la lecture du depot ;
+# - aucun secret : lint, typage, tests et build n'en ont pas besoin.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  lint:
+    name: lint (${{ matrix.projet }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        projet: [frontend, backend]
+    defaults:
+      run:
+        working-directory: ${{ matrix.projet }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: ${{ matrix.projet }}/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+
+  typecheck:
+    name: typecheck (${{ matrix.projet }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        projet: [frontend, backend]
+    defaults:
+      run:
+        working-directory: ${{ matrix.projet }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: ${{ matrix.projet }}/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+
+  shared-types:
+    name: types partages
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Les types canoniques de shared/ doivent exister dans les deux copies.
+      - run: bash tools/check-shared-types.sh
+
+  test-front:
+    name: test-front (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        # 22 = la version de la prod (.nvmrc), 24 = la LTS suivante.
+        node: [22, 24]
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm test
+
+  test-back:
+    name: test-back (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    # Postgres jetable, meme version majeure que la prod, sur le meme port que
+    # `npm run test:db` en local (5437). Le garde-fou des tests refuse 5432.
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: blindz
+          POSTGRES_PASSWORD: blindz
+          POSTGRES_DB: blindz_test
+        ports:
+          - 5437:5432
+        # pg_isready par TCP : pendant son initialisation, le conteneur ne
+        # repond que sur son socket local, puis redemarre.
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U blindz -d blindz_test"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      TEST_DATABASE_URL: postgres://blindz:blindz@127.0.0.1:5437/blindz_test
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      # Le schema reel de la prod (tools/schema-snapshot.sh), charge avec le
+      # psql du conteneur pour ne pas dependre de celui de la machine.
+      - name: Charger le schema dans la base de test
+        env:
+          PG_CONTAINER: ${{ job.services.postgres.id }}
+        run: docker exec -i "$PG_CONTAINER" psql -U blindz -d blindz_test -v ON_ERROR_STOP=1 -q < db/schema.sql
+      - run: npm test
+
+  build-front:
+    name: build-front
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: frontend
+    # Memes valeurs que le build de prod. Ce sont des adresses publiques, pas
+    # des secrets.
+    env:
+      NEXT_PUBLIC_BASE_PATH: ""
+      NEXT_PUBLIC_API_URL: https://blindz.app/api
+      NEXT_PUBLIC_SOCKET_URL: https://blindz.app
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build
