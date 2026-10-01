@@ -110,7 +110,9 @@ async function tableCheck(browser, seed, out) {
     while (Date.now() - t0 < 5 * 25000 + 30000 && !bots.every(b => b.over)) {
       const lead = bots[0]
       const cur = lead.current?.round
-      if (cur && !answered.has(cur) && !lead.reveals.has(cur) && Date.now() - (lead.timeline[cur]?.received ?? 0) > 2000) {
+      // 2 s apres le depart de la musique (startAt), pas apres l'annonce de la manche.
+      const musicAt = lead.timeline[cur]?.startAt ?? lead.timeline[cur]?.received ?? 0
+      if (cur && !answered.has(cur) && !lead.reveals.has(cur) && Date.now() - musicAt > 2000) {
         answered.add(cur)
         const truth = oracle(code, cur)
         const owner = truth?.ownerId ? usernameOf(truth.ownerId) : null

@@ -108,6 +108,13 @@ export class Bot {
   inspect(evt, payload) {
     const cur = this.current
     if (!cur || this.reveals.has(cur.round) || !cur.truth?.title) return
+    // Etat d'une manche DEJA revelee : c'est la revelation, pas une fuite. Cas
+    // vu le 02/10/2026 (graine 303) : un joueur coupe du reseau manque
+    // game:round:reveal et ne recoit, a son retour, que l'etat de resynchro.
+    if (evt === "game:state" && payload?.currentRound === cur.round && (payload?.phase === "REVEAL" || payload?.phase === "FINISHED")) {
+      this.onReveal({ round: cur.round })
+      return
+    }
     const mine = this.intents.get(cur.round)
     if (mine?.sentTitle === cur.truth.title) return
     const blob = JSON.stringify(payload ?? "")
@@ -153,9 +160,19 @@ export class Bot {
       await sleep(Math.max(0, wait))
       title = truth.title; artist = truth.artist
     } else {
-      await sleep(1500 + this.random() * 4000)
+      // Comme un humain : il faut ENTENDRE le morceau. On compte donc a partir
+      // du depart de la musique (timing.startAt, 1,6 s apres l'annonce), pas
+      // de l'annonce. Avant le 02/10/2026, deux bots rapides et le telephone
+      // pouvaient tous repondre (grace a l'oracle) pendant le compte a rebours :
+      // la manche etait revelee avant la premiere note (graine 202).
+      const untilMusic = Math.max(0, (p?.timing?.startAt ?? Date.now()) - Date.now())
+      await sleep(untilMusic + 1500 + this.random() * 4000)
     }
     if (this.left || !this.socket?.connected) { intent.lost = true; return }
+    // Revenu d'une coupure apres la revelation : le client web affiche alors le
+    // resultat et ne propose plus de repondre. On fait pareil (le comportement
+    // "lent", lui, repond expres trop tard pour tester le refus du serveur).
+    if (intent.deco && step.action !== "lent" && this.reveals.has(round)) { intent.lost = true; intent.revealedWhileAway = true; return }
     intent.sentTitle = title
     intent.sourceGuess = source
     intent.ack = await new Promise(resolve => {

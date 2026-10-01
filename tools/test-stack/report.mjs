@@ -32,7 +32,7 @@ function audioStrip(a) {
 function page(r, stamp) {
   const pill = ok => `<span class="pill ${ok ? "ok" : "ko"}">${ok ? "vert" : "rouge"}</span>`
   const rooms = r.rooms.map(x => `<tr><td>${pill(x.ok)}</td><td><b>${esc(x.label)}</b><div class="aide">salle ${esc(x.code ?? "?")} · ${x.stats.joueurs} joueurs · ${x.stats.manches} manches de ${x.stats.secondes} s · ${x.stats.duree_s ?? "?"} s</div>
-    ${x.problems.length ? `<ul>${x.problems.map(p => `<li>${esc(p)}</li>`).join("")}</ul>` : `<div class="aide">${x.stats.reponses_verifiees ?? 0} réponses confrontées à la base · ${esc(JSON.stringify(x.stats.verdicts ?? {}))}</div>`}</td></tr>`).join("")
+    ${x.problems.length ? `<ul>${x.problems.map(p => `<li>${esc(p)}</li>`).join("")}</ul>` : `<div class="aide">${x.stats.reponses_verifiees ?? 0} réponses confrontées à la base · ${esc(JSON.stringify(x.stats.verdicts ?? {}))}${x.stats.revelees_pendant_coupure ? ` · ${x.stats.revelees_pendant_coupure} manche(s) révélée(s) pendant une coupure du joueur` : ""}</div>`}</td></tr>`).join("")
   const checks = (r.browser?.checks ?? []).map(c => `<section class="carte"><h3>${pill(c.ok)} ${esc(c.label)}</h3>
     ${c.problems?.length ? `<ul>${c.problems.map(p => `<li>${esc(p)}</li>`).join("")}</ul>` : ""}
     ${c.notes?.length ? `<p class="aide">${c.notes.map(esc).join(" · ")}</p>` : ""}
