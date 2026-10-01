@@ -7,6 +7,7 @@ import { api } from "@/lib/api"
 import { SoloGameClient, type RoundStats } from "@/components/game/SoloGameClient"
 import type { SoloTrack, UserSummary } from "@/lib/types"
 import { Loader2 } from "lucide-react"
+import { absoluteUrl, publicPath } from "@/lib/publicPath"
 
 type ChallengeData = {
   code: string
@@ -311,7 +312,7 @@ function ChallengeContent() {
 
           <div className="flex flex-wrap justify-center gap-3 pt-2">
             <a
-              href="/blindify/solo/"
+              href={publicPath("/solo/")}
               className="rounded-full border-[1.5px] border-[#2e2014] px-5 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
             >
               Retour
@@ -319,7 +320,7 @@ function ChallengeContent() {
             <button
               type="button"
               onClick={() => {
-                const challengeUrl = `https://tymmerc.eu/blindify/challenge/?code=${code}`
+                const challengeUrl = `${absoluteUrl("/challenge/")}?code=${encodeURIComponent(code)}`
                 navigator.clipboard.writeText(challengeUrl).catch(() => {})
               }}
               className="btn-neon text-sm"

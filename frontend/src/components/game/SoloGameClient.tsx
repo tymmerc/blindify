@@ -9,6 +9,7 @@ import type { SoloTrack, UserSummary } from "@/lib/types"
 import { ArrowRight, Loader2, Play, Share2, Sparkles, Volume2, VolumeX } from "lucide-react"
 import { StreakEffects } from "./StreakEffects"
 import { buildShareText } from "@/lib/shareText"
+import { absoluteUrl } from "@/lib/publicPath"
 import { ShareImageButton } from "./ShareImageButton"
 import { getSocket } from "@/lib/socket"
 import { audioManager, DEFAULT_AUDIO_VOLUME } from "@/lib/audioManager"
@@ -500,7 +501,7 @@ export function SoloGameClient({
         total: stats.rounds,
         bestStreak: stats.bestStreak,
       })
-      const challengeUrl = `https://tymmerc.eu/blindify/challenge/?code=${code}`
+      const challengeUrl = `${absoluteUrl("/challenge/")}?code=${encodeURIComponent(code)}`
       await navigator.clipboard.writeText(challengeUrl)
       setChallengeLabel("Lien copié !")
       setTimeout(() => setChallengeLabel("Défier un ami"), 3000)

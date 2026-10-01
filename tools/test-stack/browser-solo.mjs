@@ -82,7 +82,9 @@ export async function soloCheck(browser, seed, out) {
     const code = copied.match(/code=([A-Z0-9]+)/i)?.[1]
     if (!code) throw new Error(`pas de lien de defi dans le presse-papier ("${copied.slice(0, 60)}")`)
     notes.push(`lien de defi copie : ${copied}`)
-    if (!copied.startsWith("https://blindz.app")) notes.push("le lien de defi pointe encore sur l'ancien domaine (redirige en 301 vers blindz.app)")
+    // Le lien doit viser le site sur lequel on joue (blindz.app en prod), jamais
+    // un domaine ecrit en dur.
+    if (!copied.startsWith(`${APP}/challenge/`)) problems.push(`le lien de defi ne vise pas le site courant (${copied})`)
 
     b = await newPage(browser, { ...devices["iPhone 13"] }, "ami", problems)
     const q = b.page
