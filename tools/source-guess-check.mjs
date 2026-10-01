@@ -7,7 +7,8 @@
 // bon proprietaire, le joueur B un mauvais. On relit ensuite la base.
 import fs from "fs"
 import { createRequire } from "module"
-import { seedLibrary, cleanupSeeded } from "./seed-library.mjs"
+// psql sans shell + gardes SQL : ids et code viennent du backend de dev
+import { seedLibrary, cleanupSeeded, psql, entier, codeSalle } from "./seed-library.mjs"
 const { io } = createRequire("/opt/blindify/frontend/package.json")("socket.io-client")
 
 const B = "http://127.0.0.1:3097"
@@ -16,8 +17,6 @@ const sleep = ms => new Promise(r => setTimeout(r, ms))
 const problems = []
 const bad = m => { problems.push(m); console.log("  !! " + m) }
 const okk = m => console.log("  [ok] " + m)
-const psql = sql => createRequire(import.meta.url)("child_process").execSync(
-  `docker exec blindify-postgres psql -U blindify -d blindify -qAt -c "${sql.replace(/"/g, '\\"')}"`).toString().trim()
 
 const api = async (path, { method = "GET", token, body } = {}) => {
   const res = await fetch(`${B}${path}`, {
@@ -32,7 +31,7 @@ const api = async (path, { method = "GET", token, body } = {}) => {
 const invite = async (nom) => {
   const g = await api("/api/auth/guest", { method: "POST", body: { nickname: nom } })
   if (!g.data?.sessionToken) throw new Error(`invite ${nom} refuse (${g.status})`)
-  return { token: g.data.sessionToken, id: g.data.user.id, nom }
+  return { token: g.data.sessionToken, id: entier(g.data.user.id), nom }
 }
 const socketDe = (j) => new Promise((res, rej) => {
   const s = io(B, { path: "/socket.io", auth: { token: j.token }, extraHeaders: { "X-E2E-Key": KEY }, transports: ["websocket"] })
@@ -45,7 +44,7 @@ await seedLibrary(A.id, 12); await seedLibrary(Bj.id, 12)
 okk(`deux invites ensemences (${A.id}, ${Bj.id})`)
 
 const room = await api("/api/rooms/create", { method: "POST", token: A.token, body: { mode: "friends", questionCount: 2 } })
-const code = room.data?.roomCode || room.data?.room?.room_code
+const code = codeSalle(room.data?.roomCode || room.data?.room?.room_code)
 if (!code) { bad(`salon refuse (${room.status} ${JSON.stringify(room.error)})`); process.exit(1) }
 const j2 = await api(`/api/rooms/${code}/join`, { method: "POST", token: Bj.token })
 if (j2.status >= 400) { bad(`B ne peut pas rejoindre (${j2.status})`); process.exit(1) }

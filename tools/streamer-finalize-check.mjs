@@ -3,8 +3,9 @@
 // faux game:lost au resync tardif. Pilotage direct par API + socket, sans
 // navigateur. Solo submode, 1 manche, seed SQL (zero Deezer).
 import fs from "fs"
-import { execSync } from "child_process"
 import { createRequire } from "module"
+// psql sans shell + gardes SQL (ids et code renvoyes par l'API de dev)
+import { psql, entier, codeSalle } from "./seed-library.mjs"
 
 const requireFront = createRequire("/opt/blindify/frontend/package.json")
 const { io } = requireFront("socket.io-client")
@@ -19,16 +20,15 @@ const problems = []
 const bad = m => { problems.push(m); say("  !! " + m) }
 const okk = m => say("  [ok] " + m)
 
-const psql = sql => execSync(
-  `docker exec blindify-postgres psql -U blindify -d blindify -qAt -c "${sql.replace(/"/g, '\\"').replace(/\n/g, " ")}"`
-).toString().trim()
-
 const api = async (path, { method = "GET", token, body } = {}) => {
   const res = await fetch(`${B}${path}`, {
     method,
     headers: {
       "Content-Type": "application/json",
       "X-E2E-Key": KEY,
+      // Le backend refuse un POST sans Origin autorisee (anti-CSRF). nginx
+      // forcait cet en-tete sur le dev jusqu'au 01/10/2026, plus maintenant.
+      Origin: new URL(B).origin,
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
@@ -40,7 +40,7 @@ const api = async (path, { method = "GET", token, body } = {}) => {
 // Hote streamer
 const guest = await api("/api/auth/guest", { method: "POST", body: { nickname: "StreamerHost" } })
 const token = guest.data?.sessionToken
-const hostId = guest.data?.user?.id
+const hostId = entier(guest.data?.user?.id)
 if (!token || !hostId) { bad("pas de session hote"); process.exit(1) }
 psql(`INSERT INTO audio_sources (provider, external_id, user_id, title, artist, album_cover, audio_url, duration_ms, metadata)
   SELECT provider, 'e2e-' || md5(random()::text || id::text), ${hostId}, title, artist, album_cover, audio_url, duration_ms, metadata
@@ -49,7 +49,7 @@ say(`hote streamer ${hostId} seede`)
 
 // Room streamer
 const room = await api("/api/rooms/create", { method: "POST", token, body: { mode: "streamer", questionCount: 1 } })
-const code = room.data?.room?.room_code || room.data?.room_code || room.data?.roomCode
+const code = codeSalle(room.data?.room?.room_code || room.data?.room_code || room.data?.roomCode)
 if (!code) { bad(`room non creee: ${JSON.stringify(room).slice(0,200)}`); process.exit(1) }
 say(`room streamer ${code} (statut initial ${psql(`SELECT status FROM multiplayer_rooms WHERE room_code='${code}'`)})`)
 
@@ -59,7 +59,7 @@ const vSocks = []
 for (const nick of ["Viewer1", "Viewer2"]) {
   const viewer = await api("/api/auth/guest", { method: "POST", body: { nickname: nick } })
   const vToken = viewer.data?.sessionToken
-  const vId = viewer.data?.user?.id
+  const vId = entier(viewer.data?.user?.id)
   psql(`INSERT INTO audio_sources (provider, external_id, user_id, title, artist, album_cover, audio_url, duration_ms, metadata)
     SELECT provider, 'e2e-' || md5(random()::text || id::text), ${vId}, title, artist, album_cover, audio_url, duration_ms, metadata
     FROM audio_sources WHERE user_id = 3103 AND audio_url IS NOT NULL AND audio_url <> '' LIMIT 5`)

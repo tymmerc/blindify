@@ -2,9 +2,9 @@
 // joue), reglages dans le lobby a distance, pause hote, recap des reponses au
 // reveal, matching genereux. Zero appel Deezer : bibliotheques seedees en SQL.
 import { chromium, devices } from "@playwright/test"
-import { execSync } from "child_process"
 import fs from "fs"
-import { seedLibrary, cleanupSeeded } from "./seed-library.mjs"
+// psql sans shell + garde SQL sur les ids renvoyes par le serveur
+import { seedLibrary, cleanupSeeded, psql, entier } from "./seed-library.mjs"
 
 const B = process.argv[2] === "prod" ? "https://blindz.app" : "https://dev.tymmerc.eu/blindify"
 const KEY = fs.readFileSync("/opt/blindify/.e2e-bypass-key", "utf8").trim()
@@ -14,7 +14,6 @@ const sleep = ms => new Promise(r => setTimeout(r, ms))
 const problems = []
 const say = (...a) => console.log(a.join(" "))
 const bad = m => { problems.push(m); say("  !! " + m) }
-const psql = q => execSync(`docker exec blindify-postgres psql -U blindify -d blindify -qtAc "${q.replace(/"/g, '\\"').replace(/\n/g, " ")}"`).toString().trim()
 
 // Schema (le backend le cree a la demande ; nos INSERT SQL directs en ont besoin avant)
 psql(`CREATE TABLE IF NOT EXISTS imported_links (
@@ -57,7 +56,7 @@ await host.getByRole("button", { name: /continuer/i }).click()
 const cont = host.getByRole("button", { name: /^continuer$/i })
 for (let i = 0; i < 30 && !(await cont.isEnabled().catch(() => false)); i++) await sleep(500)
 await cont.click({ timeout: 20000 })
-const hostId = await hostIdP
+const hostId = entier(await hostIdP)
 const linkA = await seedLink(hostId, "SoireeTest", 15)
 const linkB = await seedLink(hostId, "RapExclu", 15)
 say(`hote ${hostId} : cartes ${linkA} (SoireeTest) + ${linkB} (RapExclu)`)
@@ -96,7 +95,7 @@ const leaIdP = grabUserId(lea)
 await lea.goto(`${B}/?join=${code}`, { waitUntil: "networkidle", timeout: 90000 })
 await lea.locator("input").first().fill("Lea")
 await lea.getByRole("button", { name: /continuer/i }).click()
-const leaId = await leaIdP
+const leaId = entier(await leaIdP)
 await seedLink(leaId, "PlaylistLea", 12)
 await lea.getByRole("button", { name: /rejoindre la partie/i }).click()
 await lea.getByText(/dans la partie|équipage|lobby/i).first().waitFor({ timeout: 60000 }).catch(() => {})

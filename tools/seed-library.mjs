@@ -34,13 +34,32 @@ import { execFileSync } from "child_process"
 // tierces) et finissent dans une commande lancee en root contre la base de
 // prod. Avec l'ancien execSync, une apostrophe inverse dans un titre etait
 // executee par le shell (constate par la relecture du 30/09/2026).
-const psql = sql => execFileSync(
+// Exporte : les autres outils E2E s'en servent au lieu de leur copie en
+// execSync (alertes CodeQL 7 a 12, relecture du 01/10/2026).
+export const psql = sql => execFileSync(
   "docker", ["exec", "blindify-postgres", "psql", "-U", "blindify", "-d", "blindify", "-qAt", "-c", sql],
   { maxBuffer: 16 * 1024 * 1024 },
 ).toString().trim()
 
 // Litteral SQL : apostrophes doublees (standard_conforming_strings actif).
 const sq = v => "'" + String(v ?? "").replace(/'/g, "''") + "'"
+
+// Gardes SQL. Sans shell, une valeur piegee arrive encore dans la requete, et
+// psql -c en enchaine plusieurs. Or les ids et les codes de salle viennent des
+// reponses du serveur : un faux backend (port 3097 pris pendant un redemarrage
+// de ts-node-dev, DNS detourne) pourrait y glisser du SQL, lance avec le role
+// blindify (sans doute superuser) sur la base de prod. On refuse donc toute valeur qui n'a pas la forme
+// attendue. Une valeur absente passe telle quelle : chaque script traite deja ce
+// cas, et elle n'injecte rien. La valeur est rendue inchangee (meme type).
+export const entier = v => {
+  if (v && !/^\d{1,10}$/.test(String(v))) throw new Error(`id inattendu : ${String(v).slice(0, 40)}`)
+  return v
+}
+// Codes produits par generateRoomCode (roomsController.ts) : 6 caracteres A-Z0-9.
+export const codeSalle = c => {
+  if (c && !/^[A-Z0-9]{6}$/.test(String(c))) throw new Error(`code de salle inattendu : ${String(c).slice(0, 40)}`)
+  return c
+}
 
 const MOTS = [
   "rock", "pop francaise", "rap francais", "jazz", "electro", "chanson francaise",
@@ -78,7 +97,8 @@ async function remplirLaReserve(minimum) {
       if (neufs.length + orphelins.length >= minimum * 3) break boucle
       for (const t of await pageDeezer(q, index)) {
         const id = String(t.id ?? "")
-        if (!id || !t.preview || vus.has(id)) continue
+        // id Deezer colle tel quel dans l'INSERT : un entier, rien d'autre
+        if (!/^\d+$/.test(id) || !t.preview || vus.has(id)) continue
         vus.add(id)
         const e = etat.get(id)
         if (e === "pris") continue
@@ -102,6 +122,7 @@ async function remplirLaReserve(minimum) {
  * d'autre est laisse tranquille, d'ou le WHERE de l'ON CONFLICT.
  */
 export async function seedLibrary(userId, n = 12) {
+  entier(userId) // colle brut dans l'INSERT ; vient de la reponse du serveur
   const pool = await remplirLaReserve(n)
   const lot = pool.splice(0, n)
   if (!lot.length) throw new Error("reserve de titres epuisee")
@@ -133,7 +154,7 @@ export async function seedLibrary(userId, n = 12) {
  *  vrais identifiants Deezer, l'ancien filtre `external_id LIKE 'e2e-%'` ne
  *  matche plus rien. */
 export function cleanupSeeded(userIds = [...seedes]) {
-  const ids = userIds.filter(Boolean).join(",")
+  const ids = userIds.filter(Boolean).map(entier).join(",")
   // D'abord rendre les orphelins reattribues (ils portent des manches reelles :
   // on ne les supprime jamais), y compris ceux d'un run interrompu avant. Le
   // marqueur suffit a les retrouver ; attention, audio_sources.id est un UUID.
