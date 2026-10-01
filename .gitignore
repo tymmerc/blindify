@@ -20,6 +20,10 @@ frontend/post-export.sh
 frontend/test-build.cjs
 frontend/test-build.mjs
 
+# Cache npx de shadcn commite par erreur le 16/01/2026 (1 325 fichiers, 83 alertes
+# Dependabot sans rapport avec l'app) : il reste sur le disque, hors du depot.
+frontend/.npm-cache-shadcn/
+
 # Node.js local install (headers cause GitHub to detect C)
 frontend/.node/
 e2e-dashboard/node_modules/

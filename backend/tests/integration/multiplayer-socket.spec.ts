@@ -21,7 +21,6 @@ import {
   pool,
   waitFor,
   type TestServer,
-  type TestUser,
   type GameClient,
 } from "./helpers/socket-test-harness";
 
@@ -295,8 +294,25 @@ describe("multiplayer socket integration — N players, no desync", () => {
       }
 
       await waitFor(() => clients.every(c => c.gameOver !== null), 5000, "game over");
-      // Persistence is fire-and-forget; give the async writes a beat to land.
-      await new Promise(r => setTimeout(r, 500));
+      // Persistence is fire-and-forget: poll until the writes have landed
+      // instead of a fixed delay. 500 ms was not always enough on CI runners
+      // (01/10/2026: 4 of the 6 round responses written at check time).
+      const persisted = async () => {
+        const { rows } = await pool.query(
+          `SELECT
+             (SELECT state FROM game_sessions WHERE id = $1) AS state,
+             (SELECT COUNT(*)::int FROM game_participants WHERE session_id = $1 AND score > 0) AS scored,
+             (SELECT COUNT(*)::int FROM round_responses rr
+                JOIN game_rounds gr ON gr.id = rr.round_id WHERE gr.session_id = $1) AS responses,
+             (SELECT COUNT(*)::int FROM user_stats WHERE user_id = ANY($2::int[]) AND total_games >= 1) AS stats`,
+          [sessionId, users.map(u => u.id)],
+        );
+        const r = rows[0];
+        return r.state === "finished" && r.scored === 3 && r.responses === 3 * 2 && r.stats === 3;
+      };
+      for (const deadline = Date.now() + 5000; Date.now() < deadline && !(await persisted()); ) {
+        await new Promise(r => setTimeout(r, 100));
+      }
 
       // 1. Session flipped to finished
       const sess = await pool.query(`SELECT state, ended_at FROM game_sessions WHERE id = $1`, [sessionId]);

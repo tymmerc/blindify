@@ -1,10 +1,10 @@
-import { test, expect } from "@playwright/test"
+import { test, expect, type Page } from "@playwright/test"
 import { extractRoomCode } from "./helpers"
 
 const BASE = "https://tymmerc.eu/blindify"
 const SPOTIFY_PROFILE = "https://open.spotify.com/user/yigiha54gqwl2tj39ymvu1n2s"
 
-async function registerUser(page: any, suffix: string) {
+async function registerUser(page: Page, suffix: string) {
   const username = `e2e_${suffix}_${Date.now()}`
   await page.goto(`${BASE}/auth/login`)
   await page.waitForTimeout(1_000)
@@ -19,7 +19,7 @@ async function registerUser(page: any, suffix: string) {
   return username
 }
 
-async function getRoomCode(page: any): Promise<string> {
+async function getRoomCode(page: Page): Promise<string> {
   return extractRoomCode(page)
 }
 

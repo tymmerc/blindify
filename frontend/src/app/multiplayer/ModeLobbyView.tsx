@@ -31,6 +31,11 @@ import { ENTRY_ROUTE, HEADER_COPY } from "./lobbyCopy"
 import type { LobbyRendererProps, LobbyViewState } from "./lobbyTypes"
 import { initialLobbyContext, lobbyReducer } from "./lobbyMachine"
 
+// Phases du mode streamer ou la partie est lancee (vue "en jeu").
+const STREAMER_PLAYING_PHASES: readonly string[] = [
+  "LOBBY", "STARTING_ROUND", "GUESSING_CHAT", "GUESSING_STREAMER", "REVEAL_PARTIAL", "REVEAL_FINAL", "ROUND_ENDED",
+]
+
 type RoomPresenceEvent =
   | {
       type: "joined"
@@ -581,7 +586,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       const basePhase = state.phase
       const isFinished = isStreamer ? basePhase === "GAME_OVER" : basePhase === "FINISHED"
       const isPlaying = isStreamer
-        ? ["LOBBY", "STARTING_ROUND", "GUESSING_CHAT", "GUESSING_STREAMER", "REVEAL_PARTIAL", "REVEAL_FINAL", "ROUND_ENDED"].includes(basePhase as any)
+        ? STREAMER_PLAYING_PHASES.includes(basePhase)
         : basePhase === "GUESSING" ||
           basePhase === "REVEAL" ||
           (basePhase === "LOBBY" && (state as MultiplayerGameState).currentRound > 0)

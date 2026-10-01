@@ -464,7 +464,6 @@ describe('gamesController', () => {
       const ctx = makeSessionContext();
       mockGetSessionContext.mockResolvedValue(ctx);
 
-      let callCount = 0;
       mockQuery.mockImplementation(((sql: string) => {
         const q = typeof sql === 'string' ? sql : '';
 

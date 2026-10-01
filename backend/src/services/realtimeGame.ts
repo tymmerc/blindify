@@ -341,7 +341,7 @@ export function upsertPlayer(
     };
   } else {
     ctx.state.players[payload.userId].username = payload.username;
-    if (payload.hasOwnProperty("avatar")) {
+    if (Object.prototype.hasOwnProperty.call(payload, "avatar")) {
       ctx.state.players[payload.userId].avatar = (payload as any).avatar ?? null;
     }
   }

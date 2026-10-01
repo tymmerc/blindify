@@ -1,5 +1,6 @@
 # Blindz
 
+[![CI](https://github.com/tymmerc/blindify/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/tymmerc/blindify/actions/workflows/ci.yml)
 [![Licence : CC BY-NC-SA 4.0](https://img.shields.io/badge/Licence-CC%20BY--NC--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 
 Un blind test musical joué sur la musique des joueurs eux-mêmes. Chacun importe ses playlists Deezer ou Spotify avec un simple lien, et la partie mélange les titres de tout le monde. En ligne sur **[blindz.app](https://blindz.app)**.
@@ -42,7 +43,7 @@ maquettes/  maquettes HTML de la direction artistique
 
 ## Lancer en local
 
-Il faut Node.js 22 et Docker.
+Il faut Node.js 22 (`.nvmrc`) et Docker.
 
 ```bash
 git clone https://github.com/tymmerc/blindify.git
@@ -55,6 +56,39 @@ cd frontend && npm ci && npm run dev
 ```
 
 Le front lit l'adresse de l'API dans `NEXT_PUBLIC_API_URL` et `NEXT_PUBLIC_SOCKET_URL`, et son chemin de base dans `NEXT_PUBLIC_BASE_PATH` (vide pour servir à la racine).
+
+## Tests
+
+Front (Vitest) :
+
+```bash
+cd frontend && npm test
+```
+
+Back (Jest). Les tests unitaires tournent sans rien ; les tests d'intégration jouent de vraies parties sur un serveur Socket.IO et ont besoin d'une base Postgres jetable :
+
+```bash
+cd backend
+npm run test:unit       # sans base
+npm run test:db         # Postgres 15 jetable sur 127.0.0.1:5437, avec le schéma de la prod
+TEST_DATABASE_URL=postgres://blindz:blindz@127.0.0.1:5437/blindz_test npm test
+npm run test:db:down    # jette la base
+```
+
+Les tests refusent toute base dont le nom ne finit pas par `_test`, ainsi que le port 5432, celui du Postgres de la prod. Le schéma de test, `backend/db/schema.sql`, est une photo de la structure de la prod, sans aucune donnée, que régénère `tools/schema-snapshot.sh`.
+
+Lint et typage : `npm run lint` et `npm run typecheck`, dans `frontend/` comme dans `backend/`.
+
+## Intégration continue
+
+Chaque pull request et chaque push sur `main` lancent [`.github/workflows/ci.yml`](.github/workflows/ci.yml) :
+
+- lint et typage des deux projets ;
+- contrôle des types partagés entre le front et le back ;
+- tests du front et du back sous Node 22 et 24, avec un Postgres de service pour le back ;
+- build du front avec les adresses de la prod.
+
+Les actions sont épinglées par SHA de commit, le workflow n'a aucun droit par défaut et n'utilise aucun secret.
 
 ## Licence
 

@@ -4,6 +4,7 @@ const config: Config = {
   preset: "ts-jest",
   testEnvironment: "node",
   roots: ["<rootDir>/tests"],
+  globalSetup: "<rootDir>/tests/globalSetup.ts",
   setupFilesAfterEnv: ["<rootDir>/tests/setup.ts"],
   moduleFileExtensions: ["ts", "js", "json"],
   collectCoverageFrom: ["src/**/*.{ts,js}", "!src/**/*.d.ts"],

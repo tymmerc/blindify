@@ -11,6 +11,7 @@
 // compte les tentatives de sortie du backend de test, et une seule suffit a
 // faire echouer la campagne.
 import fs from "node:fs"
+import path from "node:path"
 import { spawnSync } from "node:child_process"
 import { runRoom } from "./room.mjs"
 import { retries } from "./bot.mjs"
@@ -61,7 +62,7 @@ if (withBrowser) {
   say("\n== scripts E2E sur la pile ==")
   for (const sc of SCRIPTS) {
     const t = Date.now()
-    const r = spawnSync(process.execPath, sc.args, { cwd: `${ROOT}/tools`, encoding: "utf8", timeout: 8 * 60 * 1000, env: { ...process.env, PATH: `${ROOT}/frontend/.node/bin:${process.env.PATH}` } })
+    const r = spawnSync(process.execPath, sc.args, { cwd: `${ROOT}/tools`, encoding: "utf8", timeout: 8 * 60 * 1000, env: { ...process.env, PATH: `${path.dirname(process.execPath)}:${process.env.PATH}` } })
     const lines = `${r.stdout ?? ""}${r.stderr ?? ""}`.split("\n").filter(l => /\[ok\]|!!|PROBLEME/.test(l))
     const check = { label: sc.label, ok: r.status === 0, problems: r.status === 0 ? [] : lines.filter(l => /!!/.test(l)).map(l => l.replace(/^\s*!!\s*/, "")).concat(r.error ? [String(r.error.message)] : []), notes: [`${lines.filter(l => /\[ok\]/.test(l)).length} verifications vertes en ${Math.round((Date.now() - t) / 1000)} s`], shots: [] }
     if (!check.ok && !check.problems.length) check.problems.push(`code de sortie ${r.status}`)

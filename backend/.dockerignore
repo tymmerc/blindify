@@ -1,0 +1,27 @@
+# Ce qui n'entre jamais dans l'image du backend. Jusqu'au 01/10/2026 il n'y avait
+# pas de .dockerignore et `COPY . .` embarquait tout : le .env (secrets en clair
+# dans une couche de l'image), les tests, le node_modules de l'hote (compile
+# pour Ubuntu, pas pour Alpine) et le dist local.
+
+# Secrets : la configuration arrive par docker-compose.yml (environment).
+.env
+.env.*
+!.env.example
+
+# Reconstruit dans l'image
+node_modules
+dist
+.next
+
+# Inutile a l'execution
+tests
+coverage
+logs
+*.md
+.git
+.gitignore
+.dockerignore
+Dockerfile
+eslint.config.mjs
+jest.config.ts
+tsconfig.jest.json

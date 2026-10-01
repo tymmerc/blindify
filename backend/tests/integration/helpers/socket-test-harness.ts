@@ -13,6 +13,11 @@ import {
   type RoundTrack,
 } from "../../../src/services/realtimeGame";
 import { startRoundAndBroadcast, clearRevealTimer } from "../../../src/services/realtimeOrchestrator";
+import { resolveTestDatabaseUrl } from "../../testDatabase";
+
+// These tests write real rows. Without a disposable test database (see
+// tests/testDatabase.ts) the suite stops here, at import, before any query.
+resolveTestDatabaseUrl(process.env.TEST_DATABASE_URL);
 
 export type TestServer = {
   httpServer: http.Server;
@@ -26,7 +31,7 @@ export type TestUser = { id: number; username: string; token: string };
 /**
  * Boots the REAL socket.io server (handlers + game machine) on an ephemeral
  * port, without importing src/index.ts (which auto-listens and connects to the
- * production DB). DATABASE_URL is pointed at blindify_test by tests/setup.ts.
+ * production DB). DATABASE_URL comes from TEST_DATABASE_URL, checked above.
  */
 export async function startTestServer(): Promise<TestServer> {
   const httpServer = http.createServer();

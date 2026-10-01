@@ -180,7 +180,7 @@ build_front() {
     cd "$WT/frontend" || exit 1
     unset __NEXT_PRIVATE_STANDALONE_CONFIG
     NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_API_URL="http://$HOST:$PROXY_PORT/blindify" NEXT_PUBLIC_BASE_PATH=/blindify \
-      PATH="./.node/bin:$PATH" npx next build >"$RUN/logs/front-build.log" 2>&1
+      PATH="$(dirname "$NODE"):$PATH" npx next build >"$RUN/logs/front-build.log" 2>&1
   ) || { log "ECHEC du build du front de test"; tail -30 "$RUN/logs/front-build.log"; exit 1; }
   echo "$head" >"$RUN/front.commit"
   log "copie de travail et front de test a jour ($head)"

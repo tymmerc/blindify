@@ -1,9 +1,9 @@
-import { test, expect } from "@playwright/test"
+import { test, expect, type Page } from "@playwright/test"
 
 const BASE = "https://tymmerc.eu/blindify"
 const SPOTIFY_PROFILE = "https://open.spotify.com/user/yigiha54gqwl2tj39ymvu1n2s"
 
-async function registerViaPage(page: any) {
+async function registerViaPage(page: Page) {
   const username = `e2e_full_${Date.now()}`
   await page.goto(`${BASE}/auth/login`)
   await page.waitForTimeout(1_000)
@@ -18,7 +18,7 @@ async function registerViaPage(page: any) {
   return username
 }
 
-async function createRoom(page: any, entryUrl: string) {
+async function createRoom(page: Page, entryUrl: string) {
   await page.goto(entryUrl)
   await page.waitForLoadState("networkidle")
   await page.waitForSelector("h1", { state: "visible", timeout: 5000 })
