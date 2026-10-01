@@ -271,6 +271,57 @@ describe("multiplayer socket integration — N players, no desync", () => {
     }
   });
 
+  it("persists the round when the last player who had not answered disconnects", async () => {
+    // Revelation anticipee par une deconnexion : le minuteur de revelation est
+    // annule sur ce chemin, il doit donc ecrire lui-meme les reponses de la
+    // manche (oublie jusqu'au 02/10/2026) et poser le filet anti-AFK.
+    const users = await seedUsers(3);
+    const roomCode = await seedRoom(users);
+    const sessionId = await seedSession(roomCode, users, 2);
+    const clients: GameClient[] = [];
+
+    try {
+      for (const u of users) clients.push(await connectClient(server.port, u));
+      await joinRoom(server.io, roomCode, clients);
+      startGame(server.io, roomCode, users, 2, 8000, sessionId); // long round: only the disconnect can reveal
+
+      await waitFor(
+        () => clients.every(c => c.lastState()?.phase === "GUESSING" && c.lastState()?.currentRound === 1),
+        5000,
+        "GUESSING round 1",
+      );
+      const [a, b, late] = clients;
+      await allAnswer([a, b], roomCode, 1);
+      await waitFor(
+        () => [a, b].every(c => c.lastState()?.players?.[c.user.id]?.hasAnswered === true),
+        5000,
+        "two answers recorded",
+      );
+      late.socket.close();
+      await waitFor(() => [a, b].every(c => c.lastState()?.phase === "REVEAL"), 5000, "REVEAL after disconnect");
+
+      const responses = async () => {
+        const { rows } = await pool.query(
+          `SELECT COUNT(*)::int AS n FROM round_responses rr
+           JOIN game_rounds gr ON gr.id = rr.round_id WHERE gr.session_id = $1 AND gr.round_index = 1`,
+          [sessionId],
+        );
+        return rows[0].n as number;
+      };
+      for (const deadline = Date.now() + 3000; Date.now() < deadline && (await responses()) < 3; ) {
+        await new Promise(r => setTimeout(r, 100));
+      }
+      // revealRound marque tout le monde "a repondu" : une ligne par joueur,
+      // celle du joueur parti comprise (vide).
+      expect(await responses()).toBe(3);
+    } finally {
+      clients.forEach(c => c.socket.close());
+      cleanupGame(roomCode);
+      await cleanupSession(sessionId);
+      await cleanupUsers(users);
+    }
+  });
+
   it("persists final scores, round responses and finished state to the DB", async () => {
     const users = await seedUsers(3);
     const roomCode = await seedRoom(users);
