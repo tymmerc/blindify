@@ -114,8 +114,26 @@ export function writeReport(result) {
   return { dir, url: `${PUBLIC_URL}/${stamp}/` }
 }
 
+/**
+ * Destinataire de l'alerte : hors du depot (public), dans `.test-stack/alerte.env`
+ * (ignore par git), ligne `ALERTE_DESTINATAIRE=adresse`. La variable
+ * d'environnement du meme nom passe devant (essai a la main).
+ */
+function alertRecipient() {
+  const fromEnv = process.env.ALERTE_DESTINATAIRE?.trim()
+  if (fromEnv) return fromEnv
+  try {
+    const conf = fs.readFileSync(path.join(RUN, "alerte.env"), "utf8")
+    return (conf.match(/^ALERTE_DESTINATAIRE=(.*)$/m)?.[1] ?? "").replace(/["\r]/g, "").trim() || null
+  } catch {
+    return null
+  }
+}
+
 /** E-mail via Resend (meme cle et meme expediteur que la surveillance blindz-uptime). */
 export async function sendAlert(result, url) {
+  const to = alertRecipient()
+  if (!to) { console.error(`alerte impossible : pas de destinataire (${path.join(RUN, "alerte.env")})`); return false }
   const env = fs.readFileSync("/opt/corsairaventure/.env.local", "utf8")
   const key = (env.match(/^RESEND_API_KEY=(.*)$/m)?.[1] ?? "").replace(/["\r]/g, "").trim()
   if (!key) { console.error("alerte impossible : pas de cle Resend"); return false }
@@ -129,7 +147,7 @@ export async function sendAlert(result, url) {
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       from: "Blindz Tests <contact@corsairaventure.com>",
-      to: ["tym.mercier@gmail.com"],
+      to: [to],
       subject: `[Blindz tests] campagne rouge (${ko.length} échec${ko.length > 1 ? "s" : ""})`,
       text: `La campagne de tests de la nuit a échoué.\n\n${ko.map(k => `- ${k}`).join("\n")}\n\nRapport complet : ${url}\n(identifiant du tableau de bord habituel)`,
     }),
