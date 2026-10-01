@@ -117,7 +117,8 @@ function ChallengeContent() {
   const handleCodeSubmit = useCallback(() => {
     const trimmed = codeInput.trim().toUpperCase()
     if (trimmed.length >= 4) {
-      window.location.href = `/blindify/challenge/?code=${trimmed}`
+      // publicPath : pas de /blindify en dur, la prod est servie a la racine.
+      window.location.href = `${publicPath("/challenge/")}?code=${encodeURIComponent(trimmed)}`
     }
   }, [codeInput])
 
@@ -132,7 +133,7 @@ function ChallengeContent() {
             <input
               type="text"
               value={codeInput}
-              onChange={(e) => setCodeInput(e.target.value.toUpperCase())}
+              onChange={(e) => setCodeInput(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))}
               placeholder="CODE DU DÉFI"
               maxLength={12}
               className="flex-1 rounded-md border-[1.5px] border-[rgba(46,32,20,.35)] bg-[#efe5d0] px-4 py-3 text-center font-display text-lg font-semibold tracking-[0.3em] text-[#2e2014] outline-none transition placeholder:font-sans placeholder:text-sm placeholder:italic placeholder:tracking-[0.15em] placeholder:text-[#b3a182] focus:border-[#c65133]"
@@ -167,7 +168,7 @@ function ChallengeContent() {
           <h1 className="font-display text-2xl font-semibold text-[#9c2f1d]">Défi introuvable</h1>
           <p className="text-sm text-[#6b573f]">{error}</p>
           <a
-            href="/blindify/challenge/"
+            href={publicPath("/challenge/")}
             className="inline-block rounded-full border-[1.5px] border-[#2e2014] px-6 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
           >
             Entrer un code
