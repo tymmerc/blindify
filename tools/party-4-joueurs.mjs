@@ -4,7 +4,9 @@ import { execSync } from "child_process"
 // Ensemencement partage : vrais identifiants Deezer, donc extraits rafraichissables.
 import { seedLibrary, cleanupSeeded } from "./seed-library.mjs"
 
-const B = "https://dev.tymmerc.eu/blindify"
+// "prod" vise blindz.app, comme soiree.mjs ; sans argument, le dev. Avant le
+// 01/10 le script visait toujours le dev, meme avec "prod".
+const B = process.argv[2] === "prod" ? "https://blindz.app" : "https://dev.tymmerc.eu/blindify"
 const KEY = fs.readFileSync("/opt/blindify/.e2e-bypass-key", "utf8").trim()
 const SHOTS = "/opt/blindify/maquettes/shots/party4"
 fs.mkdirSync(SHOTS, { recursive: true })
@@ -95,8 +97,16 @@ for (const name of ["Megane", "Max", "Lea"]) {
   const p = await ctx.newPage()
   wire(p, name)
   await p.goto(`${B}/?join=${code}`, { waitUntil: "networkidle", timeout: 90000 })
-  await p.locator("input").first().fill(name)
-  await p.getByRole("button", { name: /continuer/i }).click()
+  // Un pseudo tape trop tot est perdu (avant la redirection de /?join= vers
+  // /jouer/, ou avant que React ait pris la main sur le champ) : "Continuer"
+  // reste alors desactive. Vu une fois en prod le 01/10. On retape tant que
+  // le bouton ne s'active pas.
+  const go = p.getByRole("button", { name: /continuer/i })
+  for (let i = 0; i < 6 && !(await go.isEnabled().catch(() => false)); i++) {
+    await p.locator("input").first().fill(name)
+    await p.waitForTimeout(500)
+  }
+  await go.click()
   await p.getByRole("button", { name: /rejoindre la partie/i }).click()
   await p.getByText("Tu es dans la partie").waitFor({ timeout: 90000 })
   players.push({ name, page: p, ctx })
