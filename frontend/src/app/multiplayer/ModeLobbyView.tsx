@@ -9,6 +9,8 @@ import { api } from "@/lib/api"
 import { ApiError } from "@/lib/apiClient"
 import type { CurrentUserPayload } from "@/lib/api"
 import { audioManager } from "@/lib/audioManager"
+import { publicPath } from "@/lib/publicPath"
+import { currentReturnTo } from "@/lib/returnTo"
 import type { MultiplayerGameState, MultiplayerParticipant, MultiplayerRoom, SoloTrack, StreamerState, StreamerSubMode } from "@/lib/types"
 import { StreamerGameClient } from "@/components/game/StreamerGameClient"
 import { MultiplayerGameClient } from "@/components/game/MultiplayerGameClient"
@@ -1181,7 +1183,9 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       }
     }
     if (typeof window !== "undefined") {
-      window.location.href = `/blindify/auth/login?returnTo=${encodeURIComponent(window.location.pathname + window.location.search)}`
+      // publicPath : le site est a la racine sur blindz.app, /blindify en dur cassait
+      // ce lien en prod. returnTo sans basePath, que le routeur rajoute lui-meme.
+      window.location.href = `${publicPath("/auth/login/")}?returnTo=${encodeURIComponent(currentReturnTo())}`
     }
   }, [joinCode, pendingAction, storePostAuthRedirect])
 
