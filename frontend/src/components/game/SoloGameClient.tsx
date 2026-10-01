@@ -1447,8 +1447,13 @@ export function SoloGameClient({
               >
                 {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
               </button>
+              {/* Curseur de volume : ordinateur seulement. Sur telephone (pas de
+                  survol, volume physique du telephone), il depassait de l'ecran
+                  meme invisible : 100 px de defilement horizontal et la carte
+                  coupee des qu'on tapait une reponse (campagne de tests, 30/09).
+                  Meme regle que les parties a plusieurs. */}
               <div
-                className={`absolute left-full top-1/2 flex -translate-y-1/2 items-center gap-2 rounded-full border-[1.5px] border-[#2e2014] bg-[#efe5d0] px-2 py-1.5 shadow-[2px_2px_0_rgba(46,32,20,.25)] transition-all duration-200 ${
+                className={`absolute left-full top-1/2 hidden -translate-y-1/2 items-center gap-2 rounded-full border-[1.5px] border-[#2e2014] bg-[#efe5d0] px-2 py-1.5 shadow-[2px_2px_0_rgba(46,32,20,.25)] transition-all duration-200 sm:flex ${
                   showVolume ? "opacity-100 scale-100 translate-x-2" : "pointer-events-none opacity-0 scale-95 translate-x-0"
                 }`}
                 onMouseEnter={showVolumePanel}
