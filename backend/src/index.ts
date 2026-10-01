@@ -1,20 +1,3 @@
-// Minimal File polyfill for Node 18 (used by undici dependencies)
-if (!(globalThis as any).File) {
-  // Local type shims to avoid relying on DOM lib in tsconfig
-  type PolyfillBlobPart = any;
-  type PolyfillFileOptions = { lastModified?: number; type?: string };
-  class PolyfillFile extends Blob {
-    name: string;
-    lastModified: number;
-    constructor(bits: PolyfillBlobPart[] = [], name: string, options: PolyfillFileOptions = {}) {
-      super(bits, options);
-      this.name = name;
-      this.lastModified = options.lastModified ?? Date.now();
-    }
-  }
-  (globalThis as any).File = PolyfillFile as unknown as typeof File;
-}
-
 import express, { type NextFunction, type Request, type Response } from "express";
 import http from "http";
 import cors from "cors";
