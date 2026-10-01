@@ -57,15 +57,70 @@ function reactionMs(answerAt: number | null | undefined, startAt: number | null)
   return Math.max(0, answerAt - startAt);
 }
 
+type ResponseRow = {
+  userId: number;
+  guessTitle: string | null;
+  guessArtist: string | null;
+  isCorrect: boolean;
+  responseTimeMs: number | null;
+  scoreDelta: number;
+  verdict: string | null;
+  sourceGuess: number | null;
+  sourceOwner: number | null;
+  sourceCorrect: boolean | null;
+};
+
+/**
+ * Copie, au moment de la revelation, de tout ce qu'il faut ecrire. `state` est
+ * l'etat VIVANT de la partie : si les joueurs enchainent pendant qu'on attend
+ * la base, la manche suivante remet hasAnswered, les reponses, la piste et
+ * startAt a zero dans ce meme objet. Lire apres un await, c'etait perdre des
+ * reponses, voire ecrire celles de la manche suivante sur cette ligne
+ * (trouve par la CI le 01/10/2026). Tout est donc lu ici, sans attendre.
+ */
+function snapshotResponses(state: GameState): { round: number; rows: ResponseRow[] } {
+  const startAt = state.timing.startAt;
+  // Le proprietaire du morceau tel que le serveur l'a juge a la revelation.
+  // On le fige ici plutot que de le rejoindre plus tard via audio_sources :
+  // cette propriete se detache quand le compte disparait, et 181 manches
+  // reelles avaient deja perdu la leur.
+  const ownerRaw = (state.currentTrack?.metadata as Record<string, unknown> | null | undefined)?.owner_user_id;
+  const sourceOwner = typeof ownerRaw === "number" ? ownerRaw : Number.isFinite(Number(ownerRaw)) && ownerRaw != null ? Number(ownerRaw) : null;
+  const rows = Object.values(state.players)
+    .filter(player => player.hasAnswered)
+    .map(player => {
+      const sourceGuess = player.lastSourceGuess ?? null;
+      return {
+        userId: player.userId,
+        guessTitle: player.lastGuessTitle ?? null,
+        guessArtist: player.lastGuessArtist ?? null,
+        isCorrect: player.lastVerdict === "correct",
+        responseTimeMs: reactionMs(player.answerAt, startAt),
+        scoreDelta: player.lastGained ?? 0,
+        verdict: player.lastVerdict ?? null,
+        sourceGuess,
+        sourceOwner,
+        // Meme regle que computeScore : un point si la devinette vise le vrai proprietaire.
+        sourceCorrect: sourceOwner != null && sourceGuess != null ? sourceOwner === sourceGuess : null,
+      };
+    });
+  return { round: state.currentRound, rows };
+}
+
 /**
  * Persist every answer for the round that was just revealed.
  * No-ops when the game has no backing DB session (e.g. tests).
  */
 export async function persistRoundResponses(state: GameState, sessionId: number | undefined): Promise<void> {
   if (!sessionId) return;
-  const round = state.currentRound;
-  if (!round) return;
+  const roomCode = state.roomCode;
+  let round = 0;
   try {
+    // Copie synchrone, AVANT le premier await (voir snapshotResponses).
+    const snapshot = snapshotResponses(state);
+    round = snapshot.round;
+    const responses = snapshot.rows;
+    if (!round) return;
     const { rows } = await pool.query<{ id: number }>(
       `SELECT id FROM game_rounds WHERE session_id = $1 AND round_index = $2 LIMIT 1`,
       [sessionId, round],
@@ -73,18 +128,7 @@ export async function persistRoundResponses(state: GameState, sessionId: number 
     const roundId = rows[0]?.id;
     if (!roundId) return;
 
-    const startAt = state.timing.startAt;
-    // Le proprietaire du morceau tel que le serveur l'a juge a la revelation.
-    // On le fige ici plutot que de le rejoindre plus tard via audio_sources :
-    // cette propriete se detache quand le compte disparait, et 181 manches
-    // reelles avaient deja perdu la leur.
-    const ownerRaw = (state.currentTrack?.metadata as Record<string, unknown> | null | undefined)?.owner_user_id;
-    const sourceOwner = typeof ownerRaw === "number" ? ownerRaw : Number.isFinite(Number(ownerRaw)) && ownerRaw != null ? Number(ownerRaw) : null;
-    for (const player of Object.values(state.players)) {
-      if (!player.hasAnswered) continue;
-      const sourceGuess = player.lastSourceGuess ?? null;
-      // Meme regle que computeScore : un point si la devinette vise le vrai proprietaire.
-      const sourceCorrect = sourceOwner != null && sourceGuess != null ? sourceOwner === sourceGuess : null;
+    for (const r of responses) {
       await pool.query(
         `INSERT INTO round_responses (round_id, user_id, guess_title, guess_artist, is_correct, response_time_ms, score_delta,
                                       verdict, source_guess, source_owner, source_correct)
@@ -101,21 +145,21 @@ export async function persistRoundResponses(state: GameState, sessionId: number 
            source_correct = EXCLUDED.source_correct`,
         [
           roundId,
-          player.userId,
-          player.lastGuessTitle ?? null,
-          player.lastGuessArtist ?? null,
-          player.lastVerdict === "correct",
-          reactionMs(player.answerAt, startAt),
-          player.lastGained ?? 0,
-          player.lastVerdict ?? null,
-          sourceGuess,
-          sourceOwner,
-          sourceCorrect,
+          r.userId,
+          r.guessTitle,
+          r.guessArtist,
+          r.isCorrect,
+          r.responseTimeMs,
+          r.scoreDelta,
+          r.verdict,
+          r.sourceGuess,
+          r.sourceOwner,
+          r.sourceCorrect,
         ],
       );
     }
   } catch (err) {
-    logger.error("persist_round_responses_failed", { roomCode: state.roomCode, round, error: err });
+    logger.error("persist_round_responses_failed", { roomCode, round, error: err });
   }
 }
 
@@ -126,8 +170,22 @@ export async function persistRoundResponses(state: GameState, sessionId: number 
  */
 export async function persistGameResults(state: GameState, sessionId: number | undefined): Promise<void> {
   if (!sessionId) return;
+  // Meme precaution que persistRoundResponses : broadcastGameOver passe l'objet
+  // vivant (gameStateSnapshot ne copie qu'en phase GUESSING). On copie avant le
+  // premier await, pour ne jamais dependre de ce qui arrive ensuite a la partie.
+  const roomCode = state.roomCode;
+  const totalRounds = state.totalRounds;
+  const players = Object.values(state.players).map(p => ({
+    userId: p.userId,
+    score: p.score,
+    accuracy: p.accuracy,
+    bestStreak: p.bestStreak,
+    correct: p.correct,
+    rounds: p.rounds,
+    totalReactionMs: p.totalReactionMs,
+  }));
   try {
-    for (const player of Object.values(state.players)) {
+    for (const player of players) {
       await pool.query(
         `UPDATE game_participants
          SET score = $3, accuracy = $4, best_streak = $5
@@ -158,7 +216,7 @@ export async function persistGameResults(state: GameState, sessionId: number | u
       `UPDATE game_sessions
        SET state = 'finished', ended_at = COALESCE(ended_at, NOW()), current_round = $2
        WHERE id = $1 AND state <> 'finished'`,
-      [sessionId, state.totalRounds],
+      [sessionId, totalRounds],
     );
     // La room sort de "in_progress" en base : sans ca, elle servait le corrige
     // via /state pour toujours et s'accumulait en zombie (440 en prod avant ce
@@ -167,10 +225,10 @@ export async function persistGameResults(state: GameState, sessionId: number | u
       `UPDATE multiplayer_rooms
        SET status = 'finished', completed_at = COALESCE(completed_at, NOW())
        WHERE room_code = $1 AND status = 'in_progress'`,
-      [state.roomCode],
+      [roomCode],
     );
-    logger.info("multiplayer_game_persisted", { roomCode: state.roomCode, sessionId, players: Object.keys(state.players).length });
+    logger.info("multiplayer_game_persisted", { roomCode, sessionId, players: players.length });
   } catch (err) {
-    logger.error("persist_game_results_failed", { roomCode: state.roomCode, sessionId, error: err });
+    logger.error("persist_game_results_failed", { roomCode, sessionId, error: err });
   }
 }

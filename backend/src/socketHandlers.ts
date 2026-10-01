@@ -17,6 +17,7 @@ import {
   markReconnected,
   getGameMode,
   getSessionId,
+  type GameState,
 } from "./services/realtimeGame";
 import { persistRoundResponses, markMultiplayerRoomFinished } from "./services/gamePersistence";
 import * as lobbyRps from "./services/lobbyRps";
@@ -204,6 +205,33 @@ export async function pushFriendPresenceSnapshot(io: Server, userId: number, soc
 // ---------------------------------------------------------------------------
 // Main socket registration
 // ---------------------------------------------------------------------------
+
+/**
+ * Suite commune des revelations anticipees : tout le monde a repondu
+ * (game:answer), ou le dernier joueur qui n'avait pas repondu est parti
+ * (disconnect). Ces deux chemins annulent le minuteur de revelation, qui fait
+ * sinon ce travail (realtimeOrchestrator.scheduleReveal). Avant cette fonction
+ * commune, le chemin de la deconnexion n'ecrivait pas les reponses de la manche
+ * et ne posait pas le filet anti-AFK (trouve le 02/10/2026).
+ */
+function finishEarlyReveal(io: Server, roomCode: string, revealed: GameState): void {
+  io.to(roomCode).emit("game:round:reveal", {
+    roomCode,
+    round: revealed.currentRound,
+    timing: revealed.timing,
+    players: revealed.players,
+    // La reponse complete n'arrive qu'avec le reveal (piste caviardee pendant
+    // la manche).
+    track: revealed.currentTrack,
+  });
+  void persistRoundResponses(revealed, getSessionId(roomCode));
+  if (revealed.phase === "FINISHED") {
+    broadcastGameOver(io, roomCode);
+  } else if (revealed.phase === "REVEAL") {
+    // Filet anti-AFK : la manche suivante part seule si personne ne clique "pret".
+    scheduleForcedAdvance(io, roomCode, revealed.currentRound);
+  }
+}
 
 export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number, string | null>): void {
   io.use(async (socket, next) => {
@@ -490,26 +518,7 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
           clearRevealTimer(roomCode);
           const revealed = revealRound(roomCode);
           logger.debug(`game:answer revealRound result: phase=${revealed?.phase}`);
-          if (revealed) {
-            io.to(roomCode).emit("game:round:reveal", {
-              roomCode,
-              round: revealed.currentRound,
-              timing: revealed.timing,
-              players: revealed.players,
-              // La reponse complete n'arrive qu'avec le reveal (piste
-              // caviardee pendant la manche).
-              track: revealed.currentTrack,
-            });
-            // Persist this round's answers on the early-reveal path too
-            // (the timer path persists in the orchestrator).
-            void persistRoundResponses(revealed, getSessionId(roomCode));
-            if (revealed.phase === "FINISHED") {
-              broadcastGameOver(io, roomCode);
-            } else if (revealed.phase === "REVEAL") {
-              // Filet anti-AFK sur le chemin early-reveal aussi.
-              scheduleForcedAdvance(io, roomCode, revealed.currentRound);
-            }
-          }
+          if (revealed) finishEarlyReveal(io, roomCode, revealed);
         }
         // Broadcast state AFTER the reveal decision so clients see the final phase.
         broadcastState(io, roomCode);
@@ -866,19 +875,7 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
           if (everyoneAnswered) {
             clearRevealTimer(roomCode);
             const revealed = revealRound(roomCode);
-            if (revealed) {
-              io.to(roomCode).emit("game:round:reveal", {
-                roomCode,
-                round: revealed.currentRound,
-                timing: revealed.timing,
-                players: revealed.players,
-                // Meme contrat : la reponse complete n'arrive qu'au reveal.
-                track: revealed.currentTrack,
-              });
-              if (revealed.phase === "FINISHED") {
-                broadcastGameOver(io, roomCode);
-              }
-            }
+            if (revealed) finishEarlyReveal(io, roomCode, revealed);
           }
           broadcastState(io, roomCode);
         } else if (state && state.phase === "REVEAL") {

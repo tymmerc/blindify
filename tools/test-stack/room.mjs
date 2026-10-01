@@ -119,6 +119,9 @@ export async function runRoom({ label, mode, hostPlays = false, players, rounds 
     const partis = bots.filter(b => b.left)
     for (const b of partis) if (!facts.participants.some(p => p.userId === b.id)) bad(`${b.name} (parti en cours) a disparu des participants`)
     stats.reponses_verifiees = verifiees
+    // Joueurs revenus d'une coupure apres la revelation de leur manche : ils
+    // n'ont pas repondu (comme le client web), on les compte pour les voir.
+    stats.revelees_pendant_coupure = bots.reduce((n, b) => n + [...b.intents.values()].filter(i => i.revealedWhileAway).length, 0)
     stats.reponses_en_base = facts.reponses.length
     stats.verdicts = facts.reponses.reduce((a, x) => ({ ...a, [x.verdict]: (a[x.verdict] || 0) + 1 }), {})
   } catch (e) {
