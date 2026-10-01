@@ -365,7 +365,9 @@ describe("authController.guest", () => {
     expect(insertCall[1][1]).toBe("CoolPlayer");
   });
 
-  it("should set 4-hour session TTL", async () => {
+  // La session invite dure 1 an depuis le 07/08/2026 (0d37325) : l'app se
+  // souvient du joueur sans compte. Le test attendait encore 4 h.
+  it("should set a one-year guest session TTL", async () => {
     const req = mockReq({ body: {} });
     const res = mockRes();
 
@@ -386,12 +388,12 @@ describe("authController.guest", () => {
 
     await authController.guest(req, res);
 
-    const fourHoursMs = 1000 * 60 * 60 * 4;
-    expect(mockCreateSessionToken).toHaveBeenCalledWith(12, fourHoursMs);
+    const oneYearMs = 1000 * 60 * 60 * 24 * 365;
+    expect(mockCreateSessionToken).toHaveBeenCalledWith(12, oneYearMs);
     expect(res.cookie).toHaveBeenCalledWith(
       "blindify_session_token",
       "guest-token-3",
-      expect.objectContaining({ maxAge: fourHoursMs })
+      expect.objectContaining({ maxAge: oneYearMs })
     );
   });
 });
