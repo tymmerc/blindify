@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import axios from "axios";
+import crypto from "crypto";
 import { pool } from "../config/db";
 import { io } from "../socket";
 import { getSessionContext } from "../utils/session";
@@ -20,9 +21,11 @@ import {
   type ProviderFilter,
 } from "../services/trackResolution";
 
-function generateRoomCode(): string {
+// crypto.randomInt et pas Math.random : un code de salle permet de rejoindre
+// une partie, et Math.random devient previsible quand on observe ses tirages.
+export function generateRoomCode(): string {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  return Array.from({ length: 6 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join("");
+  return Array.from({ length: 6 }, () => alphabet[crypto.randomInt(alphabet.length)]).join("");
 }
 
 type SourceChoice = "library" | "liked" | "playlist" | "top_week" | "top_month" | "top_all";

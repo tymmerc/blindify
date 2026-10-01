@@ -4,12 +4,10 @@ import { ok, fail } from "../utils/response";
 import { logger } from "../utils/logger";
 import crypto from "crypto";
 
-function generateCode(length = 8): string {
+export function generateCode(length = 8): string {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-  const bytes = crypto.randomBytes(length);
-  return Array.from(bytes)
-    .map((b) => chars[b % chars.length])
-    .join("");
+  // randomInt uses rejection sampling: each char has exactly a 1/36 chance (byte % 36 favoured A-D)
+  return Array.from({ length }, () => chars[crypto.randomInt(chars.length)]).join("");
 }
 
 export const challengeController = {
