@@ -1,4 +1,5 @@
 #!/bin/bash
+# REMPLACE par go-prod-2026-10-01.sh (01/10) : ne plus lancer ce script.
 # Deploiement prepare le 30/09/2026. A lancer UNIQUEMENT apres GO explicite de Tym,
 # et via heavy (build Docker + build Next) :
 #
