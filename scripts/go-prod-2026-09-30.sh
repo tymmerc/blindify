@@ -51,7 +51,7 @@ systemctl stop blindify-dev-frontend
   NEXT_PUBLIC_BASE_PATH="" \
   NEXT_PUBLIC_API_URL="https://blindz.app/api" \
   NEXT_PUBLIC_SOCKET_URL="https://blindz.app" \
-  PATH="./.node/bin:$PATH" npx next build
+  PATH="/root/.nvm/versions/node/v22.21.1/bin:$PATH" npx next build   # Node 22 (.nvmrc), plus le Node 20 du front
 )
 systemctl start blindify-dev-frontend
 
