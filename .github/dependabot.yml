@@ -1,0 +1,53 @@
+# Dependabot ouvre des PR de mise a jour ; chacune passe par la CI et la
+# protection de main comme n'importe quelle PR. Les mises a jour mineures et
+# correctives sont groupees pour ne pas noyer le depot sous les PR ; les
+# versions majeures arrivent une par une, a relire.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      front-mineures:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      back-mineures:
+        update-types: [minor, patch]
+
+  # Outils du depot (husky, lint-staged).
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "chore(deps)"
+
+  # Les actions sont epinglees par SHA : Dependabot met a jour le SHA et le
+  # commentaire de version. Il ne lit pas seul les actions composites, d'ou le
+  # second dossier.
+  - package-ecosystem: github-actions
+    directories:
+      - /
+      - /.github/actions/setup-node-app
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: "ci(deps)"
+    groups:
+      actions:
+        patterns: ["*"]
