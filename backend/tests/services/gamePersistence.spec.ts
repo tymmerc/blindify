@@ -13,7 +13,7 @@ jest.mock("../../src/utils/logger", () => ({
 }));
 
 import { pool } from "../../src/config/db";
-import { persistRoundResponses } from "../../src/services/gamePersistence";
+import { persistGameResults, persistRoundResponses } from "../../src/services/gamePersistence";
 import {
   bootstrapGameState,
   clearGame,
@@ -133,5 +133,51 @@ describe("persistRoundResponses", () => {
     await pending;
 
     expect(insertedRows()).toEqual(expected);
+  });
+});
+
+describe("persistGameResults", () => {
+  // Meme piege, sur la fin de partie : broadcastGameOver passe l'objet VIVANT
+  // (gameStateSnapshot ne copie qu'en phase GUESSING). Rien ne le modifie en
+  // phase FINISHED aujourd'hui, mais l'ecriture ne doit pas en dependre.
+  it("ecrit les scores tels qu'au game over, meme si l'etat bouge pendant l'ecriture", async () => {
+    const { revealed } = playRoundOne();
+    const final = Object.values(revealed.players).map(p => ({ userId: p.userId, score: p.score, correct: p.correct }))
+    const first = deferred<{ rows: [] }>();
+    let calls = 0;
+    query.mockImplementation(() => (calls++ === 0 ? first.promise : Promise.resolve({ rows: [] })));
+
+    const pending = persistGameResults(revealed, SESSION_ID);
+    for (const p of Object.values(revealed.players)) { p.score += 100; p.correct += 5; }
+    revealed.totalRounds = 99;
+    first.resolve({ rows: [] });
+    await pending;
+
+    const participantUpdates = query.mock.calls
+      .filter(([sql]) => String(sql).includes("UPDATE game_participants"))
+      .map(([, p]) => ({ userId: p[1], score: p[2] }))
+      .sort((a, b) => a.userId - b.userId);
+    expect(participantUpdates).toEqual(final.map(f => ({ userId: f.userId, score: f.score })).sort((a, b) => a.userId - b.userId));
+    const stats = query.mock.calls
+      .filter(([sql]) => String(sql).includes("INSERT INTO user_stats"))
+      .map(([, p]) => ({ userId: p[0], correct: p[1] }))
+      .sort((a, b) => a.userId - b.userId);
+    expect(stats).toEqual(final.map(f => ({ userId: f.userId, correct: f.correct })).sort((a, b) => a.userId - b.userId));
+    const session = query.mock.calls.find(([sql]) => String(sql).includes("UPDATE game_sessions"));
+    expect(session?.[1]).toEqual([SESSION_ID, 2]);
+  });
+
+  it("ne leve jamais d'erreur : un echec de la base est seulement journalise", async () => {
+    const { revealed } = playRoundOne();
+    query.mockRejectedValue(new Error("base indisponible"));
+    await expect(persistGameResults(revealed, SESSION_ID)).resolves.toBeUndefined();
+    await expect(persistRoundResponses(revealed, SESSION_ID)).resolves.toBeUndefined();
+  });
+
+  it("ne fait rien sans session en base", async () => {
+    const { revealed } = playRoundOne();
+    await persistGameResults(revealed, undefined);
+    await persistRoundResponses(revealed, undefined);
+    expect(query).not.toHaveBeenCalled();
   });
 });

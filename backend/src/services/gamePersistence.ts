@@ -113,9 +113,14 @@ function snapshotResponses(state: GameState): { round: number; rows: ResponseRow
  */
 export async function persistRoundResponses(state: GameState, sessionId: number | undefined): Promise<void> {
   if (!sessionId) return;
-  const { round, rows: responses } = snapshotResponses(state);
-  if (!round) return;
+  const roomCode = state.roomCode;
+  let round = 0;
   try {
+    // Copie synchrone, AVANT le premier await (voir snapshotResponses).
+    const snapshot = snapshotResponses(state);
+    round = snapshot.round;
+    const responses = snapshot.rows;
+    if (!round) return;
     const { rows } = await pool.query<{ id: number }>(
       `SELECT id FROM game_rounds WHERE session_id = $1 AND round_index = $2 LIMIT 1`,
       [sessionId, round],
@@ -154,7 +159,7 @@ export async function persistRoundResponses(state: GameState, sessionId: number 
       );
     }
   } catch (err) {
-    logger.error("persist_round_responses_failed", { roomCode: state.roomCode, round, error: err });
+    logger.error("persist_round_responses_failed", { roomCode, round, error: err });
   }
 }
 
@@ -165,8 +170,22 @@ export async function persistRoundResponses(state: GameState, sessionId: number 
  */
 export async function persistGameResults(state: GameState, sessionId: number | undefined): Promise<void> {
   if (!sessionId) return;
+  // Meme precaution que persistRoundResponses : broadcastGameOver passe l'objet
+  // vivant (gameStateSnapshot ne copie qu'en phase GUESSING). On copie avant le
+  // premier await, pour ne jamais dependre de ce qui arrive ensuite a la partie.
+  const roomCode = state.roomCode;
+  const totalRounds = state.totalRounds;
+  const players = Object.values(state.players).map(p => ({
+    userId: p.userId,
+    score: p.score,
+    accuracy: p.accuracy,
+    bestStreak: p.bestStreak,
+    correct: p.correct,
+    rounds: p.rounds,
+    totalReactionMs: p.totalReactionMs,
+  }));
   try {
-    for (const player of Object.values(state.players)) {
+    for (const player of players) {
       await pool.query(
         `UPDATE game_participants
          SET score = $3, accuracy = $4, best_streak = $5
@@ -197,7 +216,7 @@ export async function persistGameResults(state: GameState, sessionId: number | u
       `UPDATE game_sessions
        SET state = 'finished', ended_at = COALESCE(ended_at, NOW()), current_round = $2
        WHERE id = $1 AND state <> 'finished'`,
-      [sessionId, state.totalRounds],
+      [sessionId, totalRounds],
     );
     // La room sort de "in_progress" en base : sans ca, elle servait le corrige
     // via /state pour toujours et s'accumulait en zombie (440 en prod avant ce
@@ -206,10 +225,10 @@ export async function persistGameResults(state: GameState, sessionId: number | u
       `UPDATE multiplayer_rooms
        SET status = 'finished', completed_at = COALESCE(completed_at, NOW())
        WHERE room_code = $1 AND status = 'in_progress'`,
-      [state.roomCode],
+      [roomCode],
     );
-    logger.info("multiplayer_game_persisted", { roomCode: state.roomCode, sessionId, players: Object.keys(state.players).length });
+    logger.info("multiplayer_game_persisted", { roomCode, sessionId, players: players.length });
   } catch (err) {
-    logger.error("persist_game_results_failed", { roomCode: state.roomCode, sessionId, error: err });
+    logger.error("persist_game_results_failed", { roomCode, sessionId, error: err });
   }
 }
