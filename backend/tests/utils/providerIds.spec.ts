@@ -58,6 +58,16 @@ function requestedUrls(): string[] {
   return mockAxiosGet.mock.calls.map(call => String(call[0]));
 }
 
+// Hote exact, pas un prefixe de chaine : "https://api.spotify.com.autre.site"
+// commence aussi par "https://api.spotify.com" (motif que CodeQL signale).
+function isSpotifyApi(url: unknown): boolean {
+  try {
+    return new URL(String(url)).host === "api.spotify.com";
+  } catch {
+    return false;
+  }
+}
+
 beforeEach(() => {
   mockQuery.mockReset();
   mockGetSessionContext.mockReset();
@@ -65,7 +75,7 @@ beforeEach(() => {
   mockQuery.mockResolvedValue({ rows: [], rowCount: 0 });
   // Fin de pagination Spotify immediate, reponse vide ailleurs (iTunes...).
   mockAxiosGet.mockImplementation(async (url: unknown) =>
-    String(url).startsWith("https://api.spotify.com")
+    isSpotifyApi(url)
       ? { data: { items: [], next: null } }
       : { data: {} }
   );
@@ -205,7 +215,7 @@ describe("gamesController.startSoloGame, playlistId Spotify", () => {
 
     await gamesController.startSoloGame(req, mockRes());
 
-    expect(requestedUrls().filter(url => url.startsWith("https://api.spotify.com"))).toEqual([]);
+    expect(requestedUrls().filter(isSpotifyApi)).toEqual([]);
   });
 
   it("synchronise une playlist a l'id valide, encode dans l'URL", async () => {
