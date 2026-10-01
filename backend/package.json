@@ -9,7 +9,10 @@
     "start": "node dist/index.js",
     "init-db": "node init-db.mjs",
     "lint": "eslint src --ext .ts",
-    "test": "jest"
+    "test": "jest",
+    "test:unit": "jest --testPathIgnorePatterns /integration/",
+    "test:db": "bash scripts/test-db.sh up",
+    "test:db:down": "bash scripts/test-db.sh down"
   },
   "keywords": [
     "blindify",

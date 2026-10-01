@@ -1,3 +1,6 @@
+-- ANCIEN schema (19 tables, aout 2026), garde seulement pour init-db.mjs.
+-- La structure reelle de la prod est dans backend/db/schema.sql (tools/schema-snapshot.sh).
+
 -- ====================================
 -- BLINDIFY DATABASE SCHEMA
 -- Universal music blind test platform
