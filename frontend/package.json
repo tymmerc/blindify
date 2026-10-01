@@ -11,7 +11,8 @@
     "dev": "PATH=\"./.node/bin:$PATH\" NEXT_IGNORE_NODE_VERSION_CHECK=1 next dev",
     "build": "PATH=\"./.node/bin:$PATH\" NEXT_IGNORE_NODE_VERSION_CHECK=1 next build",
     "start": "PATH=\"./.node/bin:$PATH\" NEXT_IGNORE_NODE_VERSION_CHECK=1 next start",
-    "lint": "PATH=\"./.node/bin:$PATH\" eslint .",
+    "lint": "PATH=\"./.node/bin:$PATH\" eslint . --max-warnings=98",
+    "typecheck": "tsc --noEmit",
     "export": "PATH=\"./.node/bin:$PATH\" NEXT_IGNORE_NODE_VERSION_CHECK=1 next build",
     "test": "PATH=\"./.node/bin:$PATH\" vitest run",
     "test:watch": "PATH=\"./.node/bin:$PATH\" vitest watch"

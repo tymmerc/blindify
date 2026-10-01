@@ -1,8 +1,8 @@
-import { test, expect } from "@playwright/test"
+import { test, expect, type Page } from "@playwright/test"
 
 const BASE = "https://tymmerc.eu/blindify"
 
-async function registerViaPage(page: any) {
+async function registerViaPage(page: Page) {
   const username = `e2e_mp_${Date.now()}`
   await page.goto(`${BASE}/auth/login`)
   await page.waitForTimeout(1_000)

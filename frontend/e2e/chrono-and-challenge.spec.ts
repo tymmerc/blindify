@@ -1,5 +1,16 @@
 import { test, expect } from "@playwright/test"
 
+/** Les champs de /api/quick-play que le test recopie dans le defi. */
+type QuickPlayTrack = {
+  title: string
+  artist: string
+  album_cover?: string
+  audio_url?: string
+  audioSourceId?: number | string
+  track_id?: number | string
+  type?: string
+}
+
 const BASE = "https://tymmerc.eu/blindify"
 const SPOTIFY_PROFILE = "https://open.spotify.com/user/yigiha54gqwl2tj39ymvu1n2s"
 
@@ -52,13 +63,13 @@ test.describe("Challenge full flow", () => {
     })
     const apiBody = await apiRes.json()
     expect(apiBody.success).toBe(true)
-    const tracks = apiBody.data.tracks
+    const tracks: QuickPlayTrack[] = apiBody.data.tracks
 
     // 2. Create a challenge with those real tracks
     const createRes = await request.post(`${BASE}/api/challenges`, {
       headers: { "Content-Type": "application/json", "Origin": "https://tymmerc.eu" },
       data: {
-        tracks: tracks.map((t: any) => ({
+        tracks: tracks.map((t) => ({
           title: t.title,
           artist: t.artist,
           album_cover: t.album_cover,
