@@ -4,10 +4,12 @@ import { useState, type FormEvent, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { api } from "@/lib/api"
 import { Logo } from "@/components/Logo"
+import { safeReturnTo } from "@/lib/returnTo"
 
 function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  // Valide : seulement un chemin interne au site (voir lib/returnTo.ts).
   const returnTo = searchParams.get("returnTo")
   const [mode, setMode] = useState<"login" | "register">("login")
   const [username, setUsername] = useState("")
@@ -29,7 +31,7 @@ function LoginForm() {
       } else {
         await api.login(trimmedUsername, password)
       }
-      router.replace(returnTo || "/modes")
+      router.replace(safeReturnTo(returnTo, "/modes"))
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Une erreur est survenue"
@@ -129,7 +131,7 @@ function LoginForm() {
             </div>
 
             <button
-              onClick={() => router.push(returnTo || "/solo")}
+              onClick={() => router.push(safeReturnTo(returnTo, "/solo"))}
               className="mt-4 w-full rounded-md border-2 border-[#2e2014] bg-transparent px-6 py-3 text-sm font-bold text-[#2e2014] transition hover:bg-[rgba(46,32,20,0.07)]"
             >
               Jouer sans compte

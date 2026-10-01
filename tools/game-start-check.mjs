@@ -2,10 +2,10 @@
 // Pilotage par API + socket, sans navigateur : invite -> salon -> bibliotheque
 // ensemencee en SQL -> lancement -> une manche recue. Zero appel Deezer.
 import fs from "fs"
-import { execSync } from "child_process"
 import { createRequire } from "module"
 const requireFront = createRequire("/opt/blindify/frontend/package.json")
-import { seedLibrary, cleanupSeeded } from "./seed-library.mjs"
+// psql sans shell + garde SQL sur le code de salle renvoye par l'API
+import { seedLibrary, cleanupSeeded, psql, codeSalle } from "./seed-library.mjs"
 const { io } = requireFront("socket.io-client")
 
 const PROD = process.argv[2] === "prod"
@@ -17,7 +17,6 @@ const sleep = ms => new Promise(r => setTimeout(r, ms))
 const problems = []
 const bad = m => { problems.push(m); console.log("  !! " + m) }
 const okk = m => console.log("  [ok] " + m)
-const psql = sql => execSync(`docker exec blindify-postgres psql -U blindify -d blindify -qAt -c "${sql.replace(/"/g, '\\"')}"`).toString().trim()
 
 const api = async (path, { method = "GET", token, body } = {}) => {
   const res = await fetch(`${B}${path}`, {
@@ -40,7 +39,7 @@ const nA = await seedLibrary(userId, 12)
 okk(`${nA} morceaux ensemences pour le premier joueur (vrais identifiants Deezer)`)
 
 const room = await api("/api/rooms/create", { method: "POST", token, body: { mode: "friends", questionCount: 1 } })
-const code = room.data?.roomCode || room.data?.room?.room_code
+const code = codeSalle(room.data?.roomCode || room.data?.room?.room_code)
 if (!code) { bad(`creation de salon refusee (${room.status} ${JSON.stringify(room.error)})`); process.exit(1) }
 okk(`salon cree : ${code}`)
 

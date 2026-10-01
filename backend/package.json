@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit",
     "start": "node dist/index.js",
     "init-db": "node init-db.mjs",
-    "lint": "eslint . --max-warnings=102",
+    "lint": "eslint . --max-warnings=99",
     "test": "jest",
     "test:unit": "jest --testPathIgnorePatterns /integration/",
     "test:db": "bash scripts/test-db.sh up",
@@ -38,7 +38,6 @@
     "pg": "^8.11.3",
     "querystring": "^0.2.1",
     "socket.io": "^4.6.1",
-    "spotify-preview-finder": "^2.1.0",
     "spotify-web-api-node": "^5.0.2",
     "winston": "^3.19.0"
   },

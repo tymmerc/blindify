@@ -9,17 +9,14 @@
 // qui est cree ici (comptes, salons, titres) est supprime a la fin.
 import { chromium, devices } from "@playwright/test"
 import fs from "fs"
-import { execSync } from "child_process"
-import { seedLibrary, cleanupSeeded } from "./seed-library.mjs"
+// psql sans shell + gardes SQL (ids et codes renvoyes par le serveur)
+import { seedLibrary, cleanupSeeded, psql, entier, codeSalle } from "./seed-library.mjs"
 
 const B = "https://dev.tymmerc.eu/blindify"
 const KEY = fs.readFileSync("/opt/blindify/.e2e-bypass-key", "utf8").trim()
 const SHOTS = `/opt/blindify/maquettes/shots/lobbies/${process.argv[2] || "avant"}`
 fs.mkdirSync(SHOTS, { recursive: true })
 const sleep = ms => new Promise(r => setTimeout(r, ms))
-const psql = sql => execSync(
-  `docker exec blindify-postgres psql -U blindify -d blindify -qAt -c "${sql.replace(/"/g, '\\"').replace(/\n/g, " ")}"`
-).toString().trim()
 const problems = []
 const bad = m => { problems.push(m); console.log("  !! " + m) }
 const say = m => console.log(m)
@@ -38,7 +35,10 @@ const page = async (opts, tag) => {
   p.on("pageerror", e => bad(`${tag} crash JS : ${String(e).slice(0, 140)}`))
   p.on("response", async r => {
     if (/\/api\/auth\/(guest|me)/.test(r.url())) {
-      try { const d = await r.json(); const id = d?.data?.user?.id; if (id) { users.add(id); p.__uid = id } } catch { /* pas ce call */ }
+      let id
+      try { id = (await r.json())?.data?.user?.id } catch { /* pas ce call */ }
+      // Garde SQL : ces ids finissent colles dans la bibliotheque et le menage.
+      if (id) { try { users.add(entier(id)); p.__uid = id } catch (e) { bad(`${tag} : ${e.message}`) } }
     }
   })
   return p
@@ -76,7 +76,7 @@ const bibliotheque = async (uid) => {
   psql(`UPDATE audio_sources SET link_id=${l2.split("\n")[0]} WHERE user_id=${uid} AND link_id IS NULL`)
 }
 
-const codeEvent = async p => p.locator("[data-code]").first().getAttribute("data-code")
+const codeEvent = async p => codeSalle(await p.locator("[data-code]").first().getAttribute("data-code"))
 const codeFriends = codeEvent
 
 try {

@@ -13,7 +13,7 @@ import { execFileSync } from "child_process"
 import fs from "fs"
 import { createRequire } from "module"
 
-const { Pool } = createRequire("/opt/blindify/backend/package.json")("pg")
+const { Pool, escapeIdentifier, DatabaseError } = createRequire("/opt/blindify/backend/package.json")("pg")
 
 const PORT = 3101
 const MAX_LIGNES = 500
@@ -64,10 +64,14 @@ const json = (res, code, corps) => {
 }
 
 const server = http.createServer(async (req, res) => {
-  const url = new URL(req.url, "http://127.0.0.1")
-  const chemin = url.pathname.replace(/^\/api/, "")
+  // Declare hors du try : le catch s'en sert pour journaliser et trier l'erreur.
+  let chemin = ""
 
   try {
+    // Dans le try : une cible invalide ferait sinon tomber tout le service.
+    const url = new URL(req.url, "http://127.0.0.1")
+    chemin = url.pathname.replace(/^\/api/, "")
+
     // Sante du serveur : ce qu'un exploitant regarde en premier le matin.
     // Tout est lu en direct, rien n'est fige dans data.json.
     if (chemin === "/sante") {
@@ -129,9 +133,10 @@ const server = http.createServer(async (req, res) => {
       )
       const sortie = []
       for (const t of tables) {
-        const { rows } = await lire(`SELECT count(*)::int AS n FROM "${t.table_name}"`)
+        const { rows } = await lire(`SELECT count(*)::int AS n FROM public.${escapeIdentifier(t.table_name)}`)
         const { rows: cols } = await lire(
-          `SELECT count(*)::int AS n FROM information_schema.columns WHERE table_name=$1`, [t.table_name]
+          `SELECT count(*)::int AS n FROM information_schema.columns
+           WHERE table_schema='public' AND table_name=$1`, [t.table_name]
         )
         sortie.push({ nom: t.table_name, lignes: rows[0].n, colonnes: cols[0].n })
       }
@@ -190,27 +195,36 @@ const server = http.createServer(async (req, res) => {
 
     // Contenu d'une table, pagine.
     if (chemin.startsWith("/table/")) {
-      const nom = decodeURIComponent(chemin.slice("/table/".length))
+      let nom
+      try { nom = decodeURIComponent(chemin.slice("/table/".length)) } catch { return json(res, 400, { erreur: "nom de table invalide" }) }
       const { rows: ok } = await lire(
-        `SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name=$1`, [nom]
+        `SELECT table_name FROM information_schema.tables
+         WHERE table_schema='public' AND table_type='BASE TABLE' AND table_name=$1`, [nom]
       )
       if (!ok.length) return json(res, 404, { erreur: "table inconnue" })
+      // A partir d'ici, table et colonne de tri sont des valeurs du catalogue,
+      // jamais celles de l'URL, et elles sont echappees quand meme.
+      const table = ok[0].table_name
+      const cible = `public.${escapeIdentifier(table)}`
 
       const { rows: cols } = await lire(
         `SELECT column_name, data_type FROM information_schema.columns
-         WHERE table_name=$1 ORDER BY ordinal_position`, [nom]
+         WHERE table_schema='public' AND table_name=$1 ORDER BY ordinal_position`, [table]
       )
       const noms = cols.map(c => c.column_name)
       const limite = Math.min(parseInt(url.searchParams.get("limite") || "50", 10) || 50, MAX_LIGNES)
       const decalage = Math.max(parseInt(url.searchParams.get("decalage") || "0", 10) || 0, 0)
-      const tri = noms.includes(url.searchParams.get("tri")) ? url.searchParams.get("tri") : noms[0]
+      const triDemande = url.searchParams.get("tri")
+      const tri = noms.find(n => n === triDemande) ?? noms[0] ?? null
       const sens = url.searchParams.get("sens") === "asc" ? "ASC" : "DESC"
+      // Une table sans colonne visible pour ce role n'a rien a trier.
+      const ordre = tri === null ? "" : `ORDER BY ${escapeIdentifier(tri)} ${sens} NULLS LAST`
 
       const { rows } = await lire(
-        `SELECT * FROM "${nom}" ORDER BY "${tri}" ${sens} NULLS LAST LIMIT $1 OFFSET $2`, [limite, decalage]
+        `SELECT * FROM ${cible} ${ordre} LIMIT $1 OFFSET $2`, [limite, decalage]
       )
-      const { rows: tot } = await lire(`SELECT count(*)::int AS n FROM "${nom}"`)
-      return json(res, 200, { nom, colonnes: cols, lignes: rows, total: tot[0].n, limite, decalage, tri, sens })
+      const { rows: tot } = await lire(`SELECT count(*)::int AS n FROM ${cible}`)
+      return json(res, 200, { nom: table, colonnes: cols, lignes: rows, total: tot[0].n, limite, decalage, tri, sens })
     }
 
     // Requête libre, en lecture seule.
@@ -220,7 +234,8 @@ const server = http.createServer(async (req, res) => {
         corps += bout
         if (corps.length > 20000) return json(res, 413, { erreur: "requête trop longue" })
       }
-      const { sql } = JSON.parse(corps || "{}")
+      let sql
+      try { ({ sql } = JSON.parse(corps || "{}")) } catch { return json(res, 400, { erreur: "corps JSON invalide" }) }
       const refus = verifierRequete(sql)
       if (refus) return json(res, 400, { erreur: refus })
 
@@ -317,7 +332,15 @@ const server = http.createServer(async (req, res) => {
 
     return json(res, 404, { erreur: "route inconnue" })
   } catch (e) {
-    return json(res, 400, { erreur: String(e.message || e).slice(0, 400) })
+    // Le detail complet part dans journald (journalctl -u blindz-db-browser),
+    // jamais vers le client.
+    console.error(`[db-browser] ${req.method} ${chemin || "?"}`, e)
+    // Seule exception : l'erreur PostgreSQL de la console SQL, dont le message
+    // est justement la reponse attendue ("relation ... does not exist").
+    if (e instanceof DatabaseError && chemin === "/query") {
+      return json(res, 400, { erreur: String(e.message).slice(0, 400) })
+    }
+    return json(res, 500, { erreur: "erreur interne" })
   }
 })
 

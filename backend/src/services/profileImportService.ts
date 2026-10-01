@@ -2,6 +2,7 @@ import axios from "axios";
 import { DEEZER_API } from "../config/deezer";
 import { Buffer } from "node:buffer";
 import { logger } from "../utils/logger";
+import { isDeezerId, isSpotifyId } from "../utils/providerIds";
 
 // ---------------------------------------------------------------------------
 // URL Parsing
@@ -32,17 +33,21 @@ export function parseProfileUrl(raw: string): ParsedUrl | null {
   } catch {
     return null;
   }
+  // Web links only: with a non-special scheme (x://, javascript://) a "\" stays
+  // in the pathname, and axios later turns it into "/" (path traversal on the API).
+  if (url.protocol !== "https:" && url.protocol !== "http:") return null;
 
   const host = url.hostname.replace(/^www\./, "");
   const segments = url.pathname.split("/").filter(Boolean);
 
   // Spotify
   if (host === "open.spotify.com") {
-    if (segments[0] === "user" && segments[1]) {
-      return { provider: "spotify", type: "user", id: decodeURIComponent(segments[1]) };
+    const id = segments[1] ? safeDecodeURIComponent(segments[1]) : null;
+    if (segments[0] === "user" && id) {
+      return { provider: "spotify", type: "user", id };
     }
-    if (segments[0] === "playlist" && segments[1]) {
-      return { provider: "spotify", type: "playlist", id: decodeURIComponent(segments[1]) };
+    if (segments[0] === "playlist" && isSpotifyId(id)) {
+      return { provider: "spotify", type: "playlist", id };
     }
     return null;
   }
@@ -50,16 +55,26 @@ export function parseProfileUrl(raw: string): ParsedUrl | null {
   // Deezer — may have locale prefix like /fr/
   if (host === "deezer.com") {
     const filtered = segments.filter(s => !/^[a-z]{2}$/.test(s));
-    if (filtered[0] === "profile" && filtered[1]) {
+    if (filtered[0] === "profile" && isDeezerId(filtered[1])) {
       return { provider: "deezer", type: "user", id: filtered[1] };
     }
-    if (filtered[0] === "playlist" && filtered[1]) {
+    if (filtered[0] === "playlist" && isDeezerId(filtered[1])) {
       return { provider: "deezer", type: "playlist", id: filtered[1] };
     }
     return null;
   }
 
   return null;
+}
+
+// A broken escape ("%E0%A4%A") makes decodeURIComponent throw; callers run
+// parseProfileUrl outside any try, so the request would hang instead of failing.
+function safeDecodeURIComponent(value: string): string | null {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -159,7 +174,7 @@ async function fetchSinglePlaylistInfo(parsed: ParsedUrl): Promise<PublicPlaylis
 
   // Deezer
   try {
-    const { data } = await axios.get(`${DEEZER_API}/playlist/${parsed.id}`, { timeout: 10_000 });
+    const { data } = await axios.get(`${DEEZER_API}/playlist/${encodeURIComponent(parsed.id)}`, { timeout: 10_000 });
     if (data?.error || !data?.id) return [];
     return [{
       id: String(data.id),

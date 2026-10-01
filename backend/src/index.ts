@@ -1,20 +1,3 @@
-// Minimal File polyfill for Node 18 (used by undici dependencies)
-if (!(globalThis as any).File) {
-  // Local type shims to avoid relying on DOM lib in tsconfig
-  type PolyfillBlobPart = any;
-  type PolyfillFileOptions = { lastModified?: number; type?: string };
-  class PolyfillFile extends Blob {
-    name: string;
-    lastModified: number;
-    constructor(bits: PolyfillBlobPart[] = [], name: string, options: PolyfillFileOptions = {}) {
-      super(bits, options);
-      this.name = name;
-      this.lastModified = options.lastModified ?? Date.now();
-    }
-  }
-  (globalThis as any).File = PolyfillFile as unknown as typeof File;
-}
-
 import express, { type NextFunction, type Request, type Response } from "express";
 import http from "http";
 import cors from "cors";
@@ -55,6 +38,7 @@ import {
 import { expireOldInvitations, getAcceptedFriendIds, type ExpiredInvitation } from "./services/social";
 import { registerSocketHandlers, broadcastFriendPresence } from "./socketHandlers";
 import { logger } from "./utils/logger";
+import { buildAllowedOrigins, matchesAllowedOrigin } from "./utils/origins";
 
 dotenv.config();
 
@@ -78,18 +62,18 @@ const secureCookies = process.env.COOKIE_SECURE
 const sameSite = secureCookies ? "none" : "lax";
 const cookieDomain = process.env.COOKIE_DOMAIN || (isProd ? "tymmerc.eu" : undefined);
 
-const allowedOrigins = [
-  frontendBase,
-  "https://blindz.app",
-  "https://tymmerc.eu",
-  "https://tymmerc.eu/blindify",
-  // Origine nue obligatoire : le header Origin n'a jamais de chemin
-  // (l'entree avec /blindify ne sert que pour le referer).
-  "https://dev.tymmerc.eu",
-  "https://dev.tymmerc.eu/blindify",
-  "http://localhost:3000",
-  "http://localhost:5173",
-].filter(Boolean) as string[];
+// Une liste par deploiement, derivee de FRONTEND_URL (voir utils/origins.ts) :
+// prod = https://blindz.app seul, localhost seulement hors production.
+// ALLOWED_ORIGINS (virgules) reste possible pour un cas exceptionnel.
+const { origins: allowedOrigins, ignored: ignoredOrigins } = buildAllowedOrigins({
+  frontendUrl: frontendBase,
+  extra: process.env.ALLOWED_ORIGINS,
+  isProd,
+});
+if (ignoredOrigins.length) {
+  logger.warn("allowed_origins_ignored", { ignored: ignoredOrigins });
+}
+logger.info("allowed_origins", { origins: allowedOrigins });
 
 const lastKnownUsername = new Map<number, string | null>();
 const PRESENCE_SWEEP_INTERVAL_MS = 5_000;
@@ -251,9 +235,7 @@ app.use((req, res, next) => {
   const referer = req.headers.referer || "";
   // Comparaison STRICTE : egalite exacte, ou prefixe borne par un "/".
   // Un simple startsWith laissait passer https://blindz.app.evil.com (CSRF).
-  const matchesAllowed = (value: string): boolean =>
-    allowedOrigins.some(o => value === o || value.startsWith(o.endsWith("/") ? o : `${o}/`));
-  const allowed = matchesAllowed(origin) || matchesAllowed(referer);
+  const allowed = matchesAllowedOrigin(origin, allowedOrigins) || matchesAllowedOrigin(referer, allowedOrigins);
   if (!allowed) {
     return fail(res, "forbidden", "Requête refusée (origine non autorisée)", 403);
   }

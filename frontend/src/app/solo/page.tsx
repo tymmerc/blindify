@@ -282,7 +282,8 @@ function ChallengeForm() {
   const handleCodeSubmit = () => {
     const trimmed = codeInput.trim().toUpperCase()
     if (trimmed.length >= 4) {
-      window.location.href = `/blindify/challenge/?code=${trimmed}`
+      // publicPath : pas de /blindify en dur, la prod est servie a la racine.
+      window.location.href = `${publicPath("/challenge/")}?code=${encodeURIComponent(trimmed)}`
     }
   }
 

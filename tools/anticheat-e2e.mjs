@@ -8,12 +8,12 @@
 // joueuse qui enregistre chaque trame. Tout le monde passe chaque manche.
 import { chromium, devices } from "@playwright/test"
 import fs from "fs"
-import { execSync } from "child_process"
 import { createRequire } from "module"
 
 const requireFront = createRequire("/opt/blindify/frontend/package.json")
 // Ensemencement partage : vrais identifiants Deezer, donc extraits rafraichissables.
-import { seedLibrary, cleanupSeeded } from "./seed-library.mjs"
+// psql (sans shell) et la garde du code de salle, lu dans le DOM, viennent aussi de la.
+import { seedLibrary, cleanupSeeded, psql, codeSalle } from "./seed-library.mjs"
 const { io } = requireFront("socket.io-client")
 
 const IS_PROD = process.argv[2] === "prod"
@@ -26,11 +26,6 @@ const problems = []
 const say = (...a) => console.log(a.join(" "))
 const bad = m => { problems.push(m); say("  !! " + m) }
 const okk = m => say("  [ok] " + m)
-
-const psql = sql => execSync(
-  `docker exec blindify-postgres psql -U blindify -d blindify -qAt -c "${sql.replace(/"/g, '\\"').replace(/\n/g, " ")}"`
-).toString().trim()
-
 
 const grabUserId = page => new Promise(resolve => {
   page.on("response", async r => {
@@ -65,7 +60,8 @@ for (const n of ["5", "10"]) {
   if (await btn.count()) { await btn.first().click(); break }
 }
 await host.getByRole("button", { name: "10s", exact: true }).click().catch(() => {})
-const code = await host.locator("[data-code]").first().getAttribute("data-code")
+// Garde SQL : ce code finit colle dans les requetes psql plus bas.
+const code = codeSalle(await host.locator("[data-code]").first().getAttribute("data-code"))
 say(`room ${code}, hote guest ${hostId}`)
 
 // ── Deux joueuses ──

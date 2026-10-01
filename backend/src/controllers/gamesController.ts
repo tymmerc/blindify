@@ -7,6 +7,7 @@ import { logger } from "../utils/logger";
 import type { AudioSourceRow } from "../types/audio";
 import axios from "axios";
 import { hydratePreviewUrl } from "../services/trackResolution";
+import { isSpotifyId } from "../utils/providerIds";
 
 async function importItunesTopTracks(limit: number): Promise<AudioSourceRow[]> {
   try {
@@ -339,7 +340,7 @@ async function collectPlayableSources(
 }
 
 async function syncPlaylistTracks(userId: number, playlistId: string, accessToken: string): Promise<void> {
-  const url = `https://api.spotify.com/v1/playlists/${playlistId}/tracks`;
+  const url = `https://api.spotify.com/v1/playlists/${encodeURIComponent(playlistId)}/tracks`;
   let nextUrl: string | null = `${url}?limit=100`;
   while (nextUrl) {
     const response = await axios.get(nextUrl, {
@@ -435,7 +436,10 @@ export const gamesController = {
     const difficulty = typeof req.body?.difficulty === "string" ? req.body.difficulty : "normal";
     const count = Number.isFinite(Number(req.body?.count)) ? Math.min(Math.max(Number(req.body.count), 5), 25) : 10;
     let likedOnly = sourceParam === "liked";
-    let playlistId = typeof req.body?.playlistId === "string" ? req.body.playlistId.trim() : null;
+    const rawPlaylistId = typeof req.body?.playlistId === "string" ? req.body.playlistId.trim() : "";
+    // Id Spotify mal forme : traite comme une playlist inutilisable (repli sur la
+    // bibliotheque plus bas), jamais colle dans l'URL de l'API.
+    let playlistId = isSpotifyId(rawPlaylistId) ? rawPlaylistId : null;
     let topRange: "short_term" | "medium_term" | "long_term" | null =
       sourceParam === "top_week"
         ? "short_term"

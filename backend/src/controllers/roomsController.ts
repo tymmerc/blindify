@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import axios from "axios";
+import crypto from "crypto";
 import { pool } from "../config/db";
 import { io } from "../socket";
 import { getSessionContext } from "../utils/session";
@@ -12,6 +13,7 @@ import { startRoundAndBroadcast } from "../services/realtimeOrchestrator";
 import { GameMode, type RoundTrack } from "../types/game";
 import { initStreamerGame } from "../services/streamerOrchestrator";
 import { activeLinkIds } from "./linksController";
+import { isSpotifyId } from "../utils/providerIds";
 import {
   hydratePreviewUrl,
   collectPlayableSources,
@@ -19,9 +21,11 @@ import {
   type ProviderFilter,
 } from "../services/trackResolution";
 
-function generateRoomCode(): string {
+// crypto.randomInt et pas Math.random : un code de salle permet de rejoindre
+// une partie, et Math.random devient previsible quand on observe ses tirages.
+export function generateRoomCode(): string {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  return Array.from({ length: 6 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join("");
+  return Array.from({ length: 6 }, () => alphabet[crypto.randomInt(alphabet.length)]).join("");
 }
 
 type SourceChoice = "library" | "liked" | "playlist" | "top_week" | "top_month" | "top_all";
@@ -45,7 +49,7 @@ const EVENT_ROUND_DURATION_MS = 20_000;
 const FIRST_ROUND_PREROLL_MS = 3_000;
 
 async function syncPlaylistTracks(userId: number, playlistId: string, accessToken: string): Promise<void> {
-  const url = `https://api.spotify.com/v1/playlists/${playlistId}/tracks`;
+  const url = `https://api.spotify.com/v1/playlists/${encodeURIComponent(playlistId)}/tracks`;
   let nextUrl: string | null = `${url}?limit=100`;
   while (nextUrl) {
     const response = await axios.get(nextUrl, {
@@ -668,6 +672,12 @@ export const roomsController = {
     const sourceParam = typeof req.body?.source === "string" ? req.body.source : "library";
     const preferredProvider = req.body?.provider as MusicProvider | undefined;
     const playlistId = typeof req.body?.playlistId === "string" ? req.body.playlistId.trim() : null;
+    // Id Spotify = 22 caracteres base62 : tout autre format est refuse avant
+    // d'atteindre l'URL de l'API Spotify.
+    if (playlistId && !isSpotifyId(playlistId)) {
+      fail(res, "invalid_playlist", "Playlist invalide", 400);
+      return;
+    }
     const topRange =
       sourceParam === "top_week"
         ? "short_term"
