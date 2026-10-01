@@ -26,7 +26,6 @@ frontend/.npm-cache-shadcn/
 
 # Node.js local install (headers cause GitHub to detect C)
 frontend/.node/
-e2e-dashboard/node_modules/
 
 # Test artifacts
 frontend/playwright-report/
