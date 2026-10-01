@@ -1,126 +1,61 @@
-# Blindify
+# Blindz
 
-[![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
+[![Licence : CC BY-NC-SA 4.0](https://img.shields.io/badge/Licence-CC%20BY--NC--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 
-**Blindify** is a music blind test game that uses your own Spotify library to create personalized quizzes.
+Un blind test musical joué sur la musique des joueurs eux-mêmes. Chacun importe ses playlists Deezer ou Spotify avec un simple lien, et la partie mélange les titres de tout le monde. En ligne sur **[blindz.app](https://blindz.app)**.
 
-## The Concept
+On marque un point pour le titre, un pour l'artiste, et un de plus si on devine qui a ajouté le morceau. Répondre vite ne rapporte rien, ça sert seulement à départager les ex aequo.
 
-Everyone knows blind tests - you hear a song and try to guess the title or artist. But most blind test apps use generic playlists that don't match your music taste.
+## Les modes
 
-**Blindify flips the script**: connect your Spotify account and play with the songs *you* actually listen to. Your playlists, your liked songs, your music.
+| Mode | Comment on joue |
+|---|---|
+| **À distance** | Une salle, un code à partager, chacun joue sur son téléphone. Jusqu'à 12 joueurs. |
+| **Autour d'une table** | Un écran affiche la partie et les joueurs répondent sur leur téléphone, jusqu'à 12. Il existe aussi une variante buzzer sur un seul téléphone, jusqu'à 5. |
+| **Solo** | Classique, chrono, ou défi : on envoie sa partie à un ami qui essaie de battre le score. |
+| **Avec ta communauté** | Pour les lives : le chat, le streamer ou les deux devinent. Encore en développement. |
 
-### How it works
+Pas besoin de compte pour jouer. Une session invité garde l'historique un an sur le navigateur, et un compte (pseudo et mot de passe) reste possible.
 
-1. **Connect Spotify** - Login with your Spotify account
-2. **Pick a mode** - Solo practice, play with friends, or host an event
-3. **Listen & Guess** - A short preview plays, type your answer before time runs out
-4. **Score points** - Faster answers = more points. Compete on leaderboards.
+## Stack
 
-### Game Modes
+| Partie | Techno |
+|---|---|
+| Front | Next.js 15 en export statique, React 19, Tailwind CSS, Framer Motion |
+| Temps réel | Socket.IO 4.8 |
+| Back | Node.js 22, Express, TypeScript |
+| Données | PostgreSQL 15 |
+| Hébergement | un VPS : nginx sert le front statique et relaie l'API, le back tourne dans Docker |
 
-| Mode | Description |
-|------|-------------|
-| **Solo** | Practice alone with your own library |
-| **Friends** | Create a private lobby, invite friends with a code |
-| **Event** | Host a blind test for a larger audience (parties, streams) |
-| **Streamer** | Optimized for Twitch/YouTube live streams |
+Les extraits audio sont les extraits publics de 30 secondes fournis par Deezer.
 
-## Tech Stack
+## Le dépôt
 
-| Layer | Technologies |
-|-------|--------------|
-| **Frontend** | Next.js 16, React 19, TailwindCSS, Framer Motion |
-| **Backend** | Node.js, Express, TypeScript |
-| **Database** | PostgreSQL 15, Redis 7 |
-| **Realtime** | Socket.IO |
-| **Infrastructure** | Docker, Nginx |
+```
+backend/    API Express et serveur Socket.IO (TypeScript), tests Jest
+frontend/   application Next.js, tests Vitest et Playwright
+shared/     types du jeu, source commune recopiée dans le back et le front
+tools/      parcours de bout en bout et pile de test isolée de la campagne de nuit
+scripts/    scripts de mise en production
+maquettes/  maquettes HTML de la direction artistique
+```
 
-## Features
+## Lancer en local
 
-- **Spotify Integration** - OAuth2 login, access your playlists and library
-- **Solo Mode** - Practice on your own with your favorite tracks
-- **Multiplayer** - Real-time games with friends via Socket.IO
-- **Event/Streamer Mode** - Host blind tests for larger audiences
-- **Leaderboards** - Track scores and compete with other players
-- **Responsive UI** - Works on desktop and mobile
+Il faut Node.js 22 et Docker.
 
-## Getting Started
-
-### Prerequisites
-
-- Node.js 20+
-- Docker & Docker Compose
-- Spotify Developer Account ([create one here](https://developer.spotify.com/dashboard))
-
-### Setup
-
-1. Clone the repository
 ```bash
 git clone https://github.com/tymmerc/blindify.git
 cd blindify
+cp .env.example .env              # base, secrets de session, URL du front
+docker compose up -d postgres     # PostgreSQL 15 sur 127.0.0.1:5432
+
+cd backend && npm ci && npm run dev
+cd frontend && npm ci && npm run dev
 ```
 
-2. Copy environment file and configure
-```bash
-cp .env.example .env
-# Edit .env with your Spotify credentials and secrets
-```
+Le front lit l'adresse de l'API dans `NEXT_PUBLIC_API_URL` et `NEXT_PUBLIC_SOCKET_URL`, et son chemin de base dans `NEXT_PUBLIC_BASE_PATH` (vide pour servir à la racine).
 
-3. Start with Docker Compose
-```bash
-docker-compose up -d
-```
+## Licence
 
-4. Access the app
-- Frontend: http://localhost:3001
-- Backend API: http://localhost:3000
-
-### Local Development
-
-**Backend:**
-```bash
-cd backend
-npm install
-npm run dev
-```
-
-**Frontend:**
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-## Project Structure
-
-```
-blindify/
-├── backend/          # Express API server
-│   └── src/
-│       ├── controllers/
-│       ├── services/
-│       └── index.ts
-├── frontend/         # Next.js app
-│   └── src/
-│       ├── app/      # App router pages
-│       ├── components/
-│       └── lib/
-├── docker-compose.yml
-└── nginx.conf
-```
-
-## Environment Variables
-
-See [.env.example](.env.example) for all required variables:
-
-- `SPOTIFY_CLIENT_ID` / `SPOTIFY_CLIENT_SECRET` - Spotify API credentials
-- `DATABASE_URL` - PostgreSQL connection string
-- `REDIS_URL` - Redis connection string
-- `JWT_SECRET` / `SESSION_SECRET` - Security keys
-
-## License
-
-This project is licensed under [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/).
-
-You can view and learn from this code, but commercial use is not permitted.
+[CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/) : tu peux lire le code et t'en inspirer, mais pas en faire un usage commercial.

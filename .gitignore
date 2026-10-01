@@ -39,3 +39,8 @@ tools/test-stack/node_modules
 
 # Pile de test locale (front de test, extraits synthetiques, journaux)
 .test-stack/
+
+# Docs internes (manuels d'agent, audits, plans) : elles restent sur le serveur,
+# hors du depot public. Seul le README est publie.
+*.md
+!/README.md
