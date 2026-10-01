@@ -90,6 +90,10 @@ Chaque pull request et chaque push sur `main` lancent [`.github/workflows/ci.yml
 
 Les actions sont épinglées par SHA de commit, le workflow n'a aucun droit par défaut et n'utilise aucun secret.
 
+Avant chaque commit, un hook (husky) refuse tout fichier `.env` dans l'index et passe ESLint sur les seuls fichiers modifiés, avec la configuration de leur projet (lint-staged). Il s'installe avec un `npm install` à la racine du dépôt.
+
+Dependabot propose chaque semaine les mises à jour des dépendances npm et des actions GitHub ; ses pull requests passent par la même CI.
+
 ## Licence
 
 [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/) : tu peux lire le code et t'en inspirer, mais pas en faire un usage commercial.

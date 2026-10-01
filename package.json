@@ -1,0 +1,12 @@
+{
+  "name": "blindz",
+  "private": true,
+  "description": "Outils communs au depot : hooks git (husky) et lint des fichiers indexes (lint-staged).",
+  "scripts": {
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^17.6.0"
+  }
+}
