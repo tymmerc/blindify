@@ -1,0 +1,30 @@
+# Prepare un des deux projets (frontend ou backend) : Node, cache npm, npm ci.
+# Action composite : les etapes communes a tous les jobs, ecrites une seule fois.
+# A appeler APRES actions/checkout, sinon ce fichier n'existe pas encore sur la
+# machine.
+name: Preparer un projet Node
+description: Installe Node (version de .nvmrc ou imposee), le cache npm et les dependances d'un dossier.
+
+inputs:
+  projet:
+    description: Dossier du projet, frontend ou backend.
+    required: true
+  node-version:
+    description: Version de Node a imposer (matrice). Vide = celle de .nvmrc, la version de la prod.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    # Si node-version est donnee, setup-node la prefere a node-version-file.
+    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      with:
+        node-version: ${{ inputs.node-version }}
+        node-version-file: .nvmrc
+        cache: npm
+        cache-dependency-path: ${{ inputs.projet }}/package-lock.json
+    # shell est obligatoire dans une action composite.
+    - run: npm ci --no-audit --no-fund
+      shell: bash
+      working-directory: ${{ inputs.projet }}

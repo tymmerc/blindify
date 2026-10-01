@@ -17,3 +17,6 @@ logs/
 # DB et scripts locaux
 schemaSQL.sql
 init-db.js
+
+# Rapports de couverture (npm test -- --coverage)
+coverage/

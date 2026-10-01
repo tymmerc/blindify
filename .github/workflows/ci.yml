@@ -8,6 +8,9 @@
 #   etiquette comme v7 peut etre deplacee (cas tj-actions/changed-files, mars 2025) ;
 # - aucun droit par defaut, chaque job ne recoit que la lecture du depot ;
 # - aucun secret : lint, typage, tests et build n'en ont pas besoin.
+#
+# Les noms des jobs sont des statuts requis par la protection de main :
+# renommer un job casse la protection sans aucun message.
 name: CI
 
 on:
@@ -17,6 +20,12 @@ on:
   workflow_dispatch:
 
 permissions: {}
+
+# Un nouveau push sur une branche annule le run devenu obsolete. Jamais sur
+# main : chaque commit de main garde son run complet.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   lint:
@@ -29,18 +38,13 @@ jobs:
       fail-fast: false
       matrix:
         projet: [frontend, backend]
-    defaults:
-      run:
-        working-directory: ${{ matrix.projet }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: ./.github/actions/setup-node-app
         with:
-          node-version-file: .nvmrc
-          cache: npm
-          cache-dependency-path: ${{ matrix.projet }}/package-lock.json
-      - run: npm ci
+          projet: ${{ matrix.projet }}
       - run: npm run lint
+        working-directory: ${{ matrix.projet }}
 
   typecheck:
     name: typecheck (${{ matrix.projet }})
@@ -52,18 +56,13 @@ jobs:
       fail-fast: false
       matrix:
         projet: [frontend, backend]
-    defaults:
-      run:
-        working-directory: ${{ matrix.projet }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: ./.github/actions/setup-node-app
         with:
-          node-version-file: .nvmrc
-          cache: npm
-          cache-dependency-path: ${{ matrix.projet }}/package-lock.json
-      - run: npm ci
+          projet: ${{ matrix.projet }}
       - run: npm run typecheck
+        working-directory: ${{ matrix.projet }}
 
   shared-types:
     name: types partages
@@ -87,18 +86,22 @@ jobs:
       matrix:
         # 22 = la version de la prod (.nvmrc), 24 = la LTS suivante.
         node: [22, 24]
-    defaults:
-      run:
-        working-directory: frontend
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: ./.github/actions/setup-node-app
         with:
+          projet: frontend
           node-version: ${{ matrix.node }}
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-      - run: npm ci
-      - run: npm test
+      - run: npm test -- --coverage
+        working-directory: frontend
+      # Un nom par version, sinon les deux jobs de la matrice entrent en conflit.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: couverture-front-node${{ matrix.node }}
+          path: frontend/coverage/
+          retention-days: 7
+          if-no-files-found: warn
 
   test-back:
     name: test-back (node ${{ matrix.node }})
@@ -130,24 +133,27 @@ jobs:
           --health-retries 30
     env:
       TEST_DATABASE_URL: postgres://blindz:blindz@127.0.0.1:5437/blindz_test
-    defaults:
-      run:
-        working-directory: backend
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: ./.github/actions/setup-node-app
         with:
+          projet: backend
           node-version: ${{ matrix.node }}
-          cache: npm
-          cache-dependency-path: backend/package-lock.json
-      - run: npm ci
       # Le schema reel de la prod (tools/schema-snapshot.sh), charge avec le
       # psql du conteneur pour ne pas dependre de celui de la machine.
       - name: Charger le schema dans la base de test
         env:
           PG_CONTAINER: ${{ job.services.postgres.id }}
-        run: docker exec -i "$PG_CONTAINER" psql -U blindz -d blindz_test -v ON_ERROR_STOP=1 -q < db/schema.sql
-      - run: npm test
+        run: docker exec -i "$PG_CONTAINER" psql -U blindz -d blindz_test -v ON_ERROR_STOP=1 -q < backend/db/schema.sql
+      - run: npm test -- --coverage
+        working-directory: backend
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: couverture-back-node${{ matrix.node }}
+          path: backend/coverage/
+          retention-days: 7
+          if-no-files-found: warn
 
   build-front:
     name: build-front
@@ -155,9 +161,6 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
-    defaults:
-      run:
-        working-directory: frontend
     # Memes valeurs que le build de prod. Ce sont des adresses publiques, pas
     # des secrets.
     env:
@@ -167,10 +170,8 @@ jobs:
       NEXT_TELEMETRY_DISABLED: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: ./.github/actions/setup-node-app
         with:
-          node-version-file: .nvmrc
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-      - run: npm ci
+          projet: frontend
       - run: npm run build
+        working-directory: frontend
