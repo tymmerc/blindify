@@ -32,7 +32,7 @@ function audioStrip(a) {
 function page(r, stamp) {
   const pill = ok => `<span class="pill ${ok ? "ok" : "ko"}">${ok ? "vert" : "rouge"}</span>`
   const rooms = r.rooms.map(x => `<tr><td>${pill(x.ok)}</td><td><b>${esc(x.label)}</b><div class="aide">salle ${esc(x.code ?? "?")} · ${x.stats.joueurs} joueurs · ${x.stats.manches} manches de ${x.stats.secondes} s · ${x.stats.duree_s ?? "?"} s</div>
-    ${x.problems.length ? `<ul>${x.problems.map(p => `<li>${esc(p)}</li>`).join("")}</ul>` : `<div class="aide">${x.stats.reponses_verifiees ?? 0} réponses confrontées à la base · ${esc(JSON.stringify(x.stats.verdicts ?? {}))}</div>`}</td></tr>`).join("")
+    ${x.problems.length ? `<ul>${x.problems.map(p => `<li>${esc(p)}</li>`).join("")}</ul>` : `<div class="aide">${x.stats.reponses_verifiees ?? 0} réponses confrontées à la base · ${esc(JSON.stringify(x.stats.verdicts ?? {}))}${x.stats.revelees_pendant_coupure ? ` · ${x.stats.revelees_pendant_coupure} manche(s) révélée(s) pendant une coupure du joueur` : ""}</div>`}</td></tr>`).join("")
   const checks = (r.browser?.checks ?? []).map(c => `<section class="carte"><h3>${pill(c.ok)} ${esc(c.label)}</h3>
     ${c.problems?.length ? `<ul>${c.problems.map(p => `<li>${esc(p)}</li>`).join("")}</ul>` : ""}
     ${c.notes?.length ? `<p class="aide">${c.notes.map(esc).join(" · ")}</p>` : ""}
@@ -114,8 +114,26 @@ export function writeReport(result) {
   return { dir, url: `${PUBLIC_URL}/${stamp}/` }
 }
 
+/**
+ * Destinataire de l'alerte : hors du depot (public), dans `.test-stack/alerte.env`
+ * (ignore par git), ligne `ALERTE_DESTINATAIRE=adresse`. La variable
+ * d'environnement du meme nom passe devant (essai a la main).
+ */
+function alertRecipient() {
+  const fromEnv = process.env.ALERTE_DESTINATAIRE?.trim()
+  if (fromEnv) return fromEnv
+  try {
+    const conf = fs.readFileSync(path.join(RUN, "alerte.env"), "utf8")
+    return (conf.match(/^ALERTE_DESTINATAIRE=(.*)$/m)?.[1] ?? "").replace(/["\r]/g, "").trim() || null
+  } catch {
+    return null
+  }
+}
+
 /** E-mail via Resend (meme cle et meme expediteur que la surveillance blindz-uptime). */
 export async function sendAlert(result, url) {
+  const to = alertRecipient()
+  if (!to) { console.error(`alerte impossible : pas de destinataire (${path.join(RUN, "alerte.env")})`); return false }
   const env = fs.readFileSync("/opt/corsairaventure/.env.local", "utf8")
   const key = (env.match(/^RESEND_API_KEY=(.*)$/m)?.[1] ?? "").replace(/["\r]/g, "").trim()
   if (!key) { console.error("alerte impossible : pas de cle Resend"); return false }
@@ -129,7 +147,7 @@ export async function sendAlert(result, url) {
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       from: "Blindz Tests <contact@corsairaventure.com>",
-      to: ["tym.mercier@gmail.com"],
+      to: [to],
       subject: `[Blindz tests] campagne rouge (${ko.length} échec${ko.length > 1 ? "s" : ""})`,
       text: `La campagne de tests de la nuit a échoué.\n\n${ko.map(k => `- ${k}`).join("\n")}\n\nRapport complet : ${url}\n(identifiant du tableau de bord habituel)`,
     }),
