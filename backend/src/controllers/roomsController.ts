@@ -1238,7 +1238,7 @@ export const roomsController = {
       const soloTrackSource = soloSourceRaw === "chat" || soloSourceRaw === "audience" ? ("chat" as const) : ("streamer" as const);
 
       const streamerRounds = normalizedTracks.map((t, index) => {
-        let trackSource: "streamer" | "chat" = "streamer";
+        let trackSource: "streamer" | "chat";
         if (subMode === "viewers_only") {
           trackSource = "chat";
         } else if (subMode === "solo") {

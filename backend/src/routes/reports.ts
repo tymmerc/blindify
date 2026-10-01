@@ -2,6 +2,7 @@ import { Router } from "express";
 import { pool } from "../config/db";
 import { getSessionContext } from "../utils/session";
 import { ok, fail } from "../utils/response";
+import { logger } from "../utils/logger";
 
 const router = Router();
 const MAX_MESSAGE = 2000;
@@ -29,6 +30,7 @@ router.post("/", async (req, res) => {
     );
     ok(res, { received: true }, 201);
   } catch (err) {
+    logger.error("report_failed", { error: err instanceof Error ? err.message : String(err) });
     fail(res, "report_failed", "Impossible d'enregistrer le report pour l'instant.", 500);
   }
 });

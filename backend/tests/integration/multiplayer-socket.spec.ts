@@ -21,7 +21,6 @@ import {
   pool,
   waitFor,
   type TestServer,
-  type TestUser,
   type GameClient,
 } from "./helpers/socket-test-harness";
 
