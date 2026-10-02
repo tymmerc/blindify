@@ -36,6 +36,8 @@ export function scheduleForcedAdvance(io: IOServer, roomCode: string, revealedRo
     // N'avance que si on est TOUJOURS sur le reveal de la meme manche
     // (sinon le chemin "tous prets" est deja passe par la).
     if (!current || current.phase !== "REVEAL" || current.currentRound !== revealedRound) return;
+    // Jamais pendant une pause de l'hote (la reprise repose ce minuteur).
+    if (current.paused) return;
     logger.debug(`forced advance for ${roomCode} after ready grace (round ${revealedRound})`);
     startRoundAndBroadcast(io, roomCode);
   }, READY_GRACE_MS);

@@ -227,8 +227,9 @@ function finishEarlyReveal(io: Server, roomCode: string, revealed: GameState): v
   void persistRoundResponses(revealed, getSessionId(roomCode));
   if (revealed.phase === "FINISHED") {
     broadcastGameOver(io, roomCode);
-  } else if (revealed.phase === "REVEAL") {
+  } else if (revealed.phase === "REVEAL" && !revealed.paused) {
     // Filet anti-AFK : la manche suivante part seule si personne ne clique "pret".
+    // Pas pendant une pause : game:resume le pose a la reprise.
     scheduleForcedAdvance(io, roomCode, revealed.currentRound);
   }
 }
