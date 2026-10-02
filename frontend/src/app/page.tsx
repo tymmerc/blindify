@@ -5,6 +5,7 @@ import { ScrollVinyl } from "@/components/home/ScrollVinyl"
 import { ModesStage } from "@/components/home/ModesStage"
 import { SiteHeader, SiteFooter } from "@/components/home/SiteChrome"
 import { FaqAccordion } from "@/components/home/FaqAccordion"
+import { RotatingEnd } from "@/components/home/RotatingEnd"
 
 // Landing de blindz.app. Composant SERVEUR : tout le texte est dans le HTML
 // pre-rendu (export statique), c'est ce que lisent Google, Bing, Brave et
@@ -136,7 +137,14 @@ export default function HomePage() {
         <div>
           <Tag color={VERMILION}>Le blind test de vos soirées</Tag>
           <h1 className="mt-5 font-display text-[2.9rem] font-semibold leading-[1.02] sm:text-[4rem] lg:text-[6rem]">
-            Le blind test avec <em className="font-medium italic text-[#cc4830]">vos</em> playlists.
+            Le blind test{" "}
+            <RotatingEnd
+              endings={[
+                <>avec <em className="font-medium italic text-[#cc4830]">vos</em> playlists.</>,
+                <>de vos <em className="font-medium italic text-[#cc4830]">soirées</em>.</>,
+                <><em className="font-medium italic text-[#cc4830]">à plusieurs</em>.</>,
+              ]}
+            />
           </h1>
           <p className="mt-7 max-w-[34rem] text-[1.1rem] leading-relaxed sm:text-[1.2rem]">
             Chacun colle le lien de son Spotify ou de son Deezer, et la partie se joue sur la musique de
