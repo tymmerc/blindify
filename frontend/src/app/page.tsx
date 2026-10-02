@@ -20,7 +20,7 @@ import { FaqAccordion } from "@/components/home/FaqAccordion"
 // le code (limites de salle roomsController, scoring realtimeGame, buzzer
 // local, cookie invite d'un an). Ne pas gonfler.
 
-const TITLE = "blindz.app · Le blind test de vos soirées, avec la musique de vos potes"
+const TITLE = "blindz.app · Le blind test de vos soirées, avec vos playlists Spotify et Deezer"
 const DESC =
   "blindz.app génère un blind test avec les playlists Spotify ou Deezer des joueurs, sans pack imposé ni quiz à préparer. À table, sur un seul tel ou à distance, gratuit et sans compte."
 
@@ -136,7 +136,7 @@ export default function HomePage() {
         <div>
           <Tag color={VERMILION}>Le blind test de vos soirées</Tag>
           <h1 className="mt-5 font-display text-[2.9rem] font-semibold leading-[1.02] sm:text-[4rem] lg:text-[6rem]">
-            Ta playlist contre celle de <em className="font-medium italic text-[#cc4830]">tes potes</em>.
+            Le blind test avec <em className="font-medium italic text-[#cc4830]">vos</em> playlists.
           </h1>
           <p className="mt-7 max-w-[34rem] text-[1.1rem] leading-relaxed sm:text-[1.2rem]">
             Chacun colle le lien de son Spotify ou de son Deezer, et la partie se joue sur la musique de
