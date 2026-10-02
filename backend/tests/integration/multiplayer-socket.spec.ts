@@ -322,6 +322,50 @@ describe("multiplayer socket integration — N players, no desync", () => {
     }
   });
 
+  it("never starts the next round while the host has paused, even after a disconnect reveal", async () => {
+    // Relu le 02/10/2026 avant la mise en prod : la revelation par deconnexion
+    // posait le filet anti-AFK (10 s) sans regarder la pause. La manche suivante
+    // serait partie en pleine pause (telephone verrouille pendant une pause).
+    const users = await seedUsers(3);
+    const roomCode = await seedRoom(users);
+    const clients: GameClient[] = [];
+
+    try {
+      for (const u of users) clients.push(await connectClient(server.port, u));
+      await joinRoom(server.io, roomCode, clients);
+      startGame(server.io, roomCode, users, 2, 8000);
+
+      await waitFor(
+        () => clients.every(c => c.lastState()?.phase === "GUESSING" && c.lastState()?.currentRound === 1),
+        5000,
+        "GUESSING round 1",
+      );
+      const [host, b, late] = clients;
+      await allAnswer([host, b], roomCode, 1);
+      await waitFor(
+        () => [host, b].every(c => c.lastState()?.players?.[c.user.id]?.hasAnswered === true),
+        5000,
+        "two answers recorded",
+      );
+      host.socket.emit("game:pause", { roomCode });
+      await waitFor(() => host.lastState()?.paused === true, 5000, "paused");
+      late.socket.close();
+      await waitFor(() => [host, b].every(c => c.lastState()?.phase === "REVEAL"), 5000, "REVEAL after disconnect");
+
+      // Le filet anti-AFK part a 10 s : on attend au-dela.
+      await new Promise(r => setTimeout(r, 12_000));
+      for (const c of [host, b]) {
+        expect(c.lastState()?.currentRound).toBe(1);
+        expect(c.lastState()?.phase).toBe("REVEAL");
+        expect(c.lastState()?.paused).toBe(true);
+      }
+    } finally {
+      clients.forEach(c => c.socket.close());
+      cleanupGame(roomCode);
+      await cleanupUsers(users);
+    }
+  });
+
   it("persists final scores, round responses and finished state to the DB", async () => {
     const users = await seedUsers(3);
     const roomCode = await seedRoom(users);
