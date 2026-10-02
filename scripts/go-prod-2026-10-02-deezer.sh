@@ -48,7 +48,7 @@ en_cours() { docker exec blindify-postgres psql -U blindify -d blindify -qAt -c 
   "SELECT count(*) FROM multiplayer_rooms WHERE status = 'in_progress' AND started_at > now() - interval '30 minutes'"; }
 DUMP="/opt/backups/avant-deploy-$HORO.sql.gz"
 docker exec blindify-postgres pg_dump -U blindify -d blindify | gzip > "$DUMP"
-gzip -t "$DUMP" && zcat "$DUMP" | tail -n 5 | grep -q 'PostgreSQL database dump complete' \
+gzip -t "$DUMP" && zcat "$DUMP" | tail -n 5 | grep >/dev/null 'PostgreSQL database dump complete' \
   || { echo "  !! sauvegarde de la base invalide : $DUMP"; exit 1; }
 # L'image qui tourne VRAIMENT, pas forcement celle taguee latest.
 docker tag "$(docker inspect -f '{{.Image}}' blindify-backend)" "blindify-backend:avant-$HORO"
@@ -89,7 +89,7 @@ code_post() { curl -s -o /dev/null -w '%{http_code}' -m 15 -X POST https://blind
 code_socket() { curl -s -o /dev/null -w '%{http_code}' -m 15 "https://blindz.app/socket.io/?EIO=4&transport=polling" -H "Origin: $1"; }
 verifie "API en ligne" "curl -sf -m 15 https://blindz.app/api/health >/dev/null"
 verifie "nouveau code : recherche Deezer en texte libre avec choix du bon titre" "docker exec blindify-backend grep -q 'pickMatch' /app/dist/services/deezerPreviewService.js"
-verifie "solo par lien : une playlist Deezer publique demarre (au moins 5 extraits)" "curl -s -m 90 -X POST https://blindz.app/api/quick-play -H 'Content-Type: application/json' -H 'Origin: https://blindz.app' -d '{\"url\":\"https://www.deezer.com/fr/playlist/1109890291\",\"count\":10}' | grep -q '\"success\":true'"
+verifie "solo par lien : une playlist Deezer publique demarre (au moins 5 extraits)" "curl -s -m 90 -X POST https://blindz.app/api/quick-play -H 'Content-Type: application/json' -H 'Origin: https://blindz.app' -d '{\"url\":\"https://www.deezer.com/fr/playlist/1109890291\",\"count\":10}' | grep >/dev/null '\"success\":true'"
 verifie "nouveau code : reponses copiees a la revelation" "docker exec blindify-backend grep -q 'const snapshot = snapshotResponses(state)' /app/dist/services/gamePersistence.js"
 verifie "nouveau code : revelation anticipee commune aux 2 chemins (reponse, deconnexion)" "[ \"\$(docker exec blindify-backend grep -c 'finishEarlyReveal(io, roomCode, revealed);' /app/dist/socketHandlers.js)\" = 2 ]"
 verifie "nouveau code : filet anti-AFK jamais pendant une pause" "docker exec blindify-backend grep -q 'revealed.paused' /app/dist/socketHandlers.js"
@@ -101,7 +101,7 @@ verifie "socket depuis une origine etrangere refuse (403)" "[ \"\$(code_socket h
 verifie "plus de .env dans le conteneur" "! docker exec blindify-backend test -e /app/.env"
 verifie "plus d'undici dans l'image" "! docker exec blindify-backend test -d /app/node_modules/undici"
 verifie "engine.io 6.6.11" "docker exec blindify-backend node -p \"require('/app/node_modules/engine.io/package.json').version\" | grep -qx 6.6.11"
-verifie "landing servie" "curl -sf -m 30 https://blindz.app/ | grep -q 'Le blind test avec'"
+verifie "landing servie" "curl -sf -m 30 https://blindz.app/ | grep >/dev/null 'Le blind test avec'"
 [ "$ko" = 0 ] || { echo "UNE VERIFICATION A ECHOUE : voir ci-dessus"; echo "  RETOUR ARRIERE : $RETOUR"; exit 1; }
 
 echo "DEPLOIEMENT TERMINE. Parcours complets ensuite, un a la fois :"

@@ -48,10 +48,10 @@ trap 'systemctl start blindify-dev-frontend' EXIT
 echo "── 2. Verifications ──"
 ko=0
 verifie() { if eval "$2"; then echo "  [ok] $1"; else echo "  !! $1"; ko=1; fi; }
-verifie "la page d'accueil sert la nouvelle version (« $ATTENDU »)" "curl -sf -m 30 https://blindz.app/ | grep -qF \"\$ATTENDU\""
+verifie "la page d'accueil sert la nouvelle version (« $ATTENDU »)" "curl -sf -m 30 https://blindz.app/ | grep -F >/dev/null \"\$ATTENDU\""
 verifie "/jouer/ servie" "curl -sf -m 30 -o /dev/null https://blindz.app/jouer/"
 verifie "/faq/ servie" "curl -sf -m 30 -o /dev/null https://blindz.app/faq/"
-verifie "redirection des anciens QR (/?join=) toujours presente" "curl -sf -m 30 https://blindz.app/ | grep -q 'join'"
+verifie "redirection des anciens QR (/?join=) toujours presente" "curl -sf -m 30 https://blindz.app/ | grep >/dev/null 'join'"
 verifie "pas de /blindify ecrit en dur dans l'export" "! grep -rqs '/blindify/auth/login' frontend/out/_next/static/chunks"
 verifie "API toujours en ligne (non touchee)" "curl -sf -m 15 https://blindz.app/api/health >/dev/null"
 [ "$ko" = 0 ] || { echo "UNE VERIFICATION A ECHOUE : voir ci-dessus"; echo "  RETOUR ARRIERE : $RETOUR"; exit 1; }
