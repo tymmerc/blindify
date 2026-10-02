@@ -5,6 +5,7 @@ import { ScrollVinyl } from "@/components/home/ScrollVinyl"
 import { ModesStage } from "@/components/home/ModesStage"
 import { SiteHeader, SiteFooter } from "@/components/home/SiteChrome"
 import { FaqAccordion } from "@/components/home/FaqAccordion"
+import { RotatingEnd } from "@/components/home/RotatingEnd"
 
 // Landing de blindz.app. Composant SERVEUR : tout le texte est dans le HTML
 // pre-rendu (export statique), c'est ce que lisent Google, Bing, Brave et
@@ -20,7 +21,7 @@ import { FaqAccordion } from "@/components/home/FaqAccordion"
 // le code (limites de salle roomsController, scoring realtimeGame, buzzer
 // local, cookie invite d'un an). Ne pas gonfler.
 
-const TITLE = "blindz.app · Le blind test avec vos playlists Spotify et Deezer"
+const TITLE = "blindz.app · Le blind test de vos soirées, avec vos playlists Spotify et Deezer"
 const DESC =
   "blindz.app génère un blind test avec les playlists Spotify ou Deezer des joueurs, sans pack imposé ni quiz à préparer. À table, sur un seul tel ou à distance, gratuit et sans compte."
 
@@ -134,14 +135,30 @@ export default function HomePage() {
       {/* ── Hero : texte a gauche, disque sur son plateau sauge a droite ── */}
       <section className="mx-auto grid max-w-6xl items-center gap-12 px-5 pb-[6rem] pt-[4.5rem] sm:px-8 lg:grid-cols-[1.15fr_0.85fr] lg:gap-8 lg:pt-[6rem]">
         <div>
-          <Tag color={VERMILION}>Blind test entre potes</Tag>
-          <h1 className="mt-5 font-display text-[2.9rem] font-semibold leading-[1.02] sm:text-[4rem] lg:text-[6rem]">
-            Le blind test avec <em className="font-medium italic text-[#cc4830]">vos</em> playlists.
+          <h1 className="font-display text-[clamp(2rem,10.5vw,2.6rem)] font-semibold leading-[1.02] sm:text-[4rem] lg:text-[3.8rem] xl:text-[4.6rem]">
+            Le blind test{" "}
+            <RotatingEnd
+              endings={[
+                <span key="playlists">avec <em className="font-medium italic text-[#cc4830]">vos</em> playlists.</span>,
+                <span key="soirees">de vos <em className="font-medium italic text-[#cc4830]">soirées</em>.</span>,
+                <span key="potes"><em className="font-medium italic text-[#cc4830]">entre potes</em>.</span>,
+                <span key="image">à <em className="font-medium italic text-[#cc4830]">votre image</em>.</span>,
+                <span key="dossiers">de vos <em className="font-medium italic text-[#cc4830]">dossiers</em>.</span>,
+                <span key="apero">de l'<em className="font-medium italic text-[#cc4830]">apéro</em>.</span>,
+                <span key="plusieurs"><em className="font-medium italic text-[#cc4830]">à plusieurs</em>.</span>,
+                <span key="balance">qui <em className="font-medium italic text-[#cc4830]">balance</em> tout.</span>,
+                <span key="pepites">de vos <em className="font-medium italic text-[#cc4830]">pépites</em>.</span>,
+                <span key="gout">à votre <em className="font-medium italic text-[#cc4830]">goût</em>.</span>,
+                <span key="tele">sur la <em className="font-medium italic text-[#cc4830]">TV</em>.</span>,
+                <span key="rien">sans <em className="font-medium italic text-[#cc4830]">préparation</em>.</span>,
+                <span key="gratuit"><em className="font-medium italic text-[#cc4830]">100 % gratuit</em>.</span>,
+              ]}
+            />
           </h1>
           <p className="mt-7 max-w-[34rem] text-[1.1rem] leading-relaxed sm:text-[1.2rem]">
-            Chacun colle le lien de son Spotify ou de son Deezer, et la partie se génère toute seule à
-            partir de ce que vous écoutez vraiment. Rien à préparer, pas de playlist imposée, et en
-            bonus il faut deviner qui a mis quoi.
+            Chacun colle le lien de son Spotify ou de son Deezer, et la partie se joue sur la musique de
+            tout le monde. Rien à préparer, pas de playlist imposée, et en bonus il faut deviner qui a
+            mis quoi.
           </p>
           <div className="mt-9 flex flex-wrap items-center gap-6">
             <Link href="/jouer/" className={`${CTA} bg-[#cc4830] text-[#f4ecdb]`}>
