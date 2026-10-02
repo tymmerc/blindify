@@ -36,6 +36,44 @@ interface DeezerSearchResponse {
 
 type CacheEntry = { track: DeezerTrack | null; ts: number };
 
+/** Minuscules, sans accents, sans "(...)" ni "[...]" ni " - Remastered ...". */
+function normalize(text: string): string {
+  return text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\([^)]*\)|\[[^\]]*\]/g, " ")
+    .replace(/\s-\s.*$/, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+/**
+ * Le bon morceau parmi les resultats : meme titre (a la normalisation pres), et
+ * de preference le bon artiste et un extrait. Aucun resultat au bon titre :
+ * null. Jouer un autre morceau que celui affiche fausserait la manche.
+ */
+function pickMatch(items: DeezerSearchItem[], title: string, artist?: string): DeezerSearchItem | null {
+  const wantTitle = normalize(title);
+  if (!wantTitle) return null;
+  // "The Weeknd, Rosalia" ou "A feat. B" : chaque artiste compte.
+  const wantArtists = (artist ?? "")
+    .split(/,|&|\bfeat\.?|\bft\.?|\bx\b/i)
+    .map(normalize)
+    .filter(Boolean);
+  const sameTitle = items.filter(i => i.id && i.title && normalize(i.title) === wantTitle);
+  const sameArtist = (i: DeezerSearchItem) => {
+    const got = normalize(i.artist?.name ?? "");
+    return wantArtists.length === 0 || wantArtists.some(a => got.includes(a) || a.includes(got));
+  };
+  return (
+    sameTitle.find(i => sameArtist(i) && i.preview) ??
+    sameTitle.find(i => sameArtist(i)) ??
+    (wantArtists.length === 0 ? sameTitle.find(i => i.preview) ?? sameTitle[0] : undefined) ??
+    null
+  );
+}
+
 export class DeezerPreviewService {
   private cache = new Map<string, CacheEntry>();
   private requestTimestamps: number[] = [];
@@ -83,13 +121,14 @@ export class DeezerPreviewService {
 
     await this.throttle();
 
-    // Build search query
-    const queryParts: string[] = [];
-    queryParts.push(`track:"${trimmedTitle}"`);
-    if (trimmedArtist) {
-      queryParts.push(`artist:"${trimmedArtist}"`);
-    }
-    const q = queryParts.join(" ");
+    // Recherche en texte libre. La syntaxe avancee (`track:"..." artist:"..."`)
+    // renvoie 0 resultat depuis le 02/10/2026 (filtre artist casse chez Deezer) :
+    // plus aucun extrait, le solo par lien ne demarrait plus. Le bon morceau est
+    // ensuite choisi par pickMatch, jamais "le premier venu".
+    // Sans les mentions de version ("- Remastered 2011", "(Radio Edit)") qui
+    // brouillent la recherche libre de Deezer ; pickMatch les ignore aussi.
+    const searchTitle = trimmedTitle.replace(/\([^)]*\)|\[[^\]]*\]/g, " ").replace(/\s-\s.*$/, "").replace(/\s+/g, " ").trim() || trimmedTitle;
+    const q = trimmedArtist ? `${searchTitle} ${trimmedArtist}` : searchTitle;
 
     try {
       const { data } = await axios.get<DeezerSearchResponse>(DEEZER_SEARCH_URL, {
@@ -102,9 +141,7 @@ export class DeezerPreviewService {
         return null;
       }
 
-      const items = data?.data ?? [];
-      // Prefer items with a preview URL
-      const match = items.find(i => Boolean(i.preview)) ?? items[0] ?? null;
+      const match = pickMatch(data?.data ?? [], trimmedTitle, trimmedArtist);
 
       if (!match?.id || !match.title) {
         this.cache.set(key, { track: null, ts: Date.now() });
