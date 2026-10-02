@@ -9,10 +9,15 @@ import { useEffect, useState, type ReactNode } from "react"
  * Le HTML pre-rendu ne contient QUE la premiere fin : c'est elle que lisent
  * Google et les IA, et ceux qui ont demande moins d'animations ne voient
  * qu'elle. Les autres n'arrivent qu'apres le chargement, dans la meme case de
- * grille (la hauteur ne saute pas tant qu'aucune fin n'est plus longue que la
- * premiere). Pas de zone « live » : un lecteur d'ecran lit le titre une fois.
+ * grille. Chaque fin tient sur UNE ligne (un peu plus petite que le debut du
+ * titre, sans retour a la ligne) : les trois ont la meme hauteur, donc pas de
+ * trou sous les fins courtes (retour de Tym le 02/10). Pas de zone « live » :
+ * un lecteur d'ecran lit le titre une fois.
  */
 const PERIODE_MS = 2200
+// Taille relative au titre : « avec vos playlists. » doit tenir sur une ligne,
+// du telephone (2,9rem) au grand ecran (6rem).
+const LIGNE = "whitespace-nowrap text-[0.8em]"
 
 export function RotatingEnd({ endings }: { endings: ReactNode[] }) {
   const [ready, setReady] = useState(false)
@@ -26,10 +31,10 @@ export function RotatingEnd({ endings }: { endings: ReactNode[] }) {
     return () => window.clearInterval(timer)
   }, [endings.length])
 
-  if (!ready) return <span className="block">{endings[0]}</span>
+  if (!ready) return <span className={`block ${LIGNE}`}>{endings[0]}</span>
 
   return (
-    <span className="grid overflow-hidden pb-[0.12em]" aria-hidden={false}>
+    <span className={`grid overflow-hidden pb-[0.12em] ${LIGNE}`}>
       {endings.map((ending, i) => {
         const offset = (i - index + endings.length) % endings.length
         // 0 = affichee ; derniere = celle qui vient de sortir (part vers le haut) ;

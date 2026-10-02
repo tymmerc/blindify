@@ -135,14 +135,14 @@ export default function HomePage() {
       {/* ── Hero : texte a gauche, disque sur son plateau sauge a droite ── */}
       <section className="mx-auto grid max-w-6xl items-center gap-12 px-5 pb-[6rem] pt-[4.5rem] sm:px-8 lg:grid-cols-[1.15fr_0.85fr] lg:gap-8 lg:pt-[6rem]">
         <div>
-          <Tag color={VERMILION}>Le blind test de vos soirées</Tag>
+          <Tag color={VERMILION}>Blind test entre potes</Tag>
           <h1 className="mt-5 font-display text-[2.9rem] font-semibold leading-[1.02] sm:text-[4rem] lg:text-[6rem]">
             Le blind test{" "}
             <RotatingEnd
               endings={[
-                <>avec <em className="font-medium italic text-[#cc4830]">vos</em> playlists.</>,
-                <>de vos <em className="font-medium italic text-[#cc4830]">soirées</em>.</>,
-                <><em className="font-medium italic text-[#cc4830]">à plusieurs</em>.</>,
+                <span key="playlists">avec <em className="font-medium italic text-[#cc4830]">vos</em> playlists.</span>,
+                <span key="soirees">de vos <em className="font-medium italic text-[#cc4830]">soirées</em>.</span>,
+                <span key="plusieurs"><em className="font-medium italic text-[#cc4830]">à plusieurs</em>.</span>,
               ]}
             />
           </h1>
