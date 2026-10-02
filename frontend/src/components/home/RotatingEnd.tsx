@@ -12,7 +12,7 @@ import { useEffect, useState, type ReactNode } from "react"
  * grille (la hauteur ne saute pas tant qu'aucune fin n'est plus longue que la
  * premiere). Pas de zone « live » : un lecteur d'ecran lit le titre une fois.
  */
-const PERIODE_MS = 3200
+const PERIODE_MS = 2200
 
 export function RotatingEnd({ endings }: { endings: ReactNode[] }) {
   const [ready, setReady] = useState(false)
