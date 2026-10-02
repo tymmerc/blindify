@@ -46,7 +46,7 @@ export function RotatingEnd({ endings }: { endings: ReactNode[] }) {
           <span
             key={i}
             aria-hidden={offset !== 0}
-            className={`[grid-area:1/1] block transition-[transform,opacity] duration-500 ease-out ${position}`}
+            className={`[grid-area:1/1] block transition-[transform,opacity] duration-[350ms] ease-out ${position}`}
           >
             {ending}
           </span>

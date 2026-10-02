@@ -175,7 +175,7 @@ export default function Page() {
           vite possible. Des catégories permanentes et tournantes, un « blindtest du jour », et des parties privées
           créées sur le lien d'une playlist Spotify ou Deezer publique. Entièrement gratuit, compte optionnel, en
           français et en anglais. Pas de mécanisme « qui a ajouté ce morceau » trouvé.{" "}
-          <a href="https://blindtest.gg/faq" rel="noopener">Source : leur FAQ</a>.
+          <a href="https://blindtest.gg/faq" rel="noopener nofollow">Source : leur FAQ</a>.
         </p>
         <h3>blindz.fr</h3>
         <p>
@@ -183,7 +183,7 @@ export default function Page() {
           préparées, extraits Deezer de 30 secondes, jusqu'à 20 joueurs. L'import de vos propres playlists Deezer est
           réservé au Premium (3,99 € par semaine, 4,99 € par mois ou 39,99 € par an d'après leur page abonnement), le
           gratuit comporte de la publicité.{" "}
-          <a href="https://blindz.fr/abonnement" rel="noopener">Source : leur page abonnement</a>. Aucun lien avec
+          <a href="https://blindz.fr/abonnement" rel="noopener nofollow">Source : leur page abonnement</a>. Aucun lien avec
           blindz.app.
         </p>
         <h3>Mukiz</h3>
@@ -191,14 +191,14 @@ export default function Page() {
           Application de blind test avec des playlists thématiques préparées par l'éditeur, en solo, en duel, en partie
           privée ou en direct, sur navigateur, iOS et Android. Freemium : accès gratuit, abonnement Premium, et un Day
           Pass de 24 h qui permet d'inviter jusqu'à 20 personnes. Pas d'import de vos playlists trouvé.{" "}
-          <a href="https://mukiz.com/faq/" rel="noopener">Source : leur FAQ</a>.
+          <a href="https://mukiz.com/faq/" rel="noopener nofollow">Source : leur FAQ</a>.
         </p>
         <h3>Tapzz, anciennement Spotiguess</h3>
         <p>
           Renommé le 1er septembre 2026. Génère des quiz personnalisés à partir de ton compte Spotify (historique,
           playlists, titres likés, ou par IA). Connexion Spotify obligatoire, 5 quiz par jour en gratuit puis abonnement,
           en anglais. Le fonctionnement du mode « entre amis » n'est pas détaillé sur leur site.{" "}
-          <a href="https://tapzz.com/" rel="noopener">Source : tapzz.com</a>.
+          <a href="https://tapzz.com/" rel="noopener nofollow">Source : tapzz.com</a>.
         </p>
         <h3>SongPop</h3>
         <p>
@@ -206,7 +206,7 @@ export default function Page() {
           organisé en packs par genre et par décennie, avec duels en ligne. Freemium avec abonnement SongPop Plus ;
           SongPop Party, jusqu'à 8 joueurs, passe par Apple Arcade et les consoles. Pas d'import de playlists
           personnelles trouvé.{" "}
-          <a href="https://apps.apple.com/us/app/songpop-guess-the-song/id1528066727" rel="noopener">Source : App Store</a>.
+          <a href="https://apps.apple.com/us/app/songpop-guess-the-song/id1528066727" rel="noopener nofollow">Source : App Store</a>.
         </p>
         <h3>blindz.app</h3>
         <p>
@@ -218,13 +218,13 @@ export default function Page() {
         </p>
       </Section>
 
-      <Section tag="Lequel choisir" title="Selon ce que vous voulez faire" tone="amber">
+      <Section tag="Quand choisir blindz.app" title="Ce qu'on fait que les autres ne font pas" tone="amber">
         <ul>
-          <Li color="#2e2014"><span><strong>Jouer sur des thèmes, en partie publique et gratuitement</strong> : blindtest.gg. Mukiz aussi, avec une app et une offre payante.</span></Li>
-          <Li color="#2e2014"><span><strong>Un quiz sur ce que toi tu écoutes</strong> : Tapzz, si tu acceptes de connecter ton compte Spotify.</span></Li>
-          <Li color="#2e2014"><span><strong>Un jeu mobile classique avec un gros catalogue (plus de 100 000 extraits d'après l'App Store)</strong> : SongPop.</span></Li>
-          <Li color="#2e2014"><span><strong>Une soirée buzzer sur des thèmes préparés</strong> : blindz.fr, en acceptant la pub ou l'abonnement.</span></Li>
-          <Li color="#2e2014"><span><strong>Une soirée sur les playlists de tous les invités, sans rien préparer, avec « qui a mis quoi »</strong> : blindz.app. C'est le seul cas où on se recommande sans réserve, et c'est précisément pour ça qu'on l'a fait.</span></Li>
+          <Li color="#2e2014"><span><strong>Les playlists de tous les joueurs, mélangées</strong> : chacun colle son lien Spotify ou Deezer, sans se connecter, et la partie se joue sur la musique de toute la bande.</span></Li>
+          <Li color="#2e2014"><span><strong>Deviner qui a mis quoi</strong> : un point de plus pour qui trouve lequel de ses potes a ramené le morceau. C'est ce qui fait rire la table.</span></Li>
+          <Li color="#2e2014"><span><strong>Autour d'une table</strong> : la télé ou un PC diffuse la musique, chacun répond sur son téléphone en scannant un QR code, jusqu'à 12 joueurs.</span></Li>
+          <Li color="#2e2014"><span><strong>Rien à préparer</strong> : pas de pack à choisir, pas de quiz à écrire. Un pseudo, un lien, et la partie est prête.</span></Li>
+          <Li color="#2e2014"><span><strong>Vraiment gratuit</strong> : sans pub, sans abonnement, sans compte, sur iPhone, Android et PC.</span></Li>
         </ul>
         <p>
           Une information fausse ou dépassée dans ce comparatif ? Écrivez-nous depuis la page{" "}
