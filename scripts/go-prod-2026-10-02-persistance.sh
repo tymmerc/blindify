@@ -47,7 +47,7 @@ en_cours() { docker exec blindify-postgres psql -U blindify -d blindify -qAt -c 
   "SELECT count(*) FROM multiplayer_rooms WHERE status = 'in_progress' AND started_at > now() - interval '30 minutes'"; }
 DUMP="/opt/backups/avant-deploy-$HORO.sql.gz"
 docker exec blindify-postgres pg_dump -U blindify -d blindify | gzip > "$DUMP"
-gzip -t "$DUMP" && zcat "$DUMP" | tail -n 5 | grep -q 'PostgreSQL database dump complete' \
+gzip -t "$DUMP" && zcat "$DUMP" | tail -n 5 | grep >/dev/null 'PostgreSQL database dump complete' \
   || { echo "  !! sauvegarde de la base invalide : $DUMP"; exit 1; }
 # L'image qui tourne VRAIMENT, pas forcement celle taguee latest.
 docker tag "$(docker inspect -f '{{.Image}}' blindify-backend)" "blindify-backend:avant-$HORO"
@@ -98,7 +98,7 @@ verifie "socket depuis une origine etrangere refuse (403)" "[ \"\$(code_socket h
 verifie "plus de .env dans le conteneur" "! docker exec blindify-backend test -e /app/.env"
 verifie "plus d'undici dans l'image" "! docker exec blindify-backend test -d /app/node_modules/undici"
 verifie "engine.io 6.6.11" "docker exec blindify-backend node -p \"require('/app/node_modules/engine.io/package.json').version\" | grep -qx 6.6.11"
-verifie "landing servie" "curl -sf -m 30 https://blindz.app/ | grep -q 'Le blind test avec'"
+verifie "landing servie" "curl -sf -m 30 https://blindz.app/ | grep >/dev/null 'Le blind test avec'"
 [ "$ko" = 0 ] || { echo "UNE VERIFICATION A ECHOUE : voir ci-dessus"; echo "  RETOUR ARRIERE : $RETOUR"; exit 1; }
 
 echo "DEPLOIEMENT TERMINE. Parcours complets ensuite, un a la fois :"
