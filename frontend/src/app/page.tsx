@@ -135,8 +135,7 @@ export default function HomePage() {
       {/* ── Hero : texte a gauche, disque sur son plateau sauge a droite ── */}
       <section className="mx-auto grid max-w-6xl items-center gap-12 px-5 pb-[6rem] pt-[4.5rem] sm:px-8 lg:grid-cols-[1.15fr_0.85fr] lg:gap-8 lg:pt-[6rem]">
         <div>
-          <Tag color={VERMILION}>Blind test entre potes</Tag>
-          <h1 className="mt-5 font-display text-[2.9rem] font-semibold leading-[1.02] sm:text-[4rem] lg:text-[6rem]">
+          <h1 className="font-display text-[clamp(2rem,10.5vw,2.6rem)] font-semibold leading-[1.02] sm:text-[4rem] lg:text-[3.8rem] xl:text-[4.6rem]">
             Le blind test{" "}
             <RotatingEnd
               endings={[
