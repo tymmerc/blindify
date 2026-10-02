@@ -144,8 +144,7 @@ export default function HomePage() {
                 <span key="potes"><em className="font-medium italic text-[#cc4830]">entre potes</em>.</span>,
                 <span key="apero">de l'<em className="font-medium italic text-[#cc4830]">apéro</em>.</span>,
                 <span key="plusieurs"><em className="font-medium italic text-[#cc4830]">à plusieurs</em>.</span>,
-                <span key="tele">sur la <em className="font-medium italic text-[#cc4830]">télé</em>.</span>,
-                <span key="anniv">des <em className="font-medium italic text-[#cc4830]">anniversaires</em>.</span>,
+                <span key="tele">sur la <em className="font-medium italic text-[#cc4830]">TV</em>.</span>,
                 <span key="rien">sans <em className="font-medium italic text-[#cc4830]">préparation</em>.</span>,
                 <span key="gratuit"><em className="font-medium italic text-[#cc4830]">100 % gratuit</em>.</span>,
               ]}
