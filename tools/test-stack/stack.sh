@@ -87,7 +87,7 @@ start_backend() {
   local be="$WT/backend"
   [ -f "$be/src/index.ts" ] || { log "ECHEC : pas de copie de travail, lancer d'abord : heavy $HERE/stack.sh front"; exit 1; }
   [ -e "$be/.env" ] && { log "ECHEC : un .env existe dans $be, il pourrait viser la prod"; exit 1; }
-  ln -sfn "$ROOT/backend/node_modules" "$be/node_modules"
+  ln -sfn "$(cat "$RUN/backend.deps" 2>/dev/null || echo "$ROOT/backend/node_modules")" "$be/node_modules"
   local env="$RUN/run/backend.env"
   umask 077
   cat >"$env" <<EOF
@@ -161,10 +161,36 @@ stop() {
   log "pile arretee, base jetee"
 }
 
+# Dependances du commit teste. Par defaut, celles du depot (frontend/ et
+# backend/ de /opt/blindify). STACK_DEPS=ci : celles du commit lui-meme,
+# installees par npm ci dans un cache par lockfile (.test-stack/deps/<empreinte>),
+# pour tester une PR qui change les dependances (Dependabot) AVANT de la fusionner.
+deps_dir() { # commit, partie (frontend|backend) -> dossier node_modules a utiliser
+  local head=$1 part=$2
+  if [ "${STACK_DEPS:-}" != ci ]; then echo "$ROOT/$part/node_modules"; return; fi
+  local key; key=$(git -C "$ROOT" show "$head:$part/package-lock.json" | sha256sum | cut -c1-16)
+  local d="$RUN/deps/$part-$key"
+  if [ ! -f "$d/.complet" ]; then
+    log "npm ci de $part pour $(git -C "$ROOT" rev-parse --short "$head") (cache $part-$key)" >&2
+    mkdir -p "$d"
+    git -C "$ROOT" show "$head:$part/package.json" >"$d/package.json"
+    git -C "$ROOT" show "$head:$part/package-lock.json" >"$d/package-lock.json"
+    (cd "$d" && PATH="$(dirname "$NODE"):$PATH" npm ci --no-audit --no-fund >"$RUN/logs/npm-ci-$part.log" 2>&1) \
+      || { log "ECHEC npm ci de $part, voir $RUN/logs/npm-ci-$part.log" >&2; return 1; }
+    touch "$d/.complet"
+  fi
+  echo "$d/node_modules"
+}
+
 build_front() {
-  local head; head=$(git -C "$ROOT" rev-parse HEAD)
-  if [ -f "$RUN/front.commit" ] && [ "$(cat "$RUN/front.commit")" = "$head" ] && [ -f "$WT/frontend/out/index.html" ]; then
-    log "copie de travail et front de test deja a jour ($head)"; return
+  # STACK_REF : branche, tag ou commit a tester (defaut : HEAD du depot).
+  # Les branches des worktrees partagent les refs du depot.
+  local head; head=$(git -C "$ROOT" rev-parse --verify "${STACK_REF:-HEAD}^{commit}")
+  local front_deps back_deps
+  front_deps=$(deps_dir "$head" frontend) || exit 1
+  back_deps=$(deps_dir "$head" backend) || exit 1
+  if [ -f "$RUN/front.commit" ] && [ "$(cat "$RUN/front.commit")" = "$head $front_deps" ] && [ -f "$WT/frontend/out/index.html" ]; then
+    log "copie de travail et front de test deja a jour ($head)"; echo "$back_deps" >"$RUN/backend.deps"; return
   fi
   # Copie de travail separee : un build dans frontend/ ecraserait out/ (servi
   # tel quel par nginx) et le .next du serveur de dev.
@@ -173,16 +199,17 @@ build_front() {
   else
     git -C "$ROOT" worktree add -q --detach "$WT" "$head"
   fi
-  ln -sfn "$ROOT/frontend/node_modules" "$WT/frontend/node_modules"
+  ln -sfn "$front_deps" "$WT/frontend/node_modules"
   ln -sfn "$ROOT/frontend/.node" "$WT/frontend/.node"
-  ln -sfn "$ROOT/backend/node_modules" "$WT/backend/node_modules"
+  ln -sfn "$back_deps" "$WT/backend/node_modules"
+  echo "$back_deps" >"$RUN/backend.deps"
   (
     cd "$WT/frontend" || exit 1
     unset __NEXT_PRIVATE_STANDALONE_CONFIG
     NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_API_URL="http://$HOST:$PROXY_PORT/blindify" NEXT_PUBLIC_BASE_PATH=/blindify \
       PATH="$(dirname "$NODE"):$PATH" npx next build >"$RUN/logs/front-build.log" 2>&1
   ) || { log "ECHEC du build du front de test"; tail -30 "$RUN/logs/front-build.log"; exit 1; }
-  echo "$head" >"$RUN/front.commit"
+  echo "$head $front_deps" >"$RUN/front.commit"
   log "copie de travail et front de test a jour ($head)"
 }
 
