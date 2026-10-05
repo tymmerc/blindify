@@ -17,7 +17,7 @@ const URL = "https://blindz.app/faq/"
 const TITLE = "FAQ · Blind test avec vos playlists, entre amis"
 const DESC =
   "Comment faire un blind test avec ses propres playlists Spotify ou Deezer, sans compte, sur téléphone, entre amis ou avec un seul tel. Toutes les réponses."
-const UPDATED = "2026-09-09"
+const UPDATED = "2026-10-05"
 
 export const metadata: Metadata = {
   title: TITLE,
@@ -66,6 +66,10 @@ const FAQ: Array<{ q: string; a: string }> = [
   {
     q: "blindz.app, c'est le retour de l'ancien site Blindz qui a fermé en 2021 ?",
     a: "Non. Blindz (blindz.fr) est un autre site, plus ancien, où l'on crée et personnalise des blind tests entre amis ; il avait été hors ligne un long moment après l'incendie du datacenter OVH de Strasbourg en 2021. blindz.app est un projet indépendant, lancé en 2026, sans aucun lien avec cette équipe. Le principe est différent aussi : ici il n'y a rien à créer ni à personnaliser, la partie est générée automatiquement à partir des playlists Spotify ou Deezer des joueurs, et on devine qui a ramené chaque morceau.",
+  },
+  {
+    q: "Pourquoi blindz.app est marqué « bêta » ?",
+    a: "Parce que le jeu est encore jeune. On peut déjà y jouer en entier, gratuitement, mais il reste sûrement des bugs, et des choses changent encore au fil des semaines. Si quelque chose ne marche pas comme prévu, dis-le-nous : le lien « signale-le », en bas de cette page et de l'accueil, ouvre un petit formulaire, et une fois dans le jeu c'est « Signaler un bug » dans le menu du compte, en haut à droite.",
   },
 ]
 

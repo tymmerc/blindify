@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useId, useRef, useState } from "react"
 import { X, Check, Loader2, Send } from "lucide-react"
 import { api } from "@/lib/api"
 
@@ -13,22 +13,49 @@ export function openBugReport() {
 }
 
 // Modal de report de bug, monte une seule fois dans le layout. S'ouvre via openBugReport().
+// Ouverte depuis le pied de page par tout visiteur : vraie fenetre modale (role
+// dialog, Echap ferme, le focus revient a l'element qui l'a ouverte).
 export function BugReportDialog() {
   const [open, setOpen] = useState(false)
   const [message, setMessage] = useState("")
   const [status, setStatus] = useState<Status>("idle")
+  const titleId = useId()
+  // Element qui avait le focus a l'ouverture (le bouton du pied de page, le menu compte...).
+  const opener = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
-    const onOpen = () => setOpen(true)
+    const onOpen = () => {
+      const active = document.activeElement
+      opener.current = active instanceof HTMLElement ? active : null
+      setOpen(true)
+    }
     window.addEventListener(BUG_REPORT_EVENT, onOpen)
     return () => window.removeEventListener(BUG_REPORT_EVENT, onOpen)
   }, [])
 
-  const close = () => {
+  const close = useCallback(() => {
     setOpen(false)
     setStatus("idle")
     setMessage("")
-  }
+  }, [])
+
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close()
+    }
+    document.addEventListener("keydown", onKey)
+    return () => document.removeEventListener("keydown", onKey)
+  }, [open, close])
+
+  // A la fermeture, rend le focus a l'element d'origine s'il est encore dans la
+  // page (l'entree du menu compte, elle, disparait avec le menu).
+  useEffect(() => {
+    if (open) return
+    const target = opener.current
+    opener.current = null
+    if (target?.isConnected) target.focus()
+  }, [open])
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -53,13 +80,16 @@ export function BugReportDialog() {
       onMouseDown={close}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
         className="w-full max-w-md rounded-2xl border-2 border-[#2e2014] bg-[#f4ecdb] p-6 shadow-[6px_6px_0_rgba(46,32,20,.2)]"
         onMouseDown={e => e.stopPropagation()}
       >
         <div className="mb-3 flex items-start justify-between gap-3">
           <div>
             <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#c65133]">Un souci ?</p>
-            <h2 className="font-display text-xl font-semibold text-[#2e2014]">Signaler un bug</h2>
+            <h2 id={titleId} className="font-display text-xl font-semibold text-[#2e2014]">Signaler un bug</h2>
           </div>
           <button
             type="button"
