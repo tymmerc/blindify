@@ -108,6 +108,12 @@ async function playFive(page, vp, shots) {
       await shot(page, vp, shots.round)
     }
   }
+  // Derniere manche : l'ecran de fin s'affiche ~120 ms AVANT le dialogue de
+  // resultat (finalizeRound passe gameFinished tout de suite, le dialogue
+  // 120 ms plus tard). playRound a pu voir ce flash et ne pas cliquer
+  // « Terminer » : on le ferme ici s'il est la.
+  const terminer = page.getByRole("button", { name: /^terminer$/i })
+  await terminer.waitFor({ timeout: 3000 }).then(() => terminer.click()).catch(() => {})
   await page.getByText(/partie terminée/i).first().waitFor({ timeout: 20000 })
   await sleep(2500)
 }
