@@ -28,6 +28,11 @@
 -- et en CI, dont la base vient du schema de la prod. Rejouee, elle ne recree
 -- que les liens qui manquent a un premier importeur (jamais un lien qu'un
 -- joueur a retire : retirer une carte vide aussi audio_sources.user_id).
+-- Rejouee sur une base qui l'a deja, elle ne prend aucun verrou fort : les
+-- index, le declencheur, la colonne et le GRANT ne sont crees que s'ils
+-- manquent. Sinon chaque demarrage bloquait audio_sources et game_rounds le
+-- temps de la transaction, et pouvait s'interbloquer avec une partie en cours
+-- (vu dans les tests : deadlock detected).
 --
 -- En prod, AVANT de redemarrer le backend :
 --   docker exec -i blindify-postgres psql -U blindify -d blindify -v ON_ERROR_STOP=1 \
@@ -54,9 +59,18 @@ CREATE TABLE IF NOT EXISTS user_audio_sources (
 
 -- La cle primaire sert les lectures par joueur. Ces deux index servent les
 -- autres sens : qui possede ce morceau (« qui a mis quoi »), et les cascades
--- quand un morceau ou une carte disparait.
-CREATE INDEX IF NOT EXISTS idx_user_audio_sources_source ON user_audio_sources (audio_source_id);
-CREATE INDEX IF NOT EXISTS idx_user_audio_sources_link ON user_audio_sources (link_id);
+-- quand un morceau ou une carte disparait. (CREATE INDEX IF NOT EXISTS
+-- verrouille la table avant de regarder si l'index existe : d'ou le test.)
+DO $$
+BEGIN
+  IF to_regclass('public.idx_user_audio_sources_source') IS NULL THEN
+    CREATE INDEX idx_user_audio_sources_source ON user_audio_sources (audio_source_id);
+  END IF;
+  IF to_regclass('public.idx_user_audio_sources_link') IS NULL THEN
+    CREATE INDEX idx_user_audio_sources_link ON user_audio_sources (link_id);
+  END IF;
+END
+$$;
 
 -- Une carte ne compte que si elle est a ce joueur : sinon le lien est garde
 -- sans carte, et la bibliotheque le range dans « Imports precedents ».
@@ -75,10 +89,19 @@ BEGIN
 END
 $$;
 
-CREATE OR REPLACE TRIGGER audio_sources_lien_proprietaire
-AFTER INSERT OR UPDATE OF user_id, link_id ON audio_sources
-FOR EACH ROW WHEN (NEW.user_id IS NOT NULL)
-EXECUTE FUNCTION audio_sources_lien_proprietaire();
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger
+    WHERE tgrelid = 'public.audio_sources'::regclass AND tgname = 'audio_sources_lien_proprietaire'
+  ) THEN
+    CREATE TRIGGER audio_sources_lien_proprietaire
+    AFTER INSERT OR UPDATE OF user_id, link_id ON audio_sources
+    FOR EACH ROW WHEN (NEW.user_id IS NOT NULL)
+    EXECUTE FUNCTION audio_sources_lien_proprietaire();
+  END IF;
+END
+$$;
 
 -- Reprise de l'existant : chaque premier importeur garde son lien et sa carte.
 INSERT INTO user_audio_sources (user_id, audio_source_id, link_id, created_at)
@@ -93,16 +116,27 @@ WHERE a.user_id IS NOT NULL
     WHERE ua.user_id = a.user_id AND ua.audio_source_id = a.id)
 ON CONFLICT (user_id, audio_source_id) DO NOTHING;
 
-ALTER TABLE game_rounds
-  ADD COLUMN IF NOT EXISTS owner_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
-CREATE INDEX IF NOT EXISTS idx_game_rounds_owner ON game_rounds (owner_user_id);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_attribute
+    WHERE attrelid = 'public.game_rounds'::regclass AND attname = 'owner_user_id' AND NOT attisdropped
+  ) THEN
+    ALTER TABLE game_rounds ADD COLUMN owner_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+  END IF;
+  IF to_regclass('public.idx_game_rounds_owner') IS NULL THEN
+    CREATE INDEX idx_game_rounds_owner ON game_rounds (owner_user_id);
+  END IF;
+END
+$$;
 
 -- Le tableau de bord lit la base avec le role blindz_ro (SELECT seul). Une
 -- table creee apres lui ne lui est pas lisible sans ce GRANT. Le role n'existe
 -- que sur le VPS : ailleurs (CI, pile de test), il n'y a rien a faire.
 DO $$
 BEGIN
-  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'blindz_ro') THEN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'blindz_ro')
+     AND NOT has_table_privilege('blindz_ro', 'public.user_audio_sources', 'SELECT') THEN
     GRANT SELECT ON user_audio_sources TO blindz_ro;
   END IF;
 END

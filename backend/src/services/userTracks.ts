@@ -15,6 +15,16 @@ import { pool } from "../config/db";
 // la racine du backend dans les deux cas (il entre dans l'image Docker).
 const MIGRATION = path.resolve(__dirname, "../../migrations/005_user_audio_sources.sql");
 
+// Premiere application sur une base neuve (pile de test, CI) : elle verrouille
+// audio_sources, users et game_rounds pendant que le reste du demarrage (ou
+// une autre suite de tests) ecrit dedans, et Postgres peut l'interrompre pour
+// interblocage. Le fichier est transactionnel et rejouable : on recommence.
+const DEADLOCK = "40P01";
+const ATTEMPTS = 3;
+
+const isDeadlock = (err: unknown): boolean =>
+  typeof err === "object" && err !== null && (err as { code?: unknown }).code === DEADLOCK;
+
 /**
  * Rejoue la migration 005 (idempotente). Appelee au demarrage : la prod l'a
  * deja, la pile de test et la CI partent du schema de la prod et ne l'ont pas
@@ -22,6 +32,17 @@ const MIGRATION = path.resolve(__dirname, "../../migrations/005_user_audio_sourc
  */
 export async function ensureUserTracksSchema(): Promise<void> {
   const sql = await fs.promises.readFile(MIGRATION, "utf8");
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await runMigration(sql);
+      return;
+    } catch (err) {
+      if (!isDeadlock(err) || attempt >= ATTEMPTS) throw err;
+    }
+  }
+}
+
+async function runMigration(sql: string): Promise<void> {
   const client = await pool.connect();
   try {
     await client.query(sql);

@@ -9,8 +9,8 @@
  * (need_more_music). Pareil pour deux amis qui collent la meme playlist.
  *
  * Ce qui est verifie :
- * - la migration 005 et le demarrage du backend donnent le meme schema, se
- *   rejouent, et reprennent l'existant (premier importeur et sa carte) ;
+ * - le demarrage du backend applique la migration 005, qui se rejoue sans rien
+ *   changer et reprend l'existant (premier importeur et sa carte) ;
  * - le declencheur relie le proprietaire ecrit par l'ancien code et les outils ;
  * - deux importeurs de la meme playlist ont chacun leurs 12 titres, sans doublon,
  *   et reimporter ne cree rien de plus ;
@@ -19,7 +19,10 @@
  *   importeurs presents d'un morceau partage ; le recapitulatif donne le joueur
  *   de la partie ;
  * - le solo par bibliotheque du second importeur joue ses titres ;
- * - supprimer un invite ou un compte garde les morceaux encore lies a d'autres.
+ * - retirer une carte ne retire que ses liens a soi ;
+ * - le janitor garde un invite qui a des morceaux sans en etre le premier
+ *   importeur ; supprimer un invite ou un compte garde les morceaux encore
+ *   lies a d'autres.
  *
  * Deezer n'est jamais appele : l'import et les extraits sont simules.
  * Base : TEST_DATABASE_URL (voir tests/testDatabase.ts), jamais la prod.
@@ -100,6 +103,7 @@ const PLAYLISTS = new Map<string, number[]>([
   ["501", [...range(90, 6), ...range(100, 6)]], // Lou : 6 morceaux partages avec Max, 6 a elle seule
   ["502", [...range(90, 6), ...range(110, 6)]], // Max
   ["601", range(130, 12)],                    // Pia puis Rob : la meme playlist
+  ["701", range(150, 12)],                    // Una puis Vic : la meme playlist
 ]);
 const externalIds = (playlistId: string) => (PLAYLISTS.get(playlistId) ?? []).map(n => `${RUN}-${n}`);
 
@@ -282,29 +286,28 @@ async function schemaShape() {
   return { columns, constraints, indexes, triggers, roundOwner };
 }
 
-async function dropUserTracks(): Promise<void> {
-  await pool.query(`DROP TRIGGER IF EXISTS audio_sources_lien_proprietaire ON audio_sources`);
-  await pool.query(`DROP FUNCTION IF EXISTS audio_sources_lien_proprietaire()`);
-  await pool.query(`DROP TABLE IF EXISTS user_audio_sources`);
-}
-
 describe("migration 005 : user_audio_sources", () => {
-  it("la migration et le demarrage du backend donnent le meme schema, et se rejouent", async () => {
-    const sql = fs.readFileSync(MIGRATION, "utf8");
-    await dropUserTracks();
-    await pool.query(sql);
-    await pool.query(sql); // rejouable sans erreur
-    const fromMigration = await schemaShape();
+  // Jamais de DROP ici : la base de test est partagee avec l'autre suite
+  // d'integration, qui joue des parties en meme temps. La premiere application
+  // (base neuve, schema de la prod) est celle du beforeAll.
+  it("le demarrage applique la migration 005, qui se rejoue sans rien changer", async () => {
+    const applied = await schemaShape();
+    await pool.query(fs.readFileSync(MIGRATION, "utf8")); // ce qui est passe en prod
+    await ensureUserTracksSchema(); // et chaque demarrage du backend
+    expect(await schemaShape()).toEqual(applied);
 
-    await dropUserTracks();
-    await ensureUserTracksSchema();
-    await ensureUserTracksSchema(); // idempotente
-    const fromBoot = await schemaShape();
-
-    expect(fromBoot).toEqual(fromMigration);
-    expect(fromBoot.columns.map(c => c.attname)).toEqual(["user_id", "audio_source_id", "link_id", "created_at"]);
-    expect(fromBoot.triggers.map(t => t.tgname)).toEqual(["audio_sources_lien_proprietaire"]);
-    expect(fromBoot.roundOwner).toEqual([{ type: "integer" }]);
+    expect(applied.columns.map(c => c.attname)).toEqual(["user_id", "audio_source_id", "link_id", "created_at"]);
+    expect(applied.constraints.map(c => c.def)).toEqual(expect.arrayContaining([
+      "PRIMARY KEY (user_id, audio_source_id)",
+      "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE",
+      "FOREIGN KEY (audio_source_id) REFERENCES audio_sources(id) ON DELETE CASCADE",
+      "FOREIGN KEY (link_id) REFERENCES imported_links(id) ON DELETE SET NULL",
+    ]));
+    expect(applied.indexes.map(i => i.indexname)).toEqual([
+      "idx_game_rounds_owner", "idx_user_audio_sources_link", "idx_user_audio_sources_source", "user_audio_sources_pkey",
+    ]);
+    expect(applied.triggers.map(t => t.tgname)).toEqual(["audio_sources_lien_proprietaire"]);
+    expect(applied.roundOwner).toEqual([{ type: "integer" }]);
   });
 
   it("reprend l'existant : le premier importeur garde son lien et sa carte, une carte etrangere est ecartee", async () => {
@@ -410,6 +413,28 @@ describe("import : chaque importeur garde son lien avec les morceaux", () => {
     );
     expect(rows.map(r => r.link_id)).not.toContain(leaCard.id);
     expect((await cardsOf(lea))[0].track_count).toBe(12);
+  });
+});
+
+describe("retirer une carte", () => {
+  it("retire les liens de ce joueur seulement, et le demarrage ne les recree pas", async () => {
+    const una = await newGuest("una"); // premiere importeuse
+    const vic = await newGuest("vic");
+    const first = await importPlaylist(una, "701");
+    const second = await importPlaylist(vic, "701");
+
+    const gone = await call(linksController.remove, vic, { params: { id: String(second.linkId) } });
+    expect(gone.status).toBe(200);
+    expect(await linkedExternalIds(vic)).toEqual([]);
+    expect(await linkedExternalIds(una)).toHaveLength(12);
+    expect((await cardsOf(una))[0].track_count).toBe(12);
+
+    const goneFirst = await call(linksController.remove, una, { params: { id: String(first.linkId) } });
+    expect(goneFirst.status).toBe(200);
+    await ensureUserTracksSchema(); // la migration rejouee au demarrage reprend l'existant
+    expect(await linkedExternalIds(una)).toEqual([]);
+    expect(await linkedExternalIds(vic)).toEqual([]);
+    expect(await rowsFor(externalIds("701"))).toBe(12); // detacher, jamais detruire
   });
 });
 
