@@ -15,7 +15,8 @@
 //                         [--montage mixte|meme|trois] [--timeout 30000]
 //                         [--pause 0] [--cle oui|non] [--sonde oui|non] [--latence 0]
 //                         [--bots 0] [--entree jouer|accueil] [--cpu non|oui]
-//                         [--chronos lentes|toutes] [--out /dossier] [--tag nom]
+//                         [--chronos lentes|toutes] [--perte non|oui]
+//                         [--out /dossier] [--tag nom]
 //
 // "meme" : tous les joueurs d'une salle dans un seul navigateur (un contexte
 // chacun) ; "trois" : un navigateur par joueur ; "mixte" alterne les deux.
@@ -38,6 +39,10 @@
 // Le 02/10 sur blindz.app, la variante WebKit avait brule 1,6 coeur en continu
 // et tous ses onglets s'etaient figes 27 s d'affilee : on veut savoir si les
 // pages du salon tournent a vide sous WebKit.
+// --perte oui : le premier POST du join de chaque joueur reste sans reponse
+// (le navigateur le retient, rien n'arrive au serveur), comme une requete
+// perdue sur un telephone. Sert a prouver ce que fait l'ecran "Preparation du
+// lobby" quand le join ne revient pas : attente sans fin, ou relance.
 // Joueur bloque : on releve aussi l'etat React du salon (salle, session,
 // statut du join...) et les requetes terminees selon la page (Resource Timing).
 // Code de sortie : 0 si personne n'est reste bloque, 1 sinon.
@@ -53,7 +58,7 @@ const KEY = fs.readFileSync("/opt/blindify/.e2e-bypass-key", "utf8").trim()
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 
 function options(argv) {
-  const o = { browser: "webkit", rooms: 12, players: 3, montage: "mixte", timeout: 30000, pause: 0, cle: "oui", sonde: "oui", chronos: "lentes", latence: 0, bots: 0, entree: "jouer", cpu: "non", out: null, tag: null }
+  const o = { browser: "webkit", rooms: 12, players: 3, montage: "mixte", timeout: 30000, pause: 0, cle: "oui", sonde: "oui", chronos: "lentes", perte: "non", latence: 0, bots: 0, entree: "jouer", cpu: "non", out: null, tag: null }
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i].replace(/^--/, "")
     if (!(k in o)) throw new Error(`option inconnue : ${argv[i]}`)
@@ -63,6 +68,7 @@ function options(argv) {
   if (!["webkit", "chromium"].includes(o.browser)) throw new Error(`navigateur inconnu : ${o.browser}`)
   if (!["mixte", "meme", "trois"].includes(o.montage)) throw new Error(`montage inconnu : ${o.montage}`)
   if (!["jouer", "accueil"].includes(o.entree)) throw new Error(`entree inconnue : ${o.entree}`)
+  if (!["oui", "non"].includes(o.perte)) throw new Error(`--perte oui ou non : ${o.perte}`)
   o.tag ??= `${o.browser}-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-")}`
   o.out ??= path.join(os.tmpdir(), "webkit-lobby", o.tag)
   return o
@@ -312,11 +318,24 @@ function digest(events, code) {
   }
 }
 
+// Retient le premier POST /api/rooms/CODE/join de la page : ni reponse ni
+// erreur, la requete reste en suspens. Les suivants passent normalement.
+async function holdFirstJoin(page, onHeld) {
+  let held = false
+  await page.route(u => /\/api\/rooms\/[A-Z0-9]+\/join$/.test(u.pathname), route => {
+    if (route.request().method() !== "POST" || held) return route.continue()
+    held = true
+    onHeld({ url: route.request().url(), at: Date.now() })
+  })
+}
+
 async function joinAs({ browser, name, code, tag, opts, device }) {
   const ctx = await browser.newContext({ ...device })
   if (opts.cle === "oui") await ctx.setExtraHTTPHeaders({ "X-E2E-Key": KEY }) // limite /api/auth : 60/min par IP
   if (opts.sonde === "oui") await ctx.addInitScript(PAGE_PROBE)
   const p = await ctx.newPage()
+  let joinHeld = null
+  if (opts.perte === "oui") await holdFirstJoin(p, held => { joinHeld = held })
   const net = []
   listen(p, net)
   const log = { name, tag, browser: opts.browser, code, steps: {}, ok: false }
@@ -343,6 +362,7 @@ async function joinAs({ browser, name, code, tag, opts, device }) {
     log.ressources = await p.evaluate(RESOURCES).catch(() => [])
     await p.screenshot({ path: path.join(opts.out, `${tag}-${name}-blocage.png`) }).catch(() => {})
   }
+  log.joinRetenu = joinHeld
   log.joinMs = log.steps["dans-la-partie"] != null ? log.steps["dans-la-partie"] - log.steps.rejoindre : null
   // Releve aussi pour les entrees reussies : la lecture est verifiee a chaque passage.
   log.etatReact = await p.evaluate(REACT_STATE).catch(e => ({ erreur: String(e).slice(0, 160) }))
@@ -423,6 +443,7 @@ async function main() {
   if (results[0]) console.log(`etat React (1re entree, controle de la lecture) : ${JSON.stringify(results[0].etatReact)}`)
   for (const r of [...stuck, ...slow]) {
     console.log(`- ${r.tag} ${r.name} ${r.ok ? `LENT ${r.joinMs} ms` : `BLOQUE (${r.erreur})`}`)
+    if (r.joinRetenu) console.log(`  premier join retenu (--perte oui) a ${r.joinRetenu.at}`)
     console.log(`  join vu par la page : ${JSON.stringify(r.digest.joinFetch)}, par le navigateur : ${JSON.stringify(r.digest.joinNavigateur)}`)
     console.log(`  en vol au depart du join : ${JSON.stringify(r.digest.inFlightAtJoin)}`)
     console.log(`  xhr >= 400 : ${r.digest.xhr400}, websockets ${r.digest.wsNew} crees / ${r.digest.wsOpen} ouverts / ${r.digest.wsClose} fermes`)
