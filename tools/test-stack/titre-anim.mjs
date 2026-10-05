@@ -56,13 +56,18 @@ function tourComplet() {
     const droite = boite.right - parseFloat(cs.paddingRight)
     const suivant = h1.nextElementSibling
     const debut = performance.now()
+    const taille = parseFloat(cs.fontSize)
+    // Chromium rend un rectangle par morceau de texte (avant, dans et apres le
+    // <em>) : on compte les lignes par hauteur, pas par rectangle.
     const mesure = el => {
       const r = el.getBoundingClientRect()
-      return { l: r.left, r: r.right, w: r.width, lignes: el.getClientRects().length }
+      const hauts = [...el.getClientRects()].map(x => x.top).sort((a, b) => a - b)
+      const lignes = hauts.filter((t, k) => k === 0 || t - hauts[k - 1] > taille / 2).length
+      return { l: r.left, r: r.right, w: r.width, lignes }
     }
     const res = {
       n: fins.length, gauche, droite, largeurVue: document.documentElement.clientWidth,
-      taille: parseFloat(cs.fontSize), entier: [], lettres: [], hauteurs: [], ySuivant: [], lisibles: [], debut,
+      taille, entier: [], lettres: [], hauteurs: [], ySuivant: [], lisibles: [], debut,
     }
     fins.forEach((f, i) => { res.entier[i] = { texte: f.textContent, ...mesure(f.firstElementChild) } })
     // Echantillons de hauteur pendant tout le tour (animations comprises)
@@ -101,6 +106,7 @@ function tourComplet() {
 }
 
 function verifierTour(tag, r) {
+  const avant = problemes.length
   if (r.n !== 13) mal(`${tag} : ${r.n} fins au lieu de 13`)
   const tol = 0.5
   let pire = null
@@ -123,7 +129,7 @@ function verifierTour(tag, r) {
   if (tag.startsWith("chromium") && r.rotation === null) mal(`${tag} : arrivee de la rotation non relevee`)
   const lect = r.lisibles.filter(x => x.nb !== 1 || !x.estEntree || x.lu !== x.attendu)
   if (lect.length) mal(`${tag} : lecture d'ecran incoherente ${JSON.stringify(lect[0])}`)
-  bon(`${tag} : ${r.n} fins x 2 formes sur une ligne (police ${r.taille}px, colonne ${(r.droite - r.gauche).toFixed(0)}px, plus juste : « ${pire?.texte} » ${pire?.forme} a ${pire?.marge.toFixed(1)}px du bord, crenage perdu ${crenage.toFixed(1)}px au plus) ; hauteur ${[...h].join("/")}px sur ${r.hauteurs.length} releves ; ${r.lisibles.length} passages avec une seule fin lisible ; decalage ${cls}`)
+  if (problemes.length === avant) bon(`${tag} : ${r.n} fins x 2 formes sur une ligne (police ${r.taille}px, colonne ${(r.droite - r.gauche).toFixed(0)}px, plus juste : « ${pire?.texte} » ${pire?.forme} a ${pire?.marge.toFixed(1)}px du bord, crenage perdu ${crenage.toFixed(1)}px au plus) ; hauteur ${[...h].join("/")}px sur ${r.hauteurs.length} releves ; ${r.lisibles.length} passages avec une seule fin lisible ; decalage ${cls}`)
   return { tag, colonne: r.droite - r.gauche, taille: r.taille, plusJuste: pire, hauteur: [...h], decalage: cls, crenage, entier: r.entier, lettres: r.lettres }
 }
 
