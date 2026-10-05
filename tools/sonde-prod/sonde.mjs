@@ -40,11 +40,9 @@
 // le VPS font bloquer son adresse par Akamai, et ca touche tous les joueurs.
 // Installation (GO de Tym) : tools/sonde-prod/installer.sh, unites dans infra/sonde-prod/.
 import { parseArgs } from "node:util"
-import { runProbe } from "./checks.mjs"
-import { decide, commitState, INITIAL_STATE } from "./decision.mjs"
-import { composeMail, formatLogLine, LOG_PATH } from "./message.mjs"
-import { loadMailConfig, sendMail, previewMail } from "./mail.mjs"
-import { loadState, saveState, appendLog, STATE_PATH } from "./storage.mjs"
+import { runOnce } from "./passage.mjs"
+import { LOG_PATH } from "./message.mjs"
+import { STATE_PATH } from "./storage.mjs"
 import { buildTargets } from "./targets.mjs"
 
 function readOptions(argv) {
@@ -62,45 +60,17 @@ function readOptions(argv) {
   return values
 }
 
-async function deliver(kind, run, previous, { dryRun, logPath }) {
-  if (!kind) return { sent: false, outcome: "aucun" }
-  const mail = composeMail(kind, run, previous, logPath)
-  const config = loadMailConfig()
-  if (dryRun) {
-    console.log(previewMail(mail, config))
-    return { sent: true, outcome: `${kind}:essai` }
-  }
-  const result = await sendMail({ config, mail })
-  return { sent: result.sent, outcome: result.sent ? `${kind}:envoye` : `${kind}:echec(${result.detail})` }
-}
-
-function printRun(run) {
-  for (const c of run.checks) {
-    console.log(`  ${c.ok ? "[ok]" : "[KO]"} ${c.label}${c.ok ? "" : ` : ${c.detail}`}${c.attempts > 1 ? " (2 essais)" : ""}`)
-  }
-  if (run.deezerDiagnosis) console.log(`  Deezer en direct : ${run.deezerDiagnosis.detail}`)
-}
-
 async function main() {
   const options = readOptions(process.argv.slice(2))
-  const targets = buildTargets(options)
   const dryRun = options["dry-run"]
-  // En essai, l'etat et le journal du minuteur ne sont jamais touches, sauf fichiers donnes.
-  const statePath = options.state ?? (dryRun ? null : STATE_PATH)
-  const logPath = options.log ?? (dryRun ? null : LOG_PATH)
-
-  const run = await runProbe({ targets })
-  printRun(run)
-  const { state: previous, warning } = statePath ? loadState(statePath) : { state: INITIAL_STATE, warning: null }
-  if (warning) console.error(`sonde : ${warning}`)
-  const decision = decide(previous, run.ok, run.at)
-  const { sent, outcome } = await deliver(decision.mail, run, previous, { dryRun, logPath: logPath ?? LOG_PATH })
-  const next = commitState(previous, decision, sent)
-  const line = formatLogLine(run, next, outcome)
-  console.log(line)
-  if (statePath) saveState(statePath, next)
-  if (logPath) appendLog(logPath, line)
-  return run.ok ? 0 : 1
+  const { ok } = await runOnce({
+    targets: buildTargets(options),
+    dryRun,
+    // En essai, l'etat et le journal du minuteur ne sont jamais touches, sauf fichiers donnes.
+    statePath: options.state ?? (dryRun ? null : STATE_PATH),
+    logPath: options.log ?? (dryRun ? null : LOG_PATH),
+  })
+  return ok ? 0 : 1
 }
 
 main().then(

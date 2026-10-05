@@ -20,7 +20,7 @@ set -euo pipefail
 REPO="${SONDE_REPO:-/opt/blindify}"
 DEST="${SONDE_DEST:-/opt/monitoring/sonde-prod}"
 UNITS="${SONDE_UNITS:-/etc/systemd/system}"
-CODE=(sonde.mjs checks.mjs decision.mjs message.mjs mail.mjs storage.mjs targets.mjs)
+CODE=(sonde.mjs passage.mjs checks.mjs decision.mjs message.mjs mail.mjs storage.mjs targets.mjs)
 UNIT_FILES=(blindz-sonde-prod.service blindz-sonde-prod.timer)
 TIMER=blindz-sonde-prod.timer
 
