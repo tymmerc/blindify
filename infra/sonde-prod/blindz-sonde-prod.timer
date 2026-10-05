@@ -6,9 +6,11 @@
 Description=Blindz : sonde de prod toutes les 65 minutes
 
 [Timer]
-# Premier passage 5 min apres le demarrage du minuteur (ou de la machine),
-# puis 65 min apres le debut du passage precedent. Jamais deux en meme temps.
-OnActiveSec=5min
+# 65 min apres le debut du passage precedent. Jamais deux en meme temps.
+# OnActiveSec sert apres un redemarrage de la machine (aucun passage encore) :
+# 65 min et pas 5, pour ne pas doubler le premier passage que l'installeur
+# lance lui-meme juste avant d'activer le minuteur.
+OnActiveSec=65min
 OnUnitActiveSec=65min
 AccuracySec=1min
 

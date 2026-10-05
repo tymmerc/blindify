@@ -16,8 +16,9 @@ After=network-online.target
 [Service]
 Type=oneshot
 ExecStart=/root/.nvm/versions/node/v22.21.1/bin/node /opt/monitoring/sonde-prod/sonde.mjs
-# 1 = la prod est en panne, pas la sonde : l'e-mail s'en charge, l'unite ne
-# passe pas en echec. 2 (sonde cassee) la met en echec (systemctl --failed).
+# 1 = la prod est en panne, pas la sonde : l'e-mail est parti, l'unite ne
+# passe pas en echec. 2 (sonde cassee, cle ou destinataire absent, e-mail du
+# qui n'a pas pu partir) la met en echec (systemctl --failed).
 SuccessExitStatus=1
 # /var/lib/blindz-sonde-prod (etat) et /var/log/blindz-sonde-prod (journal).
 StateDirectory=blindz-sonde-prod
@@ -40,9 +41,21 @@ ProtectSystem=strict
 ProtectHome=read-only
 PrivateTmp=yes
 PrivateDevices=yes
+UMask=0077
+# root sans aucun privilege : il lit encore ses propres fichiers (la cle et le
+# destinataire appartiennent a root) mais ne passe plus outre les droits des autres.
+CapabilityBoundingSet=
 NoNewPrivileges=yes
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
+ProtectKernelLogs=yes
 ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+LockPersonality=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
 RestrictSUIDSGID=yes
+SystemCallArchitectures=native
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK

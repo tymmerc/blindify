@@ -9,7 +9,8 @@
 #
 # Installer : copie le code dans /opt/monitoring/sonde-prod, les unites de
 # infra/sonde-prod dans /etc/systemd/system, lance un premier passage (il dit
-# tout de suite si quelque chose cloche) puis active le minuteur (65 min).
+# tout de suite si quelque chose cloche, et envoie un vrai e-mail si la prod
+# est en panne) puis active le minuteur (prochain passage dans 65 min).
 # Retirer : arrete et supprime le minuteur, l'unite et le code. L'etat
 # (/var/lib/blindz-sonde-prod) et le journal (/var/log/blindz-sonde-prod) restent.
 #
@@ -26,6 +27,18 @@ TIMER=blindz-sonde-prod.timer
 
 sysctl_() { if [ "${SONDE_SANS_SYSTEMCTL:-0}" = 1 ]; then echo "  (essai) systemctl $*"; else systemctl "$@"; fi; }
 
+# Garde-fous avant d'ecrire ou d'effacer quoi que ce soit.
+verifier() {
+  if [ "${SONDE_SANS_SYSTEMCTL:-0}" != 1 ] && [ "$(id -u)" != 0 ]; then
+    echo "a lancer en root (unites dans /etc/systemd/system)" >&2; exit 1
+  fi
+  # rm -rf "$DEST" au retrait : jamais sur autre chose qu'un dossier sonde-prod.
+  case "$DEST" in
+    /*/sonde-prod) ;;
+    *) echo "SONDE_DEST doit etre un chemin absolu qui finit par /sonde-prod (recu : $DEST)" >&2; exit 2 ;;
+  esac
+}
+
 retirer() {
   sysctl_ disable --now "$TIMER" || true
   for u in "${UNIT_FILES[@]}"; do rm -f "$UNITS/$u"; done
@@ -37,7 +50,7 @@ retirer() {
 # Ecrit un fichier de la reference git, sans laisser de fichier a moitie copie.
 copier() {
   local source="$1" cible="$2" mode="$3"
-  git -C "$REPO" show "$REF:$source" > "$cible.tmp"
+  git -C "$REPO" show "$REF:$source" > "$cible.tmp" || { rm -f "$cible.tmp"; return 1; }
   chmod "$mode" "$cible.tmp"
   mv "$cible.tmp" "$cible"
 }
@@ -59,7 +72,7 @@ installer() {
 }
 
 case "${1:-}" in
-  --retirer) retirer ;;
+  --retirer) verifier; retirer ;;
   ""|-*) echo "usage : installer.sh <reference git, ex. origin/main> | --retirer" >&2; exit 2 ;;
-  *) REF="$1"; installer ;;
+  *) REF="$1"; verifier; installer ;;
 esac
