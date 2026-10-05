@@ -2,6 +2,9 @@ import path from "path"
 import { defineConfig } from "vitest/config"
 
 export default defineConfig({
+  // tsconfig garde "jsx": "preserve" pour Next : sans ca, esbuild compilerait le
+  // JSX des tests .tsx en React.createElement (React non importe).
+  esbuild: { jsx: "automatic" },
   test: {
     environment: "jsdom",
     globals: true,

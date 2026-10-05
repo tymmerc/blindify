@@ -284,6 +284,44 @@
   to { transform: rotate(360deg); }
 }
 
+/* ========== Fin du grand titre de la landing (RotatingEnd.tsx) ==========
+   « Volets » : chaque lettre bascule sur son axe horizontal, de gauche a
+   droite, comme un panneau a palettes. --i = rang de la lettre dans la fin.
+   L'ancienne fin part en 170 ms, la nouvelle arrive 90 ms apres avec un
+   leger rebond ; 14 ms d'ecart entre deux lettres (passage complet ≈ 0,6 s
+   pour la fin la plus longue). Transform et opacite seulement : aucun calcul
+   de mise en page. L'entree ne garde pas son etat final (backwards) : une
+   fois posees, les lettres n'ont plus de transform. Ceux qui demandent moins
+   d'animations ne voient jamais ce bloc (le composant reste fixe). Les autres
+   variantes essayees : dev.tymmerc.eu/blindz/apercu-titre/ (description de
+   la PR pour passer de l'une a l'autre). */
+.titre-fin [data-etat="attend"] {
+  visibility: hidden;
+}
+
+.titre-fin .volet {
+  display: inline-block;
+}
+
+.titre-fin [data-etat="sort"] .volet {
+  animation: volet-sort 170ms cubic-bezier(0.55, 0, 0.9, 0.45) calc(var(--i) * 14ms) both;
+}
+
+.titre-fin [data-etat="entre"] .volet {
+  animation: volet-entre 280ms cubic-bezier(0.2, 0.7, 0.3, 1) calc(var(--i) * 14ms + 90ms) backwards;
+}
+
+@keyframes volet-sort {
+  from { transform: perspective(3em) rotateX(0); }
+  to { transform: perspective(3em) rotateX(-90deg); opacity: 0.5; }
+}
+
+@keyframes volet-entre {
+  0% { transform: perspective(3em) rotateX(90deg); opacity: 0.5; }
+  62% { transform: perspective(3em) rotateX(-16deg); opacity: 1; }
+  100% { transform: perspective(3em) rotateX(0); }
+}
+
 /* ========== App Styles (tokens legacy --ma-*) ========== */
 :root {
   --ma-bg: #f4ecdb;
