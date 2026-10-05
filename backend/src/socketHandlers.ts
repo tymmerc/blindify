@@ -4,10 +4,8 @@ import {
   gameStateSnapshot,
   redactedGuessingTrack,
   getGameState as getRealtimeState,
-  allAnswerablePlayers,
   markReady as markReadyState,
   recordAnswer,
-  revealRound,
   removePlayer,
   upsertPlayer,
   setHostConnected,
@@ -15,20 +13,23 @@ import {
   resumeGame,
   markDisconnected,
   markReconnected,
+  endReconnectGrace,
+  startReconnectGrace,
   getGameMode,
-  getSessionId,
-  type GameState,
 } from "./services/realtimeGame";
-import { persistRoundResponses, markMultiplayerRoomFinished } from "./services/gamePersistence";
+import { markMultiplayerRoomFinished } from "./services/gamePersistence";
 import * as lobbyRps from "./services/lobbyRps";
 import { validRoomCode, clampText, toIntOrNull, MAX_GUESS_LEN, MAX_CHAT_LEN } from "./utils/socketValidation";
 import {
   broadcastGameOver,
   broadcastState,
   clearAdvanceTimer,
+  clearGraceTimer,
   clearRevealTimer,
+  revealRoundNow,
   scheduleForcedAdvance,
   scheduleReveal,
+  tryEarlyReveal,
 } from "./services/realtimeOrchestrator";
 import { getSessionContextFromToken, type SessionContext } from "./utils/session";
 import {
@@ -156,6 +157,23 @@ export function emitRoomError(socket: Socket, roomCode: string, message: string,
   });
 }
 
+/**
+ * Le joueur a-t-il un AUTRE socket encore dans la salle ? Cas reel : coupure
+ * reseau franche, le client revient sur un nouveau socket, et le serveur ne
+ * voit mourir l'ancien qu'apres le delai de ping (jusqu'a 25 s). Ce depart
+ * tardif ne doit pas marquer absent un joueur deja revenu.
+ */
+function hasOtherSocketInRoom(io: Server, roomCode: string, userId: number, socketId: string): boolean {
+  const ids = io.sockets.adapter.rooms.get(roomCode);
+  if (!ids) return false;
+  for (const id of ids) {
+    if (id === socketId) continue;
+    const other = io.sockets.sockets.get(id)?.data as { auth?: SessionContext } | undefined;
+    if (other?.auth?.user?.id === userId) return true;
+  }
+  return false;
+}
+
 // ---------------------------------------------------------------------------
 // Friend presence helpers
 // ---------------------------------------------------------------------------
@@ -205,34 +223,6 @@ export async function pushFriendPresenceSnapshot(io: Server, userId: number, soc
 // ---------------------------------------------------------------------------
 // Main socket registration
 // ---------------------------------------------------------------------------
-
-/**
- * Suite commune des revelations anticipees : tout le monde a repondu
- * (game:answer), ou le dernier joueur qui n'avait pas repondu est parti
- * (disconnect). Ces deux chemins annulent le minuteur de revelation, qui fait
- * sinon ce travail (realtimeOrchestrator.scheduleReveal). Avant cette fonction
- * commune, le chemin de la deconnexion n'ecrivait pas les reponses de la manche
- * et ne posait pas le filet anti-AFK (trouve le 02/10/2026).
- */
-function finishEarlyReveal(io: Server, roomCode: string, revealed: GameState): void {
-  io.to(roomCode).emit("game:round:reveal", {
-    roomCode,
-    round: revealed.currentRound,
-    timing: revealed.timing,
-    players: revealed.players,
-    // La reponse complete n'arrive qu'avec le reveal (piste caviardee pendant
-    // la manche).
-    track: revealed.currentTrack,
-  });
-  void persistRoundResponses(revealed, getSessionId(roomCode));
-  if (revealed.phase === "FINISHED") {
-    broadcastGameOver(io, roomCode);
-  } else if (revealed.phase === "REVEAL" && !revealed.paused) {
-    // Filet anti-AFK : la manche suivante part seule si personne ne clique "pret".
-    // Pas pendant une pause : game:resume le pose a la reprise.
-    scheduleForcedAdvance(io, roomCode, revealed.currentRound);
-  }
-}
 
 export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number, string | null>): void {
   io.use(async (socket, next) => {
@@ -393,6 +383,11 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
       if (liveRoomState && (liveRoomState.phase === "GUESSING" || liveRoomState.phase === "REVEAL")) {
         markDisconnected(roomCode, currentUser.id);
         if (liveRoomState.hostUserId === currentUser.id) setHostConnected(roomCode, false);
+        // Depart volontaire : pas de grace de reconnexion (celle d'une coupure
+        // de son ancien socket est levee), la manche est revelee tout de suite
+        // si tous les autres ont repondu.
+        endReconnectGrace(roomCode, currentUser.id);
+        tryEarlyReveal(io, roomCode);
       } else {
         removePlayer(roomCode, currentUser.id);
       }
@@ -505,22 +500,9 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
 
         // Check if all answerable players have answered BEFORE broadcasting state,
         // so clients receive a single consistent state update instead of a GUESSING→REVEAL flicker.
-        const currentPhase = getRealtimeState(roomCode)?.phase;
-        const answerable = allAnswerablePlayers(roomCode);
-        const everyoneAnswered =
-          currentPhase === "GUESSING" &&
-          answerable.length > 0 &&
-          answerable.every(p => p.hasAnswered);
-
-        logger.debug(`game:answer check: phase=${currentPhase}, answerable=${answerable.length}, answered=[${answerable.map(p => `${p.userId}:${p.hasAnswered}`).join(",")}], everyoneAnswered=${everyoneAnswered}`);
-
-        if (everyoneAnswered) {
-          logger.debug(`game:answer triggering early reveal for ${roomCode}`);
-          clearRevealTimer(roomCode);
-          const revealed = revealRound(roomCode);
-          logger.debug(`game:answer revealRound result: phase=${revealed?.phase}`);
-          if (revealed) finishEarlyReveal(io, roomCode, revealed);
-        }
+        // Un joueur coupe sans reponse depuis moins de 5 s est encore attendu
+        // (grace de reconnexion) : la revelation part alors a la fin de sa grace.
+        tryEarlyReveal(io, roomCode);
         // Broadcast state AFTER the reveal decision so clients see the final phase.
         broadcastState(io, roomCode);
         // Also send directly to the answering socket as a fallback, in case
@@ -568,7 +550,7 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
           track: redactedGuessingTrack(state.currentTrack),
           timing: state.timing,
         });
-        scheduleReveal(io, roomCode, state.timing.revealAt);
+        scheduleReveal(io, roomCode, state.timing.revealAt, state.currentRound);
       } else if (state.phase === "FINISHED") {
         logger.debug(`game:ready game finished for ${roomCode}`);
         broadcastState(io, roomCode);
@@ -635,26 +617,12 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
       // un simple resync de client aurait force le reveal a travers la pause.
       if (!state.paused && state.phase === "GUESSING" && state.timing.revealAt && state.timing.revealAt <= Date.now()) {
         logger.debug(`game:sync forcing reveal for ${roomCode} (revealAt was ${state.timing.revealAt}, now=${Date.now()})`);
-        const updated = revealRound(roomCode);
-        if (updated) {
-          io.to(roomCode).emit("game:round:reveal", {
-            roomCode,
-            round: updated.currentRound,
-            timing: updated.timing,
-            players: updated.players,
-            // Meme contrat que le chemin orchestrateur : la reponse complete
-            // n'arrive qu'avec le reveal (piste caviardee avant).
-            track: updated.currentTrack,
-          });
-          broadcastState(io, roomCode);
-          if (updated.phase === "FINISHED") {
-            broadcastGameOver(io, roomCode);
-            clearRevealTimer(roomCode);
-          }
-        }
-      } else {
-        broadcastState(io, roomCode);
+        // Meme suite que les autres revelations : reponses de la manche ecrites,
+        // filet anti-AFK, minuteur de manche annule (pas de seconde revelation).
+        // Avant le 05/10/2026, ce chemin n'ecrivait pas les reponses.
+        revealRoundNow(io, roomCode);
       }
+      broadcastState(io, roomCode);
       // Also send directly to the requesting socket as a fallback
       const snapshot = gameStateSnapshot(roomCode);
       if (snapshot) {
@@ -777,6 +745,7 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
       if (!state?.paused) return;
       clearRevealTimer(roomCode);
       clearAdvanceTimer(roomCode);
+      clearGraceTimer(roomCode);
       broadcastState(io, roomCode);
     });
 
@@ -787,7 +756,11 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
       const state = resumeGame(roomCode);
       if (!state || state.paused) return;
       if (state.phase === "GUESSING" && state.timing.revealAt) {
-        scheduleReveal(io, roomCode, state.timing.revealAt);
+        scheduleReveal(io, roomCode, state.timing.revealAt, state.currentRound);
+        // Les graces de reconnexion ont ete gelees avec le chrono (resumeGame) :
+        // la revelation anticipee part maintenant si personne n'est a attendre,
+        // sinon a la fin de la grace qui la retient.
+        tryEarlyReveal(io, roomCode);
       } else if (state.phase === "REVEAL") {
         scheduleForcedAdvance(io, roomCode, state.currentRound);
       }
@@ -804,6 +777,11 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
       // des compteurs "X/Y" mais reste au classement. Hors partie, on libere le slot.
       if (liveState && (liveState.phase === "GUESSING" || liveState.phase === "REVEAL")) {
         markDisconnected(roomCode, currentUser.id);
+        // "Quitter" : pas de grace de reconnexion (celle d'une coupure de son
+        // ancien socket est levee), la manche est revelee tout de suite si tous
+        // les autres ont repondu.
+        endReconnectGrace(roomCode, currentUser.id);
+        tryEarlyReveal(io, roomCode);
       } else {
         removePlayer(roomCode, currentUser.id);
       }
@@ -847,6 +825,8 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
     socket.on("disconnecting", () => {
       const rooms = Array.from(socket.rooms).filter(room => room !== socket.id);
       for (const roomCode of rooms) {
+        // Revenu sur un autre socket avant que celui-ci meure : pas un depart.
+        if (hasOtherSocketInRoom(io, roomCode, currentUser.id, socket.id)) continue;
         const state = getRealtimeState(roomCode);
         // L'hote diffuse la musique pour toute la table : les autres doivent
         // savoir qu'il n'est plus la pour prendre le relais sur leur telephone.
@@ -858,7 +838,7 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
             const resumed = resumeGame(roomCode);
             if (resumed && !resumed.paused) {
               if (resumed.phase === "GUESSING" && resumed.timing.revealAt) {
-                scheduleReveal(io, roomCode, resumed.timing.revealAt);
+                scheduleReveal(io, roomCode, resumed.timing.revealAt, resumed.currentRound);
               } else if (resumed.phase === "REVEAL") {
                 scheduleForcedAdvance(io, roomCode, resumed.currentRound);
               }
@@ -866,18 +846,18 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
           }
         }
         if (state && state.phase === "GUESSING") {
+          // Deja marque parti : "Quitter" depuis un nouveau socket, l'ancien ne
+          // meurt qu'apres. Ce n'est pas une coupure, pas de grace a ouvrir.
+          const alreadyLeft = state.players[currentUser.id]?.disconnected === true;
           // Mark the player as disconnected instead of recording an empty answer.
           // This way they are excluded from allAnswerablePlayers() and won't
           // trigger a premature reveal that steals time from other players.
           markDisconnected(roomCode, currentUser.id);
-          // Re-check if remaining answerable players have all answered
-          const answerable = allAnswerablePlayers(roomCode);
-          const everyoneAnswered = answerable.length > 0 && answerable.every(p => p.hasAnswered);
-          if (everyoneAnswered) {
-            clearRevealTimer(roomCode);
-            const revealed = revealRound(roomCode);
-            if (revealed) finishEarlyReveal(io, roomCode, revealed);
-          }
+          // Coupure reseau (pas "Quitter") : s'il n'a pas repondu, il a 5 s pour
+          // revenir avant une revelation anticipee (grace de reconnexion,
+          // DISCONNECT_GRACE_MS). Le minuteur de manche, lui, ne l'attend pas.
+          if (!alreadyLeft) startReconnectGrace(roomCode, currentUser.id);
+          tryEarlyReveal(io, roomCode);
           broadcastState(io, roomCode);
         } else if (state && state.phase === "REVEAL") {
           // During REVEAL, mark disconnected so they don't block ready-check

@@ -12,7 +12,12 @@ import {
   clearGame,
   type RoundTrack,
 } from "../../../src/services/realtimeGame";
-import { startRoundAndBroadcast, clearRevealTimer } from "../../../src/services/realtimeOrchestrator";
+import {
+  startRoundAndBroadcast,
+  clearAdvanceTimer,
+  clearGraceTimer,
+  clearRevealTimer,
+} from "../../../src/services/realtimeOrchestrator";
 import { resolveTestDatabaseUrl } from "../../testDatabase";
 
 // These tests write real rows. Without a disposable test database (see
@@ -198,8 +203,21 @@ export async function joinRoom(io: TestServer["io"], roomCode: string, clients: 
   }, 4000, `all ${clients.length} sockets in io room ${roomCode}`);
 }
 
+export type StartGameOptions = {
+  /** Grace de reconnexion raccourcie pour le test (defaut : celle de la prod, 5 s). */
+  reconnectGraceMs?: number;
+};
+
 /** Starts a game state machine for the room with synthetic tracks. */
-export function startGame(io: TestServer["io"], roomCode: string, users: TestUser[], rounds: number, roundDurationMs = 1500, sessionId?: number): void {
+export function startGame(
+  io: TestServer["io"],
+  roomCode: string,
+  users: TestUser[],
+  rounds: number,
+  roundDurationMs = 1500,
+  sessionId?: number,
+  opts: StartGameOptions = {},
+): void {
   bootstrapGameState({
     roomCode,
     hostUserId: users[0].id,
@@ -208,6 +226,7 @@ export function startGame(io: TestServer["io"], roomCode: string, users: TestUse
     mode: "friends",
     config: { roundDurationMs, autoAdvance: false },
     sessionId,
+    reconnectGraceMs: opts.reconnectGraceMs,
   });
   startRoundAndBroadcast(io, roomCode);
 }
@@ -216,7 +235,10 @@ export function startGame(io: TestServer["io"], roomCode: string, users: TestUse
 export { pool };
 
 export function cleanupGame(roomCode: string): void {
+  // Aucun minuteur de la partie ne survit au test (grace, filet anti-AFK compris).
   clearRevealTimer(roomCode);
+  clearGraceTimer(roomCode);
+  clearAdvanceTimer(roomCode);
   clearGame(roomCode);
 }
 
