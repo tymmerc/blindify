@@ -11,7 +11,7 @@ import { FaqList, GuideShell, Li, Section, Steps, VERMILION, faqJsonLd, webPageJ
 const URL = "https://blindz.app/blind-test-soiree/"
 const TITLE = "Organiser un blind test en soirée ou à l'apéro entre potes : écran central, QR code ou un seul téléphone"
 const DESC =
-  "Organiser un blind test en soirée ou à l'apéro entre potes sans rien préparer : un écran au milieu et les téléphones des invités, ou un seul téléphone. Réglages, déroulé, pièges."
+  "Un blind test en soirée ou à l'apéro sans rien préparer : un écran au milieu et les téléphones des invités, ou un seul téléphone. Réglages, déroulé, pièges."
 const UPDATED = "2026-10-05"
 
 export const metadata: Metadata = {

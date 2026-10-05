@@ -7,7 +7,8 @@ import { BLUE, FaqList, GuideShell, Li, Section, faqJsonLd, webPageJsonLd } from
 // (MultiplayerGameClient, isEventParticipant) sauf si l'ecran central decroche
 // plus de 6 s (hostGone) ; wake lock sur l'ecran de l'hote ; bouton Pause de
 // l'hote ; 12 places par salle, hote compris ; code de salle a taper sur /jouer/.
-// Navigateurs integres des teles connectees : jamais testes, on le dit.
+// Jamais testes sur du vrai materiel : HDMI, recopie d'ecran (AirPlay,
+// Chromecast) et navigateurs integres des teles. La page le dit et reste prudente.
 
 const URL = "https://blindz.app/blind-test-tv/"
 const TITLE = "Blind test sur la télé, avec les téléphones pour répondre : brancher l'écran, le son et le QR code"
@@ -16,7 +17,7 @@ const DESC =
 const UPDATED = "2026-10-05"
 
 export const metadata: Metadata = {
-  title: "Blind test sur la télé, les téléphones pour répondre",
+  title: "Blind test sur la télé avec les téléphones",
   description: DESC,
   alternates: { canonical: URL },
   openGraph: { title: TITLE, description: DESC, url: URL, type: "article", locale: "fr_FR" },
@@ -33,11 +34,11 @@ const FAQ = [
   },
   {
     q: "Combien de joueurs devant une seule télé ?",
-    a: "Une salle a 12 places, l'écran central compris quand il présente seulement : 11 joueurs qui répondent depuis leur téléphone.",
+    a: "Douze places par salle, et l'écran central en occupe une : il reste 11 joueurs qui répondent depuis leur téléphone. Si l'organisateur joue aussi sur son propre téléphone, il compte parmi ces 11.",
   },
   {
     q: "Le navigateur de ma télé connectée suffit ?",
-    a: "On ne l'a pas testé, et ces navigateurs gèrent souvent mal le son et les pages animées. Un ordinateur en HDMI ou la recopie d'écran d'un téléphone sont plus sûrs.",
+    a: "On ne l'a jamais essayé, donc on ne peut pas te le promettre. Si tu tentes le coup, fais une partie d'essai avant que les invités arrivent et vérifie que le son sort bien. Sinon, un ordinateur branché en HDMI reste le plus simple.",
   },
 ]
 
@@ -52,17 +53,21 @@ export default function Page() {
       currentHref="/blind-test-tv/"
       jsonLd={[webPageJsonLd(URL, TITLE, DESC, UPDATED), faqJsonLd(FAQ)]}
     >
-      <Section tag="L'image" title="Trois façons de mettre blindz.app sur la télé">
+      <Section tag="L'image" title="Mettre blindz.app sur la télé, ou s'en passer">
         <h3>Un ordinateur branché en HDMI</h3>
         <p>
-          La solution qui ne réserve pas de surprise. Un câble HDMI entre l'ordinateur et la télé, le navigateur ouvert sur
-          blindz.app/jouer, et le son part dans la télé par le même câble. Mets le navigateur en plein écran : la page est
-          faite pour être lue de loin, avec la manche, le chrono et les scores en grand.
+          Le plus simple en général : un câble HDMI entre l'ordinateur et la télé, et le navigateur ouvert sur
+          blindz.app/jouer. Le son passe normalement par le même câble, mais certains ordinateurs le gardent sur leurs
+          propres haut-parleurs : dans ce cas, choisis la télé comme sortie dans les réglages du son. Mets le navigateur
+          en plein écran, la page est faite pour être lue de loin, avec la manche, le chrono et les scores en grand. Et
+          pendant la partie, garde l'onglet de blindz.app au premier plan : un onglet caché peut être ralenti par le
+          navigateur, et la page ne peut plus empêcher l'écran de se mettre en veille.
         </p>
         <h3>La recopie d'écran d'un téléphone ou d'une tablette</h3>
         <p>
           Recopie de l'écran sur iPhone vers une Apple TV ou une télé compatible AirPlay, diffusion d'écran sur Android vers
-          une Chromecast ou une télé qui l'accepte (le nom change selon la marque). Ça marche bien, avec deux précautions :
+          une Chromecast ou une télé qui l'accepte (le nom change selon la marque). On ne l'a pas testé nous-mêmes, alors
+          fais un essai avant la soirée, et prends deux précautions :
         </p>
         <ul>
           <Li><span><strong>Active le mode Ne pas déranger.</strong> Tout ce qui s'affiche sur le téléphone s'affiche sur la télé, notifications comprises.</span></Li>

@@ -6,7 +6,10 @@ import { FaqList, GuideShell, Li, Section, VERMILION, faqJsonLd, webPageJsonLd }
 // les deux). Verifie dans le code (05/10/2026) : 12 places par salle, hote
 // compris (roomsController, room_full) ; pseudo jusqu'a 30 caracteres ; la
 // musique importee reste dans la bibliotheque du joueur (audio_sources, cookie
-// invite d'un an) ; jeu en ligne seulement, il faut du reseau.
+// invite d'un an) ; un titre appartient au premier qui l'a importe sur tout le
+// site, d'ou "une liste par personne" ; "qui a mis quoi" a partir de deux
+// importeurs distincts ; un seul tel : pas de "qui a mis quoi", musique du
+// telephone completee par le fonds du site ; jeu en ligne seulement.
 
 const URL = "https://blindz.app/blind-test-evjf-evg/"
 const TITLE = "Blind test pour un EVJF ou un EVG : la vie de la future mariée ou du futur marié en chansons"
@@ -32,11 +35,11 @@ const FAQ = [
   },
   {
     q: "Il n'y a pas de télé là où on dort.",
-    a: "Le téléphone d'un témoin posé au milieu de la table fait l'écran central, avec une enceinte Bluetooth pour le son. À cinq ou moins, le mode un seul tel suffit : tout le monde pose un doigt sur le même téléphone.",
+    a: "Le téléphone d'un témoin posé au milieu de la table fait l'écran central, avec une enceinte Bluetooth pour le son. À cinq ou moins, il y a aussi le mode un seul tel, où tout le monde pose un doigt sur le même téléphone. Mais là, seule la musique importée sur ce téléphone passe (complétée par le fonds commun du site s'il en manque), et il n'y a pas de « qui a mis ce morceau » : pour sa vie en chansons, garde l'écran central.",
   },
   {
     q: "Le jeu peut donner des gages ?",
-    a: "Non, il compte les points et c'est tout : un point pour le titre, un pour l'artiste, un pour avoir deviné qui a mis le morceau. Les gages, c'est à vous de les inventer, par exemple pour le dernier du classement à chaque partie.",
+    a: "Non, il compte les points et c'est tout : un point pour le titre, un pour l'artiste, un pour avoir deviné qui a mis le morceau. Les gages, c'est à la bande de les inventer, par exemple pour le dernier du classement à chaque partie.",
   },
 ]
 
@@ -53,20 +56,21 @@ export default function Page() {
     >
       <Section tag="Le principe" title="Sa vie en chansons, chacun sa part">
         <p>
-          Dans le message d'organisation, demande à chaque participant de faire une playlist publique de cinq à dix
-          morceaux liés à la future mariée ou au futur marié : la chanson de votre rencontre, l'hymne de ses dix-huit ans,
-          ce qu'il passait en boucle pendant ses partiels, le slow honteux d'une boum. Sur place, chacun colle son lien et
+          Dans le message d'organisation, demande à chaque participant de faire une playlist publique d'une dizaine de
+          morceaux liés à la future mariée ou au futur marié : la chanson de leur rencontre, l'hymne de ses dix-huit ans,
+          ce qui tournait en boucle pendant ses partiels, le slow honteux d'une boum. Sur place, chacun colle son lien et
           la partie mélange tout.
         </p>
         <p>
-          À chaque manche, la table cherche le titre et l'artiste, puis qui a mis ce morceau. C'est là qu'un EVJF devient
+          À chaque manche, la table cherche le titre et l'artiste, puis qui a mis ce morceau. C'est là que ça devient
           drôle : les amis d'enfance découvrent les souvenirs des collègues, et la personne qu'on enterre doit expliquer
           d'où sort ce slow de Lorie que quelqu'un a gardé depuis la cinquième.
         </p>
         <ul>
-          <Li><span><strong>La future mariée joue aussi.</strong> Elle ne ramène pas de playlist souvenirs (elle connaît les réponses), mais elle cherche avec les autres. Si elle ne reconnaît pas la chanson de votre rencontre, vous aurez de quoi en parler.</span></Li>
-          <Li><span><strong>Préparez les liens avant de partir.</strong> Chacun peut coller le sien la veille, depuis le téléphone qu'il emportera : la musique importée reste dans sa bibliothèque, et sur place il n'aura plus qu'à rejoindre la salle.</span></Li>
-          <Li><span><strong>Il faut au moins deux playlists</strong> pour que la question « qui a mis ce morceau » apparaisse.</span></Li>
+          <Li><span><strong>La personne qu'on fête joue aussi.</strong> Elle ne ramène pas de playlist souvenirs (elle connaîtrait les réponses), mais elle cherche avec les autres. Et si elle sèche sur une chanson qui parle de vous deux, tu as de quoi la charrier jusqu'au mariage.</span></Li>
+          <Li><span><strong>Fais coller les liens avant de partir.</strong> Chacun peut coller le sien la veille, depuis le téléphone qu'il emportera : la musique importée reste dans sa bibliothèque, et sur place il n'aura plus qu'à rejoindre la salle.</span></Li>
+          <Li><span><strong>Une liste par personne.</strong> Deux participants qui collent la même playlist ne doublent pas la musique : sur blindz.app, un morceau reste au nom du premier qui l'a importé, et le second se retrouve sans rien à lui. Pareil pour un tube qu'un autre joueur du site a déjà ramené un jour.</span></Li>
+          <Li><span><strong>« Qui a mis ce morceau »</strong> n'apparaît qu'à partir de deux personnes qui ont ramené de la musique, ce qui ne devrait pas poser de problème à quinze.</span></Li>
         </ul>
         <p>
           Pour trouver le bon lien : <Link href="/blind-test-spotify/">sur Spotify</Link> ou{" "}
@@ -85,16 +89,16 @@ export default function Page() {
 
       <Section tag="Plus de 12" title="Quand la bande est trop grande pour une salle" tone="amber">
         <p>
-          Une salle a 12 places, et l'écran central en prend une s'il présente seulement : 11 joueurs qui répondent. Un EVJF
-          à quinze dépasse vite. Deux façons de faire :
+          L'écran central occupe une des 12 places de la salle, il reste donc 11 joueurs qui répondent, et un EVJF ou un
+          EVG à quinze dépasse vite. Deux façons de s'en sortir :
         </p>
         <ul>
           <Li color="#2e2014"><span><strong>Les binômes.</strong> Un téléphone pour deux, avec un pseudo commun (« Julie et Sam »). Vingt-deux personnes tiennent dans une salle, et devoir se mettre d'accord avant de taper fait partie du jeu.</span></Li>
           <Li color="#2e2014"><span><strong>Deux salles.</strong> Deux écrans, deux codes, chacune son classement. Pratique si le groupe se partage de toute façon entre deux pièces.</span></Li>
         </ul>
         <p>
-          Dans les deux cas, pensez aux manches : chacune joue le morceau d'une seule personne. Avec beaucoup de
-          playlists, prenez 15 ou 20 manches pour que tout le monde passe.
+          Dans les deux cas, regarde le nombre de manches : chacune ne joue le morceau que d'une personne, alors avec
+          beaucoup de playlists, monte à 15 ou 20 pour que tout le monde passe.
         </p>
       </Section>
 

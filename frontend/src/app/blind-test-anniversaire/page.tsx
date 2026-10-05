@@ -2,12 +2,20 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { AMBER, FaqList, GuideShell, Li, Section, Steps, faqJsonLd, webPageJsonLd } from "@/components/home/Guide"
 
-// Guide "blind test d'anniversaire". Verifie dans le code (05/10/2026) : manches
-// reparties a parts egales entre ceux qui ont ramene de la musique, ecart max 1
-// (roomsController, tourniquet) ; titres sans extrait ecartes ; une seule
-// playlist suffit pour lancer, "qui a mis quoi" seulement a partir de deux
-// importeurs ; 12 places par salle, hote compris ; l'ecran central affiche
-// "Ajoute par" a la revelation (TheaterGameView).
+// Guide "blind test d'anniversaire". Verifie dans le code (05/10/2026) :
+// - manches reparties en tourniquet entre ceux qui ont ramene de la musique,
+//   ecart max 1 tant que chacun a de quoi remplir sa part (roomsController) ;
+//   titres sans extrait ecartes au lancement ;
+// - une seule personne avec de la musique suffit pour lancer, "qui a mis quoi"
+//   a partir de deux importeurs distincts (COUNT(DISTINCT user_id)) ;
+// - un titre appartient au PREMIER qui l'a importe, sur tout le site
+//   (audio_sources unique par provider + external_id) : meme playlist collee
+//   deux fois ou classique deja importe = rien pour le second. Dit dans la page ;
+// - 12 places par salle, hote compris ; l'ecran central affiche "Propose par"
+//   a la revelation (MultiplayerGameClient, mode event) ;
+// - un seul tel : toute la bibliotheque du telephone, titres joues dans les
+//   12 h mis de cote, complement pris au hasard dans le fonds du site
+//   (gamesController.startSoloGame).
 
 const URL = "https://blindz.app/blind-test-anniversaire/"
 const TITLE = "Blind test d'anniversaire : avec la musique des invités, et des souvenirs de la personne fêtée"
@@ -16,7 +24,7 @@ const DESC =
 const UPDATED = "2026-10-05"
 
 export const metadata: Metadata = {
-  title: "Blind test d'anniversaire avec la musique des invités",
+  title: "Blind test d'anniversaire et playlist souvenirs",
   description: DESC,
   alternates: { canonical: URL },
   openGraph: { title: TITLE, description: DESC, url: URL, type: "article", locale: "fr_FR" },
@@ -27,8 +35,8 @@ const DAY_STEPS = [
     t: "Un écran au milieu",
     b: (
       <>
-        La télé, un ordinateur ou simplement un téléphone avec une enceinte, en mode Autour d'une table. Pour brancher la
-        télé, voir <Link href="/blind-test-tv/">le guide du blind test sur la télé</Link>.
+        La télé, un ordinateur ou simplement un téléphone avec une enceinte, en mode Autour d'une table. Si tu veux la
+        télé, <Link href="/blind-test-tv/">le guide de la télé</Link> explique comment la brancher.
       </>
     ),
   },
@@ -42,18 +50,18 @@ const DAY_STEPS = [
   },
   {
     t: "Assez de manches pour tout le monde",
-    b: "Chaque manche joue le morceau d'une seule personne. À dix invités qui ont ramené de la musique, prenez 15 ou 20 manches, sinon certains souvenirs ne passeront jamais.",
+    b: "Chaque manche joue le morceau d'une seule personne. Si dix invités ont ramené de la musique, prends 15 ou 20 manches, sinon certains souvenirs ne passeront jamais.",
   },
 ]
 
 const FAQ = [
   {
     q: "La personne fêtée n'a ni Spotify ni Deezer, elle peut jouer ?",
-    a: "Oui. Pour lancer une partie, il suffit qu'une personne dans la salle ait importé de la musique. Les autres jouent sur ces morceaux-là, sans compte et sans rien installer.",
+    a: "Oui. Pour lancer une partie, il suffit qu'une personne dans la salle ait ramené de la musique. Les autres jouent sur ces morceaux-là, sans compte et sans rien installer.",
   },
   {
     q: "On peut utiliser une playlist que quelqu'un d'autre a faite ?",
-    a: "Oui, n'importe quelle playlist publique Spotify ou Deezer. Pour la question « qui a mis ce morceau », elle compte comme celle du joueur qui a collé le lien.",
+    a: "Oui, si elle est publique sur Spotify ou Deezer. Mais pour le jeu, un morceau appartient à la première personne qui l'a importé sur blindz.app. Sur une playlist très écoutée, une partie des titres a peut-être déjà été ramenée par un autre joueur du site, et ceux-là ne compteront pas dans ta musique. Une playlist faite à la main pour l'occasion évite la surprise.",
   },
   {
     q: "Combien de temps dure une partie ?",
@@ -61,7 +69,7 @@ const FAQ = [
   },
   {
     q: "On est plus de 12, comment on fait ?",
-    a: "Une salle a 12 places, et l'écran central en prend une s'il présente seulement. Au-delà, ouvrez deux salles sur deux écrans (chacune a son classement), ou jouez en binômes : un téléphone pour deux, ça oblige à se mettre d'accord avant de taper.",
+    a: "L'écran central occupe déjà une des 12 places de la salle. Au-delà, ouvre une deuxième salle sur un deuxième écran (chacune a son classement), ou mets les invités en binômes : un téléphone pour deux, ça oblige à se mettre d'accord avant de taper.",
   },
 ]
 
@@ -79,9 +87,9 @@ export default function Page() {
       <Section tag="L'idée qui marche" title="La playlist souvenirs">
         <p>
           Quelques jours avant, demande à chaque invité de faire une petite playlist publique avec des morceaux qui lui
-          rappellent la personne fêtée : la chanson du voyage de terminale, celle de votre premier concert, le tube
-          qu'elle chante faux dans la voiture depuis quinze ans. Le jour J, chacun colle le lien de cette playlist-là
-          plutôt que la sienne.
+          rappellent la personne fêtée : la chanson du voyage de terminale, celle de leur premier concert ensemble, le
+          tube qu'elle chante faux dans la voiture depuis quinze ans. Le jour J, chacun colle le lien de cette
+          playlist-là plutôt que la sienne.
         </p>
         <p>
           À chaque manche, il faut trouver le titre et l'artiste, puis deviner qui a mis le morceau. Avec des playlists
@@ -90,10 +98,11 @@ export default function Page() {
           l'histoire sort.
         </p>
         <ul>
-          <Li><span><strong>Personne ne monopolise la partie.</strong> Les manches sont réparties à parts égales entre ceux qui ont ramené de la musique, à un morceau près, même si l'un a mis 40 titres et l'autre 8.</span></Li>
-          <Li><span><strong>Mettez-en un peu plus que prévu.</strong> Un titre sans extrait disponible est écarté au lancement. Une dizaine de morceaux chacun laisse de la marge.</span></Li>
+          <Li><span><strong>Personne ne monopolise la partie.</strong> Les manches sont réparties à tour de rôle entre ceux qui ont ramené de la musique : celui qui a mis 40 titres n'en aura pas plus que celui qui en a mis 10, à un morceau près. Ça suppose que chacun ait de quoi remplir sa part. Un invité qui n'a que trois morceaux jouables en placera trois, et les autres compléteront.</span></Li>
+          <Li><span><strong>Chacun fait sa propre liste.</strong> Sur blindz.app, un morceau reste au nom de la première personne qui l'a importé, sur tout le site. Si deux invités collent la même playlist, le second n'a aucun morceau à lui, et un grand classique qu'un autre joueur a déjà ramené un jour ne comptera pas non plus.</span></Li>
+          <Li><span><strong>Mets-en un peu plus que prévu.</strong> Un titre sans extrait disponible est écarté au lancement. Une dizaine de morceaux chacun laisse de la marge.</span></Li>
           <Li><span><strong>La personne fêtée peut ramener la sienne aussi.</strong> Ses propres morceaux passent alors au milieu des souvenirs des autres, et c'est à la table de les reconnaître.</span></Li>
-          <Li><span><strong>Il faut au moins deux playlists</strong> pour que la question « qui a mis ce morceau » apparaisse. Avec une seule, on joue au titre et à l'artiste.</span></Li>
+          <Li><span><strong>Il faut au moins deux personnes qui ont ramené de la musique</strong> pour que la question « qui a mis ce morceau » apparaisse. Avec une seule, on joue au titre et à l'artiste.</span></Li>
         </ul>
         <p>
           Pour copier le bon lien : <Link href="/blind-test-spotify/">côté Spotify</Link>,{" "}
@@ -115,6 +124,17 @@ export default function Page() {
           Les enfants n'ont en général ni téléphone ni compte Spotify. Le mode un seul tel est fait pour ça : un parent
           importe sur son téléphone une playlist des chansons que les enfants connaissent (dessins animés, comptines, les
           tubes du moment), et jusqu'à 5 joueurs posent chacun un doigt sur l'écran.
+        </p>
+        <p>
+          Une chose à savoir avant : ce mode joue toute la musique importée sur ce téléphone, pas seulement la playlist du
+          jour. S'il a déjà servi pour une soirée entre adultes, ces morceaux-là peuvent revenir au milieu des comptines,
+          alors prends un téléphone (ou un navigateur) qui n'a jamais servi sur blindz.app.
+        </p>
+        <p>
+          Prévois aussi large. Les morceaux joués dans les douze dernières heures sont mis de côté, un tube déjà importé
+          par un autre joueur du site ne rejoint pas la bibliothèque du téléphone, et quand il n'y a plus assez de
+          morceaux, le jeu complète avec le fonds commun de blindz.app, qui n'a rien de spécial pour les enfants. Pour
+          deux ou trois parties, une playlist de trente ou quarante chansons n'est pas de trop.
         </p>
         <ul>
           <Li color="#2e2014"><span>La musique démarre quand tous les doigts sont posés. Le premier qui lâche prend le téléphone et tape sa réponse.</span></Li>
