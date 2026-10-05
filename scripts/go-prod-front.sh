@@ -10,6 +10,14 @@
 #
 # Le texte attendu prouve que c'est bien la nouvelle version qui est servie.
 # Retour arriere : la commande affichee a l'etape 0.
+#
+# Voie rapide ou voie complete ?
+#   rapide   : texte, style, images, pages statiques (landing, FAQ, guides,
+#              comparatif). PR + CI verte + fusion, puis ce script.
+#   complete : tout ce qui touche au jeu, aux sockets, a l'API ou a la base.
+#              Tests d'abord, campagne sur la pile isolee
+#              (tools/test-stack/campagne-ref.sh), script de mise en prod date
+#              et relu, GO de Tym, verifications et parcours en prod apres.
 set -euo pipefail
 cd /opt/blindify
 ATTENDU="${1:?usage : go-prod-front.sh TEXTE_ATTENDU_SUR_LA_PAGE_D_ACCUEIL}"
@@ -36,6 +44,14 @@ echo "── 1. Reconstruction du front (export statique, Node 22) ──"
 # Le front de dev tourne dans le meme dossier : on l'arrete pendant la construction.
 systemctl stop blindify-dev-frontend
 trap 'systemctl start blindify-dev-frontend' EXIT
+# On construit avec les versions que la CI a testees, celles du lockfile de main.
+# Constat du 05/10 : 198 paquets installes ne correspondaient plus au lockfile
+# (un ancien npm install), et les fusions Dependabot creusent l'ecart.
+if ! PATH="$NODE22:$PATH" node scripts/deps-a-jour.mjs frontend; then
+  echo "  npm ci : les node_modules du serveur reprennent le lockfile de main"
+  (cd frontend && PATH="$NODE22:$PATH" npm ci --no-audit --no-fund)
+  PATH="$NODE22:$PATH" node scripts/deps-a-jour.mjs frontend
+fi
 (
   cd frontend
   unset __NEXT_PRIVATE_STANDALONE_CONFIG NODE_ENV || true

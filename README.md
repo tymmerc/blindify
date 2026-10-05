@@ -94,6 +94,13 @@ Avant chaque commit, un hook (husky) refuse tout fichier `.env` dans l'index et 
 
 Dependabot propose chaque semaine les mises à jour des dépendances npm et des actions GitHub ; ses pull requests passent par la même CI.
 
+## Mise en production
+
+`main` est protégée : tout passe par une pull request, avec la CI au vert. La mise en prod se fait ensuite sur le serveur, à la main, par un script qui garde une sauvegarde, vérifie le site après coup et affiche la commande de retour arrière. Deux voies selon ce qui change :
+
+- **voie rapide**, pour le texte, le style, les images et les pages statiques (accueil, FAQ, guides) : la PR, la CI, la fusion, puis `scripts/go-prod-front.sh "texte attendu sur la page d'accueil"`. Le script reconstruit le front avec les versions du lockfile (celles que la CI a testées), vérifie que la nouvelle version est bien servie et ne touche pas au backend : aucune partie n'est coupée ;
+- **voie complète**, pour tout ce qui touche au jeu, à l'API ou à la base : tests d'abord, puis une campagne de vraies parties sur une pile de test isolée (base jetable, faux Deezer, bots et navigateurs, voir `tools/test-stack/`), un script de mise en prod daté et relu, et des vérifications en prod juste après.
+
 ## Licence
 
 [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/) : tu peux lire le code et t'en inspirer, mais pas en faire un usage commercial.
