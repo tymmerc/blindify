@@ -9,7 +9,7 @@ import { AMBER, BLUE, FaqList, GuideShell, Li, Section, faqJsonLd, webPageJsonLd
 const URL = "https://blindz.app/blind-test-en-ligne-gratuit/"
 const TITLE = "Blind test en ligne gratuit, sans inscription : comment jouer"
 const DESC =
-  "Jouer à un blind test en ligne gratuit, sans compte ni application, avec les playlists Spotify ou Deezer des joueurs. Autour d'une table, sur un seul téléphone ou à distance, jusqu'à 12 joueurs."
+  "Blind test en ligne gratuit, sans compte ni appli, sur les playlists Spotify ou Deezer des joueurs : à table, sur un seul tel ou à distance, 12 par salle."
 const UPDATED = "2026-09-08"
 
 export const metadata: Metadata = {

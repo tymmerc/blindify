@@ -9,7 +9,7 @@ import { AMBER, FaqList, GuideShell, Li, Section, Steps, faqJsonLd, howToJsonLd,
 const URL = "https://blindz.app/blind-test-deezer/"
 const TITLE = "Faire un blind test avec ses playlists Deezer"
 const DESC =
-  "Comment faire un blind test avec ses propres playlists Deezer, entre amis, sans connexion : copier le lien d'un profil ou d'une playlist publique, le coller, et jouer. Compatible avec les joueurs Spotify."
+  "Un blind test entre amis sur ses playlists Deezer, sans connexion : coller le lien d'un profil ou d'une playlist publique, et jouer. Spotify marche aussi."
 const UPDATED = "2026-09-08"
 
 export const metadata: Metadata = {

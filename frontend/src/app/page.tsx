@@ -64,7 +64,7 @@ const MODES = [
     num: "01",
     color: VERMILION,
     title: "Autour d'une table",
-    max: "Jusqu'à 12 joueurs",
+    max: "12 places, écran compris",
     body:
       "Un écran au milieu, la télé ou un PC, qui diffuse la musique et affiche les scores. Chacun scanne le QR code et répond depuis son téléphone. Ceux qui arrivent en retard voient un écran d'attente et entrent tout seuls à la fin de la partie en cours.",
   },
