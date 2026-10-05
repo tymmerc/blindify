@@ -24,6 +24,12 @@
 set -euo pipefail
 # Le depot qui porte ce script (normalement /opt/blindify, sur main).
 DEPOT="$(cd "$(dirname "$0")/.." && pwd)"
+# Rien d'autre que --essai ou aucun argument : une faute de frappe (--esai,
+# -essai, --dry-run) ne doit jamais lancer le vrai passage.
+case "$#:${1:-}" in
+  0:|1:--essai) ;;
+  *) echo "usage : bash $0 [--essai]" >&2; exit 2 ;;
+esac
 ESSAI=0
 [ "${1:-}" = "--essai" ] && ESSAI=1
 CONF=/etc/nginx/sites-enabled/10-main.conf
@@ -51,14 +57,34 @@ if grep -rqs --exclude="$(basename "$SNIPPET")" "blindify-redirects" /etc/nginx/
   echo "  !! le snippet blindify-redirects.conf est inclus quelque part : a regarder avant"; exit 1
 fi
 # Un reload rend actif TOUT ce qui a change dans /etc/nginx depuis le dernier
-# chargement, pas seulement 10-main.conf. Les workers en service sont nes a ce
-# chargement : un fichier plus recent qu'eux est un changement en attente (autre
-# projet, autre session) que ce script activerait sans le dire.
+# chargement, pas seulement 10-main.conf. Un fichier plus recent que ce
+# chargement est un changement en attente (autre projet, autre session) que ce
+# script activerait sans le dire. Date du dernier chargement, de deux facons,
+# et on garde la plus ancienne (un fichier de trop a regarder plutot qu'un oubli) :
+#  - les workers en service naissent a chaque chargement reussi (systemctl
+#    reload comme nginx -s reload) ; un reload refuse garde les anciens ;
+#  - le dernier "Reloaded" ou "Started" de nginx.service dans le journal
+#    (systemctl reload seulement). systemd 255 n'a pas de propriete
+#    ExecReloadStartTimestamp, et ExecReload n'y garde pas d'heure.
+dernier_chargement_nginx() {
+  local maintenant age workers journal
+  maintenant="$(date +%s)"
+  age="$( { ps -o etimes=,args= --ppid "$(cat /run/nginx.pid)" || true; } \
+    | awk '/worker process/ && !/shutting down/ && $1 > m { m = $1 } END { print m + 0 }')"
+  workers=0; [ "$age" -gt 0 ] && workers=$(( maintenant - age ))
+  journal="$( { journalctl -u nginx.service -o short-unix --no-pager 2>/dev/null || true; } \
+    | awk '/systemd\[1\]: (Reloaded|Started) nginx/ { t = int($1) } END { print t + 0 }')"
+  if [ "$workers" -gt 0 ] && [ "$journal" -gt 0 ]; then
+    echo $(( workers < journal ? workers : journal ))
+  else
+    echo $(( workers > journal ? workers : journal ))
+  fi
+}
 en_attente_nginx() {
-  local age
-  age="$(ps -o etimes=,args= --ppid "$(cat /run/nginx.pid)" | grep -v 'shutting down' | awk '$1>m {m=$1} END {print m+0}')"
-  [ "$age" -gt 0 ] || return 0
-  find -L /etc/nginx -type f -newermt "@$(( $(date +%s) - age ))" 2>/dev/null
+  local depuis
+  depuis="$(dernier_chargement_nginx)"
+  if [ "$depuis" -le 0 ]; then echo "(date du dernier chargement de nginx introuvable)"; return 0; fi
+  find -L /etc/nginx -type f -newermt "@$depuis" 2>/dev/null || true
 }
 attente="$(en_attente_nginx)"
 if [ -n "$attente" ]; then
@@ -101,7 +127,11 @@ fi
 echo "── 1. Sauvegarde ──"
 mkdir -p "$SAUVE"
 cp -a "$CONF" "$SAUVE/10-main.conf"
-[ -f "$SNIPPET" ] && cp -a "$SNIPPET" "$SAUVE/"
+cmp -s "$CONF" "$SAUVE/10-main.conf" || { echo "  !! sauvegarde de 10-main.conf differente : rien n'est touche"; exit 1; }
+if [ -f "$SNIPPET" ]; then
+  cp -a "$SNIPPET" "$SAUVE/"
+  cmp -s "$SNIPPET" "$SAUVE/$(basename "$SNIPPET")" || { echo "  !! sauvegarde du snippet differente : rien n'est touche"; exit 1; }
+fi
 RETOUR="cp -a $SAUVE/10-main.conf $CONF"
 [ -f "$SNIPPET" ] && RETOUR+=" && cp -a $SAUVE/$(basename "$SNIPPET") $SNIPPET"
 RETOUR+=" && nginx -t && systemctl reload nginx"

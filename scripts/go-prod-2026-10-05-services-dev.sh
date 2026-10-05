@@ -16,7 +16,8 @@
 #     blindz-dev-front (un par service : l'un ne lit pas les secrets de l'autre) ;
 #   - donne au front de dev son dossier .next-dev (la construction de prod,
 #     en root, garde .next) ;
-#   - pose les trois fichiers de durcissement de infra/menage-2026-10-05/systemd/.
+#   - pose les trois fichiers de durcissement de infra/menage-2026-10-05/systemd/
+#     (les deux services de dev ne voient plus dans /opt que leur code et Node).
 # L'explorateur de base reste root (il appelle docker), mais sans capacites.
 # Chiffres et raisons : /opt/mira/dossier/docs-blindz/MENAGE-TECHNIQUE-2026-10-05.md
 #
@@ -25,6 +26,12 @@
 # saute ce qui est deja fait).
 set -euo pipefail
 DEPOT="$(cd "$(dirname "$0")/.." && pwd)"
+# Rien d'autre que --essai ou aucun argument : une faute de frappe (--esai,
+# -essai, --dry-run) ne doit jamais lancer le vrai passage.
+case "$#:${1:-}" in
+  0:|1:--essai) ;;
+  *) echo "usage : bash $0 [--essai]" >&2; exit 2 ;;
+esac
 ESSAI=0
 [ "${1:-}" = "--essai" ] && ESSAI=1
 SRC="$DEPOT/infra/menage-2026-10-05/systemd"
@@ -59,9 +66,12 @@ if [ -n "$manque" ]; then
   [ "$ESSAI" = 1 ] && echo "     (normal avant la fusion de la PR ; l'essai continue)" || exit 1
 fi
 # Fichiers que les services doivent lire et qu'un autre utilisateur ne peut pas lire.
-illisibles="$(find /opt/blindify/backend /opt/blindify/frontend /opt/blindify/shared \
-  \( -path '*/node_modules' -o -path "$FRONT/.next" -o -path "$FRONT/.next-dev" -o -path "$FRONT/out" -o -name '.env*' \) -prune \
-  -o ! -perm -o+r -print 2>/dev/null | head -5)"
+# awk et non head : head s'arrete tot, find recoit SIGPIPE, et avec pipefail
+# le script s'arretait en silence (code 141) des qu'il y en avait plus de 5.
+illisibles="$( { find /opt/blindify/backend /opt/blindify/frontend \
+  \( -path '*/node_modules' -o -path "$FRONT/.next" -o -path "$FRONT/.next-dev" -o -path "$FRONT/out" \
+     -o -path /opt/blindify/backend/logs -o -name '.env*' \) -prune \
+  -o ! -perm -o+r -print 2>/dev/null || true; } | awk 'NR <= 5')"
 [ -z "$illisibles" ] || { echo "  !! fichiers illisibles pour les nouveaux utilisateurs :"; echo "$illisibles" | sed 's/^/     /'; exit 1; }
 # daemon-reload rend actives les modifications EN ATTENTE de toutes les unites
 # (autre projet, autre session), pas seulement les notres. On les liste avant.
@@ -117,7 +127,11 @@ echo "── 1. Sauvegarde ──"
 mkdir -p "$SAUVE"
 for u in $UNITES; do
   cp -a "/etc/systemd/system/$u.service" "$SAUVE/"
-  [ -d "/etc/systemd/system/$u.service.d" ] && cp -a "/etc/systemd/system/$u.service.d" "$SAUVE/"
+  cmp -s "/etc/systemd/system/$u.service" "$SAUVE/$u.service" || { echo "  !! sauvegarde de $u.service illisible ou differente : rien n'est touche"; exit 1; }
+  if [ -d "/etc/systemd/system/$u.service.d" ]; then
+    cp -a "/etc/systemd/system/$u.service.d" "$SAUVE/"
+    diff -r "/etc/systemd/system/$u.service.d" "$SAUVE/$u.service.d" >/dev/null || { echo "  !! sauvegarde de $u.service.d differente : rien n'est touche"; exit 1; }
+  fi
 done
 RETOUR="rm -f $(for u in $UNITES; do printf '/etc/systemd/system/%s.service.d/60-durcissement.conf ' "$u"; done)&& systemctl daemon-reload && systemctl restart $UNITES"
 echo "  sauvegarde : $SAUVE"
@@ -166,6 +180,11 @@ verifie "journaux du backend de dev a part" "ls /var/log/blindz-dev-back/ | grep
 verifie "explorateur de base : sante lue (docker + base)" "curl -sf -m 15 http://127.0.0.1:3101/api/sante | grep -F >/dev/null '\"etat\":\"healthy\"'"
 verifie "le front de dev ne peut plus ecrire le site de prod" "! runuser -u blindz-dev-front -- test -w $FRONT/out"
 verifie "le backend de dev ne lit plus le .env de prod" "! runuser -u blindz-dev-back -- test -r /opt/blindify/backend/.env"
+# Ce que voit chaque service dans /opt, lu dans son espace de montage
+# (/proc/<pid>/root) : son code et Node, rien des autres projets.
+vu_dans_opt() { ls -A "/proc/$(systemctl show -p MainPID --value "$1")/root/opt$2" 2>/dev/null | tr '\n' ' '; }
+verifie "le backend de dev ne voit dans /opt que blindify/backend et node" "[ \"\$(vu_dans_opt blindify-dev-backend)\" = 'blindify node ' ] && [ \"\$(vu_dans_opt blindify-dev-backend /blindify)\" = 'backend ' ]"
+verifie "le front de dev ne voit dans /opt que blindify/frontend et node" "[ \"\$(vu_dans_opt blindify-dev-frontend)\" = 'blindify node ' ] && [ \"\$(vu_dans_opt blindify-dev-frontend /blindify)\" = 'frontend ' ]"
 verifie "Next n'a pas reecrit tsconfig.json" "git -C /opt/blindify diff --quiet -- frontend/tsconfig.json"
 verifie "API de prod toujours en ligne (non touchee)" "curl -sf -m 15 https://blindz.app/api/health | grep -F >/dev/null '\"status\":\"ok\"'"
 echo "  exposition apres durcissement :"
