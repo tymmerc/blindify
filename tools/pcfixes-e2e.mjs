@@ -7,19 +7,50 @@
 //   node tools/pcfixes-e2e.mjs --pile   sur la pile de test : le bouton d'import
 //                                       est teste pour de vrai, il interroge le
 //                                       faux Deezer local (aucun risque Akamai)
+//
+// Variables utiles pour rejouer un passage (voir test-stack/serie-pcfixes.mjs) :
+//   PCFIXES_PROFIL=4321   profil factice impose au lieu d'un tirage (--pile)
+//   PCFIXES_SHOTS=/dossier  ou ranger les captures
+//   PCFIXES_GARDER_TITRES=1 ne libere pas les titres du profil avant l'import
+//                         (--pile) : reproduit le sujet produit decrit plus bas
 import { chromium, devices } from "@playwright/test"
 import fs from "fs"
 import { seedLibrary, cleanupSeeded } from "./seed-library.mjs"
+import { psql } from "./test-stack/testdb.mjs"
 
 const PILE = process.argv.includes("--pile")
 const B = PILE ? "http://blindz-test.localhost:3180/blindify" : "https://dev.tymmerc.eu/blindify"
 const KEY = fs.readFileSync("/opt/blindify/.e2e-bypass-key", "utf8").trim()
-const SHOTS = "/opt/blindify/maquettes/shots/pcfixes"
+const SHOTS = process.env.PCFIXES_SHOTS || "/opt/blindify/maquettes/shots/pcfixes"
 fs.mkdirSync(SHOTS, { recursive: true })
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 const problems = []
 const say = (...a) => console.log(a.join(" "))
 const bad = m => { problems.push(m); say("  !! " + m) }
+
+// Pile seulement. Le faux Deezer n'a que 48 titres et chaque profil factice en
+// donne 12 : sur une base qui a deja servi, les titres du profil tire sont
+// souvent deja au nom de l'hote d'un passage precedent. Avec la regle "le
+// premier importeur garde le titre", le nouvel hote n'a alors plus aucun titre
+// a lui et l'API refuse de lancer la partie (need_more_music), prouve le
+// 05/10/2026 par test-stack/serie-pcfixes.mjs. Ce test verifie les correctifs
+// PC, pas le partage de titres entre joueurs (sujet produit suivi a part) :
+// avant l'import, les titres du profil redeviennent libres, comme sur une base
+// neuve. On demande au faux Deezer ce qu'il va servir, par le meme chemin que
+// l'import (profil -> playlists -> titres).
+async function libererTitresDuProfil(profil) {
+  const stub = "http://127.0.0.1:3180/deezer-stub"
+  const lire = async url => { const r = await fetch(`${stub}${url}`); if (!r.ok) throw new Error(`faux Deezer ${url} : HTTP ${r.status}`); return r.json() }
+  const ids = []
+  for (const pl of (await lire(`/user/${profil}/playlists`)).data ?? []) {
+    for (const t of (await lire(`/playlist/${pl.id}/tracks`)).data ?? []) ids.push(String(t.id))
+  }
+  if (!ids.length || !ids.every(id => /^\d+$/.test(id))) throw new Error(`faux Deezer : titres inattendus pour le profil ${profil}`)
+  const liste = ids.map(id => `'${id}'`).join(",")
+  const pris = psql(`WITH l AS (UPDATE audio_sources SET user_id = NULL, link_id = NULL
+    WHERE provider = 'deezer' AND external_id IN (${liste}) AND user_id IS NOT NULL RETURNING 1) SELECT count(*) FROM l`)
+  say(`  ${ids.length} titres au profil, ${pris} deja a un autre invite, rendus libres avant l'import`)
+}
 
 const b = await chromium.launch({ args: ["--autoplay-policy=no-user-gesture-required"] })
 const mk = async o => { const c = await b.newContext(o); await c.setExtraHTTPHeaders({ "X-E2E-Key": KEY }); return c }
@@ -31,15 +62,25 @@ host.on("pageerror", e => bad(`HOTE crash: ${String(e).slice(0, 120)}`))
 let hostId = null
 host.on("response", async r => {
   if (/\/api\/auth\/(guest|me)/.test(r.url())) { try { hostId = (await r.json())?.data?.user?.id ?? hostId } catch { /* autre */ } }
+  // Reponse de l'API au lancement : si la partie ne demarre pas, la sortie dit
+  // pourquoi (ex. need_more_music) au lieu du seul "bras jamais leve".
+  if (/\/api\/rooms\/[A-Z0-9]+\/start$/.test(new URL(r.url()).pathname)) {
+    const body = await r.json().catch(() => null)
+    say(`  lancement : HTTP ${r.status()}`, body?.error
+      ? `${body.error.code} ${JSON.stringify(body.error.details ?? {})}`
+      : `${body?.data?.session?.totalRounds ?? "?"} manche(s)`)
+  }
 })
 await host.goto(`${B}/jouer/`, { waitUntil: "networkidle", timeout: 90000 })
 await host.locator("input").first().fill("Tymeo")
 await host.getByRole("button", { name: /continuer/i }).click()
 if (PILE) {
-  // Profil factice different a chaque passage : la regle "le premier importeur
-  // garde le titre" donnerait sinon 0 titre au second import du meme profil
-  // sur une pile deja utilisee (vu le 30/09, c'est un vrai sujet produit).
-  const profil = 3000 + Math.floor(Math.random() * 6000)
+  // Profil factice tire au hasard. Ca ne suffit pas a avoir des titres neufs
+  // (les profils se partagent les 48 titres du faux Deezer), d'ou la liberation.
+  const profil = Number(process.env.PCFIXES_PROFIL) || 3000 + Math.floor(Math.random() * 6000)
+  say(`  profil factice ${profil}`)
+  if (process.env.PCFIXES_GARDER_TITRES === "1") say("  titres du profil laisses a leurs proprietaires (PCFIXES_GARDER_TITRES)")
+  else await libererTitresDuProfil(profil)
   await host.locator('input[placeholder^="https://"]').fill(`https://www.deezer.com/profile/${profil}`)
   await host.getByRole("button", { name: /importer ma musique/i }).click()
   await host.getByText(/titres? importés?/).waitFor({ timeout: 90000 })
