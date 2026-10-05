@@ -3,6 +3,7 @@ import { makeSpotify } from "../../config/spotify";
 import type { AudioSourceRow } from "../../types/audio";
 import type { MusicProvider, UserConnection } from "../../types/user";
 import { hydratePreviewUrl } from "../trackResolution";
+import { linkTrackToUser } from "../userTracks";
 
 type SpotifyLibraryTrack = {
   id?: string;
@@ -119,6 +120,7 @@ export async function syncSpotifyLibrary(
         metadata,
       ]
     );
+    await linkTrackToUser(userId, rows[0].id, null);
     inserted.push(rows[0]);
   }
 

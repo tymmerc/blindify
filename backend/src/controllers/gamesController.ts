@@ -7,6 +7,7 @@ import { logger } from "../utils/logger";
 import type { AudioSourceRow } from "../types/audio";
 import axios from "axios";
 import { hydratePreviewUrl } from "../services/trackResolution";
+import { linkTrackToUser } from "../services/userTracks";
 import { isSpotifyId } from "../utils/providerIds";
 
 async function importItunesTopTracks(limit: number): Promise<AudioSourceRow[]> {
@@ -109,6 +110,12 @@ async function fetchGlobalRandomSources(count: number): Promise<AudioSourceRow[]
   return rows;
 }
 
+// La bibliotheque d'un joueur : ses liens joueur-morceau (un morceau peut etre
+// a plusieurs joueurs). Le fonds commun : les morceaux que personne n'a importes.
+const OWNED_BY = (userParam: string): string =>
+  `EXISTS (SELECT 1 FROM user_audio_sources ua WHERE ua.audio_source_id = s.id AND ua.user_id = ${userParam})`;
+const NO_OWNER = `NOT EXISTS (SELECT 1 FROM user_audio_sources ua WHERE ua.audio_source_id = s.id)`;
+
 async function fetchAudioSources(
   userId: number,
   provider: MusicProvider,
@@ -160,7 +167,7 @@ async function fetchAudioSources(
       `SELECT s.id, s.provider, s.external_id, s.title, s.artist, s.album_cover, s.audio_url, s.duration_ms, s.metadata
        FROM audio_sources s
        INNER JOIN likes l ON l.audio_source_id = s.id
-       WHERE l.user_id = $1 AND (s.provider = $2 OR s.user_id = $1) ${extraClause ? extraClause + " AND " : " AND "}${usedFilter}
+       WHERE l.user_id = $1 AND (s.provider = $2 OR ${OWNED_BY("$1")}) ${extraClause ? extraClause + " AND " : " AND "}${usedFilter}
        ORDER BY RANDOM()
        LIMIT $${limitIndex}`,
       params
@@ -174,7 +181,7 @@ async function fetchAudioSources(
   const { rows } = await pool.query<AudioSourceRow>(
     `SELECT s.id, s.provider, s.external_id, s.title, s.artist, s.album_cover, s.audio_url, s.duration_ms, s.metadata
      FROM audio_sources s
-     WHERE (s.user_id=$2 OR (s.provider=$1 AND s.user_id IS NULL)) ${extraClause ? extraClause + " AND " : " AND "}${usedFilter}
+     WHERE (${OWNED_BY("$2")} OR (s.provider=$1 AND ${NO_OWNER})) ${extraClause ? extraClause + " AND " : " AND "}${usedFilter}
      ORDER BY RANDOM()
      LIMIT $${limitIndex}`,
     params
@@ -370,7 +377,7 @@ async function syncPlaylistTracks(userId: number, playlistId: string, accessToke
         playlist_id: playlistId,
         provider: "spotify" as MusicProvider,
       };
-      await pool.query<AudioSourceRow>(
+      const { rows } = await pool.query<{ id: string }>(
         `INSERT INTO audio_sources (provider, external_id, user_id, title, artist, album_cover, duration_ms, metadata)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
          ON CONFLICT (provider, external_id)
@@ -380,9 +387,11 @@ async function syncPlaylistTracks(userId: number, playlistId: string, accessToke
            album_cover=EXCLUDED.album_cover,
            duration_ms=EXCLUDED.duration_ms,
            metadata=EXCLUDED.metadata,
-           user_id=COALESCE(audio_sources.user_id, EXCLUDED.user_id)`,
+           user_id=COALESCE(audio_sources.user_id, EXCLUDED.user_id)
+         RETURNING id`,
         ["spotify", track.id, userId, track.name, artist, cover, track.duration_ms ?? null, metadata]
       );
+      await linkTrackToUser(userId, rows[0].id, null);
     }
     nextUrl = data.next ?? null;
   }
@@ -413,7 +422,7 @@ async function syncTopTracks(
       time_range: timeRange,
       provider: "spotify" as MusicProvider,
     };
-    await pool.query<AudioSourceRow>(
+    const { rows } = await pool.query<{ id: string }>(
       `INSERT INTO audio_sources (provider, external_id, user_id, title, artist, album_cover, duration_ms, metadata)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
        ON CONFLICT (provider, external_id)
@@ -423,9 +432,11 @@ async function syncTopTracks(
          album_cover=EXCLUDED.album_cover,
          duration_ms=EXCLUDED.duration_ms,
          metadata=EXCLUDED.metadata,
-         user_id=COALESCE(audio_sources.user_id, EXCLUDED.user_id)`,
+         user_id=COALESCE(audio_sources.user_id, EXCLUDED.user_id)
+       RETURNING id`,
       ["spotify", track.id, userId, track.name, artist, cover, track.duration_ms ?? null, metadata]
     );
+    await linkTrackToUser(userId, rows[0].id, null);
   }
 }
 

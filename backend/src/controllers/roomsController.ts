@@ -13,6 +13,7 @@ import { startRoundAndBroadcast } from "../services/realtimeOrchestrator";
 import { GameMode, type RoundTrack } from "../types/game";
 import { initStreamerGame } from "../services/streamerOrchestrator";
 import { activeLinkIds } from "./linksController";
+import { bySmallestLibrary, linkTrackToUser, ownersAmong } from "../services/userTracks";
 import { isSpotifyId } from "../utils/providerIds";
 import {
   hydratePreviewUrl,
@@ -79,7 +80,7 @@ async function syncPlaylistTracks(userId: number, playlistId: string, accessToke
         playlist_id: playlistId,
         provider: "spotify" as MusicProvider,
       };
-      await pool.query<AudioSourceRow>(
+      const { rows } = await pool.query<{ id: string }>(
         `INSERT INTO audio_sources (provider, external_id, user_id, title, artist, album_cover, duration_ms, metadata)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
          ON CONFLICT (provider, external_id)
@@ -89,9 +90,11 @@ async function syncPlaylistTracks(userId: number, playlistId: string, accessToke
            album_cover=EXCLUDED.album_cover,
            duration_ms=EXCLUDED.duration_ms,
            metadata=EXCLUDED.metadata,
-           user_id=COALESCE(audio_sources.user_id, EXCLUDED.user_id)`,
+           user_id=COALESCE(audio_sources.user_id, EXCLUDED.user_id)
+         RETURNING id`,
         ["spotify", track.id, userId, track.name, artist, cover, track.duration_ms ?? null, metadata]
       );
+      await linkTrackToUser(userId, rows[0].id, null);
     }
     nextUrl = data.next ?? null;
   }
@@ -122,7 +125,7 @@ async function syncTopTracks(
       time_range: timeRange,
       provider: "spotify" as MusicProvider,
     };
-    await pool.query<AudioSourceRow>(
+    const { rows } = await pool.query<{ id: string }>(
       `INSERT INTO audio_sources (provider, external_id, user_id, title, artist, album_cover, duration_ms, metadata)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
        ON CONFLICT (provider, external_id)
@@ -132,9 +135,11 @@ async function syncTopTracks(
          album_cover=EXCLUDED.album_cover,
          duration_ms=EXCLUDED.duration_ms,
          metadata=EXCLUDED.metadata,
-         user_id=COALESCE(audio_sources.user_id, EXCLUDED.user_id)`,
+         user_id=COALESCE(audio_sources.user_id, EXCLUDED.user_id)
+       RETURNING id`,
       ["spotify", track.id, userId, track.name, artist, cover, track.duration_ms ?? null, metadata]
     );
+    await linkTrackToUser(userId, rows[0].id, null);
   }
 }
 
@@ -308,11 +313,11 @@ export const roomsController = {
     try {
       participantRows = (await pool.query(
         `SELECT rp.user_id, COALESCE(rp.nickname, u.username) AS username,
-                (SELECT count(*) FROM audio_sources a
-                  WHERE a.user_id = rp.user_id
+                (SELECT count(*) FROM user_audio_sources ua
+                  WHERE ua.user_id = rp.user_id
                     AND (
                       NOT EXISTS (SELECT 1 FROM imported_links il WHERE il.user_id = rp.user_id)
-                      OR EXISTS (SELECT 1 FROM imported_links il2 WHERE il2.id = a.link_id AND il2.active)
+                      OR EXISTS (SELECT 1 FROM imported_links il2 WHERE il2.id = ua.link_id AND il2.user_id = rp.user_id AND il2.active)
                     ))::int AS track_count
          FROM room_participants rp
          JOIN users u ON u.id = rp.user_id
@@ -447,11 +452,11 @@ export const roomsController = {
               s.album_cover,
               s.audio_url,
               s.metadata,
-              s.user_id AS owner_user_id,
+              COALESCE(gr.owner_user_id, s.user_id) AS owner_user_id,
               u.username AS owner_username
        FROM game_rounds gr
        LEFT JOIN audio_sources s ON s.id = gr.audio_source_id
-       LEFT JOIN users u ON u.id = s.user_id
+       LEFT JOIN users u ON u.id = COALESCE(gr.owner_user_id, s.user_id)
        WHERE gr.session_id=$1
        ORDER BY gr.round_index ASC`,
       [session.id]
@@ -757,11 +762,11 @@ export const roomsController = {
                 s.album_cover,
                 s.audio_url,
                 s.metadata,
-                s.user_id AS owner_user_id,
+                COALESCE(gr.owner_user_id, s.user_id) AS owner_user_id,
                 u.username AS owner_username
          FROM game_rounds gr
          LEFT JOIN audio_sources s ON s.id = gr.audio_source_id
-         LEFT JOIN users u ON u.id = s.user_id
+         LEFT JOIN users u ON u.id = COALESCE(gr.owner_user_id, s.user_id)
          WHERE gr.session_id=$1
          ORDER BY gr.round_index ASC`,
         [session.id]
@@ -863,7 +868,7 @@ export const roomsController = {
 
     // Regle : au moins 1 playlist importee (par un joueur OU l'hote presentateur).
     const { rows: musicRows } = await pool.query<{ n: string }>(
-      `SELECT COUNT(DISTINCT user_id) AS n FROM audio_sources WHERE user_id = ANY($1::int[])`,
+      `SELECT COUNT(DISTINCT user_id) AS n FROM user_audio_sources WHERE user_id = ANY($1::int[])`,
       [musicContributorIds]
     );
     const playersWithMusic = Number(musicRows[0]?.n ?? 0);
@@ -962,7 +967,12 @@ export const roomsController = {
       return ids === null || ids === undefined ? {} : { linkIds: ids };
     };
     const contribution = new Map<number, number>();
-    for (const pid of musicContributorIds) {
+    // Un morceau peut etre a plusieurs joueurs : chacun ne tire que ce qui
+    // n'est pas deja pris (excludeKeys), et les plus petites bibliotheques
+    // passent d'abord. Sans ca, un ami dont la playlist est deja chez l'hote
+    // se faisait prendre ses morceaux et n'avait pas sa part du tourniquet.
+    const quotaOrder = await bySmallestLibrary(musicContributorIds);
+    for (const pid of quotaOrder) {
       const pref = prefMap.get(pid);
       const choice = normalizeSource(pref?.source ?? sourceParam);
       const likedChoice = choice === "liked";
@@ -985,6 +995,7 @@ export const roomsController = {
         timeRange: timeChoice,
         provider: poolProvider,
         ownedOnly: true,
+        excludeKeys: [...seen],
         ...linkOpts(pid),
       });
       for (const s of owned) s.user_id = pid; // revendique la contribution pour cette partie
@@ -1002,6 +1013,7 @@ export const roomsController = {
           likedOnly: likedChoice,
           playlistId: playlistChoice,
           timeRange: timeChoice,
+          excludeKeys: [...seen],
           ...linkOpts(pid),
         });
         extra = slice.length;
@@ -1019,6 +1031,7 @@ export const roomsController = {
           likedOnly: false,
           provider: poolProvider,
           ownedOnly: true,
+          excludeKeys: [...seen],
           ...linkOpts(pid),
         });
         pushUnique(fill);
@@ -1036,6 +1049,7 @@ export const roomsController = {
           likedOnly: false,
           provider: "any",
           ownedOnly: true,
+          excludeKeys: [...existingKeys],
           ...linkOpts(pid),
         });
         for (const candidate of fallback) {
@@ -1056,7 +1070,7 @@ export const roomsController = {
       // collectPlayableSources (et pas fetchAudioSources brut) : il rafraichit les
       // extraits et jette ceux sans audio. Sinon on pouvait injecter ici un titre
       // muet et la table restait 10 secondes dans le silence.
-      const personalPool = await collectPlayableSources(pid, 3, { provider: poolProvider, ownedOnly: true, ...linkOpts(pid) });
+      const personalPool = await collectPlayableSources(pid, 3, { provider: poolProvider, ownedOnly: true, excludeKeys: [...existingKeys], ...linkOpts(pid) });
       for (const candidate of personalPool) {
         const key = candidate.external_id ?? String(candidate.id);
         if (existingKeys.has(key)) continue;
@@ -1143,6 +1157,15 @@ export const roomsController = {
       avatarMap.set(u.id, u.avatar);
     });
 
+    // « Qui a mis quoi » : un morceau partage revient aussi aux autres joueurs
+    // de la salle qui l'ont importe (roundOwners.ts).
+    const coOwners = await ownersAmong(sources.map(src => src.id), musicContributorIds);
+    const ownersOf = (src: AudioSourceRow): number[] => {
+      const primary = src.user_id ?? null;
+      const all = new Set([...(primary ? [primary] : []), ...(coOwners.get(src.id) ?? [])]);
+      return Array.from(all).sort((a, b) => a - b);
+    };
+
     // Wrap game creation in a transaction to ensure atomicity
     const client = await pool.connect();
     let session: any;
@@ -1197,15 +1220,18 @@ export const roomsController = {
         owner_avatar: (source as { user_id?: number | null }).user_id
           ? avatarMap.get((source as { user_id?: number | null }).user_id ?? 0) ?? null
           : null,
+        owner_user_ids: ownersOf(source),
       },
     }));
 
     for (const track of normalizedTracks) {
+      // owner_user_id : qui a apporte le morceau dans CETTE partie, pour le
+      // recapitulatif (audio_sources.user_id n'est que le premier importeur).
       await client.query(
-        `INSERT INTO game_rounds (session_id, round_index, audio_source_id, correct_title, correct_artist)
-         VALUES ($1,$2,$3,$4,$5)
+        `INSERT INTO game_rounds (session_id, round_index, audio_source_id, correct_title, correct_artist, owner_user_id)
+         VALUES ($1,$2,$3,$4,$5,$6)
         ON CONFLICT (session_id, round_index) DO NOTHING`,
-        [session.id, track.round, track.audioSourceId, track.title, track.artist]
+        [session.id, track.round, track.audioSourceId, track.title, track.artist, track.metadata.owner_user_id ?? null]
       );
     }
 

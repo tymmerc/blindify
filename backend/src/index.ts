@@ -22,6 +22,8 @@ import invitationsRoutes from "./routes/invitations";
 import importRoutes from "./routes/import";
 import linksRoutes from "./routes/links";
 import { ensureLinksSchema } from "./controllers/linksController";
+import { ensureUserTracksSchema } from "./services/userTracks";
+import { DEAD_GUEST_FILTER } from "./services/deadGuests";
 import quickPlayRoutes from "./routes/quickPlay";
 import challengeRoutes from "./routes/challenges";
 import { fail, ok } from "./utils/response";
@@ -319,7 +321,12 @@ async function bootstrap() {
 
   // Schema de la bibliotheque de liens des le BOOT : le poll room details y fait
 // reference, un premier deploiement sans la table crash-loopait le serveur.
-ensureLinksSchema().catch(err => logger.error("links_schema_boot_failed", { error: err }));
+// Bibliotheque par joueur (migration 005) : la prod l'a deja, la pile de test
+// et la CI partent du schema de la prod. Apres les liens, sa table y fait reference.
+ensureLinksSchema()
+  .catch(err => logger.error("links_schema_boot_failed", { error: err }))
+  .then(() => ensureUserTracksSchema())
+  .catch(err => logger.error("user_tracks_schema_boot_failed", { error: err }));
 ensureResponseSchema().catch(err => logger.error("response_schema_boot_failed", { error: err }));
 
 // Index manquants sur les colonnes FK les plus sollicitees : sans eux, chaque
@@ -369,29 +376,6 @@ ensurePerformanceIndexes().catch(err => logger.error("ensure_indexes_boot_failed
 // et un vrai joueur disparaissait a 31 jours. Constate sur une soiree de 17
 // parties du 28/08 dont il ne reste aucun nom.
 const JANITOR_INTERVAL_MS = 6 * 60 * 60 * 1000;
-const DEAD_GUEST_FILTER = `
-      SELECT u.id FROM users u
-      WHERE u.provider = 'guest'
-        AND u.created_at < NOW() - INTERVAL '30 days'
-        AND NOT EXISTS (
-          SELECT 1 FROM user_sessions s
-          WHERE s.user_id = u.id AND s.expires_at > NOW())
-        AND NOT EXISTS (
-          SELECT 1 FROM room_participants rp
-          JOIN multiplayer_rooms r ON r.id = rp.room_id
-          WHERE rp.user_id = u.id AND r.created_at > NOW() - INTERVAL '30 days')
-        AND NOT EXISTS (
-          SELECT 1 FROM multiplayer_rooms mr
-          WHERE mr.host_user_id = u.id AND mr.created_at > NOW() - INTERVAL '30 days')
-        AND NOT EXISTS (
-          SELECT 1 FROM game_participants gp WHERE gp.user_id = u.id)
-        AND NOT EXISTS (
-          SELECT 1 FROM game_sessions gs WHERE gs.host_user_id = u.id)
-        AND NOT EXISTS (
-          SELECT 1 FROM imported_links il WHERE il.user_id = u.id)
-        AND NOT EXISTS (
-          SELECT 1 FROM audio_sources a WHERE a.user_id = u.id)
-      LIMIT 500`;
 
 async function runJanitor(): Promise<void> {
   const step = async (label: string, sql: string): Promise<void> => {

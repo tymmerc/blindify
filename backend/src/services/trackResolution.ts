@@ -64,38 +64,46 @@ export async function fetchAudioSources(
   userIds: number | number[],
   provider: ProviderFilter,
   count: number,
-  opts: { likedOnly?: boolean; playlistId?: string; timeRange?: string; ownedOnly?: boolean; linkIds?: number[] } = {}
+  opts: { likedOnly?: boolean; playlistId?: string; timeRange?: string; ownedOnly?: boolean; linkIds?: number[]; excludeKeys?: string[] } = {}
 ): Promise<AudioSourceRow[]> {
   const extraConds: string[] = [];
   const params: unknown[] = [];
   const userList = Array.isArray(userIds) ? userIds : [userIds];
 
   params.push(userList);
-  // ownedOnly : uniquement les titres reellement possedes par ces joueurs (pas le pool
-  // global a user_id NULL). Sert a garantir une attribution "qui a ajoute" fiable.
+  // A qui est un morceau : les liens joueur-morceau (user_audio_sources). Un
+  // morceau peut etre a plusieurs joueurs ; la ligne rendue porte le joueur de
+  // la liste et SA carte. ownedOnly : uniquement les morceaux de ces joueurs
+  // (pas le fonds commun, sans aucun importeur). Sert a garantir une
+  // attribution "qui a ajoute" fiable.
   const userCond = opts.likedOnly
     ? `l.user_id = ANY($1)`
     : opts.ownedOnly
-      ? `s.user_id = ANY($1)`
-      : `(s.user_id = ANY($1) OR s.user_id IS NULL)`;
+      ? `ua.user_id IS NOT NULL`
+      : `(ua.user_id IS NOT NULL OR NOT EXISTS (SELECT 1 FROM user_audio_sources x WHERE x.audio_source_id = s.id))`;
   let providerCond = "";
   if (provider !== "any") {
     params.push(provider);
-    providerCond = opts.likedOnly ? `AND s.provider = $2` : `AND provider = $2`;
+    providerCond = `AND s.provider = $2`;
   }
 
   if (opts.playlistId) {
     params.push(opts.playlistId);
-    extraConds.push(`metadata->>'playlist_id' = $${params.length}`);
+    extraConds.push(`s.metadata->>'playlist_id' = $${params.length}`);
   }
   if (opts.timeRange) {
     params.push(opts.timeRange);
-    extraConds.push(`metadata->>'time_range' = $${params.length}`);
+    extraConds.push(`s.metadata->>'time_range' = $${params.length}`);
   }
   // Bibliotheque de liens : ne jouer QUE les titres des cartes cochees.
   if (opts.linkIds) {
     params.push(opts.linkIds);
-    extraConds.push(`link_id = ANY($${params.length}::int[])`);
+    extraConds.push(`${opts.likedOnly ? "s.link_id" : "ua.link_id"} = ANY($${params.length}::int[])`);
+  }
+  // Morceaux deja tires pour cette partie (meme cle que le dedoublonnage).
+  if (opts.excludeKeys?.length) {
+    params.push(opts.excludeKeys);
+    extraConds.push(`COALESCE(s.external_id, s.id::text) <> ALL($${params.length}::text[])`);
   }
 
   const extraClause = extraConds.length ? `AND ${extraConds.join(" AND ")}` : "";
@@ -118,8 +126,9 @@ export async function fetchAudioSources(
   params.push(count);
   const limitIndex = params.length;
   const { rows } = await pool.query<AudioSourceRow>(
-    `SELECT s.id, s.user_id AS user_id, s.provider, s.external_id, s.title, s.artist, s.album_cover, s.audio_url, s.duration_ms, s.metadata, s.link_id
+    `SELECT s.id, ua.user_id AS user_id, s.provider, s.external_id, s.title, s.artist, s.album_cover, s.audio_url, s.duration_ms, s.metadata, ua.link_id AS link_id
      FROM audio_sources s
+     LEFT JOIN user_audio_sources ua ON ua.audio_source_id = s.id AND ua.user_id = ANY($1)
      WHERE ${userCond} ${providerCond} ${extraClause}
      ORDER BY RANDOM()
      LIMIT $${limitIndex}`,
@@ -144,7 +153,7 @@ export function shuffle<T>(arr: T[]): T[] {
 export async function collectPlayableSources(
   userIds: number | number[],
   desiredCount: number,
-  opts: { likedOnly?: boolean; playlistId?: string; timeRange?: string; provider?: ProviderFilter; ownedOnly?: boolean; linkIds?: number[] }
+  opts: { likedOnly?: boolean; playlistId?: string; timeRange?: string; provider?: ProviderFilter; ownedOnly?: boolean; linkIds?: number[]; excludeKeys?: string[] }
 ): Promise<AudioSourceRow[]> {
   // Sur-fetch reduit (4x) : moins de recherches Deezer en parallele au lancement
   // (les previews expirent et doivent etre re-cherchees) tout en gardant une marge.
@@ -156,6 +165,7 @@ export async function collectPlayableSources(
     timeRange: opts.timeRange,
     ownedOnly: opts.ownedOnly,
     linkIds: opts.linkIds,
+    excludeKeys: opts.excludeKeys,
   });
 
   // Hydrate / rafraichit les previews via Deezer (re-fetch si manquante OU expiree).

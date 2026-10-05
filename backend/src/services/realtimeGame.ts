@@ -1,3 +1,5 @@
+import { isOwnerGuess, ownerChoices } from "./roundOwners";
+
 export type Verdict = "correct" | "close" | "wrong";
 
 export type RoundTrack = {
@@ -236,25 +238,7 @@ export function startNextRound(roomCode: string, opts?: { forceRound?: number; s
 
   // Picker "qui a ajoute ?" : on propose 3 candidats (le bon + 2 leurres) plutot
   // que tous les joueurs. Calcule une fois par round, identique pour tout le monde.
-  const ownerId = typeof (track.metadata as any)?.owner_user_id === "number"
-    ? ((track.metadata as any).owner_user_id as number)
-    : null;
-  const playerIds = Object.keys(ctx.state.players).map(Number);
-  if (ownerId && playerIds.includes(ownerId) && playerIds.length >= 3) {
-    const decoys = playerIds.filter(id => id !== ownerId);
-    for (let i = decoys.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [decoys[i], decoys[j]] = [decoys[j], decoys[i]];
-    }
-    const choices = [ownerId, decoys[0], decoys[1]];
-    for (let i = choices.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [choices[i], choices[j]] = [choices[j], choices[i]];
-    }
-    track.ownerChoices = choices;
-  } else {
-    track.ownerChoices = playerIds;
-  }
+  track.ownerChoices = ownerChoices(track.metadata, Object.keys(ctx.state.players).map(Number));
 
   Object.values(ctx.state.players).forEach(player => {
     player.hasAnswered = false;
@@ -381,8 +365,7 @@ export function revealRound(roomCode: string): GameState | undefined {
       answerAt: player.answerAt,
       startAt: startAt,
       maxDuration: ctx.state.timing.revealAt && startAt ? ctx.state.timing.revealAt - startAt : ctx.roundDurationMs,
-      sourceOwnerId: (track.metadata as any)?.owner_user_id ?? null,
-      sourceGuess: player.lastSourceGuess ?? null,
+      ownerGuessed: isOwnerGuess(track.metadata, player.lastSourceGuess),
     });
     ctx.state.players[player.userId] = {
       ...next,
@@ -652,10 +635,10 @@ function computeScore(params: {
   answerAt: number | null | undefined;
   startAt: number | null;
   maxDuration?: number | null;
-  sourceOwnerId?: number | null;
-  sourceGuess?: number | null;
+  // « Qui a mis quoi » juste : l'un des joueurs a qui revient le morceau (roundOwners.ts).
+  ownerGuessed?: boolean;
 }): { next: PlayerState; gained: number; verdict: Verdict } {
-  const { previous, detail, answerAt, startAt, maxDuration, sourceOwnerId, sourceGuess } = params;
+  const { previous, detail, answerAt, startAt, maxDuration, ownerGuessed } = params;
   const verdict = detail.verdict;
   const reactionMs = startAt && answerAt ? Math.max(0, answerAt - startAt) : null;
   const correctTitle = detail.matchedTitle;
@@ -667,7 +650,7 @@ function computeScore(params: {
   // La vitesse (totalReactionMs cumulé) sert uniquement de départage d'égalité.
   const titlePoints = correctTitle ? 1 : 0;
   const artistPoints = correctArtist ? 1 : 0;
-  const sourceBonus = sourceOwnerId && sourceGuess && sourceOwnerId === sourceGuess ? 1 : 0;
+  const sourceBonus = ownerGuessed ? 1 : 0;
 
   const gainedPoints = titlePoints + artistPoints + sourceBonus;
 

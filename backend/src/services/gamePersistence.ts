@@ -1,6 +1,7 @@
 import { pool } from "../config/db";
 import { logger } from "../utils/logger";
 import type { GameState } from "./realtimeGame";
+import { roundOwnerIds } from "./roundOwners";
 
 /**
  * Multiplayer game persistence.
@@ -84,8 +85,10 @@ function snapshotResponses(state: GameState): { round: number; rows: ResponseRow
   // On le fige ici plutot que de le rejoindre plus tard via audio_sources :
   // cette propriete se detache quand le compte disparait, et 181 manches
   // reelles avaient deja perdu la leur.
-  const ownerRaw = (state.currentTrack?.metadata as Record<string, unknown> | null | undefined)?.owner_user_id;
-  const sourceOwner = typeof ownerRaw === "number" ? ownerRaw : Number.isFinite(Number(ownerRaw)) && ownerRaw != null ? Number(ownerRaw) : null;
+  // Morceau partage : source_owner garde le contributeur de la manche, et
+  // deviner un autre joueur qui l'avait importe compte juste (roundOwners.ts).
+  const owners = roundOwnerIds(state.currentTrack?.metadata);
+  const sourceOwner = owners[0] ?? null;
   const rows = Object.values(state.players)
     .filter(player => player.hasAnswered)
     .map(player => {
@@ -100,8 +103,8 @@ function snapshotResponses(state: GameState): { round: number; rows: ResponseRow
         verdict: player.lastVerdict ?? null,
         sourceGuess,
         sourceOwner,
-        // Meme regle que computeScore : un point si la devinette vise le vrai proprietaire.
-        sourceCorrect: sourceOwner != null && sourceGuess != null ? sourceOwner === sourceGuess : null,
+        // Meme regle que computeScore : un point si la devinette vise l'un des proprietaires.
+        sourceCorrect: sourceOwner != null && sourceGuess != null ? owners.includes(sourceGuess) : null,
       };
     });
   return { round: state.currentRound, rows };
