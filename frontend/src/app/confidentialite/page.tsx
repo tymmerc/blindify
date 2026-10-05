@@ -120,7 +120,7 @@ export default function ConfidentialitePage() {
           <Section title="Hébergement" accent="#c65133">
             <p>
               Le site et ses données sont hébergés en Allemagne, chez Hetzner Online GmbH, dans son centre
-              de données de Falkenstein. Elles restent donc dans l'Union européenne, où s'applique le RGPD.
+              de données de Falkenstein. Les données restent donc dans l'Union européenne, où s'applique le RGPD.
             </p>
           </Section>
 
