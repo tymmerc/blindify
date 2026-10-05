@@ -21,7 +21,7 @@ function files() {
 
 const prodUp = () => prodRoutes()
 const prodDown = resend => prodRoutes({
-  quickPlay: body => (body.url === DEEZER.url ? quickPlayKo("insufficient_tracks", 400, { needed: 10, found: 1 }) : quickPlayOk(9)),
+  quickPlay: body => (body.url === DEEZER.url ? quickPlayKo("insufficient_tracks", 400, { needed: 10, found: 1 }) : quickPlayOk(9, "spotify")),
   deezerSearch: () => json({ data: [] }),
   ...(resend ? { resend } : {}),
 })
@@ -67,10 +67,25 @@ test("vert, panne, panne, vert : un e-mail de panne puis un de retour, une ligne
 test("Resend en panne : l'e-mail de panne est retente au passage suivant", async () => {
   const where = files()
   const failed = await pass(prodDown(() => json({ message: "erreur" }, 500)), where)
-  assert.equal(failed.mail, "panne:echec(Resend HTTP 500)")
+  assert.deepEqual([failed.mail, failed.mailFailed], ["panne:echec(Resend HTTP 500)", true])
   assert.equal(readState(where.statePath).announced, "OK", "Tym n'a rien recu")
   const retried = await pass(prodDown(), where)
-  assert.equal(retried.mail, "panne:envoye")
+  assert.deepEqual([retried.mail, retried.mailFailed], ["panne:envoye", false])
+  const quiet = await pass(prodDown(), where)
+  assert.deepEqual([quiet.mail, quiet.mailFailed], ["aucun", false], "pas d'e-mail du, pas d'echec")
+})
+
+test("cle ou destinataire absent : la sonde s'arrete avant tout appel, sauf en essai", async () => {
+  const missing = () => ({ to: null, key: null, missing: ["destinataire absent ou invalide (alerte.env)"] })
+  const { fn, calls } = fakeFetch(prodUp())
+  await assert.rejects(
+    runOnce({ targets: [DEEZER], ...files(), fetchFn: fn, sleep: noSleep, loadConfig: missing, print: silent, warn: silent }),
+    /envoi d'e-mail impossible : destinataire absent/,
+  )
+  assert.equal(calls.length, 0, "pas de sonde si personne ne peut etre prevenu")
+  const dry = await pass(prodDown(), { statePath: null, logPath: null }, { dryRun: true, loadConfig: missing })
+  assert.equal(dry.mail, "panne:essai")
+  assert.match(dry.printed.join("\n"), /ALERTE_DESTINATAIRE ABSENT/)
 })
 
 test("mode essai sans fichier : l'e-mail est affiche, rien n'est envoye ni ecrit", async () => {

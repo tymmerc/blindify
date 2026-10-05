@@ -10,8 +10,10 @@ export const DEEZER = { id: "deezer", provider: "deezer", label: "Deezer, playli
 export const SPOTIFY = { id: "spotify", provider: "spotify", label: "Spotify, playlist", url: "https://open.spotify.com/playlist/6QfyfBMAoQy8YxbbPL0hkZ" }
 
 export const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } })
-export const tracks = (n, url = PREVIEW) => Array.from({ length: n }, (_, i) => ({ round: i + 1, title: `t${i}`, artist: "a", audio_url: url }))
-export const quickPlayOk = n => json({ success: true, data: { session: { id: 0 }, tracks: tracks(n) }, error: null })
+// type : le service d'ou vient le titre, comme le backend ("deezer" ou "spotify").
+export const tracks = (n, url = PREVIEW, type = "deezer") => Array.from({ length: n }, (_, i) => ({ round: i + 1, type, title: `t${i}`, artist: "a", audio_url: url }))
+export const quickPlayOk = (n, type = "deezer") => json({ success: true, data: { session: { id: 0, provider: type }, tracks: tracks(n, PREVIEW, type) }, error: null })
+const providerOf = url => (url.includes("open.spotify.com") ? "spotify" : "deezer")
 export const quickPlayKo = (code, status = 400, details) => json({ success: false, data: null, error: { code, message: "Pas assez de titres avec extrait audio disponible.", ...(details ? { details } : {}) } }, status)
 export const audio = () => new Response(MP3, { status: 206, headers: { "content-type": "audio/mpeg" } })
 export const soloHtml = '<html><script src="/_next/static/chunks/app/solo/page-2245b9a9e3449968.js"></script></html>'
@@ -29,7 +31,7 @@ export function fakeFetch(routes) {
 }
 
 /** Le vrai blindz.app, Deezer et Resend, rejoues. Chaque option remplace une reponse. */
-export function prodRoutes({ quickPlay = () => quickPlayOk(10), preview = audio, deezerSearch, resend = () => json({ id: "faux" }) } = {}) {
+export function prodRoutes({ quickPlay = body => quickPlayOk(10, providerOf(body.url)), preview = audio, deezerSearch, resend = () => json({ id: "faux" }) } = {}) {
   return (url, init) => {
     if (url === `${BASE}/api/health`) return json({ success: true, data: { status: "ok" }, error: null })
     if (url === `${BASE}/solo/`) return new Response(soloHtml, { status: 200, headers: { "content-type": "text/html", "content-security-policy": CSP } })

@@ -10,7 +10,7 @@ import { loadState, saveState, appendLog } from "./storage.mjs"
 async function deliver(kind, run, previous, opts) {
   if (!kind) return { sent: false, outcome: "aucun" }
   const mail = composeMail(kind, run, previous, opts.logPath ?? LOG_PATH)
-  const config = opts.loadConfig()
+  const { config } = opts
   if (opts.dryRun) {
     opts.print(previewMail(mail, config))
     return { sent: true, outcome: `${kind}:essai` }
@@ -28,22 +28,28 @@ function printRun(run, print) {
 
 /**
  * statePath / logPath a null : rien n'est lu ni ecrit (mode essai sans fichier).
- * Renvoie { ok, mail, line } : ok pour le code de sortie, mail = issue de l'e-mail.
+ * Renvoie { ok, mail, mailFailed, line } : ok pour le code de sortie, mail =
+ * issue de l'e-mail, mailFailed = un e-mail etait du et n'est pas parti.
+ * Hors essai, une cle ou un destinataire absent arrete tout avant la sonde :
+ * une sonde qui ne peut prevenir personne doit echouer tout de suite (code 2),
+ * pas le jour de la premiere panne.
  */
 export async function runOnce({
   targets, statePath, logPath, dryRun = false, fetchFn = fetch, sleep, pauseMs,
   loadConfig = loadMailConfig, print = console.log, warn = console.error,
 }) {
+  const config = loadConfig()
+  if (!dryRun && config.missing.length) throw new Error(`envoi d'e-mail impossible : ${config.missing.join(", ")}`)
   const run = await runProbe({ fetchFn, targets, sleep, pauseMs })
   printRun(run, print)
   const { state: previous, warning } = statePath ? loadState(statePath) : { state: INITIAL_STATE, warning: null }
   if (warning) warn(`sonde : ${warning}`)
   const decision = decide(previous, run.ok, run.at)
-  const { sent, outcome } = await deliver(decision.mail, run, previous, { dryRun, logPath, fetchFn, loadConfig, print })
+  const { sent, outcome } = await deliver(decision.mail, run, previous, { dryRun, logPath, fetchFn, config, print })
   const next = commitState(previous, decision, sent)
   const line = formatLogLine(run, next, outcome)
   print(line)
   if (statePath) saveState(statePath, next)
   if (logPath) appendLog(logPath, line)
-  return { ok: run.ok, mail: outcome, line }
+  return { ok: run.ok, mail: outcome, mailFailed: Boolean(decision.mail) && !sent, line }
 }

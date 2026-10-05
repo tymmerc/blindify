@@ -77,6 +77,14 @@ test("lancement : reponse non JSON (nginx 504) ou delai depasse, blindz.app susp
   assert.equal(reason(new Error("boum")), "boum")
 })
 
+test("lien Spotify lu par un autre service : l'import Spotify n'est pas prouve, Spotify suspect", async () => {
+  const r = await checkLink(fakeFetch(prodRoutes({ quickPlay: () => quickPlayOk(10, "deezer") })).fn, SPOTIFY)
+  assert.deepEqual([r.ok, r.code, r.suspect], [false, "autre_service", "spotify"])
+  assert.match(r.detail, /10 titres sur 10 ne viennent pas de spotify/)
+  const ok = await checkLink(fakeFetch(prodRoutes()).fn, SPOTIFY)
+  assert.deepEqual([ok.ok, ok.tracks], [true, 10])
+})
+
 test("lancement accepte mais trop peu d'extraits utilisables : souci chez nous", async () => {
   const r = await checkLink(fakeFetch(prodRoutes({ quickPlay: () => json({ success: true, data: { tracks: [...tracks(3), { audio_url: null }, { audio_url: "http://x" }] } }) })).fn, DEEZER)
   assert.deepEqual([r.ok, r.code, r.tracks, r.suspect], [false, "trop_peu", 3, "app"])
@@ -93,6 +101,18 @@ test("extrait : du MP3, sinon la raison", async () => {
   const { fn, calls } = fakeFetch(audio)
   await checkPreview(fn, PREVIEW)
   assert.equal(calls[0].init.headers.Range, "bytes=0-8191", "seulement le debut de l'extrait")
+})
+
+test("extrait : le debut du MP3 arrive en petits morceaux", async () => {
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new Uint8Array([0x49]))
+      controller.enqueue(new Uint8Array([0x44, 0x33, 0x04, 0, 0]))
+      controller.close()
+    },
+  })
+  const r = await checkPreview(fakeFetch(() => new Response(body, { status: 206, headers: { "content-type": "audio/mpeg" } })).fn, PREVIEW)
+  assert.equal(r.ok, true)
 })
 
 test("signature MP3 : ID3 ou synchro de trame", () => {
@@ -127,6 +147,10 @@ test("un lien : extrait d'un domaine absent de la CSP, le navigateur ne le lirai
   const r = await checkTarget(fakeFetch(routes).fn, DEEZER, { mediaSrc: parseMediaSrc(CSP), sleep: noSleep })
   assert.deepEqual([r.ok, r.code, r.suspect], [false, "csp", "app"])
   assert.match(r.detail, /cdn\.nouveau-deezer\.com absent de media-src/)
+  assert.equal(allowedByCsp("https://", parseMediaSrc(CSP)), false, "adresse illisible : refusee, sans planter")
+  const broken = prodRoutes({ quickPlay: () => json({ success: true, data: { tracks: tracks(10, "https://exa mple/x.mp3") } }) })
+  const odd = await checkTarget(fakeFetch(broken).fn, DEEZER, { mediaSrc: parseMediaSrc(CSP), sleep: noSleep })
+  assert.deepEqual([odd.ok, odd.code], [false, "csp"])
 })
 
 test("diagnostic Deezer en direct : bloque, vide, erreur, normal, injoignable", async () => {
@@ -160,7 +184,7 @@ test("sonde complete, API par terre : on s'arrete la, sans attendre les liens", 
 
 test("sonde complete, panne d'extraits : retentee puis diagnostic Deezer", async () => {
   const routes = prodRoutes({
-    quickPlay: body => (body.url === DEEZER.url ? quickPlayKo("insufficient_tracks", 400, { needed: 10, found: 0 }) : quickPlayOk(9)),
+    quickPlay: body => (body.url === DEEZER.url ? quickPlayKo("insufficient_tracks", 400, { needed: 10, found: 0 }) : quickPlayOk(9, "spotify")),
     deezerSearch: () => json({ data: [] }),
   })
   const { fn, calls } = fakeFetch(routes)

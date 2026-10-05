@@ -32,8 +32,10 @@
 // --only deezer|spotify.
 // Fichiers : etat /var/lib/blindz-sonde-prod/etat.json, journal (une ligne par
 // passage) /var/log/blindz-sonde-prod/sonde.log.
-// Sortie : 0 tout va bien, 1 la prod est en panne (l'e-mail s'en charge),
-// 2 la sonde elle-meme a un probleme (options, disque).
+// Sortie : 0 tout va bien, 1 la prod est en panne (l'e-mail est parti),
+// 2 la sonde elle-meme a un probleme (options, disque, cle Resend ou
+// destinataire absent, e-mail du qui n'a pas pu partir) : l'unite systemd
+// passe alors en echec (systemctl --failed).
 //
 // Charge : un passage = 2 lancements de solo, soit une trentaine d'appels a
 // Deezer depuis le backend, comme deux joueurs. Pas plus : trop d'appels depuis
@@ -63,13 +65,14 @@ function readOptions(argv) {
 async function main() {
   const options = readOptions(process.argv.slice(2))
   const dryRun = options["dry-run"]
-  const { ok } = await runOnce({
+  const { ok, mailFailed } = await runOnce({
     targets: buildTargets(options),
     dryRun,
     // En essai, l'etat et le journal du minuteur ne sont jamais touches, sauf fichiers donnes.
     statePath: options.state ?? (dryRun ? null : STATE_PATH),
     logPath: options.log ?? (dryRun ? null : LOG_PATH),
   })
+  if (mailFailed) return 2
   return ok ? 0 : 1
 }
 

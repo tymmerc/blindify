@@ -73,7 +73,12 @@ export function parseMediaSrc(csp) {
 /** Le navigateur accepterait-il de lire cette adresse avec ces sources CSP ? */
 export function allowedByCsp(url, sources, pageOrigin = BASE) {
   if (!sources) return true // pas de CSP : rien ne bloque
-  const u = new URL(url)
+  let u
+  try {
+    u = new URL(url)
+  } catch {
+    return false // adresse d'extrait illisible : le navigateur ne la lirait pas
+  }
   return sources.some(src => {
     if (src === "*") return true
     if (src === "'self'") return u.origin === pageOrigin
@@ -146,6 +151,12 @@ export async function checkLink(fetchFn, target, base = BASE) {
   if (previews.length < MIN_TRACKS) {
     return { ...check, ok: false, suspect: "app", code: "trop_peu", http: res.status, ms, tracks: previews.length, detail: `partie lancée avec ${previews.length} extraits seulement (minimum ${MIN_TRACKS})` }
   }
+  // Chaque titre doit venir du service du lien : un lien Spotify lu « a cote »
+  // (repli sur une playlist Deezer du meme nom) ne prouve pas que l'import Spotify marche.
+  const foreign = tracks.filter(t => t?.type !== target.provider).length
+  if (foreign > 0) {
+    return { ...check, ok: false, suspect: target.provider, code: "autre_service", http: res.status, ms, tracks: previews.length, detail: `${foreign} titres sur ${tracks.length} ne viennent pas de ${target.provider} : le lien n'a pas été lu par son service` }
+  }
   return { ...check, ok: true, suspect: null, ms, tracks: previews.length, previews, detail: "ok" }
 }
 
@@ -160,9 +171,19 @@ export function looksLikeMp3(bytes) {
 async function firstBytes(res, max) {
   if (!res.body?.getReader) return new Uint8Array(await res.arrayBuffer()).slice(0, max)
   const reader = res.body.getReader()
-  const { value } = await reader.read()
+  const chunks = []
+  let size = 0
+  // Le premier morceau recu peut etre tout petit : on lit jusqu'a avoir assez.
+  while (size < max) {
+    const { done, value } = await reader.read()
+    if (done || !value) break
+    chunks.push(value)
+    size += value.length
+  }
   await reader.cancel().catch(() => {})
-  return (value ?? new Uint8Array()).slice(0, max)
+  const bytes = new Uint8Array(size)
+  chunks.reduce((offset, chunk) => (bytes.set(chunk, offset), offset + chunk.length), 0)
+  return bytes.slice(0, max)
 }
 
 /** Lit le debut d'un extrait, comme le lecteur audio du navigateur. */
