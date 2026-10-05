@@ -288,6 +288,8 @@ jobs:
           trivy image --scanners vuln,secret --skip-db-update
           --format json --output trivy-image-backend.json "$IMAGE"
       # Checklist du TD Docker : le Dockerfile n'est jamais modifie par la CI.
+      # Les regles viennent de mirror.gcr.io ; s'il ne repond pas, Trivy prend
+      # celles livrees avec le binaire (verifie en local, memes resultats).
       - name: Scanner le Dockerfile (informatif)
         run: >-
           trivy config --exit-code 0
@@ -309,12 +311,16 @@ jobs:
       # --ignore-unfixed : seule une faille qui a deja un correctif bloque.
       # Sinon la CI resterait rouge sans aucune action possible, et on finirait
       # par ignorer le rouge. Les failles sans correctif restent dans le resume.
+      # --table-mode detailed : le journal ne montre que ce qui bloque, sans le
+      # tableau des 1 700 fichiers de l'image a zero.
       - name: Bloquer sur une vulnerabilite CRITICAL corrigeable
         run: >-
           trivy image --scanners vuln --severity CRITICAL --ignore-unfixed
-          --skip-db-update --exit-code 1 "$IMAGE"
+          --skip-db-update --table-mode detailed --exit-code 1 "$IMAGE"
       # Tout secret bloque, quelle que soit sa gravite : un fichier publie
       # dans une couche d'image ne s'efface plus (le .env du 01/10).
       - name: Bloquer sur un secret
         if: ${{ !cancelled() && steps.rapport.outcome == 'success' }}
-        run: trivy image --scanners secret --exit-code 1 "$IMAGE"
+        run: >-
+          trivy image --scanners secret
+          --table-mode detailed --exit-code 1 "$IMAGE"
