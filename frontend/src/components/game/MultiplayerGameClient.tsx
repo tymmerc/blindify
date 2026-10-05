@@ -10,6 +10,8 @@ import { GAME_MODES, type GameModeConfig, type GameMode } from "@/lib/gameModes"
 import { useWakeLock } from "@/lib/useWakeLock"
 import { ConfettiBurst } from "./ConfettiBurst"
 import { TheaterGameView } from "./TheaterGameView"
+import { EndFeedback } from "./EndFeedback"
+import type { FeedbackContext } from "@/lib/feedback"
 
 const VINYL_GROOVES = "repeating-radial-gradient(circle at 50% 50%, #241a10 0 2.5px, #3a2a1a 2.5px 5px)"
 
@@ -99,6 +101,14 @@ function AnalogVinyl({
 }
 
 
+// Retour de fin de partie : chaque joueur devant son propre ecran le voit,
+// jamais l'ecran central d'une partie autour d'une table (presentateur).
+function resolveEndFeedback(enabled: boolean, mode: GameMode, roomCode: string | undefined): FeedbackContext | null {
+  if (!enabled) return null
+  if (mode !== "friends" && mode !== "event") return null
+  return { mode, gameCode: roomCode ?? null }
+}
+
 export type ChatMessage = {
   userId: number
   username: string
@@ -125,6 +135,8 @@ type Props = {
   answerRejectSignal?: number
   /** Pause / reprise (hote uniquement) : emis vers le serveur par le parent. */
   onPauseToggle?: () => void
+  /** Bloc « Ça s'est bien passé ? » sous les resultats (false pour la demo simulee). */
+  showEndFeedback?: boolean
 }
 
 type Phase = "guessing" | "locked" | "reveal"
@@ -145,6 +157,7 @@ export function MultiplayerGameClient({
   chatMessages = [],
   onSendChat,
   answerRejectSignal,
+  showEndFeedback = true,
 }: Props) {
   const resolvedConfig = modeConfig ?? GAME_MODES[mode] ?? GAME_MODES.friends
   const accent = accentColor ?? (resolvedConfig as { theme?: { accent?: string } }).theme?.accent ?? "#c65133"
@@ -158,6 +171,7 @@ export function MultiplayerGameClient({
   const hostPlays = state?.hostPlays === true
   const isEventPresenter = mode === "event" && isHost && !hostPlays
   const isEventParticipant = mode === "event" && !isHost
+  const endFeedback = resolveEndFeedback(showEndFeedback && !isEventPresenter, mode, state?.roomCode)
   // largeUI only applies to the presenter projection — participants get normal sizing
   const isLargeUI = "largeUI" in gameConfig && gameConfig.largeUI === true && !isEventParticipant
   const [guessTitle, setGuessTitle] = useState("")
@@ -759,6 +773,7 @@ export function MultiplayerGameClient({
         onReady={onReady}
         onRematch={onRematch}
         onExit={onExit}
+        endFeedback={endFeedback}
         chatMessages={chatMessages}
         chatInput={chatInput}
         setChatInput={setChatInput}
@@ -1659,6 +1674,8 @@ export function MultiplayerGameClient({
                     </button>
                   )}
                 </div>
+
+                {endFeedback && <EndFeedback context={endFeedback} className="mt-5" />}
               </motion.section>
             )}
           </main>

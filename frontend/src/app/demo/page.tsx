@@ -238,6 +238,7 @@ export default function DemoPage() {
           autoAdvance
           accentColor={accent}
           mode="event"
+          showEndFeedback={false}
         />
       </div>
     </div>

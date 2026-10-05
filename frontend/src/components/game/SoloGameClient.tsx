@@ -16,6 +16,7 @@ import { audioManager, DEFAULT_AUDIO_VOLUME } from "@/lib/audioManager"
 import { RoundUiState, roundFlowReducer, computeScore, resolveModeFlags, ROUND_FEEDBACK_MS, type ScoreBreakdown } from "@/lib/roundFlow"
 import { getListeningDuration } from "@/lib/progressiveDifficulty"
 import { HintButton } from "./HintButton"
+import { EndFeedback } from "./EndFeedback"
 import { useMode } from "@/contexts/ModeContext"
 import { evaluateGuess as evaluateGuessShared, evaluateGuessSeparate, normalize, tokenize, type Verdict } from "@/lib/matching"
 
@@ -1216,6 +1217,8 @@ export function SoloGameClient({
             Rejouer
           </button>
         </div>
+        {/* Defi : le retour se donne sur l'ecran du classement (challenge/page.tsx). */}
+        {!challengeCode && <EndFeedback context={{ mode: "solo", sessionId }} />}
       </div>
     )
   }

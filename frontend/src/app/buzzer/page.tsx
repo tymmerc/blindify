@@ -14,6 +14,7 @@ import { useWakeLock } from "@/lib/useWakeLock"
 import { evaluateGuess, type GuessVerdict } from "@/lib/guessMatch"
 import { publicPath } from "@/lib/publicPath"
 import { FingerBoard, type BoardPhase } from "./FingerBoard"
+import { EndFeedback } from "@/components/game/EndFeedback"
 
 const ZONE_COLORS = ["#c65133", "#e0a32e", "#7d9471", "#5b7d99", "#a06592"]
 const MAX_PLAYERS = 5 // limite multi-touch des iPhone
@@ -369,6 +370,8 @@ function BuzzerContent() {
             Retour aux modes
           </button>
         </div>
+        {/* Un seul tel pour toute la tablee : un avis pour le groupe. */}
+        <EndFeedback context={{ mode: "buzzer" }} className="mt-8" />
       </div>
     )
   }

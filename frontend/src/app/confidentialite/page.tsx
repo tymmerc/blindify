@@ -27,7 +27,7 @@ export default function ConfidentialitePage() {
           <h1 className="font-display text-4xl font-semibold md:text-5xl">
             Politique de <em className="font-medium italic text-[#c65133]">confidentialité</em>
           </h1>
-          <p className="text-sm text-[#8a7558]">Dernière mise à jour : 5 août 2026</p>
+          <p className="text-sm text-[#8a7558]">Dernière mise à jour : 5 octobre 2026</p>
         </div>
 
         <div className="space-y-6">
@@ -63,6 +63,13 @@ export default function ConfidentialitePage() {
                 Spotify ou Deezer (titre, artiste, extrait). On ne récupère rien de ton compte Spotify ou
                 Deezer, juste ce qui est nécessaire pour construire la partie à partir du lien que tu
                 fournis.
+              </Item>
+              <Item>
+                <strong>Ton retour de fin de partie</strong>, seulement si tu en donnes un : ta réponse à
+                « Ça s'est bien passé ? », le texte que tu écris si tu signales un bug, le mode de jeu et
+                le type de navigateur. Le retour est rattaché à la partie concernée, mais on n'y enregistre
+                ni ton pseudo ni ton adresse IP. Ça sert uniquement à corriger les bugs et à améliorer le
+                jeu.
               </Item>
             </ul>
           </Section>

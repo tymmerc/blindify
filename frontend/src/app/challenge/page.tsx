@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation"
 import { clientApi } from "@/lib/apiClient"
 import { api } from "@/lib/api"
 import { SoloGameClient, type RoundStats } from "@/components/game/SoloGameClient"
+import { EndFeedback } from "@/components/game/EndFeedback"
 import type { SoloTrack, UserSummary } from "@/lib/types"
 import { Loader2 } from "lucide-react"
 import { absoluteUrl, publicPath } from "@/lib/publicPath"
@@ -329,6 +330,8 @@ function ChallengeContent() {
               Copier le lien du défi
             </button>
           </div>
+
+          <EndFeedback context={{ mode: "defi", gameCode: code }} />
         </div>
       </div>
     )
