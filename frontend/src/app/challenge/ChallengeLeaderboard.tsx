@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { Check } from "lucide-react"
 import { absoluteUrl, publicPath } from "@/lib/publicPath"
+import { ChallengeShell } from "./ChallengeShell"
 
 // Classement d'un defi, une fois la partie de l'ami terminee. On y propose de
 // lancer son propre defi : c'est la que l'envie de "defier a mon tour" nait.
@@ -68,8 +69,8 @@ export function ChallengeLeaderboard({ challenge, attempts, currentPlayerName }:
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4 py-8 text-[#2e2014] sm:px-6">
-      <div className="w-full max-w-lg space-y-6">
+    <ChallengeShell wide>
+      <div className="space-y-6">
         <h1 className="text-center font-display text-3xl font-semibold">Résultats du défi</h1>
 
         <ol className="rounded-md border-2 border-[#2e2014] bg-[#ece1c8] px-4 py-3 shadow-[4px_4px_0_rgba(46,32,20,.18)] sm:px-6">
@@ -116,6 +117,6 @@ export function ChallengeLeaderboard({ challenge, attempts, currentPlayerName }:
           </p>
         )}
       </div>
-    </div>
+    </ChallengeShell>
   )
 }

@@ -10,6 +10,7 @@ import { Loader2 } from "lucide-react"
 import { publicPath } from "@/lib/publicPath"
 import { NICKNAME_KEY, cleanPlayerName, isChallengeCode, normalizeChallengeCode, readStored, writeStored } from "@/lib/soloSetup"
 import { ChallengeLeaderboard, type LeaderboardEntry } from "./ChallengeLeaderboard"
+import { ChallengeShell } from "./ChallengeShell"
 
 type ChallengeData = {
   code: string
@@ -124,8 +125,8 @@ function ChallengeContent() {
 
   if (phase === "no-code") {
     return (
-      <div className="flex min-h-screen items-center justify-center px-6 text-[#2e2014]">
-        <div className="w-full max-w-md space-y-6 text-center">
+      <ChallengeShell>
+        <div className="space-y-6 text-center">
           <h1 className="font-display text-3xl font-semibold">Rejoindre un défi</h1>
           <p className="text-sm text-[#6b573f]">Un pote t&apos;a lancé un défi ? Tape le code qu&apos;il t&apos;a envoyé.</p>
           <div className="flex gap-3">
@@ -157,7 +158,7 @@ function ChallengeContent() {
             depuis le solo.
           </p>
         </div>
-      </div>
+      </ChallengeShell>
     )
   }
 
@@ -171,8 +172,8 @@ function ChallengeContent() {
 
   if (phase === "error") {
     return (
-      <div className="flex min-h-screen items-center justify-center px-6 text-[#2e2014]">
-        <div className="w-full max-w-md space-y-4 border-2 border-[#2e2014] bg-[#ece1c8] p-8 text-center shadow-[4px_4px_0_rgba(46,32,20,.18)]">
+      <ChallengeShell>
+        <div className="space-y-4 border-2 border-[#2e2014] bg-[#ece1c8] p-8 text-center shadow-[4px_4px_0_rgba(46,32,20,.18)]">
           <h1 className="font-display text-2xl font-semibold text-[#9c2f1d]">Défi introuvable</h1>
           <p className="text-sm text-[#6b573f]">{error}</p>
           <a
@@ -182,20 +183,20 @@ function ChallengeContent() {
             Entrer un code
           </a>
         </div>
-      </div>
+      </ChallengeShell>
     )
   }
 
   if (phase === "intro" && challenge) {
     return (
-      <div className="flex min-h-screen items-center justify-center px-6 text-[#2e2014]">
-        <div className="w-full max-w-md space-y-6">
+      <ChallengeShell>
+        <div className="space-y-6">
           <div className="space-y-2 text-center">
             <h1 className="font-display text-3xl font-semibold">
               Défi de <em className="font-medium italic text-[#c65133]">{challenge.creatorName}</em>
             </h1>
             <p className="text-sm text-[#6b573f]">
-              {challenge.trackCount} morceau{challenge.trackCount > 1 ? "x" : ""}, les mêmes que {challenge.creatorName}, dans le même ordre. À toi de faire mieux.
+              Un blind test sur {challenge.trackCount} morceau{challenge.trackCount > 1 ? "x" : ""}, les mêmes que {challenge.creatorName} et dans le même ordre. Trouve le titre et l&apos;artiste, et bats son score.
             </p>
           </div>
 
@@ -241,7 +242,7 @@ function ChallengeContent() {
             </button>
           </div>
         </div>
-      </div>
+      </ChallengeShell>
     )
   }
 
