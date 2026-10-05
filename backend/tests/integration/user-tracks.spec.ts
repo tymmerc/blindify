@@ -49,8 +49,6 @@ jest.mock("axios", () => ({ __esModule: true, default: { get: jest.fn(async () =
 
 import http from "http";
 import crypto from "crypto";
-import fs from "fs";
-import path from "path";
 import type { Request, Response } from "express";
 import { resolveTestDatabaseUrl } from "../testDatabase";
 import { pool } from "../../src/config/db";
@@ -58,13 +56,15 @@ import { initSocket } from "../../src/socket";
 import { getSessionContext } from "../../src/utils/session";
 import { fetchPlaylistTracks, fetchPublicPlaylists, type ImportedTrack } from "../../src/services/profileImportService";
 import { ensureLinksSchema } from "../../src/controllers/linksController";
-import { ensureUserTracksSchema, linkTrackToUser } from "../../src/services/userTracks";
+import { bySmallestLibrary, ensureUserTracksSchema, linkTrackToUser } from "../../src/services/userTracks";
 import { DEAD_GUEST_FILTER } from "../../src/services/deadGuests";
 import { importController } from "../../src/controllers/importController";
 import { linksController } from "../../src/controllers/linksController";
 import { roomsController } from "../../src/controllers/roomsController";
 import { gamesController } from "../../src/controllers/gamesController";
 import { authController } from "../../src/controllers/authController";
+import { audioSourcesController } from "../../src/controllers/audioSourcesController";
+import { fetchAudioSources } from "../../src/services/trackResolution";
 import { clearGame } from "../../src/services/realtimeGame";
 import { clearAdvanceTimer, clearRevealTimer } from "../../src/services/realtimeOrchestrator";
 
@@ -73,7 +73,6 @@ resolveTestDatabaseUrl(process.env.TEST_DATABASE_URL);
 
 jest.setTimeout(30000);
 
-const MIGRATION = path.join(__dirname, "../../migrations/005_user_audio_sources.sql");
 const RUN = crypto.randomUUID().slice(0, 8);
 
 // ---- faux catalogue Deezer ---------------------------------------------------
@@ -104,6 +103,12 @@ const PLAYLISTS = new Map<string, number[]>([
   ["502", [...range(90, 6), ...range(110, 6)]], // Max
   ["601", range(130, 12)],                    // Pia puis Rob : la meme playlist
   ["701", range(150, 12)],                    // Una puis Vic : la meme playlist
+  ["702", range(170, 12)],                    // Wes puis Yan : la meme playlist
+  ["703", range(190, 12)],                    // Zoe, puis l'ancien backend lui retire sa carte
+  ["704", range(210, 12)],                    // Abel puis Bea : xmin des liens
+  ["801", range(230, 12)],                    // Kim : carte decochee
+  ["802", range(250, 3)],                     // Kim : carte cochee, 3 titres
+  ["803", range(260, 6)],                     // Leo : 6 titres
 ]);
 const externalIds = (playlistId: string) => (PLAYLISTS.get(playlistId) ?? []).map(n => `${RUN}-${n}`);
 
@@ -124,10 +129,11 @@ type Reply = { status: number; body: Envelope };
 /** Un champ de la reponse { success, data, error }, au type attendu par le test. */
 const field = <T>(reply: Reply, key: string): T => reply.body.data?.[key] as T;
 
-function as(userId: number): void {
+/** Un invite ; avec `connection`, un joueur relie a un service (son fonds commun est celui du service). */
+function as(userId: number, connection: { provider: string } | null = null): void {
   mockSession.mockResolvedValue({
     user: { id: userId, provider: "guest", provider_id: `invite-${userId}`, username: `joueur${userId}` },
-    connection: null,
+    connection,
     sessionToken: null,
   } as unknown as Awaited<ReturnType<typeof getSessionContext>>);
 }
@@ -136,8 +142,9 @@ async function call(
   handler: (req: Request, res: Response) => Promise<void>,
   userId: number,
   req: { body?: unknown; params?: Record<string, string> } = {},
+  connection: { provider: string } | null = null,
 ): Promise<Reply> {
-  as(userId);
+  as(userId, connection);
   const reply: Reply = { status: 200, body: { success: false, data: null, error: null } };
   const res = {
     status(code: number) { reply.status = code; return res; },
@@ -292,8 +299,10 @@ describe("migration 005 : user_audio_sources", () => {
   // (base neuve, schema de la prod) est celle du beforeAll.
   it("le demarrage applique la migration 005, qui se rejoue sans rien changer", async () => {
     const applied = await schemaShape();
-    await pool.query(fs.readFileSync(MIGRATION, "utf8")); // ce qui est passe en prod
-    await ensureUserTracksSchema(); // et chaque demarrage du backend
+    // Chaque demarrage du backend. (En prod, psql envoie chaque commande a
+    // part : meme decoupage, verifie sur une base jetable avec psql.)
+    await ensureUserTracksSchema();
+    await ensureUserTracksSchema();
     expect(await schemaShape()).toEqual(applied);
 
     expect(applied.columns.map(c => c.attname)).toEqual(["user_id", "audio_source_id", "link_id", "created_at"]);
@@ -306,8 +315,17 @@ describe("migration 005 : user_audio_sources", () => {
     expect(applied.indexes.map(i => i.indexname)).toEqual([
       "idx_game_rounds_owner", "idx_user_audio_sources_link", "idx_user_audio_sources_source", "user_audio_sources_pkey",
     ]);
-    expect(applied.triggers.map(t => t.tgname)).toEqual(["audio_sources_lien_proprietaire"]);
+    expect(applied.triggers.map(t => t.tgname)).toEqual(["audio_sources_lien_proprietaire", "audio_sources_lien_retire"]);
+    // Index partiel : les manches d'avant la migration n'ont pas de contributeur.
+    expect(applied.indexes.find(i => i.indexname === "idx_game_rounds_owner")?.indexdef).toContain("WHERE (owner_user_id IS NOT NULL)");
     expect(applied.roundOwner).toEqual([{ type: "integer" }]);
+  });
+
+  it("deux demarrages en meme temps : la migration passe pour les deux", async () => {
+    // Le backend et le backend de dev qui redemarrent ensemble. Sans verrou,
+    // le second echouait (XX000 « tuple concurrently updated » sur la fonction).
+    const runs = await Promise.allSettled([1, 2, 3, 4].map(() => ensureUserTracksSchema()));
+    expect(runs.filter(r => r.status === "rejected")).toEqual([]);
   });
 
   it("reprend l'existant : le premier importeur garde son lien et sa carte, une carte etrangere est ecartee", async () => {
@@ -358,6 +376,42 @@ describe("migration 005 : user_audio_sources", () => {
       [rows[0].id],
     );
     expect(linked).toEqual([{ user_id: seeded, link_id: link[0].id }]);
+  });
+
+  it("un lien qui ne change pas n'est jamais reecrit, ni par le declencheur ni par l'import", async () => {
+    const abel = await newGuest("abel"); // premier importeur
+    const bea = await newGuest("bea");
+    await importPlaylist(abel, "704");
+    const versions = async () => (await pool.query<{ audio_source_id: string; xmin: string }>(
+      `SELECT audio_source_id, xmin::text FROM user_audio_sources WHERE user_id = $1 ORDER BY audio_source_id`,
+      [abel],
+    )).rows;
+    const before = await versions();
+    expect(before).toHaveLength(12);
+
+    // Bea importe les memes morceaux : l'upsert d'audio_sources reecrit
+    // user_id (inchange) et declenche le lien d'Abel. Puis Abel reimporte.
+    await importPlaylist(bea, "704");
+    await importPlaylist(abel, "704");
+
+    expect(await versions()).toEqual(before);
+  });
+
+  it("pendant le deploiement, l'ancien backend qui retire une carte retire aussi le lien", async () => {
+    const zoe = await newGuest("zoe");
+    const { linkId } = await importPlaylist(zoe, "703");
+    expect(await linkedExternalIds(zoe)).toHaveLength(12);
+
+    // Ce que fait le code d'avant (image precedente, backend de dev) : il ne
+    // connait que la colonne historique.
+    await pool.query(`UPDATE audio_sources SET user_id=NULL, link_id=NULL WHERE link_id=$1 AND user_id=$2`, [linkId, zoe]);
+    await pool.query(`DELETE FROM imported_links WHERE id=$1 AND user_id=$2`, [linkId, zoe]);
+
+    expect(await linkedExternalIds(zoe)).toEqual([]);
+    // Sans ca, les liens restaient sans carte et revenaient dans « Imports precedents ».
+    expect(await cardsOf(zoe)).toEqual([]);
+    await ensureUserTracksSchema();
+    expect(await linkedExternalIds(zoe)).toEqual([]);
   });
 });
 
@@ -435,6 +489,74 @@ describe("retirer une carte", () => {
     expect(await linkedExternalIds(una)).toEqual([]);
     expect(await linkedExternalIds(vic)).toEqual([]);
     expect(await rowsFor(externalIds("701"))).toBe(12); // detacher, jamais detruire
+  });
+
+  it("la premiere importeuse retire sa carte, le second garde la sienne et lance sa partie", async () => {
+    const wes = await newGuest("wes"); // premier importeur
+    const yan = await newGuest("yan");
+    const tom = await newGuest("tom2");
+    const first = await importPlaylist(wes, "702");
+    await importPlaylist(yan, "702");
+
+    const gone = await call(linksController.remove, wes, { params: { id: String(first.linkId) } });
+    expect(gone.status).toBe(200);
+
+    const code = await newRoom([yan, tom]);
+    const lobby = await call(roomsController.details, yan, { params: { code } });
+    const counts = field<Array<{ user_id: number; track_count: number }>>(lobby, "participants").map(p => [p.user_id, p.track_count]);
+    expect(counts).toEqual([[yan, 12], [tom, 0]]);
+    const started = await startRoom(code, yan);
+    expect(started.status).toBe(200);
+    expect(started.tracks).toHaveLength(10);
+    expect(started.tracks.every(t => t.metadata.owner_user_id === yan)).toBe(true);
+    expect(started.tracks.every(t => (t.metadata.owner_user_ids ?? []).join() === String(yan))).toBe(true);
+  });
+});
+
+describe("les autres lectures de la bibliotheque", () => {
+  it("GET /api/audio-sources rend ses morceaux au second importeur", async () => {
+    const first = await newGuest("api_premier");
+    const second = await newGuest("api_second");
+    await importPlaylist(first, "101");
+    await importPlaylist(second, "101");
+
+    const reply = await call(audioSourcesController.index, second);
+
+    expect(reply.status).toBe(200);
+    const mine = field<Array<{ external_id: string }>>(reply, "sources").map(s => s.external_id).filter(id => id.startsWith(`${RUN}-`));
+    expect(mine.sort()).toEqual([...externalIds("101")].sort());
+  });
+
+  it("titres likes : le second importeur les joue depuis sa carte", async () => {
+    const first = await newGuest("like_premier");
+    const second = await newGuest("like_second");
+    await importPlaylist(first, "101");
+    const { linkId } = await importPlaylist(second, "101");
+    const { rows } = await pool.query<{ id: string }>(
+      `SELECT id FROM audio_sources WHERE provider = 'deezer' AND external_id = ANY($1::text[]) ORDER BY external_id LIMIT 3`,
+      [externalIds("101")],
+    );
+    for (const row of rows) {
+      await pool.query(`INSERT INTO likes (user_id, audio_source_id) VALUES ($1, $2)`, [second, row.id]);
+    }
+
+    const liked = await fetchAudioSources(second, "deezer", 50, { likedOnly: true, linkIds: [linkId] });
+
+    expect(liked.map(s => s.id).sort()).toEqual(rows.map(r => r.id).sort());
+    expect(liked.every(s => s.user_id === second && s.link_id === linkId)).toBe(true);
+  });
+
+  it("le tourniquet range les bibliotheques comme le lobby les compte : cartes cochees seulement", async () => {
+    const kim = await newGuest("kim");
+    const leo = await newGuest("leo");
+    const off = await importPlaylist(kim, "801");
+    await importPlaylist(kim, "802");
+    await importPlaylist(leo, "803");
+    const toggled = await call(linksController.toggle, kim, { params: { id: String(off.linkId) }, body: { active: false } });
+    expect(toggled.status).toBe(200);
+
+    // Kim : 15 titres en tout, 3 qui jouent ce soir. Leo : 6.
+    expect(await bySmallestLibrary([leo, kim])).toEqual([kim, leo]);
   });
 });
 
@@ -537,6 +659,37 @@ describe("solo par bibliotheque", () => {
     const played = field<Array<{ track_id: string }>>(reply, "tracks").map(t => t.track_id);
     expect(played).toHaveLength(10);
     expect(played.every(id => externalIds("101").includes(id))).toBe(true);
+  });
+
+  it("sans musique, le solo Deezer pioche dans le fonds commun, jamais un morceau qu'un joueur garde", async () => {
+    const libres = range(300, 12).map(track);
+    for (const t of libres) {
+      await pool.query(
+        `INSERT INTO audio_sources (provider, external_id, title, artist) VALUES ('deezer', $1, $2, $3)`,
+        [t.externalId, t.title, t.artist],
+      );
+    }
+    // Un morceau dont le premier importeur s'est retire (user_id vide) mais
+    // qu'un autre joueur garde : il n'est pas au fonds commun.
+    const garde = await newGuest("garde");
+    const { rows } = await pool.query<{ id: string }>(
+      `INSERT INTO audio_sources (provider, external_id, title, artist) VALUES ('deezer', $1, 'Garde', 'G') RETURNING id`,
+      [`${RUN}-garde`],
+    );
+    await linkTrackToUser(garde, rows[0].id, null);
+    const sansMusique = await newGuest("sans_musique");
+
+    const reply = await call(gamesController.startSoloGame, sansMusique, { body: { source: "library", count: 10 } }, { provider: "deezer" });
+
+    expect(reply.status).toBe(200);
+    const played = field<Array<{ track_id: string }>>(reply, "tracks").map(t => t.track_id);
+    expect(played).toHaveLength(10);
+    const { rows: owned } = await pool.query<{ n: string }>(
+      `SELECT count(*) AS n FROM user_audio_sources ua JOIN audio_sources a ON a.id = ua.audio_source_id
+       WHERE a.external_id = ANY($1::text[])`,
+      [played],
+    );
+    expect(Number(owned[0].n)).toBe(0);
   });
 });
 
