@@ -10,8 +10,9 @@
 //     sauf dans une bande qui defile expres (le choix « qui a ajoute ? »).
 // Ecrans : partie a distance (l'hote, avec PAUSE, et un invite) en manche, a la
 // revelation et a la fin ; autour d'une table (ecran central + telephone) ; un
-// seul tel (buzzer). Tailles 320x568, 375x667, 390x844, 430x932. Moteurs :
-// WebKit (profil iPhone 13) et Chromium (profil Pixel 7).
+// seul tel (buzzer). Tailles 320x568, 375x667, 390x844, 430x932, et pour la
+// partie a distance aussi 667x375 (telephone couche) et 768x1024 (tablette).
+// Moteurs : WebKit (profil iPhone 13) et Chromium (profil Pixel 7).
 //
 //   campagne-ref.sh <branche> --script /chemin/ecran-jeu-iphone.mjs /dossier/des/preuves [webkit,chromium]
 //
@@ -26,6 +27,7 @@ import { APP, newPage, sleep } from "./probe.mjs"
 const OUT = process.argv[2] || "/tmp/ecran-jeu-iphone"
 const ENGINES = (process.argv[3] || "webkit,chromium").split(",")
 const SIZES = [[320, 568], [375, 667], [390, 844], [430, 932]]
+const REMOTE_SIZES = [...SIZES, [667, 375], [768, 1024]]
 const LAUNCH = { webkit, chromium }
 const DEVICE = { webkit: devices["iPhone 13"], chromium: devices["Pixel 7"] }
 fs.mkdirSync(OUT, { recursive: true })
@@ -138,12 +140,13 @@ async function remote(browser, eng) {
     await g.getByRole("button", { name: /rejoindre la partie/i }).click({ timeout: 20000 })
     await g.locator("[data-code]").first().waitFor({ timeout: 30000 })
     await h.getByText("Lou").first().waitFor({ timeout: 30000 })
-    await h.getByRole("button", { name: "5", exact: true }).first().click()
+    await h.getByRole("button", { name: "10", exact: true }).first().click()
     await sleep(800)
     await h.getByRole("button", { name: /lancer la partie/i }).first().click()
 
-    for (let round = 1; round <= 5; round++) {
-      const size = SIZES[round - 1]
+    // Une taille par manche (manche et revelation), les dernieres manches sans capture.
+    for (let round = 1; round <= 10; round++) {
+      const size = REMOTE_SIZES[round - 1]
       await Promise.all(pages.map(([, p]) => p.getByPlaceholder("Titre du morceau").waitFor({ state: "visible", timeout: 60000 })))
       await sleep(1200)
       if (size) await both(pages, { eng, screen: "distance-manche", size })
@@ -159,7 +162,7 @@ async function remote(browser, eng) {
     // Fin : le podium du salon (« Fin de la face · Resultats ») remplace l'ecran de jeu.
     await Promise.all(pages.map(([, p]) => p.getByText(/Fin de la face/).first().waitFor({ state: "visible", timeout: 60000 })))
     await sleep(4000) // entree animee du podium
-    for (const size of SIZES) await both(pages, { eng, screen: "distance-fin", size })
+    for (const size of REMOTE_SIZES) await both(pages, { eng, screen: "distance-fin", size })
   } catch (e) {
     problems.push(`${eng} a distance : arret, ${e.message.split("\n")[0]}`)
     say(`  !! arret : ${e.message.split("\n")[0]}`)

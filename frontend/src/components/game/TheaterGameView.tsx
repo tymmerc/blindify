@@ -401,7 +401,7 @@ export function TheaterGameView(props: Props) {
                 className="theater-submit flex-1"
                 disabled={localHasAnswered || disabled}
               >
-                {localHasAnswered ? "Envoyée" : "Valider ma réponse"}
+                {localHasAnswered ? "Envoyée" : <>Valider<span className="theater-submit-tail"> ma réponse</span></>}
               </button>
               {/* Personne ne connait ce son : on passe au lieu de regarder le
                   chrono, reveal des que tout le monde a tranche. */}
@@ -1336,6 +1336,9 @@ const theaterStyles = `
 
   @media (max-width:900px){
     .theater-stage > div:nth-child(2){grid-template-columns:minmax(0,1fr) !important}
+    /* Tablette, telephone couche : l'en-tete complet fait ~750 px. */
+    .theater-volume-slider{display:none}
+    .theater-brand small{display:none}
     .theater-score-col{display:none}
     .theater-dock{grid-template-columns:1fr 1fr !important}
     .theater-dock > .theater-field:nth-child(3){grid-column:1 / -1}
@@ -1391,15 +1394,17 @@ const theaterStyles = `
     .finale-board{max-width:100%}
   }
   /* Petits telephones (iPhone SE 1re generation, 320 px) : la marque saute et
-     les deux boutons de reponse passent l'un sous l'autre. */
+     le bouton dit juste « Valider », pour garder Valider et Je sais pas sur
+     une ligne (l'un sous l'autre, ils mangeaient la place de la platine). */
   @media (max-width:359px){
     .theater-brand{display:none}
     .theater-topbar{grid-template-columns:minmax(0,1fr) auto !important}
-    .theater-actions{flex-direction:column; align-items:stretch}
+    .theater-submit-tail{display:none}
   }
-  /* Ecran court (568 px de haut) : la platine reduit pour que le libelle
-     « Extrait en cours » ne passe plus sous l'en-tete. */
+  /* Ecran court (568 px de haut) : la platine reduit et la mention 33 tours
+     (decorative) saute, sinon « Extrait en cours » passe sous l'en-tete. */
   @media (max-width:640px) and (max-height:600px){
-    .theater-arena{width:min(62vw, 20vh)}
+    .theater-arena{width:min(62vw, 18vh)}
+    .theater-arena-hint{display:none}
   }
 `
