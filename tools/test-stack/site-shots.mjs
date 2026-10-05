@@ -85,10 +85,18 @@ async function landing(view) {
   if (await btn.count()) {
     await btn.first().click()
     await sleep(600)
-    const dialog = await page.getByRole("heading", { name: "Signaler un bug" }).isVisible().catch(() => false)
-    expect(dialog, `landing ${view.tag} : le lien ouvre "Signaler un bug"`)
+    const dialog = page.getByRole("dialog", { name: "Signaler un bug" })
+    const visible = await dialog.isVisible().catch(() => false)
+    expect(visible, `landing ${view.tag} : le lien ouvre "Signaler un bug" (role dialog nomme par son titre)`)
+    expect((await dialog.getAttribute("aria-modal").catch(() => null)) === "true", `landing ${view.tag} : le dialogue est aria-modal`)
     await shot(page, `landing-${view.tag}-signaler`)
-    await page.getByRole("button", { name: "Fermer" }).click().catch(() => {})
+    // Echap ferme et le focus revient sur le bouton du pied de page
+    await page.keyboard.press("Escape")
+    await sleep(300)
+    const closed = !(await dialog.isVisible().catch(() => false))
+    const back = await btn.first().evaluate(el => el === document.activeElement).catch(() => false)
+    expect(closed, `landing ${view.tag} : Echap ferme le formulaire`)
+    expect(back, `landing ${view.tag} : le focus revient sur « signale-le »`)
   } else {
     expect(false, `landing ${view.tag} : bouton "signale-le" dans le pied`)
   }
@@ -124,12 +132,15 @@ async function comparatif(view) {
     const ext = [...document.querySelectorAll("a[href^='http']")].map(a => ({ href: a.href, rel: a.rel }))
     const ld = [...document.querySelectorAll('script[type="application/ld+json"]')].map(s => s.textContent).join("\n")
     const h3 = [...document.querySelectorAll("h3")].map(h => h.textContent)
-    return { rows, ext, ld, h3 }
+    const blinest = [...document.querySelectorAll("table tbody tr")].find(tr => tr.querySelector("td")?.textContent?.trim() === "Blinest")?.textContent || ""
+    return { rows, ext, ld, h3, blinest }
   })
   say(`  lignes du tableau : ${info.rows.join(", ")}`)
   expect(info.rows.includes("Blinest"), `comparatif ${view.tag} : ligne Blinest dans le tableau`)
   expect(info.h3.includes("Blinest"), `comparatif ${view.tag} : fiche Blinest`)
   expect(/Blinest/.test(info.ld), `comparatif ${view.tag} : Blinest dans le JSON-LD`)
+  // Relecture du 05/10 : chez Blinest, seul l'import Deezer existe encore
+  expect(/Deezer/.test(info.blinest) && !/Spotify|Apple Music/.test(info.blinest), `comparatif ${view.tag} : la ligne Blinest dit import Deezer, ni Spotify ni Apple Music`)
   const external = info.ext.filter(l => !l.href.startsWith(APP))
   const unsafe = external.filter(l => !/\bnoopener\b/.test(l.rel) || !/\bnofollow\b/.test(l.rel))
   if (unsafe.length) bad(`comparatif ${view.tag} : liens externes sans noopener nofollow : ${unsafe.map(l => l.href).join(" ")}`)
