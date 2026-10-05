@@ -255,6 +255,99 @@ describe("RotatingEnd", () => {
     expect([...container.querySelectorAll("[data-etat]")].map(e => e.getAttribute("data-etat"))).toEqual(["sort", "entre", "attend"])
   })
 
+  it("fait un seul tour : les 13 fins, retour a la premiere, puis plus rien ne bouge", () => {
+    vi.useFakeTimers()
+    moinsDAnimations(false)
+    const fins = Array.from({ length: 13 }, (_, i) => <span key={i}>fin {i}.</span>)
+    const { container } = render(<RotatingEnd endings={fins} />)
+    const etats = () => [...container.querySelectorAll("[data-etat]")].map(e => e.getAttribute("data-etat"))
+    // rang de la fin lisible (une seule a la fois)
+    const lue = () => [...container.querySelectorAll("[data-etat]")].findIndex(e => e.getAttribute("aria-hidden") !== "true")
+    const vues: number[] = []
+    for (let battement = 0; battement < 20; battement++) {
+      act(() => {
+        vi.advanceTimersByTime(2200)
+      })
+      vues.push(lue())
+      // 13e passage : la premiere fin revient en lettres, comme les autres
+      if (battement === 12) expect(etats()[0]).toBe("entre")
+    }
+    expect(vues).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 0, 0, 0, 0, 0, 0, 0, 0])
+    // au battement d'apres elle se pose, d'un seul tenant, et la minuterie est coupee
+    expect(etats()).toEqual(["repos", ...Array(12).fill("attend")])
+    expect(container.querySelector(".volet")).toBeNull()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it("une pause en cours de tour reprend ou elle en etait, sans rallonger le tour", () => {
+    vi.useFakeTimers()
+    moinsDAnimations(false)
+    const { container } = render(<RotatingEnd endings={FINS} />)
+    const etats = () => [...container.querySelectorAll("[data-etat]")].map(e => e.getAttribute("data-etat"))
+    act(() => {
+      vi.advanceTimersByTime(2200)
+    })
+    ongletCache(true)
+    act(() => {
+      vi.advanceTimersByTime(60_000)
+    })
+    ongletCache(false)
+    act(() => {
+      vi.advanceTimersByTime(2200)
+    })
+    expect(etats()).toEqual(["attend", "sort", "entre"])
+    act(() => {
+      vi.advanceTimersByTime(2200)
+    })
+    expect(etats()).toEqual(["entre", "attend", "sort"])
+    act(() => {
+      vi.advanceTimersByTime(2200)
+    })
+    expect(etats()).toEqual(["repos", "attend", "attend"])
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it("une fois le tour fini, ni l'onglet ni le reglage d'animations ne relancent rien", () => {
+    vi.useFakeTimers()
+    const reglage = moinsDAnimations(false)
+    const { container } = render(<RotatingEnd endings={FINS} />)
+    const etats = () => [...container.querySelectorAll("[data-etat]")].map(e => e.getAttribute("data-etat"))
+    act(() => {
+      vi.advanceTimersByTime(2200 * 3)
+    })
+    expect(etats()).toEqual(["entre", "attend", "sort"])
+
+    // onglet cache pendant que la premiere fin revient : elle se pose tout de suite
+    ongletCache(true)
+    expect(etats()).toEqual(["repos", "attend", "attend"])
+    ongletCache(false)
+    expect(vi.getTimerCount()).toBe(0)
+
+    reglage.changer(true)
+    reglage.changer(false)
+    expect(vi.getTimerCount()).toBe(0)
+    act(() => {
+      vi.advanceTimersByTime(60_000)
+    })
+    expect(etats()).toEqual(["repos", "attend", "attend"])
+  })
+
+  it("demonte pendant le dernier battement : minuterie et ecouteurs retires", () => {
+    vi.useFakeTimers()
+    const reglage = moinsDAnimations(false)
+    const retirer = vi.spyOn(document, "removeEventListener")
+    const { unmount } = render(<RotatingEnd endings={FINS} />)
+    act(() => {
+      vi.advanceTimersByTime(2200 * 3)
+    })
+    expect(vi.getTimerCount()).toBe(1)
+    unmount()
+    expect(vi.getTimerCount()).toBe(0)
+    expect(reglage.ecouteurs.size).toBe(0)
+    expect(retirer).toHaveBeenCalledWith("visibilitychange", expect.any(Function))
+    retirer.mockRestore()
+  })
+
   it("une seule fin : rien ne tourne", () => {
     vi.useFakeTimers()
     moinsDAnimations(false)

@@ -15,6 +15,11 @@ import {
  * Fin du grand titre de la landing qui change toutes les 2,2 s (choix de Tym le
  * 02/10/2026 : « on arrive pas a choisir, on met les deux »).
  *
+ * Un seul tour (choix de Tym le 05/10, WCAG 2.2.2 « Pause, Stop, Hide ») : les
+ * 13 fins passent une fois, le 13e passage ramene la premiere, et au battement
+ * suivant elle se pose (le meme HTML que le pre-rendu) et la minuterie s'arrete
+ * pour de bon. Environ 31 s en tout, plus rien ne bouge ensuite.
+ *
  * Le HTML pre-rendu ne contient QUE la premiere fin : c'est elle que lisent
  * Google et les IA, et ceux qui ont demande moins d'animations ne voient
  * qu'elle. Les autres n'arrivent qu'apres le chargement, dans la meme case de
@@ -24,9 +29,11 @@ import {
  * titre une fois.
  *
  * La rotation s'arrete quand l'onglet est cache et repart a son retour (une
- * periode entiere avant le passage suivant). Elle s'arrete aussi si l'appareil
- * passe en « moins d'animations » en cours de route, et repart s'il en sort :
- * la fin affichee reste alors posee, sans lettres en mouvement.
+ * periode entiere avant le passage suivant), la ou elle en etait : le tour
+ * n'est pas rallonge. Elle s'arrete aussi si l'appareil passe en « moins
+ * d'animations » en cours de route, et repart s'il en sort : la fin affichee
+ * reste alors posee, sans lettres en mouvement. Une fois le tour fini, plus
+ * rien ne la relance.
  *
  * Passage d'une fin a l'autre (demande de Tym le 05/10) : « volets ». Les
  * lettres basculent une par une de gauche a droite, comme un panneau a
@@ -103,6 +110,11 @@ type Rotation = { tours: number; pose: number }
 const avancer = (r: Rotation): Rotation => ({ ...r, tours: r.tours + 1 })
 // Meme objet si rien ne change : pas de rendu pour rien.
 const poser = (r: Rotation): Rotation => (r.pose === r.tours ? r : { ...r, pose: r.tours })
+// Un battement de la minuterie : un passage tant que le tour n'est pas fait,
+// puis on pose la premiere fin revenue.
+const battre = (total: number) => (r: Rotation): Rotation => (r.tours < total ? avancer(r) : poser(r))
+// Tour fait et premiere fin posee (au dernier battement ou par une pause).
+const tourFini = (r: Rotation, total: number) => r.tours >= total && r.pose === r.tours
 
 export function RotatingEnd({ endings }: { endings: ReactNode[] }) {
   // ready : la rotation a pu demarrer au moins une fois (pas de « moins
@@ -132,11 +144,12 @@ export function RotatingEnd({ endings }: { endings: ReactNode[] }) {
     }
   }, [endings.length])
 
+  const fini = tourFini(rotation, endings.length)
   useEffect(() => {
-    if (!ready || enPause) return
-    const timer = window.setInterval(() => setRotation(avancer), PERIODE_MS)
+    if (!ready || enPause || fini) return
+    const timer = window.setInterval(() => setRotation(battre(endings.length)), PERIODE_MS)
     return () => window.clearInterval(timer)
-  }, [ready, enPause])
+  }, [ready, enPause, fini, endings.length])
 
   // titre-fin des le HTML pre-rendu : meme repere avant et apres le chargement
   // (et le texte que verifie la mise en prod du front).
