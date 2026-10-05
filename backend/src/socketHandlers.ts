@@ -156,6 +156,23 @@ export function emitRoomError(socket: Socket, roomCode: string, message: string,
   });
 }
 
+/**
+ * Le joueur a-t-il un AUTRE socket encore dans la salle ? Cas reel : coupure
+ * reseau franche, le client revient sur un nouveau socket, et le serveur ne
+ * voit mourir l'ancien qu'apres le delai de ping (jusqu'a 25 s). Ce depart
+ * tardif ne doit pas marquer absent un joueur deja revenu.
+ */
+function hasOtherSocketInRoom(io: Server, roomCode: string, userId: number, socketId: string): boolean {
+  const ids = io.sockets.adapter.rooms.get(roomCode);
+  if (!ids) return false;
+  for (const id of ids) {
+    if (id === socketId) continue;
+    const other = io.sockets.sockets.get(id)?.data as { auth?: SessionContext } | undefined;
+    if (other?.auth?.user?.id === userId) return true;
+  }
+  return false;
+}
+
 // ---------------------------------------------------------------------------
 // Friend presence helpers
 // ---------------------------------------------------------------------------
@@ -816,6 +833,8 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
     socket.on("disconnecting", () => {
       const rooms = Array.from(socket.rooms).filter(room => room !== socket.id);
       for (const roomCode of rooms) {
+        // Revenu sur un autre socket avant que celui-ci meure : pas un depart.
+        if (hasOtherSocketInRoom(io, roomCode, currentUser.id, socket.id)) continue;
         const state = getRealtimeState(roomCode);
         // L'hote diffuse la musique pour toute la table : les autres doivent
         // savoir qu'il n'est plus la pour prendre le relais sur leur telephone.

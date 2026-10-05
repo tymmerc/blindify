@@ -28,6 +28,7 @@ import {
   type TestUser,
   type GameClient,
 } from "./helpers/socket-test-harness";
+import { getGameState } from "../../src/services/realtimeGame";
 
 jest.setTimeout(30000);
 
@@ -322,6 +323,31 @@ describe("grace de reconnexion apres une coupure reseau", () => {
       expect(Object.keys(a.lastState()?.players ?? {})).toContain(String(leaver.user.id));
     } finally {
       await closeTable(t);
+    }
+  });
+
+  it("l'ancien socket d'un joueur deja revenu peut mourir sans le faire partir", async () => {
+    // Coupure reseau franche cote telephone : le client revient sur un nouveau
+    // socket, et le serveur ne voit mourir l'ancien que plus tard.
+    const t = await openTable(3, { grace: 1_000 });
+    const [a, b, late] = t.clients;
+    let fresh: GameClient | undefined;
+    try {
+      await answerAll([a, b], t.roomCode, 1);
+      const second = await connectClient(server.port, late.user);
+      fresh = second;
+      second.socket.emit("room:join", { roomCode: t.roomCode });
+      await waitFor(() => second.states.length >= 1, 5000, "second socket joined");
+
+      late.socket.close();
+      await sleep(1_000 + 700);
+      expect(a.lastState()?.phase).toBe("GUESSING");
+      expect(getGameState(t.roomCode)?.players[late.user.id]?.disconnected).toBeFalsy();
+
+      expect((await answer(second, t.roomCode, 1)).ok).toBe(true);
+      await waitFor(inPhase([a, b, second], "REVEAL"), 5000, "REVEAL after his answer");
+    } finally {
+      await closeTable(t, [fresh]);
     }
   });
 });
