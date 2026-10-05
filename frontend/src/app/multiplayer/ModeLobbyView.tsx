@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import { useRouter } from "next/navigation"
 import type { Socket } from "socket.io-client"
 import { Loader2 } from "lucide-react"
-import { getSocket, disconnectSocket } from "@/lib/socket"
+import { getSocket, disconnectSocket, connectIfIdle } from "@/lib/socket"
 import { api } from "@/lib/api"
 import { ApiError } from "@/lib/apiClient"
 import type { CurrentUserPayload } from "@/lib/api"
@@ -323,7 +323,11 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       }
       disconnectSocket()
     }
-  }, [router, isGuest, setGuest])
+    // Pas isGuest dans les dependances : l'effet ne le lit pas, et le premier
+    // setGuest(true) d'un invite relancait tout (nettoyage avec room:leave et
+    // disconnectSocket, second /api/auth/me, nouvel objet utilisateur pendant
+    // la poignee de main du socket).
+  }, [router, setGuest])
 
   useEffect(() => {
     roomRef.current = room
@@ -469,10 +473,11 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         lastJoinKeyRef.current = null
       })
     }
-    // Connect if not already connected (autoConnect is disabled)
-    if (!socketRef.current.connected) {
-      socketRef.current.connect()
-    }
+    // autoConnect est coupe : on connecte ici, mais seulement un socket au repos.
+    // ensureSocket est appele a chaque nouvel utilisateur et a chaque entree en
+    // salle, souvent pendant la poignee de main : un connect() de plus a ce
+    // moment faisait fermer la connexion par le serveur (voir connectIfIdle).
+    connectIfIdle(socketRef.current)
     if (socketRef.current.connected) {
       setSocketConnected(true)
     }
