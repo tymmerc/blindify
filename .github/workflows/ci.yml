@@ -1,13 +1,14 @@
 # Integration continue de Blindz : on verifie, on ne corrige jamais.
 # Chaque job part d'une machine neuve ; ils tournent en parallele, la duree
 # totale est celle du plus lent. Du moins cher au plus cher : lint et typage,
-# puis tests, puis build.
+# puis tests, puis build, puis image Docker du backend scannee par Trivy.
 #
 # Securite (depot public) :
 # - chaque action est epinglee par SHA de commit, version en commentaire : une
-#   etiquette comme v7 peut etre deplacee (cas tj-actions/changed-files, mars 2025) ;
+#   etiquette comme v7 peut etre deplacee (cas tj-actions/changed-files, mars 2025,
+#   puis aquasecurity/trivy-action, mars 2026) ;
 # - aucun droit par defaut, chaque job ne recoit que la lecture du depot ;
-# - aucun secret : lint, typage, tests et build n'en ont pas besoin.
+# - aucun secret : lint, typage, tests, build et scan n'en ont pas besoin.
 #
 # Les noms des jobs sont des statuts requis par la protection de main :
 # renommer un job casse la protection sans aucun message.
@@ -175,3 +176,145 @@ jobs:
           projet: frontend
       - run: npm run build
         working-directory: frontend
+
+  # Image Docker du backend, construite comme en prod puis scannee par Trivy
+  # avant toute publication (cours UE1, chapitre 3). L'image ne quitte jamais
+  # la machine du run : push: false.
+  # Bloque la PR : une vulnerabilite CRITICAL deja corrigee en amont, ou un
+  # secret, quel qu'il soit. Ne bloque pas pour l'instant : HIGH et en dessous
+  # (16 HIGH connues dans l'image de prod au 02/10), signalees dans le resume
+  # du run et le rapport JSON. La config du Dockerfile est informative.
+  image-backend:
+    name: image backend (trivy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      IMAGE: blindz-backend:ci
+      # Le miroir de Google d'abord, ghcr.io en secours : ghcr.io limite le
+      # nombre de telechargements (erreur TOOMANYREQUESTS). Trivy ne passe au
+      # second registre que sur une erreur passagere (limite, panne).
+      TRIVY_DB_REPOSITORY: mirror.gcr.io/aquasec/trivy-db:2,ghcr.io/aquasecurity/trivy-db:2
+      TRIVY_DISABLE_TELEMETRY: "true"
+      TRIVY_SKIP_VERSION_CHECK: "true"
+      TRIVY_NO_PROGRESS: "true"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Tester le resume des rapports Trivy
+        run: bash tools/trivy/resume.test.sh
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      # Meme contexte et meme Dockerfile que docker-compose.yml. load : l'image
+      # va dans le Docker de la machine, ou Trivy la lit. Cache des couches
+      # dans celui de GitHub Actions : seul main l'ecrit, les PR le relisent
+      # (le quota de cache du depot est deja bien rempli par npm).
+      - name: Construire l'image du backend
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: backend
+          file: backend/Dockerfile
+          push: false
+          load: true
+          tags: ${{ env.IMAGE }}
+          cache-from: type=gha,scope=image-backend
+          cache-to: ${{ github.ref == 'refs/heads/main' && 'type=gha,mode=max,scope=image-backend' || '' }}
+
+      # Trivy en binaire, ni trivy-action ni setup-trivy : le 19/03/2026 leurs
+      # etiquettes ont ete deplacees vers un voleur de secrets et le binaire
+      # 0.69.4 a ete piege (CVE-2026-33634, GHSA-69fq-xp46-6x23). L'empreinte
+      # est ecrite ici, pas lue dans la release : une archive modifiee arrete
+      # le job avant d'etre executee. 0.74.0 : release immuable, signature
+      # sigstore verifiee a l'epinglage (cosign verify-blob), aucun avis ouvert.
+      # Pour monter de version : nouvelle archive, verifier la signature avec
+      # cosign, recopier son sha256 ici.
+      - name: Installer Trivy
+        env:
+          TRIVY_VERSION: 0.74.0
+          TRIVY_SHA256: 2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a
+        run: |
+          archive="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/$archive" \
+            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/$archive"
+          echo "$TRIVY_SHA256  $RUNNER_TEMP/$archive" | sha256sum --check --strict
+          mkdir -p "$RUNNER_TEMP/trivy"
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP/trivy" trivy
+          echo "$RUNNER_TEMP/trivy" >> "$GITHUB_PATH"
+          echo "TRIVY_CACHE_DIR=$RUNNER_TEMP/trivy-cache" >> "$GITHUB_ENV"
+          "$RUNNER_TEMP/trivy/trivy" --version
+
+      # Base de vulnerabilites : 1,4 Go une fois decompressee, environ 90 Mo
+      # dans le cache. Gardee un jour : un seul telechargement par jour, ecrit par
+      # main et relu par les PR. Trivy la remplace lui-meme quand elle est
+      # perimee.
+      - name: Date du jour
+        id: jour
+        run: echo "date=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+      - name: Restaurer la base de vulnerabilites
+        id: base
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/trivy-cache/db
+          key: trivy-db-${{ steps.jour.outputs.date }}
+          restore-keys: trivy-db-
+      # Trois essais espaces. Si les deux registres refusent, la base de la
+      # veille (cache) suffit pour un verrou sur les CRITICAL ; sans aucune
+      # base, le job echoue plutot que de laisser passer une image non scannee.
+      - name: Mettre a jour la base de vulnerabilites
+        run: |
+          for essai in 1 2 3; do
+            if trivy image --download-db-only; then exit 0; fi
+            if [ "$essai" -lt 3 ]; then sleep $((essai * 20)); fi
+          done
+          if [ -f "$TRIVY_CACHE_DIR/db/trivy.db" ]; then
+            echo "::warning::Base Trivy pas mise a jour (registres indisponibles) : scan avec celle du cache"
+            trivy --version
+            exit 0
+          fi
+          echo "::error::Aucune base Trivy disponible : relancer le job plus tard"
+          exit 1
+      - name: Garder la base pour les runs du jour
+        if: github.ref == 'refs/heads/main' && steps.base.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/trivy-cache/db
+          key: trivy-db-${{ steps.jour.outputs.date }}
+
+      # Rapport complet : toutes les gravites, corrigeables ou non. Ne bloque
+      # jamais, c'est ce que montrent le resume du run et l'artefact.
+      - name: Scanner l'image (rapport complet)
+        id: rapport
+        run: >-
+          trivy image --scanners vuln,secret --skip-db-update
+          --format json --output trivy-image-backend.json "$IMAGE"
+      # Checklist du TD Docker : le Dockerfile n'est jamais modifie par la CI.
+      - name: Scanner le Dockerfile (informatif)
+        run: >-
+          trivy config --exit-code 0
+          --format json --output trivy-dockerfile-backend.json backend/Dockerfile
+      - name: Resume dans la page du run
+        run: |
+          bash tools/trivy/resume.sh image trivy-image-backend.json >> "$GITHUB_STEP_SUMMARY"
+          bash tools/trivy/resume.sh config trivy-dockerfile-backend.json >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: trivy-backend
+          path: |
+            trivy-image-backend.json
+            trivy-dockerfile-backend.json
+          retention-days: 30
+          if-no-files-found: warn
+
+      # Les deux verrous, apres le rapport pour qu'il soit toujours publie.
+      # --ignore-unfixed : seule une faille qui a deja un correctif bloque.
+      # Sinon la CI resterait rouge sans aucune action possible, et on finirait
+      # par ignorer le rouge. Les failles sans correctif restent dans le resume.
+      - name: Bloquer sur une vulnerabilite CRITICAL corrigeable
+        run: >-
+          trivy image --scanners vuln --severity CRITICAL --ignore-unfixed
+          --skip-db-update --exit-code 1 "$IMAGE"
+      # Tout secret bloque, quelle que soit sa gravite : un fichier publie
+      # dans une couche d'image ne s'efface plus (le .env du 01/10).
+      - name: Bloquer sur un secret
+        if: ${{ !cancelled() && steps.rapport.outcome == 'success' }}
+        run: trivy image --scanners secret --exit-code 1 "$IMAGE"
