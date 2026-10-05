@@ -85,6 +85,11 @@ export async function soloCheck(browser, seed, out) {
     // Le lien doit viser le site sur lequel on joue (blindz.app en prod), jamais
     // un domaine ecrit en dur.
     if (!copied.startsWith(`${APP}/challenge/`)) problems.push(`le lien de defi ne vise pas le site courant (${copied})`)
+    // Le lien est aussi affiche en clair (sur iPhone la copie automatique est
+    // souvent refusee) : ce doit etre le meme.
+    const shown = await p.getByLabel(/lien du défi/i).inputValue({ timeout: 5000 }).catch(() => "")
+    if (shown !== copied) problems.push(`le lien de defi affiche ("${shown.slice(0, 80)}") n'est pas celui copie`)
+    await shot(p, "3b-defi-pret")
 
     b = await newPage(browser, { ...devices["iPhone 13"] }, "ami", problems)
     const q = b.page
@@ -127,7 +132,8 @@ export async function chronoCheck(browser, seed, out) {
   const { ctx, page: p } = await newPage(browser, { ...devices["iPhone 13"] }, "chrono", problems)
   try {
     await p.goto(`${APP}/solo/`, { waitUntil: "networkidle", timeout: 60000 })
-    await p.getByRole("button", { name: /^chrono$/i }).click()
+    // Onglet au sens ARIA depuis la refonte du lobby solo (role tab, plus button).
+    await p.getByRole("tab", { name: /^chrono$/i }).click()
     await p.getByPlaceholder(/open\.spotify\.com\/user/).first().fill(`${LINK}${(seed + 7) % 40}`)
     await p.getByRole("button", { name: "1 min", exact: true }).click()
     await p.getByRole("button", { name: /lancer le chrono/i }).click()
