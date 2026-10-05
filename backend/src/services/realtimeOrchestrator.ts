@@ -241,8 +241,9 @@ export function tryEarlyReveal(io: IOServer, roomCode: string): boolean {
 }
 
 /**
- * Revele la manche hors de son minuteur (revelation anticipee). Annule les
- * minuteurs de la manche puis fait la meme suite que le minuteur. Une seule fois : rien si la manche
+ * Revele la manche hors de son minuteur : revelation anticipee, ou resynchro
+ * d'un client apres l'heure (game:sync). Annule les minuteurs de la manche
+ * puis fait la meme suite que le minuteur. Une seule fois : rien si la manche
  * n'est plus en jeu. Rend true si la manche vient d'etre revelee.
  */
 export function revealRoundNow(io: IOServer, roomCode: string): boolean {
@@ -258,7 +259,8 @@ export function revealRoundNow(io: IOServer, roomCode: string): boolean {
 /**
  * Suite commune des revelations hors minuteur. Avant cette fonction commune,
  * le chemin de la deconnexion n'ecrivait pas les reponses de la manche et ne
- * posait pas le filet anti-AFK (trouve le 02/10/2026).
+ * posait pas le filet anti-AFK (trouve le 02/10/2026) ; celui de game:sync non
+ * plus (aligne le 05/10/2026).
  */
 function finishEarlyReveal(io: IOServer, roomCode: string, revealed: GameState): void {
   io.to(roomCode).emit("game:round:reveal", {

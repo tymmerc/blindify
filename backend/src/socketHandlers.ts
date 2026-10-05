@@ -6,7 +6,6 @@ import {
   getGameState as getRealtimeState,
   markReady as markReadyState,
   recordAnswer,
-  revealRound,
   removePlayer,
   upsertPlayer,
   setHostConnected,
@@ -26,6 +25,7 @@ import {
   clearAdvanceTimer,
   clearGraceTimer,
   clearRevealTimer,
+  revealRoundNow,
   scheduleForcedAdvance,
   scheduleReveal,
   tryEarlyReveal,
@@ -614,26 +614,12 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
       // un simple resync de client aurait force le reveal a travers la pause.
       if (!state.paused && state.phase === "GUESSING" && state.timing.revealAt && state.timing.revealAt <= Date.now()) {
         logger.debug(`game:sync forcing reveal for ${roomCode} (revealAt was ${state.timing.revealAt}, now=${Date.now()})`);
-        const updated = revealRound(roomCode);
-        if (updated) {
-          io.to(roomCode).emit("game:round:reveal", {
-            roomCode,
-            round: updated.currentRound,
-            timing: updated.timing,
-            players: updated.players,
-            // Meme contrat que le chemin orchestrateur : la reponse complete
-            // n'arrive qu'avec le reveal (piste caviardee avant).
-            track: updated.currentTrack,
-          });
-          broadcastState(io, roomCode);
-          if (updated.phase === "FINISHED") {
-            broadcastGameOver(io, roomCode);
-            clearRevealTimer(roomCode);
-          }
-        }
-      } else {
-        broadcastState(io, roomCode);
+        // Meme suite que les autres revelations : reponses de la manche ecrites,
+        // filet anti-AFK, minuteur de manche annule (pas de seconde revelation).
+        // Avant le 05/10/2026, ce chemin n'ecrivait pas les reponses.
+        revealRoundNow(io, roomCode);
       }
+      broadcastState(io, roomCode);
       // Also send directly to the requesting socket as a fallback
       const snapshot = gameStateSnapshot(roomCode);
       if (snapshot) {

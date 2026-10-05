@@ -29,6 +29,7 @@ import {
   type GameClient,
 } from "./helpers/socket-test-harness";
 import { getGameState } from "../../src/services/realtimeGame";
+import { clearRevealTimer } from "../../src/services/realtimeOrchestrator";
 
 jest.setTimeout(30000);
 
@@ -348,6 +349,28 @@ describe("grace de reconnexion apres une coupure reseau", () => {
       await waitFor(inPhase([a, b, second], "REVEAL"), 5000, "REVEAL after his answer");
     } finally {
       await closeTable(t, [fresh]);
+    }
+  });
+
+  it("game:sync qui revele une manche en retard ecrit ses reponses et ne revele qu'une fois", async () => {
+    const t = await openTable(3, { roundMs: 1_000, session: true });
+    const [a, b] = t.clients;
+    try {
+      const revealAt = Number(a.roundStarts[0]?.timing?.revealAt);
+      // Minuteur de manche perdu : c'est le cas que le filet game:sync rattrape.
+      clearRevealTimer(t.roomCode);
+      await answerAll([a, b], t.roomCode, 1);
+      await sleep(revealAt + 300 - Date.now());
+      expect(a.lastState()?.phase).toBe("GUESSING");
+
+      a.socket.emit("game:sync", { roomCode: t.roomCode });
+      await waitFor(inPhase(t.clients, "REVEAL"), 3000, "REVEAL through game:sync");
+
+      const rows = await responsesFor(t.sessionId ?? 0, 1, 3);
+      expect(rows).toHaveLength(3);
+      for (const c of t.clients) expect(c.reveals.filter(r => r.round === 1)).toHaveLength(1);
+    } finally {
+      await closeTable(t);
     }
   });
 });
