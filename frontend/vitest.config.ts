@@ -2,8 +2,8 @@ import path from "path"
 import { defineConfig } from "vitest/config"
 
 export default defineConfig({
-  // tsconfig garde "jsx": "preserve" pour Next : les tests de composants
-  // (*.test.tsx) ont besoin du JSX compile, runtime automatique de React 17+.
+  // Runtime JSX automatique, comme Next : les composants n'importent pas React,
+  // et sans ca les tests de composants (.test.tsx) tombent sur "React is not defined".
   esbuild: { jsx: "automatic" },
   test: {
     environment: "jsdom",
