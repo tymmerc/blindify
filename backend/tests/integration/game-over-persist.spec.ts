@@ -71,7 +71,12 @@ describe("fin de partie : resultats ecrits une seule fois", () => {
         );
         return rows[0] as { state: string; room_status: string; games: number };
       };
-      for (const deadline = Date.now() + 5000; Date.now() < deadline && (await persisted()).games < 2; ) {
+      // Ecriture en tache de fond : la session et la room sont soldees APRES les
+      // stats des joueurs, on attend donc les trois (sur CI, games arrivait a 2
+      // avant que la session soit passee a finished).
+      const done = (p: { state: string; room_status: string; games: number }) =>
+        p.state === "finished" && p.room_status === "finished" && p.games >= 2;
+      for (const deadline = Date.now() + 5000; Date.now() < deadline && !done(await persisted()); ) {
         await sleep(100);
       }
       expect(await persisted()).toEqual({ state: "finished", room_status: "finished", games: 2 });
