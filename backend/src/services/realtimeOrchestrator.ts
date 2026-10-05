@@ -2,7 +2,9 @@ import type { Server as IOServer } from "socket.io";
 import { logger } from "../utils/logger";
 import {
   clearGameIfFinished,
+  earlyRevealDecision,
   gameStateSnapshot,
+  getGameState,
   getSessionId,
   redactedGuessingTrack,
   revealRound,
@@ -17,6 +19,9 @@ const revealTimers = new Map<string, NodeJS.Timeout>();
 // table reste coincee sur l'ecran de reveal.
 const advanceTimers = new Map<string, NodeJS.Timeout>();
 const READY_GRACE_MS = 10_000;
+// Grace de reconnexion (DISCONNECT_GRACE_MS, realtimeGame) : un minuteur par
+// salle, cale sur la fin de la derniere grace en cours de la manche.
+const graceTimers = new Map<string, NodeJS.Timeout>();
 
 export function clearAdvanceTimer(roomCode: string): void {
   const t = advanceTimers.get(roomCode);
@@ -105,6 +110,10 @@ export function scheduleReveal(io: IOServer, roomCode: string, revealAt: number)
   const timer = setTimeout(() => {
     revealTimers.delete(roomCode);
     if (finishedRooms.has(roomCode)) return;
+    // Manche deja revelee par un autre chemin : jamais deux revelations.
+    if (getGameState(roomCode)?.phase !== "GUESSING") return;
+    // Fin normale de la manche : une grace de reconnexion en cours n'a plus d'objet.
+    clearGraceTimer(roomCode);
     logger.debug(`reveal timer fired for ${roomCode}`);
     const updated = revealRound(roomCode);
     logger.debug(`revealRound result: phase=${updated?.phase}, players=${updated ? Object.keys(updated.players).length : 0}`);
@@ -128,8 +137,10 @@ export function startRoundAndBroadcast(
   roomCode: string,
   opts?: { forceRound?: number; startAt?: number }
 ): GameState | undefined {
-  // Une nouvelle manche demarre : le filet anti-AFK de la precedente est obsolete.
+  // Une nouvelle manche demarre : le filet anti-AFK et la grace de la precedente
+  // sont obsoletes.
   clearAdvanceTimer(roomCode);
+  clearGraceTimer(roomCode);
   // Pre-roll entre les manches : le bras de lecture se pose sur le vinyle AVANT
   // que la musique parte (les clients sequencent l'animation sur startAt).
   const state = startNextRound(roomCode, { ...opts, startAt: opts?.startAt ?? Date.now() + 1_600 });
@@ -165,8 +176,9 @@ export function broadcastGameOver(io: IOServer, roomCode: string) {
   emitGameOver(io, snapshot);
   // Persist final scores/stats before the in-memory state is dropped.
   void persistGameResults(snapshot, getSessionId(roomCode));
-  revealTimers.delete(roomCode);
+  clearRevealTimer(roomCode);
   clearAdvanceTimer(roomCode);
+  clearGraceTimer(roomCode);
   // L'etat FINISHED reste en memoire une minute : les clients recuperent
   // l'ecran de resultats via /state (playlist complete) pendant cette fenetre.
   // clearGameIfFinished ne touche pas une revanche relancee entre-temps.
@@ -181,5 +193,89 @@ export function clearRevealTimer(roomCode: string) {
   if (existing) {
     clearTimeout(existing);
     revealTimers.delete(roomCode);
+  }
+}
+
+export function clearGraceTimer(roomCode: string): void {
+  const existing = graceTimers.get(roomCode);
+  if (existing) {
+    clearTimeout(existing);
+    graceTimers.delete(roomCode);
+  }
+}
+
+function scheduleGraceCheck(io: IOServer, roomCode: string, round: number, until: number): void {
+  clearGraceTimer(roomCode);
+  if (finishedRooms.has(roomCode)) return;
+  const timer = setTimeout(() => {
+    graceTimers.delete(roomCode);
+    // Grace d'une manche deja passee (revelee par son minuteur) : rien a faire.
+    if (getGameState(roomCode)?.currentRound !== round) return;
+    logger.debug(`reconnect grace over for ${roomCode} (round ${round})`);
+    if (tryEarlyReveal(io, roomCode)) emitState(io, roomCode);
+  }, Math.max(0, until - Date.now()));
+  // Ce minuteur ne garde jamais le processus en vie a lui seul.
+  timer.unref?.();
+  graceTimers.set(roomCode, timer);
+}
+
+/**
+ * Point d'entree unique des revelations anticipees, rappele a chaque evenement
+ * qui peut changer la donne : une reponse, une coupure, un depart, la reprise
+ * apres une pause, la fin d'une grace. Revele tout de suite si tous les
+ * joueurs connectes ont repondu et que personne n'est a attendre ; attend la
+ * fin d'une grace de reconnexion en cours (minuteur) ; sinon ne fait rien.
+ * Rend true si la manche vient d'etre revelee ; l'appelant diffuse l'etat.
+ */
+export function tryEarlyReveal(io: IOServer, roomCode: string): boolean {
+  const decision = earlyRevealDecision(roomCode);
+  logger.debug(`early reveal check for ${roomCode}: ${decision.kind}`);
+  if (decision.kind === "wait") {
+    scheduleGraceCheck(io, roomCode, getGameState(roomCode)?.currentRound ?? 0, decision.until);
+    return false;
+  }
+  // Plus personne a attendre (revenu, pause, manche qui continue) : le minuteur
+  // de grace n'a plus d'objet. Le prochain evenement rappellera cette fonction.
+  clearGraceTimer(roomCode);
+  return decision.kind === "reveal" ? revealRoundNow(io, roomCode) : false;
+}
+
+/**
+ * Revele la manche hors de son minuteur (revelation anticipee). Annule les
+ * minuteurs de la manche puis fait la meme suite que le minuteur. Une seule fois : rien si la manche
+ * n'est plus en jeu. Rend true si la manche vient d'etre revelee.
+ */
+export function revealRoundNow(io: IOServer, roomCode: string): boolean {
+  if (getGameState(roomCode)?.phase !== "GUESSING") return false;
+  clearRevealTimer(roomCode);
+  clearGraceTimer(roomCode);
+  const revealed = revealRound(roomCode);
+  if (!revealed) return false;
+  finishEarlyReveal(io, roomCode, revealed);
+  return true;
+}
+
+/**
+ * Suite commune des revelations hors minuteur. Avant cette fonction commune,
+ * le chemin de la deconnexion n'ecrivait pas les reponses de la manche et ne
+ * posait pas le filet anti-AFK (trouve le 02/10/2026).
+ */
+function finishEarlyReveal(io: IOServer, roomCode: string, revealed: GameState): void {
+  io.to(roomCode).emit("game:round:reveal", {
+    roomCode,
+    round: revealed.currentRound,
+    timing: revealed.timing,
+    players: revealed.players,
+    // La reponse complete n'arrive qu'avec le reveal (piste caviardee pendant
+    // la manche).
+    track: revealed.currentTrack,
+  });
+  void persistRoundResponses(revealed, getSessionId(roomCode));
+  if (revealed.phase === "FINISHED") {
+    broadcastGameOver(io, roomCode);
+  } else if (revealed.phase === "REVEAL" && !revealed.paused) {
+    // Filet anti-AFK : la manche suivante part seule si personne ne clique "pret".
+    // Pas pendant une pause : game:resume le pose a la reprise.
+    scheduleForcedAdvance(io, roomCode, revealed.currentRound);
   }
 }
