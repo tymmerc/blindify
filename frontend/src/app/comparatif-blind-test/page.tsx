@@ -3,15 +3,20 @@ import Link from "next/link"
 import { AMBER, BLUE, FaqList, GuideShell, Li, Section, VERMILION, faqJsonLd, webPageJsonLd } from "@/components/home/Guide"
 
 // Comparatif honnete. Tout ce qui est dit des autres services vient de LEURS
-// pages, lues le 8 septembre 2026 (liens en bas de chaque fiche). Quand une
+// pages, lues le 8 septembre 2026 (liens en bas de chaque fiche). Blinest,
+// ajoute le 5 octobre 2026, a ete lu ce jour-la (FAQ, page de categorie, page
+// de soutien, et leur code sur GitHub pour l'import de playlist et les
+// mini-jeux) ; les autres n'ont pas ete relus. Quand une
 // info n'a pas ete lue, on ecrit "non precise" plutot que d'inventer. Le biais
-// est annonce en tete de page : c'est nous qui faisons blindz.app.
+// est annonce en tete de page : c'est nous qui faisons blindz.app. Pas de
+// recommandation vers un concurrent (regle de Tym) : la page dit quand
+// blindz.app est le bon choix, et decrit les autres tels qu'ils se presentent.
 
 const URL = "https://blindz.app/comparatif-blind-test/"
-const TITLE = "Quel blind test en ligne choisir en 2026 : blindz.app, blindtest.gg, blindz.fr, Mukiz, Tapzz, SongPop"
+const TITLE = "Quel blind test en ligne choisir en 2026 : blindz.app, Blinest, blindtest.gg, blindz.fr, Mukiz, Tapzz, SongPop"
 const DESC =
-  "Comparatif honnête des blind tests en ligne en 2026 : d'où vient la musique, gratuit ou pas, compte obligatoire ou non, et lequel choisir selon ce que vous voulez faire. Sources : les sites eux-mêmes."
-const UPDATED = "2026-09-08"
+  "Blinest, blindtest.gg, Mukiz, SongPop ou blindz.app ? Comparatif honnête : d'où vient la musique, gratuit ou pas, compte ou non. Sources : leurs propres sites."
+const UPDATED = "2026-10-05"
 
 export const metadata: Metadata = {
   title: "Quel blind test en ligne choisir en 2026 : comparatif",
@@ -48,6 +53,16 @@ const ROWS: Row[] = [
     own: "Oui, via le lien d'une playlist à la création de la partie",
     free: "Gratuit",
     account: "Non (optionnel)",
+    where: "Navigateur",
+    players: "Non précisé",
+    who: "Non trouvé",
+  },
+  {
+    name: "Blinest",
+    music: "Salles thématiques officielles et salles créées par les joueurs",
+    own: "Oui, une playlist montée par le créateur de la room (import Deezer ou titre par titre)",
+    free: "Gratuit, avec pub (coupée les mois où les dons suffisent)",
+    account: "Rejoindre : non (invité) ; créer une room : oui",
     where: "Navigateur",
     players: "Non précisé",
     who: "Non trouvé",
@@ -97,11 +112,15 @@ const ROWS: Row[] = [
 const FAQ = [
   {
     q: "Quel blind test en ligne est gratuit et sans inscription ?",
-    a: "D'après leurs propres pages au 8 septembre 2026 : blindz.app (gratuit, sans pub, sans compte) et blindtest.gg (gratuit, compte optionnel). blindz.fr, Mukiz, Tapzz et SongPop ont une formule gratuite limitée et une offre payante.",
+    a: "D'après leurs propres pages, lues le 8 septembre 2026 (le 5 octobre pour Blinest) : blindz.app (gratuit, sans pub, sans compte) et blindtest.gg (gratuit, compte optionnel). Blinest est gratuit aussi, avec de la publicité, et on peut y rejoindre une room en invité, mais créer une room ou une playlist demande un compte. blindz.fr, Mukiz, Tapzz et SongPop ont une formule gratuite limitée et une offre payante.",
   },
   {
     q: "Quel blind test permet de jouer avec ses propres playlists Spotify ?",
-    a: "Trois approches différentes. Tapzz génère un quiz depuis ton compte Spotify. blindtest.gg permet de créer une partie sur une playlist Spotify ou Deezer via son lien. blindz.app mélange les playlists de tous les joueurs de la partie, chacun collant son propre lien, sans connexion Spotify, et ajoute la question « qui a mis ce morceau ? ».",
+    a: "Plusieurs approches. Tapzz génère un quiz depuis ton compte Spotify. blindtest.gg permet de créer une partie sur une playlist Spotify ou Deezer via son lien. Blinest n'importe plus les playlists Spotify : avec un compte, on y monte une playlist en important une playlist Deezer ou en ajoutant les titres un par un, puis on la rattache à une room. blindz.app mélange les playlists de tous les joueurs de la partie, chacun collant son propre lien, sans connexion Spotify, et ajoute la question « qui a mis ce morceau ? ».",
+  },
+  {
+    q: "Quelle alternative à Blinest pour jouer entre amis avec ses propres playlists ?",
+    a: "Blinest permet aussi de jouer sur sa musique : avec un compte, on monte une playlist Blinest en important une playlist Deezer ou en ajoutant les titres un par un, on la rattache à une room, puis on y fait venir ses amis (un mot de passe garde la room privée). Sur blindz.app, il n'y a rien à monter avant : à plusieurs téléphones, chacun colle le lien de son profil ou d'une playlist publique Spotify ou Deezer au moment de jouer, sans compte, la partie mélange la musique de toute la bande, et un point de plus va à qui devine lequel de ses potes a ramené le morceau. On y joue autour d'une table (la télé diffuse, chacun répond sur son téléphone), à distance avec un code ou sur un seul téléphone, et il n'y a pas de pub. Ce qui est dit de Blinest vient de ses pages et de son code, lus le 5 octobre 2026.",
   },
   {
     q: "blindz.app et blindz.fr, c'est le même site ?",
@@ -115,54 +134,62 @@ export default function Page() {
       tag="Comparatif"
       tagColor={BLUE}
       title={<>Quel blind test en ligne choisir en <em className="font-medium italic text-[#cc4830]">2026</em> ?</>}
-      intro="Six services, une seule question qui tranche vraiment : d'où vient la musique, et qui la choisit. Ce comparatif est écrit par les gens qui font blindz.app, lisez-le avec ça en tête. Tout ce qui est dit des autres vient de leurs propres pages, lues le 8 septembre 2026, liens à l'appui. Quand on n'a pas trouvé l'information, on l'écrit."
-      updated="8 septembre 2026"
+      intro="Sept services, une seule question qui tranche vraiment : d'où vient la musique, et qui la choisit. Ce comparatif est écrit par les gens qui font blindz.app, lisez-le avec ça en tête. Tout ce qui est dit des autres vient de leurs propres pages, lues le 8 septembre 2026 (le 5 octobre 2026 pour Blinest), liens à l'appui. Quand on n'a pas trouvé l'information, on l'écrit."
+      updated="5 octobre 2026"
       currentHref="/comparatif-blind-test/"
       jsonLd={[webPageJsonLd(URL, TITLE, DESC, UPDATED), faqJsonLd(FAQ)]}
     >
       <Section tag="La question qui tranche" title="Trois familles de blind test">
         <ul>
           <Li color={AMBER}>
-            <span><strong>Les packs de l'éditeur.</strong> Le site prépare des playlists par thème (années 80, rap, cinéma) et tout le monde joue dessus. C'est le modèle de Mukiz, de SongPop et de blindz.fr en gratuit. Efficace pour tester sa culture générale ou jouer en partie publique, mais la musique n'est pas la vôtre.</span>
+            <span><strong>Les packs de l'éditeur.</strong> Le site prépare des playlists par thème (années 80, rap, cinéma) et tout le monde joue dessus. C'est le modèle de Mukiz, de SongPop, de blindz.fr en gratuit et des salles officielles de Blinest. Efficace pour tester sa culture générale ou jouer en partie publique, mais la musique n'est pas la vôtre.</span>
           </Li>
           <Li color={BLUE}>
             <span><strong>Ton compte à toi.</strong> Le service se connecte à ton Spotify et génère un quiz sur ce que toi tu écoutes. C'est Tapzz. Personnalisé, mais centré sur une seule personne ; un mode entre amis existe, son fonctionnement n'est pas détaillé sur leur site.</span>
           </Li>
           <Li color={VERMILION}>
-            <span><strong>Les playlists des joueurs.</strong> Chaque joueur colle le lien de sa playlist, et la partie mélange celles de tout le monde. blindtest.gg s'en approche (une partie se crée sur le lien d'une playlist). blindz.app va au bout : toutes les playlists des présents, et en plus il faut deviner <strong>qui a mis quoi</strong>.</span>
+            <span><strong>Les playlists des joueurs.</strong> Chaque joueur colle le lien de sa playlist, et la partie mélange celles de tout le monde. blindtest.gg et Blinest s'en approchent : on peut y jouer sur ses propres morceaux, mais c'est la personne qui crée la partie (ou la room) qui les choisit, pas chaque joueur. blindz.app va au bout : toutes les playlists des présents, et en plus il faut deviner <strong>qui a mis quoi</strong>.</span>
           </Li>
         </ul>
       </Section>
 
-      <Section tag="Le tableau" title="Six services, sept critères" tone="deep">
+      <Section tag="Le tableau" title="Sept services, sept critères" tone="deep">
         <p>« Non trouvé » veut dire que nous n'avons pas lu l'information sur le site du service, pas qu'elle n'existe pas.</p>
-        <div className="-mx-5 overflow-x-auto px-5 sm:mx-0 sm:px-0">
+        {/* A 390 px le tableau defile dans son cadre : la colonne Service reste
+            collee a gauche pour savoir de qui on lit la ligne. La marge de 20 px
+            est portee par les cellules du bord, pas par le cadre, sinon la
+            cellule collee viendrait toucher le bord de l'ecran. */}
+        <div className="-mx-5 overflow-x-auto sm:mx-0">
           <table className="w-full min-w-[820px] border-collapse text-[0.95rem]">
             <thead>
               <tr className="border-b-2 border-[#2e2014] text-left font-mono text-[11px] uppercase tracking-[0.14em]">
-                <th className="py-3 pr-4">Service</th>
+                <th className="sticky left-0 z-[1] bg-[#ece1c8] py-3 pl-5 pr-4 shadow-[1px_0_0_rgba(46,32,20,.18)] sm:pl-0 lg:static lg:shadow-none">Service</th>
                 <th className="py-3 pr-4">D'où vient la musique</th>
                 <th className="py-3 pr-4">Vos playlists ?</th>
                 <th className="py-3 pr-4">Gratuit</th>
                 <th className="py-3 pr-4">Compte</th>
                 <th className="py-3 pr-4">Où ça joue</th>
                 <th className="py-3 pr-4">Joueurs</th>
-                <th className="py-3">Qui a mis quoi</th>
+                <th className="py-3 pr-5 sm:pr-0">Qui a mis quoi</th>
               </tr>
             </thead>
             <tbody>
-              {ROWS.map(r => (
-                <tr key={r.name} className={`border-b-2 border-[rgba(46,32,20,.18)] align-top ${r.name === "blindz.app" ? "bg-[#f4ecdb]" : ""}`}>
-                  <td className="py-4 pr-4 font-display text-lg font-semibold">{r.name}</td>
-                  <td className="py-4 pr-4">{r.music}</td>
-                  <td className="py-4 pr-4">{r.own}</td>
-                  <td className="py-4 pr-4">{r.free}</td>
-                  <td className="py-4 pr-4">{r.account}</td>
-                  <td className="py-4 pr-4">{r.where}</td>
-                  <td className="py-4 pr-4">{r.players}</td>
-                  <td className="py-4">{r.who}</td>
-                </tr>
-              ))}
+              {ROWS.map(r => {
+                // Fond explicite sur la ligne ET sur la cellule collee, qui doit masquer ce qui defile dessous.
+                const bg = r.name === "blindz.app" ? "bg-[#f4ecdb]" : "bg-[#ece1c8]"
+                return (
+                  <tr key={r.name} className={`border-b-2 border-[rgba(46,32,20,.18)] align-top ${bg}`}>
+                    <td className={`sticky left-0 z-[1] ${bg} py-4 pl-5 pr-4 font-display text-lg font-semibold shadow-[1px_0_0_rgba(46,32,20,.18)] sm:pl-0 lg:static lg:shadow-none`}>{r.name}</td>
+                    <td className="py-4 pr-4">{r.music}</td>
+                    <td className="py-4 pr-4">{r.own}</td>
+                    <td className="py-4 pr-4">{r.free}</td>
+                    <td className="py-4 pr-4">{r.account}</td>
+                    <td className="py-4 pr-4">{r.where}</td>
+                    <td className="py-4 pr-4">{r.players}</td>
+                    <td className="py-4 pr-5 sm:pr-0">{r.who}</td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
@@ -176,6 +203,26 @@ export default function Page() {
           créées sur le lien d'une playlist Spotify ou Deezer publique. Entièrement gratuit, compte optionnel, en
           français et en anglais. Pas de mécanisme « qui a ajouté ce morceau » trouvé.{" "}
           <a href="https://blindtest.gg/faq" rel="noopener nofollow">Source : leur FAQ</a>.
+        </p>
+        <h3>Blinest</h3>
+        <p>
+          Quiz musical multijoueur en « rooms » : salles officielles par thème, ou créées par les joueurs (un mot de
+          passe peut les garder entre amis). Pour jouer sur sa musique, le créateur de la room importe une playlist
+          Deezer ou ajoute les titres un par un (plus d'import Spotify). Pas de mécanisme « qui a ajouté ce morceau »
+          trouvé.
+        </p>
+        <p>
+          Gratuit avec pub, coupée pour tous le mois où l'objectif de dons est atteint. Leur FAQ dit encore qu'il faut
+          un compte pour jouer, mais on entre aujourd'hui dans une room sans compte, en invité ; créer une room ou
+          lancer les mini-jeux en solo en demande un. Sources :{" "}
+          <a href="https://blinest.com/docs/faq" rel="noopener nofollow">leur FAQ</a> (et sa{" "}
+          <a href="https://blinest.com/docs/faq?page=7" rel="noopener nofollow">page 7</a> sur le compte),{" "}
+          <a href="https://blinest.com/blind-test-univers-musicaux" rel="noopener nofollow">une page de catégorie</a> (l'invité),{" "}
+          <a href="https://blinest.com/docs/support" rel="noopener nofollow">leur page de soutien</a> (dons et pub), leur
+          code sur GitHub pour{" "}
+          <a href="https://github.com/mchev/blinest/blob/v2.x/resources/js/Components/Playlists/ImportPlaylist.vue" rel="noopener nofollow">l'import de playlist</a>{" "}
+          et{" "}
+          <a href="https://github.com/mchev/blinest/blob/v2.x/routes/minigames.php" rel="noopener nofollow">les mini-jeux</a>.
         </p>
         <h3>blindz.fr</h3>
         <p>
