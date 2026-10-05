@@ -15,6 +15,8 @@ import gamesRoutes from "./routes/games";
 import likesRoutes from "./routes/likes";
 import roomsRoutes from "./routes/rooms";
 import reportsRoutes from "./routes/reports";
+import feedbackRoutes from "./routes/feedback";
+import { ensureFeedbackSchema, FEEDBACK_PURGE_SQL } from "./services/feedback";
 import statsRoutes from "./routes/stats";
 import audioSourcesRoutes from "./routes/audioSources";
 import friendsRoutes from "./routes/friends";
@@ -298,6 +300,7 @@ app.use("/api/links", linksRoutes);
 app.use("/api/quick-play", quickPlayRoutes);
 app.use("/api/challenges", challengeRoutes);
 app.use("/api/reports", reportsRoutes);
+app.use("/api/feedback", feedbackRoutes);
 
 app.use((_req, res) => {
   fail(res, "not_found", "Ressource introuvable", 404);
@@ -331,6 +334,9 @@ const userTracksReady = ensureLinksSchema()
   .then(() => ensureUserTracksSchema())
   .catch(err => logger.error("user_tracks_schema_boot_failed", { error: err }));
 ensureResponseSchema().catch(err => logger.error("response_schema_boot_failed", { error: err }));
+// Retours de fin de partie : la migration 004 cree la table en prod ; le
+// demarrage la cree la ou elle manque encore (pile de test, CI).
+ensureFeedbackSchema().catch(err => logger.error("feedback_schema_boot_failed", { error: err }));
 
 // Index manquants sur les colonnes FK les plus sollicitees : sans eux, chaque
 // suppression en cascade (sessions, rooms, invites) declenche des seq scans.
@@ -410,6 +416,8 @@ async function runJanitor(): Promise<void> {
   await step("old_game_sessions",
     `DELETE FROM game_sessions
      WHERE started_at < NOW() - INTERVAL '400 days'`);
+  // Retours de fin de partie : 12 mois, comme annonce sur /confidentialite.
+  await step("old_feedback", FEEDBACK_PURGE_SQL);
   // Plus d'etape "dead_guest_tracks" : le filtre epargne desormais tout invite
   // qui possede de la musique, donc il n'y a plus rien a detacher. Detacher
   // puis supprimer revenait a effacer le joueur pour contourner sa propre

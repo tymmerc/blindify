@@ -70,9 +70,27 @@ type GameContext = {
   mode: string;
   roundDurationMs: number;
   sessionId?: number;
+  /** Duree de la grace de reconnexion (DISCONNECT_GRACE_MS, sauf tests). */
+  reconnectGraceMs: number;
+  /** Fin de grace (ms) des joueurs coupes pendant la manche en cours, par userId. */
+  graceUntil: Readonly<Record<number, number>>;
 };
 
 const DEFAULT_LISTENING_MS = 20_000;
+
+/**
+ * Grace de reconnexion, decidee par Tym le 02/10/2026 : un joueur coupe du
+ * reseau en pleine manche (pas le bouton "Quitter") sans avoir repondu a 5 s
+ * pour revenir avant que la manche soit revelee en avance. Avant, une coupure
+ * d'une seconde (tunnel, wifi vers 4G, ecran verrouille) lui faisait perdre la
+ * manche des que tous les autres avaient repondu. La fin normale de la manche
+ * (son minuteur) ne l'attend jamais.
+ */
+export const DISCONNECT_GRACE_MS = 5_000;
+
+function graceMsOrDefault(value: number | undefined): number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : DISCONNECT_GRACE_MS;
+}
 
 const games = new Map<string, GameContext & { pausedAt?: number | null }>();
 
@@ -86,6 +104,8 @@ export function bootstrapGameState(params: {
   mode?: string;
   config?: { roundDurationMs?: number; autoAdvance?: boolean };
   sessionId?: number;
+  /** Reglable pour les tests d'integration ; la prod garde DISCONNECT_GRACE_MS. */
+  reconnectGraceMs?: number;
 }): GameState {
   const initialPlayers: Record<number, PlayerState> = {};
   for (const participant of params.participants) {
@@ -127,7 +147,16 @@ export function bootstrapGameState(params: {
   };
 
   const roundDurationMs = params.config?.roundDurationMs ?? DEFAULT_LISTENING_MS;
-  games.set(params.roomCode, { state, tracks: params.tracks, mode: params.mode ?? "friends", roundDurationMs, sessionId: params.sessionId, pausedAt: null });
+  games.set(params.roomCode, {
+    state,
+    tracks: params.tracks,
+    mode: params.mode ?? "friends",
+    roundDurationMs,
+    sessionId: params.sessionId,
+    pausedAt: null,
+    reconnectGraceMs: graceMsOrDefault(params.reconnectGraceMs),
+    graceUntil: {},
+  });
   return state;
 }
 
@@ -144,40 +173,62 @@ export function getGameMode(roomCode: string): string | undefined {
   return games.get(roomCode)?.mode;
 }
 
+/** Joueurs qui jouent les manches, connectes ou non. */
+function playingPlayers(ctx: GameContext): PlayerState[] {
+  const players = Object.values(ctx.state.players);
+  // En event, l'hote presente (exclu) SAUF s'il a choisi "je joue aussi".
+  if (ctx.mode === "event" && ctx.state.hostUserId && !ctx.state.hostPlays) {
+    return players.filter(p => p.userId !== ctx.state.hostUserId);
+  }
+  return players;
+}
+
 export function allAnswerablePlayers(roomCode: string): PlayerState[] {
   const ctx = games.get(roomCode);
   if (!ctx) return [];
-  let players = Object.values(ctx.state.players);
-  // En event, l'hote presente (exclu) SAUF s'il a choisi "je joue aussi".
-  if (ctx.mode === "event" && ctx.state.hostUserId && !ctx.state.hostPlays) {
-    players = players.filter(p => p.userId !== ctx.state.hostUserId);
-  }
   // Exclude disconnected players so they don't block or prematurely trigger reveals
-  return players.filter(p => !p.disconnected);
+  return playingPlayers(ctx).filter(p => !p.disconnected);
 }
 
-export function pauseGame(roomCode: string): GameState | undefined {
+export function pauseGame(roomCode: string, now = Date.now()): GameState | undefined {
   const ctx = games.get(roomCode);
   if (!ctx) return undefined;
   if (ctx.state.paused) return ctx.state;
   if (ctx.state.phase !== "GUESSING" && ctx.state.phase !== "REVEAL") return ctx.state;
-  ctx.pausedAt = Date.now();
+  ctx.pausedAt = now;
   ctx.state.paused = true;
   return ctx.state;
 }
 
-export function resumeGame(roomCode: string): GameState | undefined {
+export function resumeGame(roomCode: string, now = Date.now()): GameState | undefined {
   const ctx = games.get(roomCode);
   if (!ctx) return undefined;
   if (!ctx.state.paused) return ctx.state;
   // Decaler les horloges du temps passe en pause : le chrono reprend ou il en
   // etait, et l'audio se resynchronise tout seul (seek base sur startAt).
-  const delta = Date.now() - (ctx.pausedAt ?? Date.now());
+  const delta = now - (ctx.pausedAt ?? now);
   if (ctx.state.timing.startAt) ctx.state.timing.startAt += delta;
   if (ctx.state.timing.revealAt) ctx.state.timing.revealAt += delta;
+  ctx.graceUntil = gracesAfterPause(ctx.graceUntil, delta, now + ctx.reconnectGraceMs);
   ctx.pausedAt = null;
   ctx.state.paused = false;
   return ctx.state;
+}
+
+/**
+ * Les graces de reconnexion sont gelees par la pause comme le chrono : les
+ * reponses y sont refusees, un joueur coupe ne doit pas y perdre sa grace.
+ * Celle qui courait reprend ou elle en etait, celle d'une coupure pendant la
+ * pause part entiere de la reprise (`latest`), celle deja finie le reste.
+ */
+function gracesAfterPause(
+  graceUntil: Readonly<Record<number, number>>,
+  delta: number,
+  latest: number,
+): Readonly<Record<number, number>> {
+  return Object.fromEntries(
+    Object.entries(graceUntil).map(([userId, until]) => [userId, Math.min(until + delta, latest)]),
+  );
 }
 
 export function setHostConnected(roomCode: string, connected: boolean): GameState | undefined {
@@ -202,7 +253,63 @@ export function markReconnected(roomCode: string, userId: number): GameState | u
   const player = ctx.state.players[userId];
   if (!player) return ctx.state;
   player.disconnected = false;
+  // Revenu : sa grace est consommee. Une nouvelle coupure en ouvrira une neuve,
+  // un depart par "Quitter" n'en aura pas.
+  endReconnectGrace(roomCode, userId);
   return ctx.state;
+}
+
+/**
+ * Leve la grace de reconnexion d'un joueur : il est revenu, ou il est parti
+ * par "Quitter" (plus personne a attendre).
+ */
+export function endReconnectGrace(roomCode: string, userId: number): void {
+  const ctx = games.get(roomCode);
+  if (!ctx || !(userId in ctx.graceUntil)) return;
+  const { [userId]: _ended, ...others } = ctx.graceUntil;
+  ctx.graceUntil = others;
+}
+
+/**
+ * Ouvre la grace de reconnexion d'un joueur coupe du reseau pendant la manche
+ * (voir DISCONNECT_GRACE_MS). Rend la fin de la grace, ou null quand il n'y a
+ * personne a attendre : pas de manche en cours, joueur inconnu, ou reponse
+ * deja donnee avant la coupure.
+ */
+export function startReconnectGrace(roomCode: string, userId: number, now = Date.now()): number | null {
+  const ctx = games.get(roomCode);
+  if (!ctx || ctx.state.phase !== "GUESSING") return null;
+  const player = ctx.state.players[userId];
+  if (!player || player.hasAnswered) return null;
+  const until = now + ctx.reconnectGraceMs;
+  ctx.graceUntil = { ...ctx.graceUntil, [userId]: until };
+  return until;
+}
+
+export type EarlyRevealDecision =
+  | { kind: "none" }
+  | { kind: "wait"; until: number }
+  | { kind: "reveal" };
+
+/**
+ * Revelation anticipee : la manche peut-elle etre revelee avant son minuteur ?
+ * - "reveal" : tous les joueurs connectes ont repondu, personne a attendre ;
+ * - "wait" : eux aussi, mais un joueur coupe sans avoir repondu est encore
+ *   dans sa grace de reconnexion ; `until` est la fin de la plus tardive ;
+ * - "none" : la manche continue (un connecte n'a pas repondu, personne n'est
+ *   connecte, pause de l'hote, ou pas de manche en cours).
+ */
+export function earlyRevealDecision(roomCode: string, now = Date.now()): EarlyRevealDecision {
+  const ctx = games.get(roomCode);
+  if (!ctx || ctx.state.phase !== "GUESSING" || ctx.state.paused) return { kind: "none" };
+  const players = playingPlayers(ctx);
+  const connected = players.filter(p => !p.disconnected);
+  if (connected.length === 0 || !connected.every(p => p.hasAnswered)) return { kind: "none" };
+  const pending = players
+    .filter(p => p.disconnected && !p.hasAnswered)
+    .map(p => ctx.graceUntil[p.userId] ?? 0)
+    .filter(until => until > now);
+  return pending.length > 0 ? { kind: "wait", until: Math.max(...pending) } : { kind: "reveal" };
 }
 
 export function clearGame(roomCode: string): void {
@@ -212,6 +319,8 @@ export function clearGame(roomCode: string): void {
 export function startNextRound(roomCode: string, opts?: { forceRound?: number; startAt?: number }): GameState | undefined {
   const ctx = games.get(roomCode);
   if (!ctx) return undefined;
+  // Les graces de reconnexion valent pour une manche : la suivante repart a zero.
+  ctx.graceUntil = {};
   const nextRound = opts?.forceRound ?? ctx.state.currentRound + 1;
   if (nextRound > ctx.state.totalRounds) {
     ctx.state.phase = "FINISHED";
