@@ -15,7 +15,7 @@
 //                         [--montage mixte|meme|trois] [--timeout 30000]
 //                         [--pause 0] [--cle oui|non] [--sonde oui|non] [--latence 0]
 //                         [--bots 0] [--entree jouer|accueil] [--cpu non|oui]
-//                         [--chronos lentes|toutes] [--perte non|oui]
+//                         [--chronos lentes|toutes] [--perte non|oui|depart]
 //                         [--out /dossier] [--tag nom]
 //
 // "meme" : tous les joueurs d'une salle dans un seul navigateur (un contexte
@@ -43,6 +43,9 @@
 // (le navigateur le retient, rien n'arrive au serveur), comme une requete
 // perdue sur un telephone. Sert a prouver ce que fait l'ecran "Preparation du
 // lobby" quand le join ne revient pas : attente sans fin, ou relance.
+// --perte depart : aucun join ne revient, et le joueur appuie sur "Retour au
+// menu" pendant l'attente. Reussi si la page revient au choix des modes et
+// qu'aucun autre join ne part ensuite (les relances sont coupees).
 // Joueur bloque : on releve aussi l'etat React du salon (salle, session,
 // statut du join...) et les requetes terminees selon la page (Resource Timing).
 // Code de sortie : 0 si personne n'est reste bloque, 1 sinon.
@@ -68,7 +71,7 @@ function options(argv) {
   if (!["webkit", "chromium"].includes(o.browser)) throw new Error(`navigateur inconnu : ${o.browser}`)
   if (!["mixte", "meme", "trois"].includes(o.montage)) throw new Error(`montage inconnu : ${o.montage}`)
   if (!["jouer", "accueil"].includes(o.entree)) throw new Error(`entree inconnue : ${o.entree}`)
-  if (!["oui", "non"].includes(o.perte)) throw new Error(`--perte oui ou non : ${o.perte}`)
+  if (!["oui", "non", "depart"].includes(o.perte)) throw new Error(`--perte oui, non ou depart : ${o.perte}`)
   o.tag ??= `${o.browser}-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-")}`
   o.out ??= path.join(os.tmpdir(), "webkit-lobby", o.tag)
   return o
@@ -318,15 +321,31 @@ function digest(events, code) {
   }
 }
 
-// Retient le premier POST /api/rooms/CODE/join de la page : ni reponse ni
-// erreur, la requete reste en suspens. Les suivants passent normalement.
-async function holdFirstJoin(page, onHeld) {
-  let held = false
+// Retient le premier POST /api/rooms/CODE/join de la page (ou tous, avec
+// `all`) : ni reponse ni erreur, la requete reste en suspens. Les suivants
+// passent normalement. Compte les POST du join partis de la page.
+async function holdJoins(page, all, onHeld) {
+  const seen = { posts: 0 }
   await page.route(u => /\/api\/rooms\/[A-Z0-9]+\/join$/.test(u.pathname), route => {
-    if (route.request().method() !== "POST" || held) return route.continue()
-    held = true
-    onHeld({ url: route.request().url(), at: Date.now() })
+    if (route.request().method() !== "POST") return route.continue()
+    seen.posts++
+    if (seen.posts === 1) onHeld({ url: route.request().url(), at: Date.now() })
+    else if (!all) return route.continue()
   })
+  return seen
+}
+
+// --perte depart : le joueur attend sur "Preparation du lobby", puis appuie sur
+// "Retour au menu". Les relances partaient a 8 et 16 s : on attend 20 s de
+// plus pour verifier qu'aucun join ne part apres son depart.
+async function leaveWhileWaiting(p, joins, { tag, name, opts }, step) {
+  await p.getByText("Préparation du lobby").waitFor({ timeout: opts.timeout })
+  await sleep(1500)
+  await p.screenshot({ path: path.join(opts.out, `${tag}-${name}-attente.png`) })
+  await p.getByRole("button", { name: "Retour au menu" }).click({ timeout: 10000 }); step("retour-menu")
+  await p.waitForURL(/\/modes\/?(\?.*)?$/, { timeout: 10000 }); step("menu")
+  await sleep(20000)
+  if (joins.posts !== 1) throw new Error(`${joins.posts} POST du join envoyes, 1 attendu apres "Retour au menu"`)
 }
 
 async function joinAs({ browser, name, code, tag, opts, device }) {
@@ -335,7 +354,7 @@ async function joinAs({ browser, name, code, tag, opts, device }) {
   if (opts.sonde === "oui") await ctx.addInitScript(PAGE_PROBE)
   const p = await ctx.newPage()
   let joinHeld = null
-  if (opts.perte === "oui") await holdFirstJoin(p, held => { joinHeld = held })
+  const joins = opts.perte === "non" ? null : await holdJoins(p, opts.perte === "depart", held => { joinHeld = held })
   const net = []
   listen(p, net)
   const log = { name, tag, browser: opts.browser, code, steps: {}, ok: false }
@@ -352,7 +371,11 @@ async function joinAs({ browser, name, code, tag, opts, device }) {
     step("pseudo")
     await go.click({ timeout: 30000 }); step("continuer")
     await p.getByRole("button", { name: /rejoindre la partie/i }).click({ timeout: 30000 }); step("rejoindre")
-    await p.getByText("Tu es dans la partie").waitFor({ timeout: opts.timeout }); step("dans-la-partie")
+    if (opts.perte === "depart") {
+      await leaveWhileWaiting(p, joins, { tag, name, opts }, step)
+    } else {
+      await p.getByText("Tu es dans la partie").waitFor({ timeout: opts.timeout }); step("dans-la-partie")
+    }
     log.ok = true
   } catch (e) {
     log.erreur = String(e.message).split("\n")[0].slice(0, 200)
@@ -363,6 +386,7 @@ async function joinAs({ browser, name, code, tag, opts, device }) {
     await p.screenshot({ path: path.join(opts.out, `${tag}-${name}-blocage.png`) }).catch(() => {})
   }
   log.joinRetenu = joinHeld
+  if (joins) log.joinsEnvoyes = joins.posts
   log.joinMs = log.steps["dans-la-partie"] != null ? log.steps["dans-la-partie"] - log.steps.rejoindre : null
   // Releve aussi pour les entrees reussies : la lecture est verifiee a chaque passage.
   log.etatReact = await p.evaluate(REACT_STATE).catch(e => ({ erreur: String(e).slice(0, 160) }))
@@ -409,7 +433,8 @@ async function room(i, opts, launcher, results) {
     host.close()
   }
   const these = results.filter(r => r.tag === tag)
-  console.log(`${tag} salle ${code} : ${these.map(r => `${r.name}=${r.ok ? `${r.joinMs} ms` : "BLOQUE"}`).join(" ")}`)
+  const verdict = r => (!r.ok ? "BLOQUE" : r.joinMs != null ? `${r.joinMs} ms` : `menu, ${r.joinsEnvoyes} join`)
+  console.log(`${tag} salle ${code} : ${these.map(r => `${r.name}=${verdict(r)}`).join(" ")}`)
 }
 
 const cpuSamples = []
@@ -443,7 +468,7 @@ async function main() {
   if (results[0]) console.log(`etat React (1re entree, controle de la lecture) : ${JSON.stringify(results[0].etatReact)}`)
   for (const r of [...stuck, ...slow]) {
     console.log(`- ${r.tag} ${r.name} ${r.ok ? `LENT ${r.joinMs} ms` : `BLOQUE (${r.erreur})`}`)
-    if (r.joinRetenu) console.log(`  premier join retenu (--perte oui) a ${r.joinRetenu.at}`)
+    if (r.joinRetenu) console.log(`  premier join retenu (--perte ${opts.perte}) a ${r.joinRetenu.at}, ${r.joinsEnvoyes} POST du join en tout`)
     console.log(`  join vu par la page : ${JSON.stringify(r.digest.joinFetch)}, par le navigateur : ${JSON.stringify(r.digest.joinNavigateur)}`)
     console.log(`  en vol au depart du join : ${JSON.stringify(r.digest.inFlightAtJoin)}`)
     console.log(`  xhr >= 400 : ${r.digest.xhr400}, websockets ${r.digest.wsNew} crees / ${r.digest.wsOpen} ouverts / ${r.digest.wsClose} fermes`)
