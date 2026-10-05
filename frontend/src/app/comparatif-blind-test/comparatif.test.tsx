@@ -8,17 +8,51 @@ import Page from "./page"
 describe("comparatif des blind tests", () => {
   const renderPage = () => render(<Page />)
 
+  const faqJsonLd = (container: HTMLElement) => {
+    const blocks = [...container.querySelectorAll("script[type='application/ld+json']")]
+      .map(s => JSON.parse(s.textContent || "{}"))
+      .flatMap(o => (Array.isArray(o) ? o : [o]))
+    return blocks.find(o => o?.["@type"] === "FAQPage")
+  }
+
+  const blinestRow = () => {
+    const rows = within(screen.getByRole("table")).getAllByRole("row")
+    const row = rows.find(r => within(r).queryAllByRole("cell")[0]?.textContent === "Blinest")
+    if (!row) throw new Error("ligne Blinest absente du tableau")
+    return row
+  }
+
   it("a une ligne complete par service, Blinest compris", () => {
     renderPage()
-    const rows = within(screen.getByRole("table")).getAllByRole("row").slice(1)
+    const table = screen.getByRole("table")
+    const columns = within(table).getAllByRole("columnheader").length
+    const rows = within(table).getAllByRole("row").slice(1)
     const names = rows.map(r => within(r).getAllByRole("cell")[0].textContent)
-    expect(names).toContain("Blinest")
-    expect(names).toHaveLength(7)
+    expect(names).toEqual(expect.arrayContaining(["blindz.app", "Blinest", "blindtest.gg"]))
     for (const row of rows) {
       const cells = within(row).getAllByRole("cell")
-      expect(cells).toHaveLength(8)
+      expect(cells.length).toBe(columns)
       for (const cell of cells) expect(cell.textContent?.trim()).not.toBe("")
     }
+  })
+
+  // Relecture du 05/10 : Blinest n'importe plus que Deezer (Spotify coupe, Apple
+  // Music sert seulement a chercher des titres un par un). Leur ImportPlaylist.vue fait foi.
+  it("ne pretend plus que Blinest importe Spotify ou Apple Music", () => {
+    const { container } = renderPage()
+    expect(blinestRow().textContent).toMatch(/Deezer/)
+    expect(blinestRow().textContent).not.toMatch(/Spotify|Apple Music/)
+    const fiche = screen.getByRole("heading", { level: 3, name: "Blinest" })
+    const paragraphs: string[] = []
+    for (let el = fiche.nextElementSibling; el && el.tagName === "P"; el = el.nextElementSibling) {
+      paragraphs.push(el.textContent || "")
+    }
+    expect(paragraphs.join(" ")).toMatch(/plus d'import Spotify/)
+    expect(paragraphs.join(" ")).not.toMatch(/Apple Music/)
+    const answers = (faqJsonLd(container)?.mainEntity ?? []).map((q: { acceptedAnswer?: { text?: string } }) => q.acceptedAnswer?.text ?? "")
+    for (const a of answers) expect(a).not.toMatch(/Apple Music/)
+    const code = container.querySelector("a[href*='github.com/mchev/blinest'][href$='ImportPlaylist.vue']")
+    expect(code).not.toBeNull()
   })
 
   it("met toutes les sources externes en noopener nofollow", () => {
@@ -39,9 +73,9 @@ describe("comparatif des blind tests", () => {
 
   it("repond a la recherche « alternative a Blinest » dans le JSON-LD FAQPage", () => {
     const { container } = renderPage()
-    const ld = [...container.querySelectorAll("script[type='application/ld+json']")].map(s => JSON.parse(s.textContent || "{}"))
-    const faq = ld.find(o => o["@type"] === "FAQPage")
-    const questions: string[] = faq.mainEntity.map((q: { name: string }) => q.name)
+    const faq = faqJsonLd(container)
+    expect(faq).toBeDefined()
+    const questions: string[] = (faq?.mainEntity ?? []).map((q: { name?: string }) => q.name ?? "")
     expect(questions.some(q => /alternative à Blinest/.test(q))).toBe(true)
   })
 
