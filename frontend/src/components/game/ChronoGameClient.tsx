@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import type { SoloTrack } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import { VinylDisc } from "./VinylDisc"
+import { EndFeedback } from "./EndFeedback"
 import { audioManager } from "@/lib/audioManager"
 import { computeScore } from "@/lib/roundFlow"
 import { evaluateGuessSeparate, type Verdict } from "@/lib/matching"
@@ -299,6 +300,8 @@ export function ChronoGameClient({ tracks, durationSeconds, onGameComplete }: Ch
               Retour au menu
             </button>
           </div>
+
+          <EndFeedback context={{ mode: "chrono" }} />
         </div>
       </div>
     )
