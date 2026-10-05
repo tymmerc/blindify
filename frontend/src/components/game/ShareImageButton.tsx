@@ -8,9 +8,13 @@ export interface ShareImageButtonProps {
   stats: { rounds: number; correct: number; bestStreak: number; points: number }
   roundStates: string[]
   tracks: Array<{ title: string; artist: string }>
+  /** Remplace le style par defaut (bouton carte), ex. lien discret en fin de partie. */
+  className?: string
 }
 
-export function ShareImageButton({ stats, roundStates, tracks }: ShareImageButtonProps) {
+const DEFAULT_CLASS = "rounded-md border-2 border-[#2e2014] bg-[#ece1c8] font-bold text-[#2e2014] shadow-[3px_3px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:bg-[#ece1c8] hover:text-[#2e2014] hover:shadow-[1px_1px_0_#2e2014]"
+
+export function ShareImageButton({ stats, roundStates, tracks, className }: ShareImageButtonProps) {
   const [loading, setLoading] = useState(false)
 
   const handleClick = useCallback(async () => {
@@ -41,13 +45,15 @@ export function ShareImageButton({ stats, roundStates, tracks }: ShareImageButto
     }
   }, [stats, roundStates, tracks])
 
+  if (className) {
+    return (
+      <button type="button" className={className} onClick={handleClick} disabled={loading}>
+        {loading ? "Génération..." : "Partager l'image"}
+      </button>
+    )
+  }
   return (
-    <Button
-      variant="outline"
-      className="rounded-md border-2 border-[#2e2014] bg-[#ece1c8] font-bold text-[#2e2014] shadow-[3px_3px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:bg-[#ece1c8] hover:text-[#2e2014] hover:shadow-[1px_1px_0_#2e2014]"
-      onClick={handleClick}
-      disabled={loading}
-    >
+    <Button variant="outline" className={DEFAULT_CLASS} onClick={handleClick} disabled={loading}>
       {loading ? "Génération..." : "Partager l'image"}
     </Button>
   )
