@@ -36,6 +36,8 @@
   .logo { width:36px; height:36px; border-radius:9px; background:var(--cream); display:grid; place-items:center; flex:none; }
   .logo img { width:26px; height:26px; object-fit:contain; display:block; }
   .htxt { flex:1 1 200px; }
+  header a.vers { font-size:13px; color:var(--txt-2); text-decoration:none; border:1px solid var(--line-2); border-radius:6px; padding:6px 11px; }
+  header a.vers:hover { color:var(--amber); border-color:var(--amber); }
   .maj { font-family:"IBM Plex Mono",monospace; font-size:10.5px; color:var(--txt-3); text-transform:uppercase; letter-spacing:.1em; }
 
   /* ---- santé ---- */
@@ -131,7 +133,9 @@
   .retour.bug { border-left-color:var(--verm); }
   .retour.oui { border-left-color:var(--sage); }
   .retour .meta { display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px; }
-  .retour .texte { white-space:pre-wrap; overflow-wrap:anywhere; }
+  /* Un retour tres long (1000 caracteres, des lignes vides) ne doit pas
+     pousser les autres hors de l'ecran : il defile dans sa propre carte. */
+  .retour .texte { white-space:pre-wrap; overflow-wrap:anywhere; max-height:12em; overflow-y:auto; }
   .retour .lien { background:none; border:0; padding:0; color:var(--amber); font:inherit; cursor:pointer; text-decoration:underline; }
   .vide { color:var(--txt-3); font-size:13px; padding:6px 0; }
   .aide { font-size:11.5px; color:var(--txt-3); }
@@ -203,6 +207,8 @@
   <header>
     <span class="logo"><img src="logo.png" alt=""></span>
     <div class="htxt"><h1>Administration Blindz</h1><p class="maj" id="maj">chargement</p></div>
+    <!-- Rapport GoAccess du journal nginx de blindz.app, regenere chaque heure (infra/visites/). -->
+    <a class="vers" href="visites/">Visites du site</a>
   </header>
 
   <div class="sante" id="sante" aria-live="polite">
@@ -488,6 +494,8 @@ function rendre() {
   const titresJoues = D.titres.slice(0, 8);
   const inscr = D.inscriptions.filter(i => { const t = new Date(i.j + "T12:00:00").getTime(); return t >= f.debut.getTime() && t <= f.fin.getTime(); });
   const nInscr = inscr.reduce((t, i) => t + i.n, 0), nComptes = inscr.reduce((t, i) => t + i.comptes, 0);
+  // Comptes de test deja retires de n par stats.sql ; absent des anciens data.json.
+  const nTests = inscr.reduce((t, i) => t + (i.tests || 0), 0);
 
   const kpi = (lib, v, av, suf = "", note) => `<div class="kpi"><div class="lib">${lib} ${b ? delta(v, av) : ""}</div>
     <div class="v num">${v == null ? "—" : nb(v)}${v == null ? "" : suf}</div><div class="cmp">${b ? `avant : ${av == null ? "—" : nb(av) + suf}` : (note || "depuis le début")}</div></div>`;
@@ -558,8 +566,8 @@ function rendre() {
     <div class="bloc"><div class="g2">
       <div><div class="shead"><h2>Inscriptions</h2><span class="sub">sur la période</span></div><div class="panel">
         <div style="display:flex;gap:18px;align-items:baseline"><span class="num" style="font-family:Archivo;font-size:1.5rem;font-weight:700">${nb(nInscr)}</span>
-        <span class="aide">nouveaux joueurs, dont ${nb(nComptes)} avec un compte</span></div>
-        ${rang(D.liens.map(l => ({ label:"liens " + l.provider, n:l.n })), C.blue)}</div></div>
+        <span class="aide">nouveaux joueurs, dont ${nb(nComptes)} avec un compte${nTests ? ` · ${nb(nTests)} comptes de test écartés` : ""}</span></div>
+        ${rang(D.liens.filter(l => l.n > 0).map(l => ({ label:"liens " + l.provider, n:l.n })), C.blue)}</div></div>
       <div><div class="shead"><h2>Joueurs les plus actifs</h2><span class="sub">depuis le début</span></div>
         <div class="panel tight"><div class="scroll"><table class="min"><thead><tr><th>Pseudo</th><th>Parties</th><th>Bonnes</th><th>Série</th><th>Vu le</th></tr></thead><tbody>
           ${D.joueurs.slice(0, 10).map(j => `<tr><td>${esc(j.pseudo)}</td><td class="n">${nb(j.parties)}</td><td class="n">${nb(j.bonnes)} / ${nb(j.tentatives)}</td><td class="n">${nb(j.serie)}</td><td class="n" style="color:var(--txt-3)">${esc(j.vu_le || "?")}</td></tr>`).join("")}
@@ -870,6 +878,9 @@ function dessiner(nom) {
    direct). Tout texte vient d'un joueur : chaque champ passe par esc(), et les
    identifiants de partie sont verifies avant de devenir des data-id. */
 let filtreRetours = "";
+// Numero de la derniere demande : en changeant vite de filtre, une reponse
+// lente arrivee apres la suivante ne doit pas ecraser l'affichage.
+let demandeRetours = 0;
 const MODES_JEU = { solo:"solo", defi:"défi", chrono:"chrono", buzzer:"un seul tel", friends:"à distance", event:"autour d'une table" };
 const modeRetourPill = (m) => ({ solo:"s", defi:"a", chrono:"s", buzzer:"b", friends:"b", event:"v" }[m] || "");
 
@@ -915,11 +926,13 @@ function rendreRetours(d) {
 }
 
 async function chargerRetours() {
+  const demande = ++demandeRetours;
   $("retours").innerHTML = '<p class="vide">Chargement...</p>';
   try {
     const q = filtreRetours ? `&type=${encodeURIComponent(filtreRetours)}` : "";
     const r = await fetch(`${API}/retours?t=${Date.now()}${q}`);
     const d = await r.json().catch(() => ({}));
+    if (demande !== demandeRetours) return;
     if (r.status === 404) throw new Error("le service de l'administration n'a pas encore la route des retours : redémarrer blindz-db-browser après la mise à jour du dépôt");
     if (d.erreur) throw new Error(d.erreur);
     if (!d.table) {
@@ -934,6 +947,7 @@ async function chargerRetours() {
     }
     rendreRetours(d);
   } catch (e) {
+    if (demande !== demandeRetours) return;
     $("retours").innerHTML = `<div class="err">Impossible de lire les retours : ${esc(e.message)}</div>`;
   }
 }
