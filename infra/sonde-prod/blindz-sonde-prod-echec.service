@@ -1,0 +1,45 @@
+# Second canal de la sonde de prod de Blindz : lancee par systemd quand
+# blindz-sonde-prod.service passe en echec (OnFailure=), elle pousse une
+# notification ntfy (tools/sonde-prod/echec-ntfy.sh, copie dans
+# /opt/monitoring/sonde-prod par tools/sonde-prod/installer.sh). Le sujet ntfy
+# est lu dans /opt/monitoring/.ntfy-topic ; sans lui, une ligne dans le journal.
+#
+#   journalctl -u blindz-sonde-prod-echec -n 10
+[Unit]
+Description=Blindz : sonde de prod en echec, notification ntfy
+Documentation=https://github.com/tymmerc/blindify/tree/main/tools/sonde-prod
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /opt/monitoring/sonde-prod/echec-ntfy.sh
+TimeoutStartSec=1min
+
+# Un curl, un petit plafond.
+MemoryMax=64M
+MemorySwapMax=0
+Nice=10
+
+# Lecture seule partout : il lit le sujet ntfy et son script, rien d'autre.
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+UMask=0077
+CapabilityBoundingSet=
+NoNewPrivileges=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
