@@ -31,9 +31,21 @@ export async function ensureFeedbackSchema(): Promise<void> {
 
 export const MAX_USER_AGENT = 300;
 
-// En multijoueur, le client connait le code de la salle, pas l'identifiant de
-// la partie : on le retrouve cote serveur (room_code est unique). Pour un defi,
-// le code est celui du defi, sans rapport avec une salle.
+// Duree de conservation des retours, promise sur la page de confidentialite.
+// Le janitor du backend (index.ts, toutes les 6 heures) passe cette requete.
+export const FEEDBACK_RETENTION_MONTHS = 12;
+export const FEEDBACK_PURGE_SQL =
+  `DELETE FROM game_feedback WHERE created_at < NOW() - INTERVAL '${FEEDBACK_RETENTION_MONTHS} months'`;
+
+// Comment un retour retrouve sa partie :
+// - en solo, le client envoie l'identifiant de sa partie (il le connait) ;
+// - en multijoueur, il ne connait que le code de la salle : on retrouve la
+//   partie cote serveur (room_code est unique). Un identifiant envoye en plus
+//   par le client est ignore, il ne doit pas pouvoir rattacher le retour a une
+//   autre partie que celle de la salle ;
+// - pour un defi, le code est celui du defi, sans rapport avec une salle ; ni
+//   le defi ni le chrono ni le buzzer n'ont d'identifiant a envoyer.
+const CLIENT_SESSION_MODES: ReadonlySet<FeedbackMode> = new Set<FeedbackMode>(["solo"]);
 const ROOM_MODES: ReadonlySet<FeedbackMode> = new Set<FeedbackMode>(["friends", "event"]);
 
 const UNDEFINED_TABLE = "42P01";
@@ -42,9 +54,11 @@ const isUndefinedTable = (err: unknown): boolean =>
   typeof err === "object" && err !== null && (err as { code?: unknown }).code === UNDEFINED_TABLE;
 
 async function insertFeedback(input: FeedbackInput, userAgent: string | null): Promise<number> {
+  const sessionId = CLIENT_SESSION_MODES.has(input.mode) ? input.sessionId : null;
   const roomCode = ROOM_MODES.has(input.mode) ? input.gameCode : null;
-  // Un identifiant de partie qui n'existe pas devient NULL au lieu de faire
-  // echouer l'insertion sur la cle etrangere : le retour compte plus que le lien.
+  // Au plus un des deux est renseigne, selon le mode. Un identifiant de partie
+  // qui n'existe pas devient NULL au lieu de faire echouer l'insertion sur la
+  // cle etrangere : le retour compte plus que le lien.
   const { rows } = await pool.query<{ id: number }>(
     `INSERT INTO game_feedback (kind, answer, message, mode, session_id, game_code, user_agent, app_version)
      VALUES ($1, $2, $3, $4,
@@ -58,7 +72,7 @@ async function insertFeedback(input: FeedbackInput, userAgent: string | null): P
       input.answer,
       input.message,
       input.mode,
-      input.sessionId,
+      sessionId,
       input.gameCode,
       userAgent,
       input.appVersion,

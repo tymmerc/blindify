@@ -66,16 +66,48 @@ describe("parseFeedback", () => {
     expect(r.ok && r.value.message).toBe("ligne 1\nligne 2\tfin");
   });
 
+  it("retire les controles C1 et les caracteres invisibles sans chasse", () => {
+    const r = parseFeedback({ ...bug, message: "a\u0085b\u009Fc\u200Bd\u2060e\uFEFFf" });
+    expect(r.ok && r.value.message).toBe("abcdef");
+  });
+
+  it("retire les forcages du sens d'ecriture, qui feraient lire autre chose", () => {
+    const inverse = "bug \u202Etxt.exe\u202C fin";
+    const isole = "x\u2066y\u2067z\u2068w\u2069 \u200E\u200F\u061C\u202A\u202B\u202D.";
+    expect(parseFeedback({ ...bug, message: inverse })).toMatchObject({ ok: true, value: { message: "bug txt.exe fin" } });
+    expect(parseFeedback({ ...bug, message: isole })).toMatchObject({ ok: true, value: { message: "xyzw ." } });
+  });
+
+  it("garde le liant sans chasse des emojis composes", () => {
+    const dev = "\u{1F469}\u200D\u{1F4BB} top";
+    expect(parseFeedback({ ...bug, message: dev })).toMatchObject({ ok: true, value: { message: dev } });
+  });
+
+  it("ramene U+2028 et U+2029 a un saut de ligne, et pas plus d'une ligne vide d'affilee", () => {
+    const r = parseFeedback({ ...bug, message: "un\u2028deux\u2029trois\n\n\n\n\nquatre  \n \n\t\n\ncinq" });
+    expect(r.ok && r.value.message).toBe("un\ndeux\ntrois\n\nquatre\n\ncinq");
+  });
+
+  it("un message fait seulement de caracteres invisibles est un bug sans texte", () => {
+    const r = parseFeedback({ ...bug, message: "\u200B\u202E\n\n\u2028" });
+    expect(r.ok && r.value.message).toBeNull();
+  });
+
   it("refuse un identifiant de partie qui n'est pas un entier positif", () => {
     for (const sessionId of [0, -3, 1.5, "12", 2 ** 31, Number.NaN]) {
       expect(refusal({ ...avis, sessionId })).toBe("invalid_session");
     }
   });
 
-  it("refuse un code de partie ou une version hors format", () => {
+  it("refuse un code de partie hors format", () => {
     expect(refusal({ ...avis, gameCode: "AB CD" })).toBe("invalid_code");
     expect(refusal({ ...avis, gameCode: "x".repeat(17) })).toBe("invalid_code");
-    expect(refusal({ ...avis, appVersion: "<script>" })).toBe("invalid_version");
-    expect(refusal({ ...avis, appVersion: "a".repeat(41) })).toBe("invalid_version");
+  });
+
+  it("laisse tomber une version hors format au lieu de refuser le retour", () => {
+    for (const appVersion of ["<script>", "a".repeat(41), "v1.2+build", 12, {}]) {
+      expect(parseFeedback({ ...avis, appVersion })).toMatchObject({ ok: true, value: { kind: "avis", appVersion: null } });
+    }
+    expect(parseFeedback({ ...avis, appVersion: "v1.2.3-rc_1" })).toMatchObject({ ok: true, value: { appVersion: "v1.2.3-rc_1" } });
   });
 });

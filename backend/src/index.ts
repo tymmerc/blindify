@@ -16,7 +16,7 @@ import likesRoutes from "./routes/likes";
 import roomsRoutes from "./routes/rooms";
 import reportsRoutes from "./routes/reports";
 import feedbackRoutes from "./routes/feedback";
-import { ensureFeedbackSchema } from "./services/feedback";
+import { ensureFeedbackSchema, FEEDBACK_PURGE_SQL } from "./services/feedback";
 import statsRoutes from "./routes/stats";
 import audioSourcesRoutes from "./routes/audioSources";
 import friendsRoutes from "./routes/friends";
@@ -429,6 +429,8 @@ async function runJanitor(): Promise<void> {
   await step("old_game_sessions",
     `DELETE FROM game_sessions
      WHERE started_at < NOW() - INTERVAL '400 days'`);
+  // Retours de fin de partie : 12 mois, comme annonce sur /confidentialite.
+  await step("old_feedback", FEEDBACK_PURGE_SQL);
   // Plus d'etape "dead_guest_tracks" : le filtre epargne desormais tout invite
   // qui possede de la musique, donc il n'y a plus rien a detacher. Detacher
   // puis supprimer revenait a effacer le joueur pour contourner sa propre

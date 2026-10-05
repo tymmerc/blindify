@@ -43,24 +43,47 @@ function oneOf<T extends string>(list: readonly T[], value: unknown): T | null {
   return typeof value === "string" && (list as readonly string[]).includes(value) ? (value as T) : null;
 }
 
+// Caracteres retires du texte libre, par plages de points de code :
+// - controles C0 sauf tabulation et saut de ligne (le caractere nul fait
+//   echouer l'INSERT d'un TEXT dans PostgreSQL), DEL et controles C1 ;
+// - marques et forcages du sens d'ecriture : un U+202E retourne l'affichage du
+//   texte qui le suit et ferait lire autre chose que ce qui a ete ecrit ;
+// - caracteres invisibles sans chasse (espace sans chasse, gluon, BOM).
+// On garde U+200C et U+200D (antiliant et liant sans chasse) : le second
+// compose les emojis (famille, metiers), le premier sert a certaines langues.
+const REMOVED_RANGES: ReadonlyArray<readonly [number, number]> = [
+  [0x00, 0x08], [0x0b, 0x1f], [0x7f, 0x9f],
+  [0x061c, 0x061c], [0x200e, 0x200f], [0x202a, 0x202e], [0x2066, 0x2069],
+  [0x200b, 0x200b], [0x2060, 0x2064], [0xfeff, 0xfeff],
+];
+
+const isRemoved = (codePoint: number): boolean =>
+  REMOVED_RANGES.some(([from, to]) => codePoint >= from && codePoint <= to);
+
+// Fins de ligne de toutes origines (Windows, ancien Mac, separateurs Unicode
+// U+2028 et U+2029) ramenees au saut de ligne simple.
+const LINE_BREAKS = /\r\n?|[\u2028\u2029]/g;
+
 /**
- * Retire les caracteres de controle, sauf la tabulation et le saut de ligne.
- * Le caractere nul en particulier fait echouer l'INSERT d'un TEXT dans PostgreSQL.
+ * Texte lisible tel quel dans le tableau de bord : fins de ligne unifiees,
+ * caracteres invisibles retires, espaces de fin de ligne enleves et pas plus
+ * d'une ligne vide d'affilee.
  */
-function stripControlChars(text: string): string {
-  return Array.from(text)
-    .filter(ch => {
-      const code = ch.charCodeAt(0);
-      return code === 9 || code === 10 || (code >= 32 && code !== 127);
-    })
+function cleanFreeText(text: string): string {
+  const visible = Array.from(text.replace(LINE_BREAKS, "\n"))
+    .filter(ch => !isRemoved(ch.codePointAt(0) ?? 0))
     .join("");
+  return visible
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 /** Texte libre nettoye ; null si vide, "invalid" si ce n'est pas du texte ou s'il est trop long. */
 function cleanMessage(value: unknown): string | null | "invalid" {
   if (isAbsent(value)) return null;
   if (typeof value !== "string") return "invalid";
-  const cleaned = stripControlChars(value.replace(/\r\n?/g, "\n")).trim();
+  const cleaned = cleanFreeText(value);
   if (!cleaned) return null;
   return cleaned.length > MAX_FEEDBACK_MESSAGE ? "invalid" : cleaned;
 }
@@ -77,9 +100,13 @@ function cleanGameCode(value: unknown): string | null | "invalid" {
   return validRoomCode(value)?.toUpperCase() ?? "invalid";
 }
 
-function cleanVersion(value: unknown): string | null | "invalid" {
-  if (isAbsent(value)) return null;
-  return typeof value === "string" && VERSION_PATTERN.test(value) ? value : "invalid";
+/**
+ * Version du front : une simple aide au tri. Hors format, on la laisse tomber
+ * (null) au lieu de refuser le retour : un build avec une version inattendue
+ * ne doit pas faire echouer tous les envois.
+ */
+function cleanVersion(value: unknown): string | null {
+  return typeof value === "string" && VERSION_PATTERN.test(value) ? value : null;
 }
 
 const refuse = (code: string, message: string): FeedbackParseResult => ({ ok: false, code, message });
@@ -107,7 +134,6 @@ export function parseFeedback(body: unknown): FeedbackParseResult {
   const gameCode = cleanGameCode(raw.gameCode);
   if (gameCode === "invalid") return refuse("invalid_code", "Code de partie invalide.");
   const appVersion = cleanVersion(raw.appVersion);
-  if (appVersion === "invalid") return refuse("invalid_version", "Version invalide.");
 
   return { ok: true, value: { kind, answer, message, mode, sessionId, gameCode, appVersion } };
 }

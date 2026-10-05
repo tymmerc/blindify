@@ -6,7 +6,11 @@
  *   (appelee au demarrage, pour la pile de test et la CI) creent la meme table ;
  * - un avis et un bug arrivent en base, rattaches a leur partie quand on la
  *   connait (directement en solo, par le code de salle en multijoueur) ;
- * - les refus : corps invalide, limite d'envois par adresse ;
+ * - en multijoueur, la partie vient toujours de la salle, jamais d'un
+ *   identifiant envoye par le client ;
+ * - les refus : corps invalide, limite d'envois par adresse (une IPv6 compte
+ *   pour son /64), plafond commun a toutes les adresses ;
+ * - la purge du janitor efface les retours de plus de 12 mois, pas les autres ;
  * - la table manquante est recreee au premier envoi au lieu d'une erreur 500.
  *
  * Base : TEST_DATABASE_URL (voir tests/testDatabase.ts), jamais la prod.
@@ -23,8 +27,8 @@ import express from "express";
 import type { AddressInfo } from "net";
 import { resolveTestDatabaseUrl } from "../testDatabase";
 import { pool } from "../../src/config/db";
-import { ensureFeedbackSchema, MAX_USER_AGENT } from "../../src/services/feedback";
-import { createFeedbackRouter } from "../../src/routes/feedback";
+import { ensureFeedbackSchema, FEEDBACK_PURGE_SQL, MAX_USER_AGENT } from "../../src/services/feedback";
+import { createFeedbackRouter, type FeedbackLimits } from "../../src/routes/feedback";
 
 // Sans base de test jetable, la suite s'arrete ici, avant toute requete.
 resolveTestDatabaseUrl(process.env.TEST_DATABASE_URL);
@@ -33,10 +37,14 @@ const MIGRATION = path.join(__dirname, "../../migrations/004_game_feedback.sql")
 
 type TestApp = { url: string; close: () => Promise<void> };
 
-async function startApp(maxPerWindow?: number): Promise<TestApp> {
+async function startApp(limits?: FeedbackLimits): Promise<TestApp> {
   const app = express();
+  // Comme en prod (index.ts) : un seul proxy devant, nginx. L'adresse du
+  // client est alors la derniere de X-Forwarded-For, ce qui permet aux tests
+  // de jouer plusieurs adresses depuis 127.0.0.1.
+  app.set("trust proxy", 1);
   app.use(express.json());
-  app.use("/api/feedback", createFeedbackRouter(maxPerWindow));
+  app.use("/api/feedback", createFeedbackRouter(limits));
   const server = http.createServer(app);
   await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
   const { port } = server.address() as AddressInfo;
@@ -82,6 +90,10 @@ async function lastFeedback() {
   const { rows } = await pool.query(`SELECT * FROM game_feedback ORDER BY id DESC LIMIT 1`);
   return rows[0];
 }
+
+afterAll(async () => {
+  await pool.end();
+});
 
 const randomCode = () => crypto.randomUUID().replace(/[^A-Z0-9]/gi, "").slice(0, 6).toUpperCase();
 
@@ -141,7 +153,6 @@ describe("POST /api/feedback", () => {
     await pool.query(`DELETE FROM game_feedback WHERE session_id = ANY($1::int[]) OR message LIKE 'jest:%'`, [[sessionId, roomSessionId]]);
     await pool.query(`DELETE FROM multiplayer_rooms WHERE room_code = $1`, [roomCode]);
     await pool.query(`DELETE FROM game_sessions WHERE id = ANY($1::int[])`, [[sessionId, roomSessionId]]);
-    await pool.end();
   });
 
   it("enregistre un avis solo rattache a sa partie, sans rien de personnel", async () => {
@@ -210,8 +221,24 @@ describe("POST /api/feedback", () => {
     expect(await lastFeedback()).toMatchObject({ mode: "buzzer", message: "jest: table recreee" });
   });
 
+  it("en multijoueur, ignore l'identifiant envoye par le client et prend la partie de la salle", async () => {
+    const res = await post(app.url, { kind: "bug", mode: "friends", gameCode: roomCode, sessionId, message: "jest: autre partie" });
+    expect(res.status).toBe(201);
+    expect(await lastFeedback()).toMatchObject({ message: "jest: autre partie", session_id: roomSessionId, game_code: roomCode });
+
+    const event = await post(app.url, { kind: "bug", mode: "event", sessionId, message: "jest: sans salle" });
+    expect(event.status).toBe(201);
+    expect(await lastFeedback()).toMatchObject({ message: "jest: sans salle", session_id: null });
+  });
+
+  it("ne rattache un identifiant envoye par le client qu'en solo", async () => {
+    const res = await post(app.url, { kind: "bug", mode: "chrono", sessionId, message: "jest: chrono" });
+    expect(res.status).toBe(201);
+    expect(await lastFeedback()).toMatchObject({ message: "jest: chrono", session_id: null });
+  });
+
   it("limite les envois par adresse (429 au-dela)", async () => {
-    const limited = await startApp(2);
+    const limited = await startApp({ perAddress: 2 });
     try {
       const body = { kind: "bug", mode: "solo", message: "jest: rafale" };
       expect((await post(limited.url, body)).status).toBe(201);
@@ -222,5 +249,77 @@ describe("POST /api/feedback", () => {
     } finally {
       await limited.close();
     }
+  });
+
+  it("compte une IPv6 pour son /64 : changer d'adresse dans le bloc ne remet pas le compteur a zero", async () => {
+    const limited = await startApp({ perAddress: 2 });
+    const from = (ip: string) => ({ "X-Forwarded-For": ip });
+    try {
+      const body = { kind: "bug", mode: "solo", message: "jest: ipv6" };
+      expect((await post(limited.url, body, from("2001:db8:1:2::1"))).status).toBe(201);
+      expect((await post(limited.url, body, from("2001:db8:1:2:aaaa:bbbb:cccc:dddd"))).status).toBe(201);
+      expect((await post(limited.url, body, from("2001:db8:1:2::ffff"))).status).toBe(429);
+      // Le /64 voisin a son propre compteur, l'IPv4 aussi.
+      expect((await post(limited.url, body, from("2001:db8:1:3::1"))).status).toBe(201);
+      expect((await post(limited.url, body, from("198.51.100.4"))).status).toBe(201);
+    } finally {
+      await limited.close();
+    }
+  });
+
+  it("plafonne l'endpoint toutes adresses confondues", async () => {
+    const limited = await startApp({ perAddress: 5, global: 3 });
+    const body = { kind: "bug", mode: "solo", message: "jest: plafond" };
+    try {
+      for (const ip of ["198.51.100.1", "198.51.100.2", "2001:db8:9::1"]) {
+        expect((await post(limited.url, body, { "X-Forwarded-For": ip })).status).toBe(201);
+      }
+      const fourth = await post(limited.url, body, { "X-Forwarded-For": "203.0.113.50" });
+      expect(fourth.status).toBe(429);
+      expect((await readJson(fourth)).error?.code).toBe("rate_limited");
+      // Le plafond commun ne s'annonce pas : les seuls en-tetes RateLimit sont
+      // ceux du compteur par adresse (5), jamais le plafond (3) ni son reste.
+      expect(fourth.headers.get("ratelimit-limit")).toBe("5");
+      expect(fourth.headers.get("ratelimit-remaining")).toBe("4");
+      expect(fourth.headers.get("retry-after")).toBeNull();
+    } finally {
+      await limited.close();
+    }
+  });
+
+  it("une adresse bloquee ne consomme pas le plafond commun", async () => {
+    const limited = await startApp({ perAddress: 1, global: 2 });
+    const body = { kind: "bug", mode: "solo", message: "jest: une adresse" };
+    const same = { "X-Forwarded-For": "198.51.100.9" };
+    try {
+      expect((await post(limited.url, body, same)).status).toBe(201);
+      for (let i = 0; i < 5; i += 1) expect((await post(limited.url, body, same)).status).toBe(429);
+      expect((await post(limited.url, body, { "X-Forwarded-For": "198.51.100.10" })).status).toBe(201);
+    } finally {
+      await limited.close();
+    }
+  });
+});
+
+describe("purge des vieux retours (janitor)", () => {
+  it("efface les retours de plus de 12 mois et garde les autres", async () => {
+    await ensureFeedbackSchema();
+    const insert = (message: string, age: string) =>
+      pool.query(
+        `INSERT INTO game_feedback (kind, mode, message, created_at) VALUES ('bug', 'solo', $1, NOW() - $2::interval)`,
+        [message, age]
+      );
+    await insert("jest: purge 13 mois", "13 months");
+    await insert("jest: purge 12 mois et 1 jour", "12 months 1 day");
+    await insert("jest: purge 11 mois", "11 months");
+    await insert("jest: purge hier", "1 day");
+
+    await pool.query(FEEDBACK_PURGE_SQL);
+
+    const { rows } = await pool.query<{ message: string }>(
+      `SELECT message FROM game_feedback WHERE message LIKE 'jest: purge%' ORDER BY id`
+    );
+    expect(rows.map(r => r.message)).toEqual(["jest: purge 11 mois", "jest: purge hier"]);
+    await pool.query(`DELETE FROM game_feedback WHERE message LIKE 'jest: purge%'`);
   });
 });
