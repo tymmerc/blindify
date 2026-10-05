@@ -85,6 +85,11 @@ export async function soloCheck(browser, seed, out) {
     // Le lien doit viser le site sur lequel on joue (blindz.app en prod), jamais
     // un domaine ecrit en dur.
     if (!copied.startsWith(`${APP}/challenge/`)) problems.push(`le lien de defi ne vise pas le site courant (${copied})`)
+    // Le lien est aussi affiche en clair (sur iPhone la copie automatique est
+    // souvent refusee) : ce doit etre le meme.
+    const shown = await p.getByLabel(/lien du défi/i).inputValue({ timeout: 5000 }).catch(() => "")
+    if (shown !== copied) problems.push(`le lien de defi affiche ("${shown.slice(0, 80)}") n'est pas celui copie`)
+    await shot(p, "3b-defi-pret")
 
     b = await newPage(browser, { ...devices["iPhone 13"] }, "ami", problems)
     const q = b.page

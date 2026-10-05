@@ -46,8 +46,24 @@ function ShareScoreButton({ stats, roundStates }: { stats: ChallengeScore; round
   )
 }
 
+function ReplayActions({ primary, onReplay }: { primary: boolean; onReplay: () => void }) {
+  return (
+    <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
+      <button type="button" className={primary ? "btn-neon justify-center" : OUTLINE_BUTTON} onClick={onReplay}>
+        <RotateCcw className="h-4 w-4" />
+        Rejouer
+      </button>
+      <Link href="/solo" className={OUTLINE_BUTTON}>
+        Changer de playlist
+      </Link>
+    </div>
+  )
+}
+
 export function SoloEndScreen({ stats, accuracy, roundStates, tracks, playerName, showChallenge, challengeIntent, onReplay }: SoloEndScreenProps) {
   const goodAnswers = `${stats.correct} bonne${stats.correct > 1 ? "s" : ""} réponse${stats.correct > 1 ? "s" : ""} sur ${stats.rounds}`
+  // Venu pour defier : le defi passe juste sous le score, rejouer apres.
+  const challengeFirst = showChallenge && challengeIntent
   return (
     <div className="mx-auto w-full max-w-xl space-y-6 px-4 py-6 text-[#2e2014] sm:py-12">
       <section className="space-y-5 rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-5 text-center shadow-[4px_4px_0_rgba(46,32,20,.18)] sm:p-7">
@@ -55,18 +71,10 @@ export function SoloEndScreen({ stats, accuracy, roundStates, tracks, playerName
           <h2 className="font-display text-2xl font-semibold">Partie terminée !</h2>
           <p className="font-display text-5xl font-bold text-[#c65133]">{stats.points} pts</p>
           <p className="text-sm text-[#6b573f]">
-            {goodAnswers} · série max {stats.bestStreak} · précision {accuracy} %
+            {goodAnswers} · série max {stats.bestStreak} · précision {accuracy}&nbsp;%
           </p>
         </div>
-        <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
-          <button type="button" className={challengeIntent ? OUTLINE_BUTTON : "btn-neon justify-center"} onClick={onReplay}>
-            <RotateCcw className="h-4 w-4" />
-            Rejouer
-          </button>
-          <Link href="/solo" className={OUTLINE_BUTTON}>
-            Changer de playlist
-          </Link>
-        </div>
+        {!challengeFirst && <ReplayActions primary onReplay={onReplay} />}
       </section>
 
       {showChallenge && (
@@ -77,6 +85,8 @@ export function SoloEndScreen({ stats, accuracy, roundStates, tracks, playerName
           featured={challengeIntent}
         />
       )}
+
+      {challengeFirst && <ReplayActions primary={false} onReplay={onReplay} />}
 
       <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-3 text-sm">
         <ShareScoreButton stats={stats} roundStates={roundStates} />
