@@ -5,8 +5,10 @@
 //
 //   tools/test-stack/campagne-ref.sh <branche> --script $PWD/tools/test-stack/shots-solo.mjs --out /dossier/captures [--apres]
 //
-// --apres ajoute le parcours de l'onglet "Defier un ami" (15 a 17) et verifie
-// que l'ami voit le pseudo du createur.
+// --apres ajoute le parcours de l'onglet "Defier un ami" (15 a 17), verifie
+// que l'ami voit le pseudo du createur, que le lien colle survit au changement
+// d'onglet, et photographie les ecrans d'erreur (18 a 20, reseau coupe par
+// page.route : jamais de texte anglais du navigateur a l'ecran).
 //
 // Chaque ecran est photographie en pleine page. Le debordement horizontal est
 // mesure sur chaque ecran et note dans resume.json (au-dela de 2 px = probleme).
@@ -46,11 +48,23 @@ async function shot(page, vp, name) {
   if (overflow > 2) summary.problems.push(`${vp} ${name} : deborde de ${overflow} px en largeur`)
 }
 
-/** Clique le premier bouton visible dont le nom correspond, sinon rien. */
+/**
+ * Clique le premier onglet (role tab, depuis la refonte) ou a defaut le
+ * premier bouton (version d'avant) visible dont le nom correspond, sinon rien.
+ */
 async function clickIfAny(page, name) {
-  const b = page.getByRole("button", { name }).first()
-  if (await b.isVisible().catch(() => false)) { await b.click(); return true }
+  for (const role of ["tab", "button"]) {
+    const b = page.getByRole(role, { name }).first()
+    if (await b.isVisible().catch(() => false)) { await b.click(); return true }
+  }
   return false
+}
+
+/** Texte anglais brut du navigateur ou d'un proxy a l'ecran = probleme. */
+async function checkNoRawError(page, vp, where) {
+  const text = await page.locator("body").innerText().catch(() => "")
+  const raw = text.match(/failed to fetch|load failed|networkerror|bad gateway|internal server error|api request failed/i)
+  if (raw) summary.problems.push(`${vp} ${where} : message brut a l'ecran ("${raw[0]}")`)
 }
 
 /** Une manche : donne la bonne reponse (si on l'entend) ou passe. */
@@ -83,6 +97,14 @@ async function shootLobby(page, vp) {
   await shot(page, vp, "02-lobby")
   if (await clickIfAny(page, /^chrono$/i)) await shot(page, vp, "03-lobby-chrono")
   if (await clickIfAny(page, /^(défi|défier un ami|défier un pote)$/i)) await shot(page, vp, "04-lobby-defi")
+  if (APRES) {
+    // Le lien colle dans le classique doit suivre sur l'onglet defi.
+    await page.goto(`${APP}/solo/`, { waitUntil: "networkidle", timeout: 60000 })
+    await page.getByPlaceholder(/open\.spotify\.com\/user/).first().fill(LINK)
+    await page.getByRole("tab", { name: /défier un ami/i }).click()
+    const kept = await page.getByPlaceholder(/open\.spotify\.com\/user/).first().inputValue().catch(() => "")
+    if (kept !== LINK) summary.problems.push(`${vp} : le lien colle est perdu en changeant d'onglet ("${kept}")`)
+  }
 }
 
 /** Lit le code du defi dans le presse-papier apres "Defier un ami". */
@@ -189,6 +211,49 @@ async function friendSide(browser, vp, code) {
   }
 }
 
+/** Ecrans d'erreur : solo sans reseau, defi inexistant, defi sans reseau puis Reessayer. */
+async function shootErrors(browser, vp, code) {
+  const problems = []
+  const { ctx, page } = await newPage(browser, VIEWPORTS[vp], `${vp}-erreurs`, problems)
+  try {
+    await page.route("**/api/quick-play", route => route.abort("failed"))
+    await page.goto(`${APP}/solo/?tab=challenge`, { waitUntil: "networkidle", timeout: 60000 })
+    await page.getByPlaceholder(/open\.spotify\.com\/user/).first().fill(LINK)
+    await page.getByRole("button", { name: /jouer et lancer le défi/i }).click()
+    await page.getByText(/la partie n'a pas pu démarrer/i).waitFor({ timeout: 15000 })
+    await checkNoRawError(page, vp, "solo hors ligne")
+    await shot(page, vp, "18-erreur-solo")
+    await page.unroute("**/api/quick-play")
+    await page.getByRole("button", { name: /changer de lien/i }).click()
+    const back = await page.getByRole("tab", { name: /défier un ami/i, selected: true }).waitFor({ timeout: 10000 }).then(() => true, () => false)
+    if (!back) summary.problems.push(`${vp} : « Changer de lien » ne ramene pas sur l'onglet defi`)
+
+    await page.goto(`${APP}/challenge/?code=ZZZZ9999`, { waitUntil: "networkidle", timeout: 60000 })
+    await page.getByText(/n'existe pas ou n'existe plus/i).waitFor({ timeout: 15000 })
+    await checkNoRawError(page, vp, "defi inexistant")
+    await shot(page, vp, "19-defi-inexistant")
+
+    if (code) {
+      await page.route("**/api/challenges/**", route => route.abort("failed"))
+      await page.goto(`${APP}/challenge/?code=${code}`, { waitUntil: "networkidle", timeout: 60000 })
+      const retry = page.getByRole("button", { name: /réessayer/i })
+      await retry.waitFor({ timeout: 15000 })
+      await checkNoRawError(page, vp, "defi hors ligne")
+      await shot(page, vp, "20-defi-hors-ligne")
+      await page.unroute("**/api/challenges/**")
+      await retry.click()
+      const loaded = await page.getByText(`Défi de ${PSEUDO}`).waitFor({ timeout: 15000 }).then(() => true, () => false)
+      if (!loaded) summary.problems.push(`${vp} : « Réessayer » ne recharge pas le defi`)
+    }
+  } catch (e) {
+    summary.problems.push(`${vp} erreurs : arret : ${e.message.split("\n").slice(0, 4).join(" / ").slice(0, 300)}`)
+    await page.screenshot({ path: path.join(OUT, `${vp}-erreurs-arret.png`), fullPage: true }).catch(() => {})
+  } finally {
+    summary.problems.push(...problems)
+    await ctx.close().catch(() => {})
+  }
+}
+
 async function runViewport(browser, vp) {
   const problems = []
   const { ctx, page } = await newPage(browser, VIEWPORTS[vp], vp, problems)
@@ -200,6 +265,7 @@ async function runViewport(browser, vp) {
     const classicCode = await playAndChallenge(page, vp)
     const code = APRES ? await playChallengeTab(page, vp) : classicCode
     if (code) await friendSide(browser, vp, code)
+    if (APRES) await shootErrors(browser, vp, code)
   } catch (e) {
     summary.problems.push(`${vp} : arret : ${e.message.split("\n").slice(0, 4).join(" / ").slice(0, 300)}`)
     await page.screenshot({ path: path.join(OUT, `${vp}-erreur.png`), fullPage: true }).catch(() => {})
