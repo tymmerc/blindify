@@ -36,6 +36,8 @@
   .logo { width:36px; height:36px; border-radius:9px; background:var(--cream); display:grid; place-items:center; flex:none; }
   .logo img { width:26px; height:26px; object-fit:contain; display:block; }
   .htxt { flex:1 1 200px; }
+  header a.vers { font-size:13px; color:var(--txt-2); text-decoration:none; border:1px solid var(--line-2); border-radius:6px; padding:6px 11px; }
+  header a.vers:hover { color:var(--amber); border-color:var(--amber); }
   .maj { font-family:"IBM Plex Mono",monospace; font-size:10.5px; color:var(--txt-3); text-transform:uppercase; letter-spacing:.1em; }
 
   /* ---- santé ---- */
@@ -128,6 +130,13 @@
 
   .retour { border:1px solid var(--line); border-left:3px solid var(--amber); border-radius:8px; background:var(--surface); padding:11px 13px; margin-bottom:8px; }
   .retour .meta { font-family:"IBM Plex Mono",monospace; font-size:10.5px; color:var(--txt-3); margin-bottom:4px; }
+  .retour.bug { border-left-color:var(--verm); }
+  .retour.oui { border-left-color:var(--sage); }
+  .retour .meta { display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px; }
+  /* Un retour tres long (1000 caracteres, des lignes vides) ne doit pas
+     pousser les autres hors de l'ecran : il defile dans sa propre carte. */
+  .retour .texte { white-space:pre-wrap; overflow-wrap:anywhere; max-height:12em; overflow-y:auto; }
+  .retour .lien { background:none; border:0; padding:0; color:var(--amber); font:inherit; cursor:pointer; text-decoration:underline; }
   .vide { color:var(--txt-3); font-size:13px; padding:6px 0; }
   .aide { font-size:11.5px; color:var(--txt-3); }
 
@@ -198,6 +207,8 @@
   <header>
     <span class="logo"><img src="logo.png" alt=""></span>
     <div class="htxt"><h1>Administration Blindz</h1><p class="maj" id="maj">chargement</p></div>
+    <!-- Rapport GoAccess du journal nginx de blindz.app, regenere chaque heure (infra/visites/). -->
+    <a class="vers" href="visites/">Visites du site</a>
   </header>
 
   <div class="sante" id="sante" aria-live="polite">
@@ -210,12 +221,13 @@
 
   <nav class="onglets" role="tablist">
     <button role="tab" id="t-vue" aria-selected="true">Vue d'ensemble</button>
+    <button role="tab" id="t-retours" aria-selected="false">Retours</button>
     <button role="tab" id="t-base" aria-selected="false">Base de données</button>
   </nav>
 
   <div id="v-vue">
     <div class="ctrl">
-      <span class="seg" role="group" aria-label="Période">
+      <span class="seg" id="periode" role="group" aria-label="Période">
         <button data-p="7">7 j</button><button data-p="30" aria-pressed="true">30 j</button><button data-p="90">90 j</button><button data-p="0">tout</button>
       </span>
       <label class="bascule"><input type="checkbox" id="inclure-tests"> inclure mes parties de test</label>
@@ -223,6 +235,16 @@
       <span class="fen" id="fen"></span>
     </div>
     <div id="vue"><p class="vide">Chargement des données...</p></div>
+  </div>
+
+  <div id="v-retours" hidden>
+    <div class="ctrl">
+      <span class="seg" id="filtre-retours" role="group" aria-label="Type de retour">
+        <button data-f="" aria-pressed="true">tous</button><button data-f="avis">avis</button><button data-f="bug">bugs</button>
+      </span>
+      <span class="fen" id="retours-meta"></span>
+    </div>
+    <div id="retours"><p class="vide">Chargement...</p></div>
   </div>
 
   <div id="v-base" hidden>
@@ -264,22 +286,27 @@
 <script>
 const $ = (id) => document.getElementById(id);
 const frag = (h) => { const t = document.createElement("template"); t.innerHTML = h.trim(); return t.content; };
-const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
+// Echappe tout texte venu de la base (pseudos, titres, retours des joueurs)
+// avant innerHTML, apostrophe comprise.
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 const nb = (n) => Number(n ?? 0).toLocaleString("fr-FR");
 const pct = (a, b) => b ? Math.round(a / b * 100) : 0;
 const C = { verm:"#cc4830", amber:"#d88418", sage:"#789084", blue:"#486090", ok:"#5fbf8c", ko:"#e0796a" };
 const API = "api";
 
 /* ============================== onglets ============================== */
+const VUES = ["vue", "retours", "base"];
 function vue(nom) {
-  const v = nom !== "base";
-  $("v-vue").hidden = !v; $("v-base").hidden = v;
-  $("t-vue").setAttribute("aria-selected", String(v)); $("t-base").setAttribute("aria-selected", String(!v));
-  history.replaceState(null, "", v ? "#vue" : "#base");
-  if (!v) chargerTables();
+  const actif = VUES.includes(nom) ? nom : "vue";
+  for (const v of VUES) {
+    $("v-" + v).hidden = v !== actif;
+    $("t-" + v).setAttribute("aria-selected", String(v === actif));
+  }
+  history.replaceState(null, "", "#" + actif);
+  if (actif === "base") chargerTables();
+  if (actif === "retours") chargerRetours();
 }
-$("t-vue").onclick = () => vue("vue");
-$("t-base").onclick = () => vue("base");
+for (const v of VUES) $("t-" + v).onclick = () => vue(v);
 function sousVue(nom) {
   const d = nom !== "schema";
   $("v-donnees").hidden = !d; $("v-schema").hidden = d;
@@ -467,6 +494,8 @@ function rendre() {
   const titresJoues = D.titres.slice(0, 8);
   const inscr = D.inscriptions.filter(i => { const t = new Date(i.j + "T12:00:00").getTime(); return t >= f.debut.getTime() && t <= f.fin.getTime(); });
   const nInscr = inscr.reduce((t, i) => t + i.n, 0), nComptes = inscr.reduce((t, i) => t + i.comptes, 0);
+  // Comptes de test deja retires de n par stats.sql ; absent des anciens data.json.
+  const nTests = inscr.reduce((t, i) => t + (i.tests || 0), 0);
 
   const kpi = (lib, v, av, suf = "", note) => `<div class="kpi"><div class="lib">${lib} ${b ? delta(v, av) : ""}</div>
     <div class="v num">${v == null ? "—" : nb(v)}${v == null ? "" : suf}</div><div class="cmp">${b ? `avant : ${av == null ? "—" : nb(av) + suf}` : (note || "depuis le début")}</div></div>`;
@@ -537,8 +566,8 @@ function rendre() {
     <div class="bloc"><div class="g2">
       <div><div class="shead"><h2>Inscriptions</h2><span class="sub">sur la période</span></div><div class="panel">
         <div style="display:flex;gap:18px;align-items:baseline"><span class="num" style="font-family:Archivo;font-size:1.5rem;font-weight:700">${nb(nInscr)}</span>
-        <span class="aide">nouveaux joueurs, dont ${nb(nComptes)} avec un compte</span></div>
-        ${rang(D.liens.map(l => ({ label:"liens " + l.provider, n:l.n })), C.blue)}</div></div>
+        <span class="aide">nouveaux joueurs, dont ${nb(nComptes)} avec un compte${nTests ? ` · ${nb(nTests)} comptes de test écartés` : ""}</span></div>
+        ${rang(D.liens.filter(l => l.n > 0).map(l => ({ label:"liens " + l.provider, n:l.n })), C.blue)}</div></div>
       <div><div class="shead"><h2>Joueurs les plus actifs</h2><span class="sub">depuis le début</span></div>
         <div class="panel tight"><div class="scroll"><table class="min"><thead><tr><th>Pseudo</th><th>Parties</th><th>Bonnes</th><th>Série</th><th>Vu le</th></tr></thead><tbody>
           ${D.joueurs.slice(0, 10).map(j => `<tr><td>${esc(j.pseudo)}</td><td class="n">${nb(j.parties)}</td><td class="n">${nb(j.bonnes)} / ${nb(j.tentatives)}</td><td class="n">${nb(j.serie)}</td><td class="n" style="color:var(--txt-3)">${esc(j.vu_le || "?")}</td></tr>`).join("")}
@@ -592,9 +621,9 @@ async function ouvrirPartie(id) {
 }
 
 /* ============================= contrôles ============================= */
-document.querySelectorAll(".seg button").forEach(btn => btn.onclick = () => {
+document.querySelectorAll("#periode button").forEach(btn => btn.onclick = () => {
   periode = Number(btn.dataset.p); jourFiltre = null;
-  document.querySelectorAll(".seg button").forEach(b => b.setAttribute("aria-pressed", String(b === btn)));
+  document.querySelectorAll("#periode button").forEach(b => b.setAttribute("aria-pressed", String(b === btn)));
   try { localStorage.setItem("blindz-admin-periode", String(periode)); } catch {}
   rendre();
 });
@@ -604,7 +633,7 @@ async function chargerDonnees() {
   try {
     D = await fetch("data.json?t=" + Date.now()).then(r => { if (!r.ok) throw new Error("data.json introuvable (" + r.status + ")"); return r.json(); });
     $("maj").textContent = "Statistiques du " + D.genere_le.replace("T", " à ") + " · santé et erreurs en direct";
-    try { const p = localStorage.getItem("blindz-admin-periode"); if (p != null) { periode = Number(p); document.querySelectorAll(".seg button").forEach(b => b.setAttribute("aria-pressed", String(Number(b.dataset.p) === periode))); } } catch {}
+    try { const p = localStorage.getItem("blindz-admin-periode"); if (p != null) { periode = Number(p); document.querySelectorAll("#periode button").forEach(b => b.setAttribute("aria-pressed", String(Number(b.dataset.p) === periode))); } } catch {}
     rendre();
   } catch (e) {
     $("vue").innerHTML = '<div class="err">Impossible de charger les statistiques : ' + esc(e.message) + '<br>Relancer <span class="mono">/opt/blindify/tools/gen-stats.sh</span> sur le serveur.</div>';
@@ -844,8 +873,93 @@ function dessiner(nom) {
 }
 
 
+/* ============================== retours ============================== */
+/* Ce que les joueurs disent en fin de partie (table game_feedback, lue en
+   direct). Tout texte vient d'un joueur : chaque champ passe par esc(), et les
+   identifiants de partie sont verifies avant de devenir des data-id. */
+let filtreRetours = "";
+// Numero de la derniere demande : en changeant vite de filtre, une reponse
+// lente arrivee apres la suivante ne doit pas ecraser l'affichage.
+let demandeRetours = 0;
+const MODES_JEU = { solo:"solo", defi:"défi", chrono:"chrono", buzzer:"un seul tel", friends:"à distance", event:"autour d'une table" };
+const modeRetourPill = (m) => ({ solo:"s", defi:"a", chrono:"s", buzzer:"b", friends:"b", event:"v" }[m] || "");
+
+/* Le navigateur en clair (l'agent complet reste en infobulle). */
+function appareil(ua) {
+  const u = String(ua || "");
+  if (!u) return "navigateur inconnu";
+  const sys = /iPhone|iPad/.test(u) ? "iPhone/iPad" : /Android/.test(u) ? "Android" : /Mac OS X/.test(u) ? "Mac" : /Windows/.test(u) ? "Windows" : /Linux/.test(u) ? "Linux" : "autre";
+  const nav = /Edg\//.test(u) ? "Edge" : /Firefox\//.test(u) ? "Firefox" : /CriOS|Chrome\//.test(u) ? "Chrome" : /Safari\//.test(u) ? "Safari" : "autre";
+  return sys + " · " + nav;
+}
+
+function carteRetour(x) {
+  const bug = x.type === "bug";
+  const classe = bug ? "bug" : x.reponse === "oui" ? "oui" : "";
+  const quoi = bug ? '<span class="pill v">bug</span>'
+    : `<span class="pill ${x.reponse === "oui" ? "fin" : "abd"}">${x.reponse === "oui" ? "oui" : "pas trop"}</span>`;
+  const id = Number(x.session_id);
+  const partie = Number.isInteger(id) && id > 0 ? `<button class="lien" data-id="${id}">partie ${id}</button>` : "";
+  const texte = x.message ? `<div class="texte">${esc(x.message)}</div>`
+    : `<div class="aide">${bug ? "bug signalé sans texte" : "avis rapide, sans texte"}</div>`;
+  return `<div class="retour ${classe}">
+    <div class="meta">${esc(x.le)} · ${quoi} <span class="pill ${modeRetourPill(x.mode)}">${esc(MODES_JEU[x.mode] || x.mode)}</span>
+      ${x.game_code ? `<span>code ${esc(x.game_code)}</span>` : ""}${partie}
+      <span title="${esc(x.user_agent || "")}">${esc(appareil(x.user_agent))}</span>${x.app_version ? `<span>version ${esc(x.app_version)}</span>` : ""}</div>
+    ${texte}</div>`;
+}
+
+function rendreRetours(d) {
+  const c = d.compte;
+  const avis = c.oui + c.pas_trop;
+  $("retours-meta").textContent = `${nb(c.total)} retour${c.total > 1 ? "s" : ""} en tout · lus en direct`;
+  const kpis = `<div class="kpis">
+    <div class="kpi"><div class="lib">Avis « oui »</div><div class="v">${nb(c.oui)}</div><div class="cmp">${avis ? pct(c.oui, avis) + " % des avis" : "aucun avis"}</div></div>
+    <div class="kpi"><div class="lib">Avis « pas trop »</div><div class="v">${nb(c.pas_trop)}</div><div class="cmp">${avis ? pct(c.pas_trop, avis) + " % des avis" : "aucun avis"}</div></div>
+    <div class="kpi"><div class="lib">Bugs signalés</div><div class="v">${nb(c.bugs)}</div><div class="cmp">avec ou sans texte</div></div>
+  </div>`;
+  const liste = d.retours.length
+    ? d.retours.map(carteRetour).join("") + (d.tronque ? '<p class="aide">Les 500 plus récents seulement.</p>' : "")
+    : `<div class="panel"><p class="vide">${filtreRetours ? "Aucun retour de ce type pour l'instant." : "Aucun retour pour l'instant. Le bloc « Ça s'est bien passé ? » des écrans de fin écrit ici."}</p></div>`;
+  $("retours").innerHTML = kpis + `<div class="bloc">${liste}</div>`;
+  $("retours").querySelectorAll("button.lien[data-id]").forEach(b => b.addEventListener("click", () => ouvrirPartie(Number(b.dataset.id))));
+}
+
+async function chargerRetours() {
+  const demande = ++demandeRetours;
+  $("retours").innerHTML = '<p class="vide">Chargement...</p>';
+  try {
+    const q = filtreRetours ? `&type=${encodeURIComponent(filtreRetours)}` : "";
+    const r = await fetch(`${API}/retours?t=${Date.now()}${q}`);
+    const d = await r.json().catch(() => ({}));
+    if (demande !== demandeRetours) return;
+    if (r.status === 404) throw new Error("le service de l'administration n'a pas encore la route des retours : redémarrer blindz-db-browser après la mise à jour du dépôt");
+    if (d.erreur) throw new Error(d.erreur);
+    if (!d.table) {
+      $("retours-meta").textContent = "";
+      $("retours").innerHTML = '<div class="panel"><p class="vide">Table pas encore créée : la migration <span class="mono">backend/migrations/004_game_feedback.sql</span> n\'est pas appliquée sur cette base. Les retours de fin de partie s\'afficheront ici après le déploiement.</p></div>';
+      return;
+    }
+    if (!d.lisible) {
+      $("retours-meta").textContent = "";
+      $("retours").innerHTML = '<div class="err">La table game_feedback existe mais le rôle de lecture ne peut pas la lire. À lancer une fois : <span class="mono">GRANT SELECT ON game_feedback TO blindz_ro;</span></div>';
+      return;
+    }
+    rendreRetours(d);
+  } catch (e) {
+    if (demande !== demandeRetours) return;
+    $("retours").innerHTML = `<div class="err">Impossible de lire les retours : ${esc(e.message)}</div>`;
+  }
+}
+
+document.querySelectorAll("#filtre-retours button").forEach(btn => btn.onclick = () => {
+  filtreRetours = btn.dataset.f;
+  document.querySelectorAll("#filtre-retours button").forEach(b => b.setAttribute("aria-pressed", String(b === btn)));
+  chargerRetours();
+});
+
 /* ================================ init ================================ */
-if (location.hash === "#base") vue("base");
+if (location.hash === "#base" || location.hash === "#retours") vue(location.hash.slice(1));
 chargerSante(); setInterval(chargerSante, 60000);
 chargerDonnees();
 </script>

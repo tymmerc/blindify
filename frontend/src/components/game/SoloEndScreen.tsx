@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import Link from "next/link"
 import { RotateCcw } from "lucide-react"
 import { buildShareText } from "@/lib/shareText"
@@ -23,6 +23,8 @@ interface SoloEndScreenProps {
   showChallenge: boolean
   challengeIntent: boolean
   onReplay: () => void
+  /** Bloc sous les liens de fin (le retour « Ça s'est bien passé ? » en solo). */
+  footer?: ReactNode
 }
 
 const QUIET_LINK = "font-bold text-[#6b573f] underline underline-offset-2 hover:text-[#2e2014] disabled:opacity-50"
@@ -62,7 +64,7 @@ function ReplayActions({ challenge, onReplay }: { challenge: boolean; onReplay: 
   )
 }
 
-export function SoloEndScreen({ stats, accuracy, roundStates, tracks, playerName, showChallenge, challengeIntent, onReplay }: SoloEndScreenProps) {
+export function SoloEndScreen({ stats, accuracy, roundStates, tracks, playerName, showChallenge, challengeIntent, onReplay, footer }: SoloEndScreenProps) {
   const goodAnswers = `${stats.correct} bonne${stats.correct > 1 ? "s" : ""} réponse${stats.correct > 1 ? "s" : ""} sur ${stats.rounds}`
   // Venu pour defier : le defi passe juste sous le score, rejouer apres.
   const challengeFirst = showChallenge && challengeIntent
@@ -102,6 +104,8 @@ export function SoloEndScreen({ stats, accuracy, roundStates, tracks, playerName
           Retour aux modes
         </Link>
       </div>
+
+      {footer}
     </div>
   )
 }
