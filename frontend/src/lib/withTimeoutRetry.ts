@@ -8,6 +8,10 @@
  * relancee. Une vraie reponse du serveur, meme une erreur HTTP, n'est jamais
  * relancee : seuls le delai depasse et la coupure reseau (TypeError de fetch)
  * le sont. La requete doit donc pouvoir etre rejouee sans effet de bord.
+ *
+ * L'appelant peut tout arreter avec `signal` (joueur reparti, page quittee) :
+ * l'essai en cours est coupe, aucun autre ne part, et l'appel rejette avec une
+ * AbortError, meme si une reponse arrive ensuite.
  */
 export class RequestTimeoutError extends Error {
   constructor(readonly attempts: number) {
@@ -23,31 +27,87 @@ export type TimeoutRetryOptions = {
   attempts: number
   /** Appele juste avant chaque relance, avec le numero de l'essai qui part (2, 3...). */
   onRetry?: (attempt: number) => void
+  /** Arret voulu par l'appelant : plus aucun essai, rejet avec une AbortError. */
+  signal?: AbortSignal
+  /** Pause avant de relancer apres une coupure reseau, en ms (defaut 1000, plus ou moins 25 % au hasard). */
+  retryDelayMs?: number
+}
+
+const NETWORK_RETRY_DELAY_MS = 1000
+
+/** Vrai pour l'abandon d'une requete (fetch coupe par son signal, ou arret de withTimeoutRetry). */
+export function isAbortError(err: unknown): boolean {
+  return typeof err === "object" && err !== null && (err as { name?: unknown }).name === "AbortError"
+}
+
+function abortError(): DOMException {
+  return new DOMException("La requete a ete abandonnee", "AbortError")
+}
+
+// Pause interrompue des que l'appelant abandonne.
+function pause(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timer)
+      reject(abortError())
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort)
+      resolve()
+    }, ms)
+    signal?.addEventListener("abort", onAbort, { once: true })
+  })
+}
+
+async function attemptOnce<T>(
+  run: (signal: AbortSignal) => Promise<T>,
+  timeoutMs: number,
+  attempt: number,
+  signal?: AbortSignal
+): Promise<T> {
+  const controller = new AbortController()
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let onAbort: (() => void) | undefined
+  // La course ne depend pas de `run` : meme une requete qui ignorerait le
+  // signal ne peut pas bloquer l'appelant au-dela du delai, ni apres un abandon.
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new RequestTimeoutError(attempt))
+      controller.abort()
+    }, timeoutMs)
+  })
+  const cancelled = new Promise<never>((_, reject) => {
+    onAbort = () => {
+      reject(abortError())
+      controller.abort()
+    }
+    signal?.addEventListener("abort", onAbort, { once: true })
+  })
+  try {
+    return await Promise.race([run(controller.signal), deadline, cancelled])
+  } finally {
+    clearTimeout(timer)
+    if (onAbort) signal?.removeEventListener("abort", onAbort)
+  }
 }
 
 export async function withTimeoutRetry<T>(
   run: (signal: AbortSignal) => Promise<T>,
-  { timeoutMs, attempts, onRetry }: TimeoutRetryOptions
+  { timeoutMs, attempts, onRetry, signal, retryDelayMs = NETWORK_RETRY_DELAY_MS }: TimeoutRetryOptions
 ): Promise<T> {
   for (let attempt = 1; ; attempt++) {
-    const controller = new AbortController()
-    let timer: ReturnType<typeof setTimeout> | undefined
-    // La course ne depend pas de `run` : meme une requete qui ignorerait le
-    // signal ne peut pas bloquer l'appelant au-dela du delai.
-    const deadline = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => {
-        reject(new RequestTimeoutError(attempt))
-        controller.abort()
-      }, timeoutMs)
-    })
+    if (signal?.aborted) throw abortError()
     try {
-      return await Promise.race([run(controller.signal), deadline])
+      return await attemptOnce(run, timeoutMs, attempt, signal)
     } catch (err) {
-      const retryable = err instanceof RequestTimeoutError || err instanceof TypeError
-      if (!retryable || attempt >= attempts) throw err
+      if (signal?.aborted) throw abortError()
+      const timedOut = err instanceof RequestTimeoutError
+      if (!(timedOut || err instanceof TypeError) || attempt >= attempts) throw err
+      // Hors ligne (ou "Load failed" de Safari), fetch echoue en quelques ms :
+      // relancer aussitot brulerait tous les essais d'un coup. Apres un delai
+      // depasse, l'attente a deja eu lieu.
+      if (!timedOut) await pause(retryDelayMs * (0.75 + Math.random() * 0.5), signal)
       onRetry?.(attempt + 1)
-    } finally {
-      clearTimeout(timer)
     }
   }
 }

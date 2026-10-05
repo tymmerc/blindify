@@ -10,9 +10,11 @@
  *
  * Filet de securite en plus : un join reste sans reponse est abandonne au bout
  * de 8 s et relance (trois essais), au lieu de laisser "Preparation du lobby"
- * pour toujours.
+ * pour toujours. Ces relances s'arretent des que le joueur repart (page quittee,
+ * "Retour au menu"). La lecture de la session et la creation de l'invite ont
+ * aussi leur delai, pour ne jamais laisser un spinner nu.
  */
-import { act, render, screen, waitFor } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { ModeProvider } from "@/contexts/ModeContext"
 import { GAME_MODES } from "@/lib/gameModes"
@@ -78,7 +80,8 @@ vi.mock("@/lib/socket", async () => {
   return {
     ...actual,
     getSocket: () => mocks.socket,
-    disconnectSocket: vi.fn(),
+    // Comme le vrai : le socket est coupe (et redevient inactif) au depart.
+    disconnectSocket: vi.fn(() => { mocks.socket?.disconnect() }),
   }
 })
 vi.mock("@/lib/audioManager", () => ({ audioManager: { warmup: vi.fn() } }))
@@ -107,11 +110,15 @@ const guestSession = () => ({
   providerConnection: null,
 })
 
-// Join qui ne repond jamais, sauf pour signaler son abandon (comme fetch).
-function hangingJoin(_code: string, _nickname: string | undefined, opts: { signal: AbortSignal }) {
+// Requete qui ne repond jamais, sauf pour signaler son abandon (comme fetch).
+function hanging(signal: AbortSignal): Promise<never> {
   return new Promise((_, reject) => {
-    opts.signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")))
+    signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")))
   })
+}
+
+function hangingJoin(_code: string, _nickname: string | undefined, opts: { signal: AbortSignal }) {
+  return hanging(opts.signal)
 }
 
 function deferred<T>() {
@@ -211,6 +218,97 @@ describe("ModeLobbyView : un invite entre par le lien du QR", () => {
       expect(await screen.findByText(/Le serveur ne répond pas/)).toBeInTheDocument()
       expect(screen.getByText("Formulaire du code")).toBeInTheDocument()
       expect(screen.queryByText(/Préparation du lobby/)).not.toBeInTheDocument()
+    })
+  })
+
+  describe("le joueur repart pendant l'entree", () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it("page quittee pendant le premier essai : plus aucun join, plus aucun connect()", async () => {
+      mocks.api.joinRoom.mockImplementation(hangingJoin)
+      const view = renderLobby()
+      await waitFor(() => expect(mocks.api.joinRoom).toHaveBeenCalledTimes(1))
+      const connects = mocks.socket!.connect.mock.calls.length
+
+      view.unmount()
+      expect(mocks.api.joinRoom.mock.calls[0][2].signal.aborted).toBe(true)
+      await act(async () => { await vi.advanceTimersByTimeAsync(24000) })
+
+      expect(mocks.api.joinRoom).toHaveBeenCalledTimes(1)
+      expect(mocks.socket!.connect).toHaveBeenCalledTimes(connects)
+    })
+
+    it("une reponse du join arrivee apres le depart est ignoree (ni salon, ni socket)", async () => {
+      const late = deferred<{ room: typeof ROOM }>()
+      mocks.api.joinRoom.mockReturnValue(late.promise)
+      const view = renderLobby()
+      await waitFor(() => expect(mocks.api.joinRoom).toHaveBeenCalledTimes(1))
+      const connects = mocks.socket!.connect.mock.calls.length
+
+      view.unmount()
+      await act(async () => { late.resolve({ room: ROOM }) })
+
+      expect(mocks.api.roomDetails).not.toHaveBeenCalled()
+      expect(mocks.socket!.connect).toHaveBeenCalledTimes(connects)
+    })
+
+    it("« Retour au menu » sur l'ecran d'attente ramene aux modes et arrete les relances", async () => {
+      mocks.api.joinRoom.mockImplementation(hangingJoin)
+      renderLobby()
+      await waitFor(() => expect(mocks.api.joinRoom).toHaveBeenCalledTimes(1))
+
+      fireEvent.click(screen.getByRole("button", { name: "Retour au menu" }))
+      expect(mocks.router.replace).toHaveBeenCalledWith("/modes")
+      expect(mocks.api.joinRoom.mock.calls[0][2].signal.aborted).toBe(true)
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(24000) })
+      expect(mocks.api.joinRoom).toHaveBeenCalledTimes(1)
+      expect(screen.queryByText(/Le serveur ne répond pas/)).not.toBeInTheDocument()
+    })
+  })
+
+  describe("filet de securite : session sans reponse", () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it("relit la session trois fois au plus, puis propose de reessayer", async () => {
+      mocks.api.checkAuth.mockImplementation((opts: { signal: AbortSignal }) => hanging(opts.signal))
+      renderLobby()
+      await waitFor(() => expect(mocks.api.checkAuth).toHaveBeenCalledTimes(1))
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(3 * 8000) })
+      expect(mocks.api.checkAuth).toHaveBeenCalledTimes(3)
+      expect(await screen.findByText(/Connexion impossible/)).toBeInTheDocument()
+      expect(screen.getByRole("button", { name: "Réessayer" })).toBeInTheDocument()
+      expect(mocks.api.ensureUserSession).not.toHaveBeenCalled()
+      expect(mocks.api.joinRoom).not.toHaveBeenCalled()
+    })
+
+    it("ne recree pas un invite a l'aveugle : un seul essai, puis le bouton Réessayer", async () => {
+      mocks.api.checkAuth.mockResolvedValue(null)
+      mocks.api.ensureUserSession.mockImplementation((_nickname: string | undefined, opts: { signal: AbortSignal }) => hanging(opts.signal))
+      renderLobby()
+      await waitFor(() => expect(mocks.api.ensureUserSession).toHaveBeenCalledTimes(1))
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(10000) })
+      expect(await screen.findByText(/Connexion impossible/)).toBeInTheDocument()
+      expect(screen.getByRole("button", { name: "Réessayer" })).toBeInTheDocument()
+      expect(mocks.api.ensureUserSession.mock.calls[0][1].signal.aborted).toBe(true)
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(30000) })
+      expect(mocks.api.ensureUserSession).toHaveBeenCalledTimes(1)
+      expect(mocks.api.joinRoom).not.toHaveBeenCalled()
     })
   })
 })

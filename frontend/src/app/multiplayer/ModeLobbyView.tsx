@@ -40,6 +40,14 @@ import { RequestTimeoutError, withTimeoutRetry } from "@/lib/withTimeoutRetry"
 // perdue laissait le joueur sur "Preparation du lobby" pour toujours.
 const JOIN_TIMEOUT_MS = 8000
 const JOIN_ATTEMPTS = 3
+// Lecture de la session a l'arrivee : un GET, rejouable, meme filet que le join.
+const AUTH_TIMEOUT_MS = 8000
+const AUTH_ATTEMPTS = 3
+// Creation de l'invite : un seul essai, avec un delai. La relancer a l'aveugle
+// pourrait creer un second invite si la premiere reponse s'est perdue en route ;
+// le joueur relance lui-meme avec "Reessayer".
+const GUEST_TIMEOUT_MS = 10000
+const CONNECTION_ERROR = "Connexion impossible pour l’instant. Vérifie ta connexion et réessaie."
 
 // Phases du mode streamer ou la partie est lancee (vue "en jeu").
 const STREAMER_PLAYING_PHASES: readonly string[] = [
@@ -175,6 +183,10 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   const [streamerMode, setStreamerMode] = useState<StreamerSubMode>("duo")
   const [soloSource, setSoloSource] = useState<"streamer" | "chat">("streamer")
   const abortFlowRef = useRef(false)
+  // Join en cours, relances comprises : coupe quand le joueur repart (page
+  // quittee, "Retour au menu"). Aucun essai ne part apres son depart, et une
+  // reponse tardive ne touche plus ni l'ecran ni le socket.
+  const joinAbortRef = useRef<AbortController | null>(null)
 
   // Invitations / amis désactivés : on reste sur le code de room uniquement.
   const friends: FriendEntry[] = []
@@ -256,11 +268,16 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   useEffect(() => {
     let active = true
     let retryTimer: ReturnType<typeof setTimeout> | null = null
+    // Coupe les lectures de session encore en vol quand le composant disparait.
+    const boot = new AbortController()
     async function bootstrap() {
       try {
         setRateLimited(false)
-        // Check for existing session
-        const existing = await api.checkAuth()
+        // Session existante ? Sans delai, une requete perdue laissait un spinner nu.
+        const existing = await withTimeoutRetry(
+          signal => api.checkAuth({ signal }),
+          { timeoutMs: AUTH_TIMEOUT_MS, attempts: AUTH_ATTEMPTS, signal: boot.signal }
+        )
         if (!active) return
 
         if (existing) {
@@ -271,7 +288,10 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
           // Le login n'est JAMAIS un barrage : si la creation echoue (429, reseau),
           // on reessaie tout seul au lieu de rediriger vers /auth/login.
           try {
-            const guest = await api.ensureUserSession(initialNickname?.trim() || undefined)
+            const guest = await withTimeoutRetry(
+              signal => api.ensureUserSession(initialNickname?.trim() || undefined, { signal }),
+              { timeoutMs: GUEST_TIMEOUT_MS, attempts: 1, signal: boot.signal }
+            )
             if (!active) return
             if (guest) {
               setGuest(true)
@@ -282,6 +302,14 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
               return
             }
           } catch (guestErr) {
+            if (!active) return
+            if (guestErr instanceof RequestTimeoutError) {
+              // Pas de relance automatique (voir GUEST_TIMEOUT_MS) : bouton "Reessayer".
+              setRateLimited(false)
+              setError(CONNECTION_ERROR)
+              setErrorAction(null)
+              return
+            }
             const gstatus = (guestErr as { status?: number })?.status
             setRateLimited(gstatus === 429)
             retryTimer = setTimeout(() => { if (active) bootstrap() }, 4000)
@@ -299,7 +327,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         }
         // Autre erreur reseau : laisser l'utilisateur reessayer manuellement.
         setRateLimited(false)
-        setError("Connexion impossible pour l'instant. Verifie ta connexion et reessaie.")
+        setError(CONNECTION_ERROR)
         setErrorAction(null)
       } finally {
         if (active) setLoading(false)
@@ -310,6 +338,9 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     return () => {
       active = false
       if (retryTimer) clearTimeout(retryTimer)
+      boot.abort()
+      joinAbortRef.current?.abort()
+      joinAbortRef.current = null
       const latestRoom = roomRef.current
       const latestUser = userRef.current
       if (latestRoom && latestUser) {
@@ -1007,15 +1038,20 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         dispatchLobby({ type: "error", message })
         return
       }
+      joinAbortRef.current?.abort()
+      const controller = new AbortController()
+      joinAbortRef.current = controller
+      const { signal } = controller
       try {
         setJoining(true)
         setError(null)
         dispatchLobby({ type: "joining" })
         setFlowStarted(true)
         const { room: joined } = await withTimeoutRetry(
-          signal => api.joinRoom(normalizedCode, initialNickname || undefined, { signal }),
-          { timeoutMs: JOIN_TIMEOUT_MS, attempts: JOIN_ATTEMPTS, onRetry: () => setJoinRetrying(true) }
+          attemptSignal => api.joinRoom(normalizedCode, initialNickname || undefined, { signal: attemptSignal }),
+          { timeoutMs: JOIN_TIMEOUT_MS, attempts: JOIN_ATTEMPTS, onRetry: () => setJoinRetrying(true), signal }
         )
+        if (signal.aborted) return
         setErrorCode(null)
         setRoom(joined)
         setGameState(null)
@@ -1023,6 +1059,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         dispatchLobby({ type: "joined" })
         attachSocketListeners(joined.room_code)
         const details = await api.roomDetails(joined.room_code)
+        if (signal.aborted) return
         setRoom(details.room)
         syncParticipants(details.participants)
         // L'hote qui revient par le flux de join (F5) retrouve SA vue, avec le
@@ -1037,6 +1074,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         if (details.room?.status === "in_progress") {
           try {
             const latest = await api.roomState(joined.room_code)
+            if (signal.aborted) return
             if (latest.gameState) {
               setGameState(latest.gameState)
               const nextView = stickyResults(resolveViewFromState(latest.gameState))
@@ -1049,6 +1087,8 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
           }
         }
       } catch (err) {
+        // Joueur reparti : plus rien a afficher, l'ecran n'est plus le sien.
+        if (signal.aborted) return
         console.error("join_room_failed", err)
         const code = err instanceof ApiError ? err.code ?? null : null
         setErrorCode(code)
@@ -1060,8 +1100,11 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         dispatchLobby({ type: "error", message })
         setFlowStarted(false)
       } finally {
-        setJoining(false)
-        setJoinRetrying(false)
+        if (!signal.aborted) {
+          setJoining(false)
+          setJoinRetrying(false)
+        }
+        if (joinAbortRef.current === controller) joinAbortRef.current = null
       }
     },
     [
@@ -1384,6 +1427,10 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
 
   const handleLeaveRoom = useCallback(() => {
     abortFlowRef.current = true
+    joinAbortRef.current?.abort()
+    joinAbortRef.current = null
+    setJoining(false)
+    setJoinRetrying(false)
     autoHostTriggered.current = false
     setGuest(false)
     if (room && userPayload) {
@@ -1492,6 +1539,13 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
           <p className="text-xs text-[#8a7558]">
             {joinRetrying ? "Le réseau traîne, on réessaie tout seul…" : "Si l’attente dure, reviens au menu et relance."}
           </p>
+          <button
+            type="button"
+            onClick={handleLeaveRoom}
+            className="rounded-full border-[1.5px] border-[#2e2014] bg-transparent px-4 py-2 text-sm font-bold text-[#2e2014] hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+          >
+            Retour au menu
+          </button>
         </div>
       </div>
     )
