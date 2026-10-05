@@ -1410,9 +1410,13 @@ const theaterStyles = `
   }
   /* Telephone couche (375 px de haut) : il n'y a pas la place pour la platine
      entre l'en-tete et la carte de reponse, elle tournait par-dessus le champ
-     Titre. Elle saute ; « Extrait en cours » et le compte des reponses restent. */
+     Titre. Elle saute ; « Extrait en cours » et le compte des reponses restent.
+     Et comme sur telephone en hauteur, l'ecran defile plutot que de glisser
+     la revelation sous l'en-tete et de couper le bouton Pret. */
   @media (orientation:landscape) and (max-height:500px){
-    .theater-arena, .theater-wave{display:none}
+    .theater-arena, .theater-wave, .theater-rdots{display:none}
+    .theater-stage{overflow-x:hidden; overflow-y:auto}
+    .theater-stage > div:nth-child(2){min-height:auto}
   }
   /* Ecran court (568 px de haut) : la platine reduit et la mention 33 tours
      (decorative) saute, sinon « Extrait en cours » passe sous l'en-tete. */
