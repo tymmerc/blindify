@@ -113,7 +113,10 @@ export function Section({ id, tag, title, tone = "paper", children }: { id?: str
       <div className="mx-auto max-w-4xl px-5 py-[4rem] sm:px-8">
         <Tag color={t.tagColor} light={t.light}>{tag}</Tag>
         <h2 className="mt-4 font-display text-[1.9rem] font-semibold leading-[1.08] sm:text-[2.5rem]">{title}</h2>
-        <div className={`guide-prose mt-6 space-y-5 text-[1.05rem] leading-relaxed [&_strong]:font-bold [&_a]:border-b-2 [&_a]:font-semibold [&_ul]:list-none [&_ul]:space-y-3 [&_li]:flex [&_li]:gap-3 [&_h3]:mt-8 [&_h3]:font-display [&_h3]:text-xl [&_h3]:font-semibold`}>
+        {/* ul>li et >h3, pas li et h3 : les etapes (Steps, un ol) ont leur propre
+            mise en page. Avec [&_li]:flex, numero, titre et texte s'alignaient en
+            trois colonnes etroites sur mobile. */}
+        <div className={`guide-prose mt-6 space-y-5 text-[1.05rem] leading-relaxed [&_strong]:font-bold [&_a]:border-b-2 [&_a]:font-semibold [&_ul]:list-none [&_ul]:space-y-3 [&_ul>li]:flex [&_ul>li]:gap-3 [&>h3]:mt-8 [&>h3]:font-display [&>h3]:text-xl [&>h3]:font-semibold`}>
           {children}
         </div>
       </div>
