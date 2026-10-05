@@ -170,7 +170,7 @@ test("sonde complete verte : 4 verifications, pas de diagnostic Deezer", async (
   assert.equal(r.ok, true)
   assert.deepEqual(r.checks.map(c => c.id), ["api", "page", "deezer", "spotify"])
   assert.equal(r.deezerDiagnosis, null)
-  assert.ok(!calls.some(c => c.url.startsWith("https://api.deezer.com")), "Deezer n'est appele en direct qu'en cas de panne")
+  assert.ok(!calls.some(c => new URL(c.url).hostname === "api.deezer.com"), "Deezer n'est appele en direct qu'en cas de panne")
   assert.ok(r.checks.every(c => !("previews" in c) && !("mediaSrc" in c)), "pas de liste d'extraits dans le rapport")
 })
 

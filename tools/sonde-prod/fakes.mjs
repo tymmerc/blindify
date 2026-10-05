@@ -13,7 +13,7 @@ export const json = (body, status = 200) => new Response(JSON.stringify(body), {
 // type : le service d'ou vient le titre, comme le backend ("deezer" ou "spotify").
 export const tracks = (n, url = PREVIEW, type = "deezer") => Array.from({ length: n }, (_, i) => ({ round: i + 1, type, title: `t${i}`, artist: "a", audio_url: url }))
 export const quickPlayOk = (n, type = "deezer") => json({ success: true, data: { session: { id: 0, provider: type }, tracks: tracks(n, PREVIEW, type) }, error: null })
-const providerOf = url => (url.includes("open.spotify.com") ? "spotify" : "deezer")
+const providerOf = url => (new URL(url).hostname === "open.spotify.com" ? "spotify" : "deezer")
 export const quickPlayKo = (code, status = 400, details) => json({ success: false, data: null, error: { code, message: "Pas assez de titres avec extrait audio disponible.", ...(details ? { details } : {}) } }, status)
 export const audio = () => new Response(MP3, { status: 206, headers: { "content-type": "audio/mpeg" } })
 export const soloHtml = '<html><script src="/_next/static/chunks/app/solo/page-2245b9a9e3449968.js"></script></html>'
