@@ -110,7 +110,7 @@ const server = http.createServer(async (req, res) => {
                 coalesce(uo.username, '(sans propriétaire)') AS proprietaire
          FROM game_rounds gr
          LEFT JOIN audio_sources a ON a.id=gr.audio_source_id
-         LEFT JOIN users uo ON uo.id=a.user_id
+         LEFT JOIN users uo ON uo.id=COALESCE(gr.owner_user_id, a.user_id)
          WHERE gr.session_id=$1 ORDER BY gr.round_index`, [id])
       const { rows: reponses } = await lire(
         `SELECT r.round_id, u.username AS joueur, r.guess_title, r.guess_artist, r.is_correct AS bonne,
