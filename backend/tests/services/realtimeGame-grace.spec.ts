@@ -9,6 +9,7 @@ import {
   bootstrapGameState,
   clearGame,
   earlyRevealDecision,
+  endReconnectGrace,
   markDisconnected,
   markReady,
   markReconnected,
@@ -160,15 +161,57 @@ describe("grace de reconnexion : la decision de revelation anticipee", () => {
     expect(earlyRevealDecision(ROOM, T0 + 1_000)).toEqual({ kind: "reveal" });
   });
 
-  it("jamais de revelation anticipee pendant une pause ; la decision revient a la reprise", () => {
+  it("revenu puis parti par \"Quitter\" depuis un autre socket : endReconnectGrace leve sa grace", () => {
     setupRound();
     recordAnswer(ROOM, 1, "Song 1 Artist 1");
     recordAnswer(ROOM, 2, "Song 1 Artist 1");
     drop(3, T0);
-    pauseGame(ROOM);
+    // Le gestionnaire "Quitter" : deja marque deconnecte, plus rien a attendre.
+    markDisconnected(ROOM, 3);
+    endReconnectGrace(ROOM, 3);
+    expect(earlyRevealDecision(ROOM, T0 + 1_000)).toEqual({ kind: "reveal" });
+    // Salle inconnue ou joueur sans grace : rien a faire, pas d'erreur.
+    expect(() => endReconnectGrace("NOPE", 3)).not.toThrow();
+    expect(() => endReconnectGrace(ROOM, 2)).not.toThrow();
+  });
+
+  it("pause de l'hote : la grace en cours est gelee et reprend ou elle en etait", () => {
+    setupRound();
+    recordAnswer(ROOM, 1, "Song 1 Artist 1");
+    recordAnswer(ROOM, 2, "Song 1 Artist 1");
+    drop(3, T0);
+    // Pause 1 s apres la coupure : il lui reste 4 s.
+    pauseGame(ROOM, T0 + 1_000);
     expect(earlyRevealDecision(ROOM, T0 + 60_000)).toEqual({ kind: "none" });
-    resumeGame(ROOM);
-    expect(earlyRevealDecision(ROOM, T0 + 60_000)).toEqual({ kind: "reveal" });
+    resumeGame(ROOM, T0 + 61_000);
+    const until = T0 + 61_000 + DISCONNECT_GRACE_MS - 1_000;
+    expect(earlyRevealDecision(ROOM, T0 + 61_000)).toEqual({ kind: "wait", until });
+    expect(earlyRevealDecision(ROOM, until - 1)).toEqual({ kind: "wait", until });
+    expect(earlyRevealDecision(ROOM, until)).toEqual({ kind: "reveal" });
+  });
+
+  it("coupure pendant la pause : toute la grace part de la reprise", () => {
+    setupRound();
+    recordAnswer(ROOM, 1, "Song 1 Artist 1");
+    recordAnswer(ROOM, 2, "Song 1 Artist 1");
+    pauseGame(ROOM, T0);
+    // Les reponses sont refusees en pause : sa grace ne doit pas s'y ecouler.
+    drop(3, T0 + 1_000);
+    resumeGame(ROOM, T0 + 30_000);
+    expect(earlyRevealDecision(ROOM, T0 + 30_000)).toEqual({
+      kind: "wait",
+      until: T0 + 30_000 + DISCONNECT_GRACE_MS,
+    });
+  });
+
+  it("une grace deja finie avant la pause reste finie a la reprise", () => {
+    setupRound();
+    recordAnswer(ROOM, 1, "Song 1 Artist 1");
+    drop(3, T0);
+    pauseGame(ROOM, T0 + DISCONNECT_GRACE_MS + 1_000);
+    resumeGame(ROOM, T0 + 30_000);
+    recordAnswer(ROOM, 2, "Song 1 Artist 1");
+    expect(earlyRevealDecision(ROOM, T0 + 30_000)).toEqual({ kind: "reveal" });
   });
 
   it("la grace d'une manche ne retient pas la suivante", () => {

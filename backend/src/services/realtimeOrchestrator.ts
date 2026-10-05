@@ -72,22 +72,6 @@ function emitRoundStart(io: IOServer, state: GameState) {
   });
 }
 
-async function emitRoundReveal(io: IOServer, state: GameState) {
-  const room = io.sockets.adapter.rooms.get(state.roomCode);
-  const socketCount = room ? room.size : 0;
-  const socketIds = room ? Array.from(room) : [];
-  logger.debug(`emitting game:round:reveal to room ${state.roomCode}, sockets in room: ${socketCount}, ids: ${socketIds.join(", ")}`);
-  io.to(state.roomCode).emit("game:round:reveal", {
-    roomCode: state.roomCode,
-    round: state.currentRound,
-    timing: state.timing,
-    players: state.players,
-    // La reponse complete arrive AVEC le reveal : les clients n'ont recu
-    // qu'une piste caviardee pendant la manche.
-    track: state.currentTrack,
-  });
-}
-
 function emitGameOver(io: IOServer, state: GameState) {
   io.to(state.roomCode).emit("game:over", {
     roomCode: state.roomCode,
@@ -100,34 +84,25 @@ function emitGameOver(io: IOServer, state: GameState) {
   });
 }
 
-export function scheduleReveal(io: IOServer, roomCode: string, revealAt: number) {
+export function scheduleReveal(io: IOServer, roomCode: string, revealAt: number, round: number) {
   const existing = revealTimers.get(roomCode);
   if (existing) clearTimeout(existing);
   // Don't schedule if game is already finished or cleaned up
   if (finishedRooms.has(roomCode)) return;
   const delay = Math.max(0, revealAt - Date.now());
-  logger.debug(`scheduling reveal for ${roomCode} in ${delay}ms`);
+  logger.debug(`scheduling reveal for ${roomCode} (round ${round}) in ${delay}ms`);
   const timer = setTimeout(() => {
     revealTimers.delete(roomCode);
     if (finishedRooms.has(roomCode)) return;
-    // Manche deja revelee par un autre chemin : jamais deux revelations.
-    if (getGameState(roomCode)?.phase !== "GUESSING") return;
-    // Fin normale de la manche : une grace de reconnexion en cours n'a plus d'objet.
-    clearGraceTimer(roomCode);
-    logger.debug(`reveal timer fired for ${roomCode}`);
-    const updated = revealRound(roomCode);
-    logger.debug(`revealRound result: phase=${updated?.phase}, players=${updated ? Object.keys(updated.players).length : 0}`);
-    if (updated) {
-      emitRoundReveal(io, updated);
-      emitState(io, roomCode);
-      // Persist this round's answers (fire-and-forget; never blocks the game).
-      void persistRoundResponses(updated, getSessionId(roomCode));
-      if (updated.phase === "FINISHED") {
-        broadcastGameOver(io, roomCode);
-      } else if (updated.phase === "REVEAL") {
-        scheduleForcedAdvance(io, roomCode, updated.currentRound);
-      }
-    }
+    const current = getGameState(roomCode);
+    // Manche deja revelee, ou une autre manche que la sienne : jamais deux
+    // revelations. Jamais pendant une pause de l'hote non plus (la reprise
+    // repose ce minuteur).
+    if (!current || current.phase !== "GUESSING" || current.currentRound !== round || current.paused) return;
+    logger.debug(`reveal timer fired for ${roomCode} (round ${round})`);
+    // Meme suite que les revelations anticipees (grace annulee, reponses
+    // ecrites, filet anti-AFK, fin de partie), puis l'etat pour tous.
+    if (revealRoundNow(io, roomCode)) emitState(io, roomCode);
   }, delay);
   revealTimers.set(roomCode, timer);
 }
@@ -156,7 +131,7 @@ export function startRoundAndBroadcast(
   emitState(io, roomCode);
   emitRoundStart(io, state);
   if (state.timing.revealAt) {
-    scheduleReveal(io, roomCode, state.timing.revealAt);
+    scheduleReveal(io, roomCode, state.timing.revealAt, state.currentRound);
   }
   return state;
 }
@@ -241,10 +216,10 @@ export function tryEarlyReveal(io: IOServer, roomCode: string): boolean {
 }
 
 /**
- * Revele la manche hors de son minuteur : revelation anticipee, ou resynchro
- * d'un client apres l'heure (game:sync). Annule les minuteurs de la manche
- * puis fait la meme suite que le minuteur. Une seule fois : rien si la manche
- * n'est plus en jeu. Rend true si la manche vient d'etre revelee.
+ * Revele la manche maintenant : minuteur de manche, revelation anticipee, ou
+ * resynchro d'un client apres l'heure (game:sync). Annule les minuteurs de la
+ * manche puis fait la suite commune. Une seule fois : rien si la manche n'est
+ * plus en jeu. Rend true si la manche vient d'etre revelee.
  */
 export function revealRoundNow(io: IOServer, roomCode: string): boolean {
   if (getGameState(roomCode)?.phase !== "GUESSING") return false;
@@ -252,17 +227,17 @@ export function revealRoundNow(io: IOServer, roomCode: string): boolean {
   clearGraceTimer(roomCode);
   const revealed = revealRound(roomCode);
   if (!revealed) return false;
-  finishEarlyReveal(io, roomCode, revealed);
+  finishReveal(io, roomCode, revealed);
   return true;
 }
 
 /**
- * Suite commune des revelations hors minuteur. Avant cette fonction commune,
- * le chemin de la deconnexion n'ecrivait pas les reponses de la manche et ne
- * posait pas le filet anti-AFK (trouve le 02/10/2026) ; celui de game:sync non
- * plus (aligne le 05/10/2026).
+ * Suite commune de toutes les revelations. Avant elle, le chemin de la
+ * deconnexion n'ecrivait pas les reponses de la manche et ne posait pas le
+ * filet anti-AFK (trouve le 02/10/2026) ; celui de game:sync non plus, et le
+ * minuteur de manche avait sa propre copie (alignes le 05/10/2026).
  */
-function finishEarlyReveal(io: IOServer, roomCode: string, revealed: GameState): void {
+function finishReveal(io: IOServer, roomCode: string, revealed: GameState): void {
   io.to(roomCode).emit("game:round:reveal", {
     roomCode,
     round: revealed.currentRound,

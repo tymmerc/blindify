@@ -210,16 +210,17 @@ describe("grace de reconnexion apres une coupure reseau", () => {
     }
   });
 
-  it("pause de l'hote pendant la grace : aucune revelation en pause, elle part a la reprise", async () => {
+  it("pause de l'hote pendant la grace : la grace est gelee, la revelation part a sa fin apres la reprise", async () => {
     const t = await openTable(3, { grace: 1_000 });
     const [host, b, late] = t.clients;
+    const clock = revealClock(b);
     try {
       await answerAll([host, b], t.roomCode, 1);
       late.socket.close();
       host.socket.emit("game:pause", { roomCode: t.roomCode });
       await waitFor(() => host.lastState()?.paused === true, 5000, "paused");
 
-      // La grace (1 s) finit pendant la pause.
+      // Plus longtemps que la grace (1 s) : elle ne s'ecoule pas en pause.
       await sleep(2_000);
       for (const c of [host, b]) {
         expect(c.lastState()?.phase).toBe("GUESSING");
@@ -227,13 +228,77 @@ describe("grace de reconnexion apres une coupure reseau", () => {
         expect(c.reveals).toHaveLength(0);
       }
 
+      const resumeAt = Date.now();
       host.socket.emit("game:resume", { roomCode: t.roomCode });
-      await waitFor(
-        () => [host, b].every(c => c.lastState()?.phase === "REVEAL" && c.lastState()?.paused !== true),
-        5000,
-        "REVEAL at resume",
-      );
+      await waitFor(() => b.lastState()?.paused !== true, 3000, "resumed");
+      expect(b.lastState()?.phase).toBe("GUESSING");
+
+      await waitFor(inPhase([host, b], "REVEAL"), 5000, "REVEAL at the end of the grace");
+      // Ce qui restait de la grace a la pause (pres de 1 s), pas une revelation a la reprise.
+      expect((clock.get(1) ?? 0) - resumeAt).toBeGreaterThanOrEqual(700);
       expect(host.lastState()?.currentRound).toBe(1);
+      for (const c of [host, b]) expect(c.reveals.filter(r => r.round === 1)).toHaveLength(1);
+    } finally {
+      await closeTable(t);
+    }
+  });
+
+  it("coupure pendant la pause : toute sa grace part de la reprise, il revient et sa reponse compte", async () => {
+    // Grace plus longue ici : il doit avoir le temps de revenir apres la reprise.
+    const grace = 2_500;
+    const t = await openTable(3, { session: true, grace });
+    const [host, b, late] = t.clients;
+    let back: GameClient | undefined;
+    try {
+      await answerAll([host, b], t.roomCode, 1);
+      host.socket.emit("game:pause", { roomCode: t.roomCode });
+      await waitFor(() => host.lastState()?.paused === true, 5000, "paused");
+      late.socket.close();
+      await waitFor(
+        () => getGameState(t.roomCode)?.players[late.user.id]?.disconnected === true,
+        3000,
+        "drop seen by the server",
+      );
+      // Les reponses sont refusees en pause : la grace ne doit pas s'y ecouler.
+      await sleep(grace + 500);
+
+      host.socket.emit("game:resume", { roomCode: t.roomCode });
+      await waitFor(() => b.lastState()?.paused !== true, 3000, "resumed");
+      expect(b.lastState()?.phase).toBe("GUESSING");
+
+      const rejoined = await connectClient(server.port, late.user);
+      back = rejoined;
+      rejoined.socket.emit("room:join", { roomCode: t.roomCode });
+      await waitFor(() => rejoined.states.length >= 1, 5000, "state after rejoin");
+      expect((await answer(rejoined, t.roomCode, 1)).ok).toBe(true);
+
+      await waitFor(inPhase([host, b, rejoined], "REVEAL"), 5000, "REVEAL after his answer");
+      const seen = b.reveals.find(r => r.round === 1);
+      expect(seen?.players?.[late.user.id]?.lastVerdict).toBe("correct");
+      const rows = await responsesFor(t.sessionId ?? 0, 1, 3);
+      expect(rows.find(r => r.user_id === late.user.id)?.verdict).toBe("correct");
+    } finally {
+      await closeTable(t, [back]);
+    }
+  });
+
+  it("l'hote coupe pendant la grace d'un autre : la revelation attend toujours la fin de cette grace", async () => {
+    const t = await openTable(3);
+    const [host, b, late] = t.clients;
+    const clock = revealClock(b);
+    try {
+      await answerAll([host, b], t.roomCode, 1);
+      const dropAt = Date.now();
+      late.socket.close();
+      await sleep(GRACE / 3);
+      // L'hote avait repondu : pas de grace pour lui, mais il ne debloque rien.
+      host.socket.close();
+
+      await waitFor(() => b.lastState()?.hostConnected === false, 3000, "host seen as gone");
+      expect(b.lastState()?.phase).toBe("GUESSING");
+      await waitFor(inPhase([b], "REVEAL"), GRACE + 3000, "REVEAL after the grace");
+      expect((clock.get(1) ?? 0) - dropAt).toBeGreaterThanOrEqual(GRACE - 50);
+      expect(b.reveals.filter(r => r.round === 1)).toHaveLength(1);
     } finally {
       await closeTable(t);
     }
@@ -376,6 +441,32 @@ describe("grace de reconnexion apres une coupure reseau", () => {
       await sleep(300);
       await answerAll([a, b], t.roomCode, 1);
       await waitFor(inPhase([a, b], "REVEAL"), 1_500, "immediate REVEAL, no grace for a player who left");
+    } finally {
+      await closeTable(t, [fresh]);
+    }
+  });
+
+  it("\"Quitter\" depuis un nouveau socket apres une coupure : la grace deja ouverte est levee", async () => {
+    // L'ancien socket est mort (grace ouverte), le joueur clique "Quitter" sur
+    // le nouveau avant meme d'avoir rejoint la salle : il ne faut plus l'attendre.
+    const t = await openTable(3, { grace: 4_000 });
+    const [a, b, late] = t.clients;
+    let fresh: GameClient | undefined;
+    try {
+      await answerAll([a, b], t.roomCode, 1);
+      late.socket.close();
+      await waitFor(
+        () => getGameState(t.roomCode)?.players[late.user.id]?.disconnected === true,
+        3000,
+        "drop seen by the server",
+      );
+      const second = await connectClient(server.port, late.user);
+      fresh = second;
+      second.socket.emit("room:leave", { roomCode: t.roomCode });
+      second.socket.emit("game:leave", { roomCode: t.roomCode });
+
+      await waitFor(inPhase([a, b], "REVEAL"), 1_500, "immediate REVEAL once he left");
+      for (const c of [a, b]) expect(c.reveals.filter(r => r.round === 1)).toHaveLength(1);
     } finally {
       await closeTable(t, [fresh]);
     }

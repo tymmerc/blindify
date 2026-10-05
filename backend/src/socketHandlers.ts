@@ -13,6 +13,7 @@ import {
   resumeGame,
   markDisconnected,
   markReconnected,
+  endReconnectGrace,
   startReconnectGrace,
   getGameMode,
 } from "./services/realtimeGame";
@@ -382,8 +383,10 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
       if (liveRoomState && (liveRoomState.phase === "GUESSING" || liveRoomState.phase === "REVEAL")) {
         markDisconnected(roomCode, currentUser.id);
         if (liveRoomState.hostUserId === currentUser.id) setHostConnected(roomCode, false);
-        // Depart volontaire : pas de grace de reconnexion, la manche est revelee
-        // tout de suite si tous les autres ont repondu.
+        // Depart volontaire : pas de grace de reconnexion (celle d'une coupure
+        // de son ancien socket est levee), la manche est revelee tout de suite
+        // si tous les autres ont repondu.
+        endReconnectGrace(roomCode, currentUser.id);
         tryEarlyReveal(io, roomCode);
       } else {
         removePlayer(roomCode, currentUser.id);
@@ -547,7 +550,7 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
           track: redactedGuessingTrack(state.currentTrack),
           timing: state.timing,
         });
-        scheduleReveal(io, roomCode, state.timing.revealAt);
+        scheduleReveal(io, roomCode, state.timing.revealAt, state.currentRound);
       } else if (state.phase === "FINISHED") {
         logger.debug(`game:ready game finished for ${roomCode}`);
         broadcastState(io, roomCode);
@@ -753,9 +756,10 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
       const state = resumeGame(roomCode);
       if (!state || state.paused) return;
       if (state.phase === "GUESSING" && state.timing.revealAt) {
-        scheduleReveal(io, roomCode, state.timing.revealAt);
-        // Une grace de reconnexion a pu finir pendant la pause : la revelation
-        // anticipee qu'elle retenait part maintenant (ou a la fin de la grace).
+        scheduleReveal(io, roomCode, state.timing.revealAt, state.currentRound);
+        // Les graces de reconnexion ont ete gelees avec le chrono (resumeGame) :
+        // la revelation anticipee part maintenant si personne n'est a attendre,
+        // sinon a la fin de la grace qui la retient.
         tryEarlyReveal(io, roomCode);
       } else if (state.phase === "REVEAL") {
         scheduleForcedAdvance(io, roomCode, state.currentRound);
@@ -773,8 +777,10 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
       // des compteurs "X/Y" mais reste au classement. Hors partie, on libere le slot.
       if (liveState && (liveState.phase === "GUESSING" || liveState.phase === "REVEAL")) {
         markDisconnected(roomCode, currentUser.id);
-        // "Quitter" : pas de grace de reconnexion, la manche est revelee tout de
-        // suite si tous les autres ont repondu.
+        // "Quitter" : pas de grace de reconnexion (celle d'une coupure de son
+        // ancien socket est levee), la manche est revelee tout de suite si tous
+        // les autres ont repondu.
+        endReconnectGrace(roomCode, currentUser.id);
         tryEarlyReveal(io, roomCode);
       } else {
         removePlayer(roomCode, currentUser.id);
@@ -832,7 +838,7 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
             const resumed = resumeGame(roomCode);
             if (resumed && !resumed.paused) {
               if (resumed.phase === "GUESSING" && resumed.timing.revealAt) {
-                scheduleReveal(io, roomCode, resumed.timing.revealAt);
+                scheduleReveal(io, roomCode, resumed.timing.revealAt, resumed.currentRound);
               } else if (resumed.phase === "REVEAL") {
                 scheduleForcedAdvance(io, roomCode, resumed.currentRound);
               }

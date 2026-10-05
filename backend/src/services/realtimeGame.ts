@@ -188,28 +188,45 @@ export function allAnswerablePlayers(roomCode: string): PlayerState[] {
   return playingPlayers(ctx).filter(p => !p.disconnected);
 }
 
-export function pauseGame(roomCode: string): GameState | undefined {
+export function pauseGame(roomCode: string, now = Date.now()): GameState | undefined {
   const ctx = games.get(roomCode);
   if (!ctx) return undefined;
   if (ctx.state.paused) return ctx.state;
   if (ctx.state.phase !== "GUESSING" && ctx.state.phase !== "REVEAL") return ctx.state;
-  ctx.pausedAt = Date.now();
+  ctx.pausedAt = now;
   ctx.state.paused = true;
   return ctx.state;
 }
 
-export function resumeGame(roomCode: string): GameState | undefined {
+export function resumeGame(roomCode: string, now = Date.now()): GameState | undefined {
   const ctx = games.get(roomCode);
   if (!ctx) return undefined;
   if (!ctx.state.paused) return ctx.state;
   // Decaler les horloges du temps passe en pause : le chrono reprend ou il en
   // etait, et l'audio se resynchronise tout seul (seek base sur startAt).
-  const delta = Date.now() - (ctx.pausedAt ?? Date.now());
+  const delta = now - (ctx.pausedAt ?? now);
   if (ctx.state.timing.startAt) ctx.state.timing.startAt += delta;
   if (ctx.state.timing.revealAt) ctx.state.timing.revealAt += delta;
+  ctx.graceUntil = gracesAfterPause(ctx.graceUntil, delta, now + ctx.reconnectGraceMs);
   ctx.pausedAt = null;
   ctx.state.paused = false;
   return ctx.state;
+}
+
+/**
+ * Les graces de reconnexion sont gelees par la pause comme le chrono : les
+ * reponses y sont refusees, un joueur coupe ne doit pas y perdre sa grace.
+ * Celle qui courait reprend ou elle en etait, celle d'une coupure pendant la
+ * pause part entiere de la reprise (`latest`), celle deja finie le reste.
+ */
+function gracesAfterPause(
+  graceUntil: Readonly<Record<number, number>>,
+  delta: number,
+  latest: number,
+): Readonly<Record<number, number>> {
+  return Object.fromEntries(
+    Object.entries(graceUntil).map(([userId, until]) => [userId, Math.min(until + delta, latest)]),
+  );
 }
 
 export function setHostConnected(roomCode: string, connected: boolean): GameState | undefined {
@@ -236,11 +253,19 @@ export function markReconnected(roomCode: string, userId: number): GameState | u
   player.disconnected = false;
   // Revenu : sa grace est consommee. Une nouvelle coupure en ouvrira une neuve,
   // un depart par "Quitter" n'en aura pas.
-  if (userId in ctx.graceUntil) {
-    const { [userId]: _ended, ...others } = ctx.graceUntil;
-    ctx.graceUntil = others;
-  }
+  endReconnectGrace(roomCode, userId);
   return ctx.state;
+}
+
+/**
+ * Leve la grace de reconnexion d'un joueur : il est revenu, ou il est parti
+ * par "Quitter" (plus personne a attendre).
+ */
+export function endReconnectGrace(roomCode: string, userId: number): void {
+  const ctx = games.get(roomCode);
+  if (!ctx || !(userId in ctx.graceUntil)) return;
+  const { [userId]: _ended, ...others } = ctx.graceUntil;
+  ctx.graceUntil = others;
 }
 
 /**
