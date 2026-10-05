@@ -2,20 +2,22 @@
 
 import { useEffect, useId, useRef, useState, type FormEvent } from "react"
 import { Check, Loader2 } from "lucide-react"
-import { clientApi } from "@/lib/apiClient"
 import {
   buildAnswerPayload,
   buildBugPayload,
   FEEDBACK_MESSAGE_MAX,
+  feedbackFailure,
+  sendFeedback,
   type FeedbackAnswer,
   type FeedbackContext,
+  type FeedbackFailure,
 } from "@/lib/feedback"
 
 // Petit bloc discret sous les resultats d'une partie : un avis en un geste,
 // et un lien pour decrire un bug. Les reponses vont dans la table
 // game_feedback, lues par Tym dans l'onglet Retours du tableau de bord.
 
-type SendStatus = "idle" | "sending" | "sent" | "error"
+type SendStatus = "idle" | "sending" | "sent" | FeedbackFailure
 
 const ANSWERS: ReadonlyArray<{ value: FeedbackAnswer; label: string }> = [
   { value: "oui", label: "Oui" },
@@ -27,7 +29,13 @@ const THANKS: Record<FeedbackAnswer, string> = {
   pas_trop: "Merci de le dire. Si un truc a coincé, raconte-nous juste en dessous.",
 }
 
-const SEND_FAILED = "Ça n'est pas parti. Réessaie dans un instant."
+const FAILURE_TEXT: Record<FeedbackFailure, string> = {
+  failed: "Ça n'est pas parti. Réessaie dans un instant.",
+  rate_limited: "Beaucoup d'envois d'un coup. Réessaie dans quelques minutes.",
+}
+
+const isFailure = (status: SendStatus): status is FeedbackFailure =>
+  status === "failed" || status === "rate_limited"
 
 export interface EndFeedbackProps {
   context: FeedbackContext
@@ -51,17 +59,23 @@ export function EndFeedback({ context, className = "" }: EndFeedbackProps) {
 function QuickAnswer({ context, titleId }: { context: FeedbackContext; titleId: string }) {
   const [chosen, setChosen] = useState<FeedbackAnswer | null>(null)
   const [status, setStatus] = useState<SendStatus>("idle")
+  // Leve des le premier clic, avant que React ait redessine les boutons :
+  // deux clics tres rapproches n'envoient qu'un avis. Reste leve apres un
+  // envoi reussi (un seul avis par ecran), retombe apres un echec.
+  const guard = useRef(false)
   const locked = status === "sending" || status === "sent"
 
   const answer = async (value: FeedbackAnswer) => {
-    if (locked) return
+    if (guard.current) return
+    guard.current = true
     setChosen(value)
     setStatus("sending")
     try {
-      await clientApi.sendFeedback(buildAnswerPayload(context, value))
+      await sendFeedback(buildAnswerPayload(context, value))
       setStatus("sent")
-    } catch {
-      setStatus("error")
+    } catch (err) {
+      guard.current = false
+      setStatus(feedbackFailure(err))
     }
   }
 
@@ -76,7 +90,7 @@ function QuickAnswer({ context, titleId }: { context: FeedbackContext; titleId: 
             <AnswerButton
               key={value}
               label={label}
-              pressed={chosen === value && status !== "error"}
+              pressed={chosen === value && !isFailure(status)}
               sending={chosen === value && status === "sending"}
               disabled={locked}
               onClick={() => void answer(value)}
@@ -86,7 +100,7 @@ function QuickAnswer({ context, titleId }: { context: FeedbackContext; titleId: 
       </div>
       <p aria-live="polite" className="mt-1 min-h-[1.25rem] text-xs text-[#6b573f]">
         {status === "sent" && chosen ? THANKS[chosen] : null}
-        {status === "error" ? <span className="font-semibold text-[#9c2f1d]">{SEND_FAILED}</span> : null}
+        {isFailure(status) ? <span className="font-semibold text-[#9c2f1d]">{FAILURE_TEXT[status]}</span> : null}
       </p>
     </div>
   )
@@ -130,6 +144,8 @@ function BugReport({ context }: { context: FeedbackContext }) {
   const [open, setOpen] = useState(false)
   const [text, setText] = useState("")
   const [status, setStatus] = useState<SendStatus>("idle")
+  // Meme garde que pour l'avis : un double Envoyer ne fait qu'un signalement.
+  const guard = useRef(false)
   const toggleRef = useRef<HTMLButtonElement>(null)
   const doneRef = useRef<HTMLParagraphElement>(null)
 
@@ -145,13 +161,15 @@ function BugReport({ context }: { context: FeedbackContext }) {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
-    if (status === "sending") return
+    if (guard.current) return
+    guard.current = true
     setStatus("sending")
     try {
-      await clientApi.sendFeedback(buildBugPayload(context, text))
+      await sendFeedback(buildBugPayload(context, text))
       setStatus("sent")
-    } catch {
-      setStatus("error")
+    } catch (err) {
+      guard.current = false
+      setStatus(feedbackFailure(err))
     }
   }
 
@@ -230,7 +248,7 @@ function BugForm({ id, text, onText, status, onSubmit, onCancel }: BugFormProps)
         <span>Facultatif. On l&apos;enregistre avec le mode de jeu et ton type de navigateur, sans ton pseudo.</span>
         <span className="shrink-0 tabular-nums">{text.length}/{FEEDBACK_MESSAGE_MAX}</span>
       </p>
-      {status === "error" ? <p role="alert" className="text-xs font-semibold text-[#9c2f1d]">{SEND_FAILED}</p> : null}
+      {isFailure(status) ? <p role="alert" className="text-xs font-semibold text-[#9c2f1d]">{FAILURE_TEXT[status]}</p> : null}
       <div className="flex justify-end gap-2">
         <button
           type="button"

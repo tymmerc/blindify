@@ -2,6 +2,8 @@
 // /api/feedback et lus par Tym dans l'onglet Retours du tableau de bord.
 // Miroir des valeurs acceptees par backend/src/utils/feedbackValidation.ts.
 
+import { ApiError, clientApi } from "./apiClient"
+
 /** Ecrans de resultats ou le joueur est devant son propre ecran. */
 export type FeedbackMode = "solo" | "defi" | "chrono" | "buzzer" | "friends" | "event"
 export type FeedbackAnswer = "oui" | "pas_trop"
@@ -59,4 +61,26 @@ export function buildAnswerPayload(context: FeedbackContext, answer: FeedbackAns
 export function buildBugPayload(context: FeedbackContext, message: string): FeedbackPayload {
   const text = message.trim().slice(0, FEEDBACK_MESSAGE_MAX)
   return { kind: "bug", ...(text ? { message: text } : {}), ...contextFields(context) }
+}
+
+// Au-dela, on abandonne l'envoi : sur un reseau qui ne repond plus, le bouton
+// ne doit pas tourner indefiniment.
+export const FEEDBACK_TIMEOUT_MS = 10_000
+
+/** Pourquoi un envoi a echoue : trop d'envois (429) ou tout le reste. */
+export type FeedbackFailure = "rate_limited" | "failed"
+
+export function feedbackFailure(err: unknown): FeedbackFailure {
+  return err instanceof ApiError && err.status === 429 ? "rate_limited" : "failed"
+}
+
+/** Envoie un retour, abandonne s'il n'a pas de reponse dans le delai. */
+export async function sendFeedback(payload: FeedbackPayload, timeoutMs = FEEDBACK_TIMEOUT_MS): Promise<void> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    await clientApi.sendFeedback(payload, controller.signal)
+  } finally {
+    clearTimeout(timer)
+  }
 }
