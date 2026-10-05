@@ -3,10 +3,10 @@
 //      puis un bug avec texte (dont du HTML, pour verifier l'echappement) ;
 //   2. un solo sur ordinateur (1440x900) : avis « Oui », formulaire ouvert puis
 //      referme a Echap ;
-//   3. les lignes de game_feedback dans la base DE TEST ;
-//   4. un bug « a distance » envoye a l'API de la pile avec un code de salle :
-//      le backend doit retrouver la partie (salle et partie inserees en base de
-//      test, le solo par lien n'a pas de partie en base) ;
+//   3. une partie « a distance » (deux bots + un telephone) jusqu'a l'ecran de
+//      resultats : bug signale depuis le telephone, le backend doit retrouver
+//      la partie par le code de la salle ;
+//   4. les lignes de game_feedback dans la base DE TEST ;
 //   5. l'onglet Retours du tableau de bord, servi en local contre la base de
 //      test, puis contre une base vide (« table pas encore creee »).
 //
@@ -21,8 +21,8 @@ import http from "node:http"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { APP, heardTrack, newPage, sleep } from "./probe.mjs"
-import { psql, CONTAINER } from "./testdb.mjs"
-import { api } from "./bot.mjs"
+import { psql, seedUser, CONTAINER } from "./testdb.mjs"
+import { Bot, api, rng } from "./bot.mjs"
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const REPO = path.resolve(HERE, "../..")
@@ -30,9 +30,9 @@ const NODE = process.execPath
 const LINK = "https://www.deezer.com/fr/playlist/"
 const args = process.argv.slice(2)
 const OUT = args.includes("--out") ? args[args.indexOf("--out") + 1] : "/opt/mira/dossier/preuves/2026-10-05-blindz-retours"
-const BUG_TEXT = "Le son a coupé à la manche 3 <img src=x onerror=alert(1)>"
+// Balise, guillemets et apostrophe : le tableau de bord doit tout afficher tel quel.
+const BUG_TEXT = `Le son a coupé à la manche 3 <img src=x onerror=alert(1)> "l'écran" a figé`
 const ROOM_BUG_TEXT = "Mon tel a perdu la salle à la manche 2"
-const ROOM_CODE = "RTR5E2"
 const STACK_DB = "postgres://blindify:test@127.0.0.1:5436/blindify_test"
 
 fs.mkdirSync(OUT, { recursive: true })
@@ -128,41 +128,86 @@ async function desktopGame(browser) {
   }
 }
 
-function checkRows() {
+function checkRows(room) {
   const commit = execFileSync("git", ["-C", "/opt/blindify/.test-stack/front", "rev-parse", "--short", "HEAD"]).toString().trim()
   const rows = psql(`SELECT kind, coalesce(answer, '-'), mode, (session_id IS NOT NULL)::text, coalesce(message, '-'),
                             coalesce(app_version, '-'), (user_agent IS NOT NULL)::text
                      FROM game_feedback ORDER BY id`).split("\n").filter(Boolean).map(l => l.split("|"))
   fs.writeFileSync(path.join(OUT, "game_feedback-pile.txt"), psql(`SELECT id, kind, answer, mode, session_id, game_code, app_version, created_at, left(user_agent, 60) AS user_agent, message FROM game_feedback ORDER BY id`) + "\n")
   console.log(rows.map(r => r.join(" | ")).join("\n"))
-  check(rows.length === 3, `base de test : 3 lignes dans game_feedback (${rows.length})`)
+  check(rows.length === 4, `base de test : 4 lignes dans game_feedback (${rows.length})`)
   // Le solo lance par un lien (quick play) n'ecrit aucune partie en base
   // (session id 0 cote client) : session_id reste vide, c'est attendu.
-  const [pasTrop, bug, oui] = rows
+  const [pasTrop, bug, oui, roomBug] = rows
   check(pasTrop?.slice(0, 4).join() === "avis,pas_trop,solo,false", "base : avis « pas_trop » du solo telephone, sans partie en base (solo par lien)")
   check(bug?.[0] === "bug" && bug?.[1] === "-" && bug?.[2] === "solo" && bug?.[4] === BUG_TEXT, "base : bug du solo avec son texte intact, balises comprises")
   check(oui?.slice(0, 4).join() === "avis,oui,solo,false", "base : avis « oui » du solo ordinateur")
+  check(roomBug?.slice(0, 3).join() === "bug,-,friends" && roomBug?.[4] === ROOM_BUG_TEXT, "base : bug de la partie a distance avec son texte")
+  const linked = psql(`SELECT session_id, game_code FROM game_feedback WHERE mode = 'friends'`)
+  check(room && linked === `${room.sessionId}|${room.code}`, `base : bug a distance rattache a sa partie par le code de salle (${linked}, attendu ${room?.sessionId}|${room?.code})`)
   check(rows.every(r => r[5] === commit), `base : version du front = commit teste (${commit})`)
   check(rows.every(r => r[6] === "true"), "base : navigateur enregistre")
 }
 
+/** Identite invite creee par l'assistant /jouer/ (comme browser.mjs). */
+async function wizard(page, name, join) {
+  await page.goto(`${APP}/jouer/?join=${join}`, { waitUntil: "networkidle", timeout: 60000 })
+  await page.locator("input").first().fill(name)
+  await page.getByRole("button", { name: /continuer/i }).click()
+  for (let i = 0; i < 40 && !page.__uid; i++) await sleep(250)
+  if (!page.__uid) throw new Error(`${name} : aucune identite creee`)
+}
+
 /**
- * Bug envoye depuis une partie « a distance » : le client ne connait que le
- * code de la salle, le backend doit retrouver la partie. Salle et partie sont
- * inserees dans la base de test (une vraie partie a plusieurs telephones est
- * deja jouee par la campagne) ; l'envoi passe par l'API de la pile, avec son
- * controle d'origine, sa validation et sa limite.
+ * Partie « a distance » de 4 manches : deux bots et un telephone. Le telephone
+ * ne repond pas (les manches se ferment a la minuterie), il attend l'ecran de
+ * resultats, verifie le bloc et signale un bug. Le client ne connait que le
+ * code de la salle : le backend doit retrouver la partie.
  */
-async function roomFeedback() {
-  const sessionId = Number(psql(`INSERT INTO game_sessions (mode, state, room_code, total_rounds) VALUES ('friends', 'finished', '${ROOM_CODE}', 5) RETURNING id`).split("\n")[0])
-  psql(`INSERT INTO multiplayer_rooms (room_code, session_id, status) VALUES ('${ROOM_CODE}', ${sessionId}, 'finished')`)
-  const sent = await api("/api/feedback", { method: "POST", body: { kind: "bug", mode: "friends", gameCode: ROOM_CODE.toLowerCase(), message: ROOM_BUG_TEXT } })
-  check(sent.status === 201, `api : bug « a distance » accepte (${sent.status})`)
-  const refused = await api("/api/feedback", { method: "POST", body: { kind: "avis", mode: "tele" } })
-  check(refused.status === 400 && refused.error?.code === "invalid_mode", `api : mode inconnu refuse (${refused.status} ${refused.error?.code})`)
-  const row = psql(`SELECT mode, session_id, game_code FROM game_feedback WHERE message = '${ROOM_BUG_TEXT.replace(/'/g, "''")}'`)
-  check(row === `friends|${sessionId}|${ROOM_CODE}`, `base : bug « a distance » rattache a sa partie par le code de salle (${row})`)
-  return sessionId
+async function remoteGame(browser) {
+  const host = new Bot({ name: "HoteRetours", plan: () => ({ action: "proche" }), random: rng(501) })
+  const other = new Bot({ name: "AutreRetours", plan: () => ({ action: "faux" }), random: rng(502) })
+  const { ctx, page } = await newPage(browser, { ...devices["iPhone 13"] }, "a distance", problems)
+  try {
+    await host.enter(); await other.enter()
+    seedUser(host.id, [0, 1, 2, 3, 4, 5, 6, 7]); seedUser(other.id, [8, 9, 10, 11, 12, 13, 14, 15])
+    const created = await api("/api/rooms/create", { method: "POST", token: host.token, body: { mode: "friends", questionCount: 4 } })
+    const code = created.data?.room?.room_code
+    if (!code) throw new Error(`creation de salle refusee (${created.status})`)
+    await api(`/api/rooms/${code}/config`, { method: "POST", token: host.token, body: { questionCount: 4, roundSeconds: 12 } })
+    host.code = code; await host.connect(); host.socket.emit("room:join", { roomCode: code })
+    await other.join(code)
+
+    await wizard(page, "Distant", code)
+    seedUser(page.__uid, [16, 17, 18, 19, 20, 21, 22, 23])
+    await page.getByRole("button", { name: /rejoindre la partie/i }).click({ timeout: 20000 })
+    await page.locator("[data-code]").first().waitFor({ timeout: 30000 })
+    await sleep(2000)
+    const start = await api(`/api/rooms/${code}/start`, { method: "POST", token: host.token, body: { source: "library" } })
+    if (start.status >= 400) throw new Error(`lancement refuse (${start.status})`)
+    const t0 = Date.now()
+    while (!host.over && Date.now() - t0 < 4 * 27000 + 30000) await sleep(500)
+    check(host.over, "a distance : la partie est allee au bout")
+
+    const region = block(page)
+    await region.waitFor({ timeout: 20000 })
+    await sleep(2500) // confettis et animations de l'ecran de resultats
+    await region.scrollIntoViewIfNeeded()
+    check(await region.isVisible(), "a distance : le bloc est sur l'ecran de resultats du telephone")
+    await shot(page, "7-distance-fin-390x844")
+    await region.getByRole("button", { name: "Signaler un bug" }).click()
+    await page.getByLabel("Qu'est-ce qui s'est passé ?").fill(ROOM_BUG_TEXT)
+    await region.getByRole("button", { name: "Envoyer" }).click()
+    await page.getByText("Merci, on regarde ça.").waitFor({ timeout: 10000 })
+    check(true, "a distance : bug envoye depuis l'ecran de resultats")
+
+    const refused = await api("/api/feedback", { method: "POST", body: { kind: "avis", mode: "tele" } })
+    check(refused.status === 400 && refused.error?.code === "invalid_mode", `api : mode inconnu refuse (${refused.status} ${refused.error?.code})`)
+    return { code, sessionId: Number(psql(`SELECT session_id FROM multiplayer_rooms WHERE room_code = '${code}'`)) }
+  } finally {
+    host.close(); other.close()
+    await ctx.close().catch(() => {})
+  }
 }
 
 /* ------------------------- tableau de bord ------------------------- */
@@ -239,17 +284,17 @@ async function adminCheck(browser, roomSessionId) {
     // textContent et pas innerText : les pastilles sont en capitales (CSS).
     const order = await page.locator(".retour .texte, .retour .aide").allTextContents()
     check(order[0] === ROOM_BUG_TEXT && order[1] === "avis rapide, sans texte" && order[2] === BUG_TEXT,
-      "tableau de bord : le plus recent d'abord (bug a distance, puis avis oui, puis bug du telephone)")
+      "tableau de bord : le plus recent d'abord (bug a distance, puis avis oui, puis bug du solo)")
     const kpis = await page.locator("#retours .kpi .v").allTextContents()
     check(kpis.join() === "1,1,2", `tableau de bord : compteurs oui / pas trop / bugs (${kpis.join(" / ")})`)
     const bugText = await page.locator(".retour.bug .texte").nth(1).textContent()
     check(bugText === BUG_TEXT, "tableau de bord : le texte du bug est affiche tel quel, balises comprises")
     check(await page.locator(".retour img").count() === 0 && scripts.length === 0, "tableau de bord : aucune balise injectee, aucun script execute")
-    await shot(page, "7-admin-retours-1440x900")
+    await shot(page, "8-admin-retours-1440x900")
     await page.locator("#filtre-retours button[data-f='bug']").click()
     await page.locator(".retour").first().waitFor()
     check(await page.locator(".retour").count() === 2 && await page.locator(".retour.bug").count() === 2, "tableau de bord : le filtre « bugs » ne garde que les 2 bugs")
-    await shot(page, "8-admin-retours-bugs-1440x900")
+    await shot(page, "9-admin-retours-bugs-1440x900")
     const links = await page.locator(".retour .lien").allTextContents()
     check(links.length === 1 && links[0] === `partie ${roomSessionId}`, `tableau de bord : seul le bug a distance a un lien vers sa partie (${links.join(", ") || "aucun"})`)
     await page.locator(".retour .lien").first().click()
@@ -259,13 +304,13 @@ async function adminCheck(browser, roomSessionId) {
     await page.setViewportSize({ width: 390, height: 844 })
     await page.locator("#filtre-retours button[data-f='']").click()
     await page.locator(".retour").first().waitFor()
-    await shot(page, "9-admin-retours-390x844", { fullPage: true })
+    await shot(page, "10-admin-retours-390x844", { fullPage: true })
 
     await page.setViewportSize({ width: 1440, height: 900 })
     await page.goto("http://127.0.0.1:3105/blindz/#retours", { waitUntil: "networkidle" })
     await page.getByText(/Table pas encore créée/).waitFor({ timeout: 10000 })
     check(true, "tableau de bord : base sans la table, message « table pas encore créée »")
-    await shot(page, "10-admin-table-absente-1440x900")
+    await shot(page, "11-admin-table-absente-1440x900")
     await ctx.close()
   } finally {
     for (const s of servers) s.close()
@@ -284,9 +329,9 @@ try {
   check(before === "0", `pile : table game_feedback creee par le backend au demarrage, vide (${before} ligne)`)
   await phoneGame(browser)
   await desktopGame(browser)
-  checkRows()
-  const roomSessionId = await roomFeedback()
-  await adminCheck(browser, roomSessionId)
+  const room = await remoteGame(browser)
+  checkRows(room)
+  await adminCheck(browser, room.sessionId)
 } catch (e) {
   problems.push(`arret : ${String(e.message).split("\n").slice(0, 4).join(" / ").slice(0, 400)}`)
   console.log(`[ECHEC] arret : ${e.message}`)
