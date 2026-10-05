@@ -467,6 +467,8 @@ function rendre() {
   const titresJoues = D.titres.slice(0, 8);
   const inscr = D.inscriptions.filter(i => { const t = new Date(i.j + "T12:00:00").getTime(); return t >= f.debut.getTime() && t <= f.fin.getTime(); });
   const nInscr = inscr.reduce((t, i) => t + i.n, 0), nComptes = inscr.reduce((t, i) => t + i.comptes, 0);
+  // Comptes de test deja retires de n par stats.sql ; absent des anciens data.json.
+  const nTests = inscr.reduce((t, i) => t + (i.tests || 0), 0);
 
   const kpi = (lib, v, av, suf = "", note) => `<div class="kpi"><div class="lib">${lib} ${b ? delta(v, av) : ""}</div>
     <div class="v num">${v == null ? "—" : nb(v)}${v == null ? "" : suf}</div><div class="cmp">${b ? `avant : ${av == null ? "—" : nb(av) + suf}` : (note || "depuis le début")}</div></div>`;
@@ -537,8 +539,8 @@ function rendre() {
     <div class="bloc"><div class="g2">
       <div><div class="shead"><h2>Inscriptions</h2><span class="sub">sur la période</span></div><div class="panel">
         <div style="display:flex;gap:18px;align-items:baseline"><span class="num" style="font-family:Archivo;font-size:1.5rem;font-weight:700">${nb(nInscr)}</span>
-        <span class="aide">nouveaux joueurs, dont ${nb(nComptes)} avec un compte</span></div>
-        ${rang(D.liens.map(l => ({ label:"liens " + l.provider, n:l.n })), C.blue)}</div></div>
+        <span class="aide">nouveaux joueurs, dont ${nb(nComptes)} avec un compte${nTests ? ` · ${nb(nTests)} comptes de test écartés` : ""}</span></div>
+        ${rang(D.liens.filter(l => l.n > 0).map(l => ({ label:"liens " + l.provider, n:l.n })), C.blue)}</div></div>
       <div><div class="shead"><h2>Joueurs les plus actifs</h2><span class="sub">depuis le début</span></div>
         <div class="panel tight"><div class="scroll"><table class="min"><thead><tr><th>Pseudo</th><th>Parties</th><th>Bonnes</th><th>Série</th><th>Vu le</th></tr></thead><tbody>
           ${D.joueurs.slice(0, 10).map(j => `<tr><td>${esc(j.pseudo)}</td><td class="n">${nb(j.parties)}</td><td class="n">${nb(j.bonnes)} / ${nb(j.tentatives)}</td><td class="n">${nb(j.serie)}</td><td class="n" style="color:var(--txt-3)">${esc(j.vu_le || "?")}</td></tr>`).join("")}
