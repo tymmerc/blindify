@@ -1,8 +1,10 @@
 // Fin du grand titre de la landing (RotatingEnd, passage « volets ») sur la pile
-// de test : HTML pre-rendu, moins d'animations, chaque fin sur une ligne a cinq
-// largeurs (Chromium) et sur iPhone (WebKit), aucune fin lisible en double, pas
-// de decalage de mise en page, images figees pendant un passage (390 et 1440)
-// et une courte video de la vraie landing.
+// de test : HTML pre-rendu, CSS minifie, moins d'animations (au chargement et en
+// cours de route), chaque fin sur une ligne a cinq largeurs (Chromium) et sur
+// iPhone (WebKit), aucune fin lisible en double, nom du titre dans l'arbre
+// d'accessibilite a chaque passage, pas de decalage de mise en page, images
+// figees pendant un passage (390 et 1440) et une courte video de la vraie
+// landing.
 //
 //   campagne-ref.sh <branche> --script /chemin/tools/test-stack/titre-anim.mjs [dossier]
 import { chromium, devices, webkit } from "@playwright/test"
@@ -167,6 +169,38 @@ async function planche(browser, tag, opts) {
   bon(`${tag} : planche du passage (${FIGES.join(", ")} ms) -> ${tag}-passage.png`)
 }
 
+/** Nom du titre dans l'arbre d'accessibilite (calcule par Playwright, ce que
+ *  lit un lecteur d'ecran) a chaque passage, horloge figee : 14 passages, donc
+ *  les 13 fins et un retour au point de depart. */
+async function arbreAccessibilite(browser, tag, opts) {
+  const ctx = await browser.newContext(opts)
+  const page = await ctx.newPage()
+  await page.clock.install()
+  await page.goto(`${APP}/`, { waitUntil: "networkidle", timeout: 120000 })
+  await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 50)
+  await hydratee(page)
+  // Texte entier de chaque fin (la copie sr-only si elle est en lettres) et
+  // fin lue au moment ou l'horloge s'arrete
+  const { fins, depart } = await page.$$eval("h1 .titre-fin > [data-etat]", fs => ({
+    fins: fs.map(f => (f.querySelector(".sr-only") ?? f).textContent),
+    depart: fs.findIndex(f => f.getAttribute("aria-hidden") !== "true"),
+  }))
+  const avant = problemes.length
+  for (let k = 0; k <= fins.length; k++) {
+    const i = (depart + k) % fins.length
+    if (k) {
+      await page.clock.runFor(2200)
+      await page.waitForSelector(`h1 .titre-fin > [data-etat]:nth-child(${i + 1})[data-etat='entre']`, { state: "attached", timeout: 5000 })
+    }
+    const arbre = await page.locator("h1").ariaSnapshot()
+    const nom = arbre.match(/^- heading "(.*)" \[level=1\]/m)?.[1]
+    const attendu = propre(`Le blind test ${fins[i]}`)
+    if (propre(nom ?? "") !== attendu) mal(`${tag} : passage ${k}, arbre d'accessibilite ${JSON.stringify(arbre)} au lieu de « ${attendu} »`)
+  }
+  await ctx.close()
+  if (problemes.length === avant) bon(`${tag} : arbre d'accessibilite, le titre se lit « Le blind test » + la bonne fin, entiere, sur ${fins.length + 1} passages de suite (les ${fins.length} fins et retour au depart)`)
+}
+
 async function video(browser, tag, opts) {
   const ctx = await browser.newContext({ ...opts, recordVideo: { dir: `${OUT}/video-tmp`, size: opts.viewport } })
   const page = await ctx.newPage()
@@ -201,6 +235,16 @@ const chrome = await chromium.launch()
   else if (pre.rotation) mal("HTML pre-rendu : la rotation est deja dans le HTML")
   else if (!pre.repere) mal("HTML pre-rendu : pas de titre-fin (texte attendu par go-prod-front.sh)")
   else bon(`HTML pre-rendu : « ${texte} », rien d'autre dans le h1, repere titre-fin present`)
+  // Le nom de l'animation survit-il a la minification ? Si oui, il sert de
+  // deuxieme repere apres une mise en prod (le CSS est un fichier a part).
+  const css = await page.evaluate(async () => {
+    const liens = [...document.querySelectorAll("link[rel='stylesheet']")].map(l => l.href)
+    const textes = await Promise.all(liens.map(h => fetch(h).then(r => r.text())))
+    return liens.map((h, k) => ({ fichier: new URL(h).pathname, entre: textes[k].includes("@keyframes volet-entre"), kerning: /\.titre-fin\{font-kerning:none\}/.test(textes[k]) }))
+  })
+  const avecVolet = css.filter(c => c.entre)
+  if (!avecVolet.length) mal(`CSS : @keyframes volet-entre introuvable dans ${css.map(c => c.fichier).join(", ")}`)
+  else bon(`CSS minifie : @keyframes volet-entre garde son nom dans ${avecVolet.map(c => c.fichier).join(", ")} (font-kerning none : ${avecVolet.some(c => c.kerning) ? "oui" : "non"})`)
   await ctx.close()
 }
 
@@ -212,6 +256,29 @@ const chrome = await chromium.launch()
   const etats = await page.locator("h1 [data-etat]").count()
   if (texte !== PREMIERE || etats) mal(`moins d'animations : « ${texte} », ${etats} fins tournantes`)
   else bon(`moins d'animations : titre fixe « ${texte} » apres 5 s`)
+  await ctx.close()
+}
+
+// 2 bis. Moins d'animations demande en cours de route : la fin affichee se pose
+// et ne bouge plus, puis la rotation repart quand on retire le reglage
+{
+  const { ctx, page } = await ouvrir(chrome, { viewport: { width: 390, height: 844 } })
+  await hydratee(page)
+  await page.waitForSelector("h1 .titre-fin [data-etat='entre']", { state: "attached", timeout: 10000 })
+  await page.emulateMedia({ reducedMotion: "reduce" })
+  const fige = () => page.$$eval("h1 .titre-fin > [data-etat]", fs => fs.map(f => f.dataset.etat).join(","))
+  // l'evenement change arrive au rendu suivant : on attend que la fin se pose
+  await page.waitForFunction(() => !document.querySelector("h1 .titre-fin [data-etat='entre'], h1 .titre-fin [data-etat='sort']"), null, { timeout: 5000 }).catch(() => {})
+  const pose = await fige()
+  const lettres = await page.locator("h1 .volet").count()
+  await page.waitForTimeout(5000)
+  const apres = await fige()
+  await page.emulateMedia({ reducedMotion: "no-preference" })
+  const repart = await page.waitForSelector("h1 .titre-fin [data-etat='sort']", { state: "attached", timeout: 5000 }).then(() => true, () => false)
+  const etats = pose.split(",")
+  if (etats.filter(e => e === "repos").length !== 1 || etats.some(e => e === "entre" || e === "sort") || lettres || apres !== pose || !repart)
+    mal(`moins d'animations en cours de route : ${pose} puis ${apres}, ${lettres} lettres, repart ${repart}`)
+  else bon("moins d'animations en cours de route : la fin affichee se pose (sans lettres), rien ne bouge en 5 s, la rotation repart quand on retire le reglage")
   await ctx.close()
 }
 
@@ -228,6 +295,7 @@ const mesures = []
 // 4. Planches figees et video (Chromium)
 await planche(chrome, "chromium-390", { ...devices["iPhone 13"], deviceScaleFactor: 2 })
 await planche(chrome, "chromium-1440", { viewport: { width: 1440, height: 900 } })
+await arbreAccessibilite(chrome, "chromium 1440px", { viewport: { width: 1440, height: 900 } })
 await video(chrome, "video-1440", { viewport: { width: 1440, height: 900 } })
 await video(chrome, "video-390", { viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true })
 await chrome.close()
@@ -243,6 +311,7 @@ const safari = await webkit.launch()
   await Promise.all(pages.map(({ ctx }) => ctx.close()))
 }
 await planche(safari, "webkit-390", { ...devices["iPhone 13"], deviceScaleFactor: 2 })
+await arbreAccessibilite(safari, "webkit 390px", { ...devices["iPhone 13"] })
 await safari.close()
 
 fs.writeFileSync(`${OUT}/mesures.json`, JSON.stringify(mesures, null, 1))
