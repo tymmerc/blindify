@@ -20,7 +20,9 @@
 # L'explorateur de base reste root (il appelle docker), mais sans capacites.
 # Chiffres et raisons : /opt/mira/dossier/docs-blindz/MENAGE-TECHNIQUE-2026-10-05.md
 #
-# Retour arriere : la commande affichee a l'etape 1.
+# Retour arriere : la commande affichee a l'etape 1, et de nouveau si une
+# etape ou un controle echoue. Le script peut etre relance sans risque (il
+# saute ce qui est deja fait).
 set -euo pipefail
 DEPOT="$(cd "$(dirname "$0")/.." && pwd)"
 ESSAI=0
@@ -61,6 +63,27 @@ illisibles="$(find /opt/blindify/backend /opt/blindify/frontend /opt/blindify/sh
   \( -path '*/node_modules' -o -path "$FRONT/.next" -o -path "$FRONT/.next-dev" -o -path "$FRONT/out" -o -name '.env*' \) -prune \
   -o ! -perm -o+r -print 2>/dev/null | head -5)"
 [ -z "$illisibles" ] || { echo "  !! fichiers illisibles pour les nouveaux utilisateurs :"; echo "$illisibles" | sed 's/^/     /'; exit 1; }
+# daemon-reload rend actives les modifications EN ATTENTE de toutes les unites
+# (autre projet, autre session), pas seulement les notres. On les liste avant.
+# Les .scope de docker se declarent toujours "a recharger" : ignores.
+en_attente_systemd() {
+  systemctl show -p Id -p NeedDaemonReload -- $(systemctl list-units --all --plain --no-legend --no-pager \
+      --type=service,socket,timer,slice,path,mount,target | awk '{print $1}') 2>/dev/null \
+    | awk -v RS= '/NeedDaemonReload=yes/ { if (match($0, /Id=[^\n]+/)) print substr($0, RSTART+3, RLENGTH-3) }'
+}
+attente="$(en_attente_systemd)"
+if [ -n "$attente" ]; then
+  echo "  !! unites modifiees sur disque et pas encore rechargees (daemon-reload les activerait) :"
+  echo "$attente" | sed 's/^/     /'
+  if [ "$ESSAI" = 1 ]; then
+    echo "     (essai : a regarder avant le vrai passage)"
+  elif [ "${SYSTEMD_EN_ATTENTE_VU:-}" != 1 ]; then
+    echo "     Rien n'est touche. Les regarder ; pour continuer quand meme : SYSTEMD_EN_ATTENTE_VU=1 bash $0"
+    exit 1
+  fi
+else
+  echo "  aucune autre unite en attente de daemon-reload"
+fi
 echo "  exposition actuelle (systemd-analyze security, 10 = rien de protege) :"
 for u in $UNITES; do echo "    $u : $(score "$u.service")"; done
 
@@ -100,9 +123,12 @@ RETOUR="rm -f $(for u in $UNITES; do printf '/etc/systemd/system/%s.service.d/60
 echo "  sauvegarde : $SAUVE"
 echo "  retour arriere : $RETOUR"
 echo "  (les utilisateurs, /opt/node et $FRONT/.next-dev peuvent rester, ils ne genent pas)"
+# Toute commande qui echoue a partir d'ici arrete le script (set -e) : on
+# reaffiche alors le retour arriere, pour ne pas avoir a le chercher plus haut.
+trap 'echo "  !! arret sur erreur (ligne $LINENO). RETOUR ARRIERE : $RETOUR"' ERR
 
 echo "── 2. Node, utilisateurs, dossiers ──"
-if ! cmp -s "$NODE_SRC" "$NODE_DST" 2>/dev/null; then
+if [ -x "$NODE_SRC" ] && ! cmp -s "$NODE_SRC" "$NODE_DST" 2>/dev/null; then
   install -D -o root -g root -m 0755 "$NODE_SRC" "$NODE_DST"
 fi
 echo "  $NODE_DST : $("$NODE_DST" --version)"

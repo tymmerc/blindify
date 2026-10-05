@@ -19,7 +19,8 @@
 # nulle part) part dans la sauvegarde.
 # Chiffres et raisons : /opt/mira/dossier/docs-blindz/MENAGE-TECHNIQUE-2026-10-05.md
 #
-# Retour arriere : la commande affichee a l'etape 0.
+# Retour arriere : la commande affichee a l'etape 1, et de nouveau si une
+# etape ou un controle echoue.
 set -euo pipefail
 # Le depot qui porte ce script (normalement /opt/blindify, sur main).
 DEPOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -48,6 +49,29 @@ fi
 nginx -t 2>/dev/null || { echo "  !! nginx -t echoue AVANT toute modification : corriger d'abord"; exit 1; }
 if grep -rqs --exclude="$(basename "$SNIPPET")" "blindify-redirects" /etc/nginx/; then
   echo "  !! le snippet blindify-redirects.conf est inclus quelque part : a regarder avant"; exit 1
+fi
+# Un reload rend actif TOUT ce qui a change dans /etc/nginx depuis le dernier
+# chargement, pas seulement 10-main.conf. Les workers en service sont nes a ce
+# chargement : un fichier plus recent qu'eux est un changement en attente (autre
+# projet, autre session) que ce script activerait sans le dire.
+en_attente_nginx() {
+  local age
+  age="$(ps -o etimes=,args= --ppid "$(cat /run/nginx.pid)" | grep -v 'shutting down' | awk '$1>m {m=$1} END {print m+0}')"
+  [ "$age" -gt 0 ] || return 0
+  find -L /etc/nginx -type f -newermt "@$(( $(date +%s) - age ))" 2>/dev/null
+}
+attente="$(en_attente_nginx)"
+if [ -n "$attente" ]; then
+  echo "  !! fichiers modifies depuis le dernier chargement de nginx (le reload les activerait aussi) :"
+  echo "$attente" | sed 's/^/     /'
+  if [ "$ESSAI" = 1 ]; then
+    echo "     (essai : a regarder avant le vrai passage)"
+  elif [ "${NGINX_EN_ATTENTE_VU:-}" != 1 ]; then
+    echo "     Rien n'est touche. Les regarder ; pour les activer avec ce menage : NGINX_EN_ATTENTE_VU=1 bash $0"
+    exit 1
+  fi
+else
+  echo "  aucun autre changement en attente dans /etc/nginx"
 fi
 echo "  patch applicable, nginx -t actuel OK, snippet orphelin confirme"
 echo "  usage des anciennes routes sur les journaux disponibles (comparer a l'audit) :"
@@ -83,6 +107,9 @@ RETOUR="cp -a $SAUVE/10-main.conf $CONF"
 RETOUR+=" && nginx -t && systemctl reload nginx"
 echo "  sauvegarde : $SAUVE"
 echo "  retour arriere : $RETOUR"
+# Toute commande qui echoue a partir d'ici arrete le script (set -e) : on
+# reaffiche alors le retour arriere, pour ne pas avoir a le chercher plus haut.
+trap 'echo "  !! arret sur erreur (ligne $LINENO). RETOUR ARRIERE : $RETOUR"' ERR
 
 echo "── 2. Nouvelle configuration ──"
 cat "$TMP/10-main.conf" >"$CONF"   # garde proprietaire et droits du fichier
