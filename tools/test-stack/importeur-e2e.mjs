@@ -114,7 +114,7 @@ try {
   const [dora, eli] = await Promise.all(["Dora", "Eli"].map(name => new Bot({ name, plan: () => ({ action: "muet" }), random: Math.random }).enter()))
   for (const b of [dora, eli]) {
     const listed = await api("/api/import/playlists", { method: "POST", token: b.token, body: { url: `https://www.deezer.com/fr/playlist/${playlist}` } })
-    const synced = await api("/api/import/sync-all", { method: "POST", token: b.token, body: { provider: "deezer", playlistIds: [String(playlist)], linkId: listed.data?.linkId } })
+    const synced = await api("/api/import/sync-all", { method: "POST", token: b.token, body: { provider: "deezer", playlistIds: [String(playlist)], maxTracksPerPlaylist: 50, linkId: listed.data?.linkId } })
     const card = (await api("/api/links", { token: b.token })).data?.links?.[0]
     say(`  ${b.name} (invite ${b.id}) : import ${synced.status}, ${synced.data?.synced} titres annonces, carte a ${card?.track_count} titre(s)`)
     Number(card?.track_count) === 12 ? ok(`carte de ${b.name} : 12 titres`) : bad(`carte de ${b.name} : ${card?.track_count} titre(s) au lieu de 12`)
