@@ -15,6 +15,12 @@ updates:
     groups:
       front-mineures:
         update-types: [minor, patch]
+    ignore:
+      # @types/node decrit l'API d'une version de Node : il suit celle qui fait
+      # tourner le code (22, voir .nvmrc et backend/Dockerfile), pas la derniere
+      # parue. Ses majeures se montent a la main, dans la meme PR que Node.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: npm
     directory: /backend
@@ -27,6 +33,31 @@ updates:
     groups:
       back-mineures:
         update-types: [minor, patch]
+    ignore:
+      # Meme regle que pour le front.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+
+  # Image de base du backend (ligne FROM de backend/Dockerfile). L'etiquette
+  # node:22-alpine ne donne que la version majeure : Dependabot ne peut donc
+  # proposer que des montees de majeure, a relire une par une (une majeure
+  # impaire de Node n'a jamais de LTS : celle-la se refuse a la relecture).
+  # Accepter une montee, c'est aussi monter .nvmrc et @types/node dans la meme
+  # PR (Dependabot ne touche qu'a la ligne FROM). Une seule image, rien a
+  # grouper.
+  - package-ecosystem: docker
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: "chore(deps)"
+
+  # docker-compose.yml n'est pas surveille, expres : postgres:15-alpine et
+  # redis:7-alpine ne donnent eux aussi que la majeure, et aucune des deux
+  # montees ne se fait en changeant l'etiquette. Les donnees d'un Postgres 15
+  # ne demarrent pas sous une version plus recente (pg_upgrade ou sauvegarde
+  # puis restauration), et Redis n'est utilise par aucun code.
 
   # Outils du depot (husky, lint-staged).
   - package-ecosystem: npm
