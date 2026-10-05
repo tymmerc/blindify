@@ -12,7 +12,13 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: "https://blindz.app/blind-test-en-ligne-gratuit/", lastModified: new Date("2026-09-08"), changeFrequency: "monthly", priority: 0.8 },
     { url: "https://blindz.app/blind-test-spotify/", lastModified: new Date("2026-09-08"), changeFrequency: "monthly", priority: 0.8 },
     { url: "https://blindz.app/blind-test-deezer/", lastModified: new Date("2026-09-08"), changeFrequency: "monthly", priority: 0.8 },
-    { url: "https://blindz.app/blind-test-soiree/", lastModified: new Date("2026-09-08"), changeFrequency: "monthly", priority: 0.8 },
+    { url: "https://blindz.app/blind-test-soiree/", lastModified: new Date("2026-10-05"), changeFrequency: "monthly", priority: 0.8 },
+    // Pages par occasion (05/10/2026). La liste des guides est dans lib/guides ;
+    // un test verifie que chacun est ici.
+    { url: "https://blindz.app/blind-test-anniversaire/", lastModified: new Date("2026-10-05"), changeFrequency: "monthly", priority: 0.8 },
+    { url: "https://blindz.app/blind-test-evjf-evg/", lastModified: new Date("2026-10-05"), changeFrequency: "monthly", priority: 0.8 },
+    { url: "https://blindz.app/blind-test-tv/", lastModified: new Date("2026-10-05"), changeFrequency: "monthly", priority: 0.8 },
+    { url: "https://blindz.app/blind-test-entre-collegues/", lastModified: new Date("2026-10-05"), changeFrequency: "monthly", priority: 0.8 },
     { url: "https://blindz.app/comparatif-blind-test/", lastModified: new Date("2026-10-05"), changeFrequency: "monthly", priority: 0.8 },
     { url: "https://blindz.app/confidentialite/", changeFrequency: "yearly", priority: 0.3 },
     { url: "https://blindz.app/mentions-legales/", changeFrequency: "yearly", priority: 0.3 },

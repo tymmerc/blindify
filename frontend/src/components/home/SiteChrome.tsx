@@ -1,6 +1,7 @@
 import Image from "next/image"
 import Link from "next/link"
 import { publicPath } from "@/lib/publicPath"
+import { GUIDES } from "@/lib/guides"
 import { BugReportLink } from "@/components/home/BugReportLink"
 
 // En-tete et pied de page communs a la landing et aux guides. Composants
@@ -8,13 +9,8 @@ import { BugReportLink } from "@/components/home/BugReportLink"
 // le bouton qui ouvre le signalement de bug (BugReportLink).
 // Palette du logo : vermillon, ambre, sauge, bleu acier sur encre et papier.
 
-export const GUIDES = [
-  { href: "/blind-test-en-ligne-gratuit/", label: "Blind test en ligne gratuit" },
-  { href: "/blind-test-spotify/", label: "Blind test avec Spotify" },
-  { href: "/blind-test-deezer/", label: "Blind test avec Deezer" },
-  { href: "/blind-test-soiree/", label: "Blind test en soirée" },
-  { href: "/comparatif-blind-test/", label: "Comparatif des blind tests" },
-] as const
+// La liste des guides vit dans lib/guides (lue aussi par les tests).
+export { GUIDES }
 
 export function SiteHeader() {
   return (
