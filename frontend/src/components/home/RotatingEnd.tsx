@@ -23,6 +23,11 @@ import {
  * (retour de Tym le 02/10). Pas de zone « live » : un lecteur d'ecran lit le
  * titre une fois.
  *
+ * La rotation s'arrete quand l'onglet est cache et repart a son retour (une
+ * periode entiere avant le passage suivant). Elle s'arrete aussi si l'appareil
+ * passe en « moins d'animations » en cours de route, et repart s'il en sort :
+ * la fin affichee reste alors posee, sans lettres en mouvement.
+ *
  * Passage d'une fin a l'autre (demande de Tym le 05/10) : « volets ». Les
  * lettres basculent une par une de gauche a droite, comme un panneau a
  * palettes. Tout le mouvement est en CSS (globals.css, bloc « Fin du grand
@@ -36,19 +41,34 @@ const PERIODE_MS = 2200
 const LIGNE = "whitespace-nowrap"
 
 /**
- * repos : affichee depuis le chargement, sans animation d'entree.
+ * repos : posee sans animation (au chargement, ou pendant une pause).
  * entre : vient d'arriver (ses lettres basculent pour apparaitre).
  * sort : vient d'etre remplacee (ses lettres basculent pour partir).
  * attend : cachee, garde juste sa place dans la case.
  */
 export type EtatFin = "repos" | "entre" | "sort" | "attend"
 
-/** Etat de la fin `i` apres `tours` passages, sur `total` fins. */
-export function etatFin(i: number, tours: number, total: number): EtatFin {
+/**
+ * Etat de la fin `i` apres `tours` passages, sur `total` fins. `pose` est le
+ * nombre de passages au dernier arret (0 au chargement) : tant qu'aucun passage
+ * n'a eu lieu depuis, la fin affichee est au repos et aucune ne sort.
+ */
+export function etatFin(i: number, tours: number, total: number, pose = 0): EtatFin {
   const index = tours % total
-  if (i === index) return tours === 0 ? "repos" : "entre"
-  if (tours > 0 && i === (index - 1 + total) % total) return "sort"
+  if (i === index) return tours === pose ? "repos" : "entre"
+  if (tours > pose && i === (index - 1 + total) % total) return "sort"
   return "attend"
+}
+
+/**
+ * Lettres d'un texte telles qu'on les voit (graphemes) : une lettre et son
+ * accent combine, ou un emoji compose, restent ensemble. Array.from (points de
+ * code) si le navigateur n'a pas Intl.Segmenter.
+ */
+export function graphemes(texte: string): string[] {
+  if (typeof Intl === "undefined" || typeof Intl.Segmenter !== "function") return Array.from(texte)
+  const segmenteur = new Intl.Segmenter("fr", { granularity: "grapheme" })
+  return Array.from(segmenteur.segment(texte), s => s.segment)
 }
 
 /**
@@ -60,7 +80,7 @@ export function enLettres(fin: ReactNode): ReactNode {
   let rang = 0
   const couper = (n: ReactNode): ReactNode => {
     if (typeof n === "string" || typeof n === "number") {
-      return Array.from(String(n), (c, j) => {
+      return graphemes(String(n)).map((c, j) => {
         const i = rang++
         if (c === " ") return " "
         return (
@@ -78,18 +98,45 @@ export function enLettres(fin: ReactNode): ReactNode {
   return couper(fin)
 }
 
+type Rotation = { tours: number; pose: number }
+
+const avancer = (r: Rotation): Rotation => ({ ...r, tours: r.tours + 1 })
+// Meme objet si rien ne change : pas de rendu pour rien.
+const poser = (r: Rotation): Rotation => (r.pose === r.tours ? r : { ...r, pose: r.tours })
+
 export function RotatingEnd({ endings }: { endings: ReactNode[] }) {
+  // ready : la rotation a pu demarrer au moins une fois (pas de « moins
+  // d'animations » demande). Avant, on garde la fin du HTML pre-rendu.
   const [ready, setReady] = useState(false)
-  const [tours, setTours] = useState(0)
+  const [enPause, setEnPause] = useState(true)
+  const [rotation, setRotation] = useState<Rotation>({ tours: 0, pose: 0 })
   const lettres = useMemo(() => endings.map(enLettres), [endings])
 
+  // Ecoute « moins d'animations » et la visibilite de l'onglet
   useEffect(() => {
     if (endings.length < 2) return
-    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return
-    setReady(true)
-    const timer = window.setInterval(() => setTours(t => t + 1), PERIODE_MS)
-    return () => window.clearInterval(timer)
+    const requete = window.matchMedia?.("(prefers-reduced-motion: reduce)")
+    const suivre = () => {
+      const reduit = Boolean(requete?.matches)
+      const pause = reduit || document.hidden
+      setEnPause(pause)
+      if (pause) setRotation(poser)
+      if (!reduit) setReady(true)
+    }
+    suivre()
+    requete?.addEventListener?.("change", suivre)
+    document.addEventListener("visibilitychange", suivre)
+    return () => {
+      requete?.removeEventListener?.("change", suivre)
+      document.removeEventListener("visibilitychange", suivre)
+    }
   }, [endings.length])
+
+  useEffect(() => {
+    if (!ready || enPause) return
+    const timer = window.setInterval(() => setRotation(avancer), PERIODE_MS)
+    return () => window.clearInterval(timer)
+  }, [ready, enPause])
 
   // titre-fin des le HTML pre-rendu : meme repere avant et apres le chargement
   // (et le texte que verifie la mise en prod du front).
@@ -98,7 +145,7 @@ export function RotatingEnd({ endings }: { endings: ReactNode[] }) {
   return (
     <span className={`titre-fin grid pb-[0.12em] ${LIGNE}`}>
       {endings.map((ending, i) => {
-        const etat = etatFin(i, tours, endings.length)
+        const etat = etatFin(i, rotation.tours, endings.length, rotation.pose)
         const lue = etat === "repos" || etat === "entre"
         return (
           <span key={i} data-etat={etat} aria-hidden={!lue} className="[grid-area:1/1] block">

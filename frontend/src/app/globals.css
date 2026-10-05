@@ -294,9 +294,15 @@
    sinon Safari en dessine un trait au milieu de la ligne. L'entree ne garde
    pas son etat final (backwards) : une fois posees, les lettres n'ont plus de
    transform. Ceux qui demandent moins d'animations ne voient jamais ce bloc
-   (le composant reste fixe). Les autres variantes essayees :
-   dev.tymmerc.eu/blindz/apercu-titre/ (description de la PR pour passer de
-   l'une a l'autre). */
+   (le composant reste fixe). Les variantes essayees et ecartees sont decrites
+   dans la PR #51.
+   Pas de crenage sur la fin : en lettres separees elle le perd forcement, et
+   l'ecart (jusqu'a 4 px) se voyait comme un petit saut de la ligne au moment
+   ou elle passe de la forme entiere aux lettres. */
+.titre-fin {
+  font-kerning: none;
+}
+
 .titre-fin [data-etat="attend"] {
   visibility: hidden;
 }
