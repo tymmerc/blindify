@@ -308,4 +308,20 @@ describe("grace de reconnexion apres une coupure reseau", () => {
       await closeTable(t, [back]);
     }
   });
+
+  it("\"Quitter\" garde la revelation immediate, sans grace, et le joueur reste au classement", async () => {
+    const t = await openTable(3, { grace: 4_000 });
+    const [a, b, leaver] = t.clients;
+    try {
+      await answerAll([a, b], t.roomCode, 1);
+      // Comme le client web (handleLeaveRoom) : room:leave puis game:leave, socket ouvert.
+      leaver.socket.emit("room:leave", { roomCode: t.roomCode });
+      leaver.socket.emit("game:leave", { roomCode: t.roomCode });
+
+      await waitFor(inPhase([a, b], "REVEAL"), 1_500, "immediate REVEAL after Quitter");
+      expect(Object.keys(a.lastState()?.players ?? {})).toContain(String(leaver.user.id));
+    } finally {
+      await closeTable(t);
+    }
+  });
 });

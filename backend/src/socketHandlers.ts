@@ -365,6 +365,9 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
       if (liveRoomState && (liveRoomState.phase === "GUESSING" || liveRoomState.phase === "REVEAL")) {
         markDisconnected(roomCode, currentUser.id);
         if (liveRoomState.hostUserId === currentUser.id) setHostConnected(roomCode, false);
+        // Depart volontaire : pas de grace de reconnexion, la manche est revelee
+        // tout de suite si tous les autres ont repondu.
+        tryEarlyReveal(io, roomCode);
       } else {
         removePlayer(roomCode, currentUser.id);
       }
@@ -767,6 +770,9 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
       // des compteurs "X/Y" mais reste au classement. Hors partie, on libere le slot.
       if (liveState && (liveState.phase === "GUESSING" || liveState.phase === "REVEAL")) {
         markDisconnected(roomCode, currentUser.id);
+        // "Quitter" : pas de grace de reconnexion, la manche est revelee tout de
+        // suite si tous les autres ont repondu.
+        tryEarlyReveal(io, roomCode);
       } else {
         removePlayer(roomCode, currentUser.id);
       }
