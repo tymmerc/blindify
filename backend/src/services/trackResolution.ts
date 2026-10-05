@@ -61,32 +61,30 @@ export async function hydratePreviewUrl(source: AudioSourceRow): Promise<string 
 export type ProviderFilter = MusicProvider | "any";
 
 export async function fetchAudioSources(
-  userIds: number | number[],
+  userId: number,
   provider: ProviderFilter,
   count: number,
-  opts: { likedOnly?: boolean; playlistId?: string; timeRange?: string; ownedOnly?: boolean; linkIds?: number[]; excludeKeys?: string[] } = {}
+  opts: { likedOnly?: boolean; playlistId?: string; timeRange?: string; linkIds?: number[]; excludeKeys?: string[] } = {}
 ): Promise<AudioSourceRow[]> {
   const extraConds: string[] = [];
-  const params: unknown[] = [];
-  const userList = Array.isArray(userIds) ? userIds : [userIds];
+  const params: unknown[] = [userId];
 
-  params.push(userList);
-  // A qui est un morceau : les liens joueur-morceau (user_audio_sources). Un
-  // morceau peut etre a plusieurs joueurs ; la ligne rendue porte le joueur de
-  // la liste et SA carte. ownedOnly : uniquement les morceaux de ces joueurs
-  // (pas le fonds commun, sans aucun importeur). Sert a garantir une
-  // attribution "qui a ajoute" fiable.
-  const userCond = opts.likedOnly
-    ? `l.user_id = ANY($1)`
-    : opts.ownedOnly
-      ? `ua.user_id IS NOT NULL`
-      : `(ua.user_id IS NOT NULL OR NOT EXISTS (SELECT 1 FROM user_audio_sources x WHERE x.audio_source_id = s.id))`;
-  let providerCond = "";
+  // Les morceaux de CE joueur, par ses liens joueur-morceau (user_audio_sources) :
+  // jamais le fonds commun, pour une attribution « qui a ajoute » fiable. La
+  // ligne rendue porte le joueur et SA carte (un morceau peut etre a plusieurs).
+  // likedOnly : ses titres likes, relies a sa carte s'il les a importes.
+  const from = opts.likedOnly
+    ? `FROM audio_sources s
+       JOIN likes l ON l.audio_source_id = s.id
+       LEFT JOIN user_audio_sources ua ON ua.audio_source_id = s.id AND ua.user_id = l.user_id
+       WHERE l.user_id = $1`
+    : `FROM user_audio_sources ua
+       JOIN audio_sources s ON s.id = ua.audio_source_id
+       WHERE ua.user_id = $1`;
   if (provider !== "any") {
     params.push(provider);
-    providerCond = `AND s.provider = $2`;
+    extraConds.push(`s.provider = $${params.length}`);
   }
-
   if (opts.playlistId) {
     params.push(opts.playlistId);
     extraConds.push(`s.metadata->>'playlist_id' = $${params.length}`);
@@ -98,7 +96,7 @@ export async function fetchAudioSources(
   // Bibliotheque de liens : ne jouer QUE les titres des cartes cochees.
   if (opts.linkIds) {
     params.push(opts.linkIds);
-    extraConds.push(`${opts.likedOnly ? "s.link_id" : "ua.link_id"} = ANY($${params.length}::int[])`);
+    extraConds.push(`ua.link_id = ANY($${params.length}::int[])`);
   }
   // Morceaux deja tires pour cette partie (meme cle que le dedoublonnage).
   if (opts.excludeKeys?.length) {
@@ -106,32 +104,12 @@ export async function fetchAudioSources(
     extraConds.push(`COALESCE(s.external_id, s.id::text) <> ALL($${params.length}::text[])`);
   }
 
-  const extraClause = extraConds.length ? `AND ${extraConds.join(" AND ")}` : "";
-
-  if (opts.likedOnly) {
-    params.push(count);
-    const limitIndex = params.length;
-    const { rows } = await pool.query<AudioSourceRow>(
-      `SELECT s.id, s.user_id AS user_id, s.provider, s.external_id, s.title, s.artist, s.album_cover, s.audio_url, s.duration_ms, s.metadata, s.link_id
-       FROM audio_sources s
-       INNER JOIN likes l ON l.audio_source_id = s.id
-       WHERE ${userCond} ${providerCond} ${extraClause}
-       ORDER BY RANDOM()
-       LIMIT $${limitIndex}`,
-      params
-    );
-    return rows;
-  }
-
   params.push(count);
-  const limitIndex = params.length;
   const { rows } = await pool.query<AudioSourceRow>(
     `SELECT s.id, ua.user_id AS user_id, s.provider, s.external_id, s.title, s.artist, s.album_cover, s.audio_url, s.duration_ms, s.metadata, ua.link_id AS link_id
-     FROM audio_sources s
-     LEFT JOIN user_audio_sources ua ON ua.audio_source_id = s.id AND ua.user_id = ANY($1)
-     WHERE ${userCond} ${providerCond} ${extraClause}
+     ${from} ${extraConds.map(cond => `AND ${cond}`).join(" ")}
      ORDER BY RANDOM()
-     LIMIT $${limitIndex}`,
+     LIMIT $${params.length}`,
     params
   );
   return rows;
@@ -151,19 +129,18 @@ export function shuffle<T>(arr: T[]): T[] {
 }
 
 export async function collectPlayableSources(
-  userIds: number | number[],
+  userId: number,
   desiredCount: number,
-  opts: { likedOnly?: boolean; playlistId?: string; timeRange?: string; provider?: ProviderFilter; ownedOnly?: boolean; linkIds?: number[]; excludeKeys?: string[] }
+  opts: { likedOnly?: boolean; playlistId?: string; timeRange?: string; provider?: ProviderFilter; linkIds?: number[]; excludeKeys?: string[] }
 ): Promise<AudioSourceRow[]> {
   // Sur-fetch reduit (4x) : moins de recherches Deezer en parallele au lancement
   // (les previews expirent et doivent etre re-cherchees) tout en gardant une marge.
   const candidateLimit = Math.min(desiredCount * 4, 200);
   const providerFilter = opts.provider ?? "any";
-  const candidates = await fetchAudioSources(userIds, providerFilter, candidateLimit, {
+  const candidates = await fetchAudioSources(userId, providerFilter, candidateLimit, {
     likedOnly: opts.likedOnly,
     playlistId: opts.playlistId,
     timeRange: opts.timeRange,
-    ownedOnly: opts.ownedOnly,
     linkIds: opts.linkIds,
     excludeKeys: opts.excludeKeys,
   });

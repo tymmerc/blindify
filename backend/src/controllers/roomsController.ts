@@ -13,7 +13,7 @@ import { startRoundAndBroadcast } from "../services/realtimeOrchestrator";
 import { GameMode, type RoundTrack } from "../types/game";
 import { initStreamerGame } from "../services/streamerOrchestrator";
 import { activeLinkIds } from "./linksController";
-import { bySmallestLibrary, linkTrackToUser, ownersAmong } from "../services/userTracks";
+import { bySmallestLibrary, linkTrackToUser, ownersAmong, PLAYS_TONIGHT } from "../services/userTracks";
 import { isSpotifyId } from "../utils/providerIds";
 import {
   hydratePreviewUrl,
@@ -314,11 +314,7 @@ export const roomsController = {
       participantRows = (await pool.query(
         `SELECT rp.user_id, COALESCE(rp.nickname, u.username) AS username,
                 (SELECT count(*) FROM user_audio_sources ua
-                  WHERE ua.user_id = rp.user_id
-                    AND (
-                      NOT EXISTS (SELECT 1 FROM imported_links il WHERE il.user_id = rp.user_id)
-                      OR EXISTS (SELECT 1 FROM imported_links il2 WHERE il2.id = ua.link_id AND il2.user_id = rp.user_id AND il2.active)
-                    ))::int AS track_count
+                  WHERE ua.user_id = rp.user_id AND ${PLAYS_TONIGHT("ua", "rp.user_id")})::int AS track_count
          FROM room_participants rp
          JOIN users u ON u.id = rp.user_id
          WHERE rp.room_id=$1
@@ -994,7 +990,6 @@ export const roomsController = {
         playlistId: playlistChoice,
         timeRange: timeChoice,
         provider: poolProvider,
-        ownedOnly: true,
         excludeKeys: [...seen],
         ...linkOpts(pid),
       });
@@ -1009,7 +1004,6 @@ export const roomsController = {
       if (need > 0) {
         const slice = await collectPlayableSources(pid, need, {
           provider: poolProvider,
-          ownedOnly: true,
           likedOnly: likedChoice,
           playlistId: playlistChoice,
           timeRange: timeChoice,
@@ -1030,7 +1024,6 @@ export const roomsController = {
         const fill = await collectPlayableSources(pid, room.question_count - collected.length, {
           likedOnly: false,
           provider: poolProvider,
-          ownedOnly: true,
           excludeKeys: [...seen],
           ...linkOpts(pid),
         });
@@ -1048,7 +1041,6 @@ export const roomsController = {
         const fallback = await collectPlayableSources(pid, room.question_count - sources.length, {
           likedOnly: false,
           provider: "any",
-          ownedOnly: true,
           excludeKeys: [...existingKeys],
           ...linkOpts(pid),
         });
@@ -1070,7 +1062,7 @@ export const roomsController = {
       // collectPlayableSources (et pas fetchAudioSources brut) : il rafraichit les
       // extraits et jette ceux sans audio. Sinon on pouvait injecter ici un titre
       // muet et la table restait 10 secondes dans le silence.
-      const personalPool = await collectPlayableSources(pid, 3, { provider: poolProvider, ownedOnly: true, excludeKeys: [...existingKeys], ...linkOpts(pid) });
+      const personalPool = await collectPlayableSources(pid, 3, { provider: poolProvider, excludeKeys: [...existingKeys], ...linkOpts(pid) });
       for (const candidate of personalPool) {
         const key = candidate.external_id ?? String(candidate.id);
         if (existingKeys.has(key)) continue;

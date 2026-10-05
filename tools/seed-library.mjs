@@ -160,6 +160,14 @@ export function cleanupSeeded(userIds = [...seedes]) {
   // marqueur suffit a les retrouver ; attention, audio_sources.id est un UUID.
   psql(`UPDATE audio_sources SET user_id = NULL, metadata = metadata - 'e2e_reclame'
         WHERE metadata->>'e2e_reclame' = 'true'`)
+  // Bibliotheque par joueur (migration 005) : les liens de ces joueurs de test,
+  // y compris vers des morceaux dont ils n'etaient pas le premier importeur.
+  // Garde : la table n'existe qu'une fois la migration passee.
+  if (ids) psql(`DO $$ BEGIN
+          IF to_regclass('public.user_audio_sources') IS NOT NULL THEN
+            DELETE FROM user_audio_sources WHERE user_id IN (${ids});
+          END IF;
+        END $$`)
   if (ids) psql(`DELETE FROM audio_sources WHERE user_id IN (${ids})`)
   // Ceinture et bretelles : les titres inseres portent un marqueur dans metadata,
   // donc un run interrompu (Ctrl-C, timeout, plantage) se rattrape au run

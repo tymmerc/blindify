@@ -7,7 +7,7 @@ import { logger } from "../utils/logger";
 import type { AudioSourceRow } from "../types/audio";
 import axios from "axios";
 import { hydratePreviewUrl } from "../services/trackResolution";
-import { linkTrackToUser } from "../services/userTracks";
+import { linkTrackToUser, UNOWNED } from "../services/userTracks";
 import { isSpotifyId } from "../utils/providerIds";
 
 async function importItunesTopTracks(limit: number): Promise<AudioSourceRow[]> {
@@ -111,10 +111,10 @@ async function fetchGlobalRandomSources(count: number): Promise<AudioSourceRow[]
 }
 
 // La bibliotheque d'un joueur : ses liens joueur-morceau (un morceau peut etre
-// a plusieurs joueurs). Le fonds commun : les morceaux que personne n'a importes.
+// a plusieurs joueurs).
 const OWNED_BY = (userParam: string): string =>
   `EXISTS (SELECT 1 FROM user_audio_sources ua WHERE ua.audio_source_id = s.id AND ua.user_id = ${userParam})`;
-const NO_OWNER = `NOT EXISTS (SELECT 1 FROM user_audio_sources ua WHERE ua.audio_source_id = s.id)`;
+const SOURCE_COLUMNS = `s.id, s.provider, s.external_id, s.title, s.artist, s.album_cover, s.audio_url, s.duration_ms, s.metadata`;
 
 async function fetchAudioSources(
   userId: number,
@@ -142,11 +142,11 @@ async function fetchAudioSources(
 
   if (opts.playlistId) {
     extraParams.push(opts.playlistId);
-    extraConds.push(`metadata->>'playlist_id' = $${baseOffset + extraParams.length}`);
+    extraConds.push(`s.metadata->>'playlist_id' = $${baseOffset + extraParams.length}`);
   }
   if (opts.timeRange) {
     extraParams.push(opts.timeRange);
-    extraConds.push(`metadata->>'time_range' = $${baseOffset + extraParams.length}`);
+    extraConds.push(`s.metadata->>'time_range' = $${baseOffset + extraParams.length}`);
   }
   if (opts.excludeIds?.length) {
     extraParams.push(opts.excludeIds);
@@ -175,13 +175,25 @@ async function fetchAudioSources(
     return rows;
   }
 
-  // General library/playlist/top query
+  // Sa bibliotheque, plus le fonds commun du service (morceaux que personne
+  // n'a importes). Deux branches plutot qu'un OR : avec le OR, Postgres
+  // parcourait toute la table et testait chaque morceau. Sur 150 000 morceaux
+  // (jeu de la relecture de #54) : 284 ms avec le OR, 92 ms ainsi, 42 ms
+  // avant la migration 005.
   const params = [provider, userId, ...extraParams, count];
   const limitIndex = params.length;
+  const filters = `${extraClause} AND ${usedFilter}`;
   const { rows } = await pool.query<AudioSourceRow>(
-    `SELECT s.id, s.provider, s.external_id, s.title, s.artist, s.album_cover, s.audio_url, s.duration_ms, s.metadata
-     FROM audio_sources s
-     WHERE (${OWNED_BY("$2")} OR (s.provider=$1 AND ${NO_OWNER})) ${extraClause ? extraClause + " AND " : " AND "}${usedFilter}
+    `SELECT * FROM (
+       SELECT ${SOURCE_COLUMNS}
+       FROM user_audio_sources ua
+       JOIN audio_sources s ON s.id = ua.audio_source_id
+       WHERE ua.user_id = $2 ${filters}
+       UNION ALL
+       SELECT ${SOURCE_COLUMNS}
+       FROM audio_sources s
+       WHERE s.provider = $1 AND ${UNOWNED("s")} ${filters}
+     ) AS pioche
      ORDER BY RANDOM()
      LIMIT $${limitIndex}`,
     params

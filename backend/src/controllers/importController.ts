@@ -8,14 +8,15 @@ import { parseProfileUrl, fetchPublicPlaylists, fetchPlaylistTracks, type Import
 import { upsertLink, claimLegacyTracks, ownLinkId } from "./linksController";
 import axios from "axios";
 import { deezerPreviewService } from "../services/deezerPreviewService";
-import { linkTrackToUser } from "../services/userTracks";
+import { LINK_UPSERT } from "../services/userTracks";
 
 /** How many tracks to pre-resolve Deezer previews for after import (fire-and-forget). */
 const PRE_RESOLVE_BATCH = 50;
 
 /**
  * Range le morceau dans audio_sources (sans appel Deezer) et le relie a CE
- * joueur, meme si quelqu'un l'avait deja : chacun garde ses morceaux.
+ * joueur, meme si quelqu'un l'avait deja : chacun garde ses morceaux. Une
+ * seule commande : le morceau et le lien arrivent ensemble ou pas du tout.
  */
 async function upsertTrack(
   userId: number,
@@ -23,21 +24,26 @@ async function upsertTrack(
   playlistId: string,
   linkId: number | null,
 ): Promise<void> {
-  const { rows } = await pool.query<{ id: string }>(
-    `INSERT INTO audio_sources (user_id, provider, external_id, title, artist, album_cover, audio_url, duration_ms, metadata, link_id)
-     VALUES ($1, $2, $3, $4, $5, $6, NULL, $7, $8, $9)
-     ON CONFLICT (provider, external_id)
-     DO UPDATE SET
-       album_cover = COALESCE(EXCLUDED.album_cover, audio_sources.album_cover),
-       -- Colonnes historiques (premier importeur), gardees pour un retour
-       -- arriere. Le jeu lit user_audio_sources, ecrite juste apres.
-       user_id = COALESCE(audio_sources.user_id, EXCLUDED.user_id),
-       link_id = CASE
-         WHEN audio_sources.user_id IS NULL OR audio_sources.user_id = EXCLUDED.user_id
-           THEN COALESCE(EXCLUDED.link_id, audio_sources.link_id)
-         ELSE audio_sources.link_id
-       END
-     RETURNING id`,
+  await pool.query(
+    `WITH morceau AS (
+       INSERT INTO audio_sources (user_id, provider, external_id, title, artist, album_cover, audio_url, duration_ms, metadata, link_id)
+       VALUES ($1, $2, $3, $4, $5, $6, NULL, $7, $8, $9)
+       ON CONFLICT (provider, external_id)
+       DO UPDATE SET
+         album_cover = COALESCE(EXCLUDED.album_cover, audio_sources.album_cover),
+         -- Colonnes historiques (premier importeur), gardees pour un retour
+         -- arriere. Le jeu lit user_audio_sources, ecrite juste en dessous.
+         user_id = COALESCE(audio_sources.user_id, EXCLUDED.user_id),
+         link_id = CASE
+           WHEN audio_sources.user_id IS NULL OR audio_sources.user_id = EXCLUDED.user_id
+             THEN COALESCE(EXCLUDED.link_id, audio_sources.link_id)
+           ELSE audio_sources.link_id
+         END
+       RETURNING id
+     )
+     INSERT INTO user_audio_sources (user_id, audio_source_id, link_id)
+     SELECT $1::int, id, $9::int FROM morceau
+     ${LINK_UPSERT}`,
     [
       userId,
       track.provider,
@@ -54,7 +60,6 @@ async function upsertTrack(
       linkId,
     ]
   );
-  await linkTrackToUser(userId, rows[0].id, linkId);
 }
 
 /**

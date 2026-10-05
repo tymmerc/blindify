@@ -1,6 +1,7 @@
 import type { Server as IOServer } from "socket.io";
 import type { StreamerState, StreamerRound, StreamerSubMode } from "../types/streamer";
 import { markMultiplayerRoomFinished } from "./gamePersistence";
+import { roundOwnerIds } from "./roundOwners";
 
 type Guess = { userId: number; guess: string; at: number };
 
@@ -16,9 +17,10 @@ const games = new Map<string, {
   streamerGuess?: Guess;
 }>();
 
+// Qui a apporte le morceau ne le devine pas : le contributeur de la manche,
+// et tout autre joueur de la salle qui l'a importe aussi (roundOwners.ts).
 function enforceProviderRule(round: StreamerRound, userId: number): boolean {
-  const ownerId = (round.metadata as any)?.owner_user_id;
-  return ownerId !== userId;
+  return !roundOwnerIds(round.metadata).includes(userId);
 }
 
 // Phases pendant lesquelles quelqu'un doit encore deviner : la reponse ne
