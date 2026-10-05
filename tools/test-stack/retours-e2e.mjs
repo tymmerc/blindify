@@ -4,7 +4,10 @@
 //   2. un solo sur ordinateur (1440x900) : avis « Oui », formulaire ouvert puis
 //      referme a Echap ;
 //   3. les lignes de game_feedback dans la base DE TEST ;
-//   4. l'onglet Retours du tableau de bord, servi en local contre la base de
+//   4. un bug « a distance » envoye a l'API de la pile avec un code de salle :
+//      le backend doit retrouver la partie (salle et partie inserees en base de
+//      test, le solo par lien n'a pas de partie en base) ;
+//   5. l'onglet Retours du tableau de bord, servi en local contre la base de
 //      test, puis contre une base vide (« table pas encore creee »).
 //
 //   tools/test-stack/campagne-ref.sh <branche> --script <ce fichier> [--out DOSSIER]
@@ -19,6 +22,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { APP, heardTrack, newPage, sleep } from "./probe.mjs"
 import { psql, CONTAINER } from "./testdb.mjs"
+import { api } from "./bot.mjs"
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const REPO = path.resolve(HERE, "../..")
@@ -27,6 +31,8 @@ const LINK = "https://www.deezer.com/fr/playlist/"
 const args = process.argv.slice(2)
 const OUT = args.includes("--out") ? args[args.indexOf("--out") + 1] : "/opt/mira/dossier/preuves/2026-10-05-blindz-retours"
 const BUG_TEXT = "Le son a coupé à la manche 3 <img src=x onerror=alert(1)>"
+const ROOM_BUG_TEXT = "Mon tel a perdu la salle à la manche 2"
+const ROOM_CODE = "RTR5E2"
 const STACK_DB = "postgres://blindify:test@127.0.0.1:5436/blindify_test"
 
 fs.mkdirSync(OUT, { recursive: true })
@@ -130,12 +136,33 @@ function checkRows() {
   fs.writeFileSync(path.join(OUT, "game_feedback-pile.txt"), psql(`SELECT id, kind, answer, mode, session_id, game_code, app_version, created_at, left(user_agent, 60) AS user_agent, message FROM game_feedback ORDER BY id`) + "\n")
   console.log(rows.map(r => r.join(" | ")).join("\n"))
   check(rows.length === 3, `base de test : 3 lignes dans game_feedback (${rows.length})`)
+  // Le solo lance par un lien (quick play) n'ecrit aucune partie en base
+  // (session id 0 cote client) : session_id reste vide, c'est attendu.
   const [pasTrop, bug, oui] = rows
-  check(pasTrop?.slice(0, 4).join() === "avis,pas_trop,solo,true", "base : avis « pas_trop » du solo, rattache a sa partie")
-  check(bug?.[0] === "bug" && bug?.[1] === "-" && bug?.[3] === "true" && bug?.[4] === BUG_TEXT, "base : bug du solo avec son texte intact, rattache a sa partie")
-  check(oui?.slice(0, 4).join() === "avis,oui,solo,true", "base : avis « oui » du solo ordinateur")
+  check(pasTrop?.slice(0, 4).join() === "avis,pas_trop,solo,false", "base : avis « pas_trop » du solo telephone, sans partie en base (solo par lien)")
+  check(bug?.[0] === "bug" && bug?.[1] === "-" && bug?.[2] === "solo" && bug?.[4] === BUG_TEXT, "base : bug du solo avec son texte intact, balises comprises")
+  check(oui?.slice(0, 4).join() === "avis,oui,solo,false", "base : avis « oui » du solo ordinateur")
   check(rows.every(r => r[5] === commit), `base : version du front = commit teste (${commit})`)
   check(rows.every(r => r[6] === "true"), "base : navigateur enregistre")
+}
+
+/**
+ * Bug envoye depuis une partie « a distance » : le client ne connait que le
+ * code de la salle, le backend doit retrouver la partie. Salle et partie sont
+ * inserees dans la base de test (une vraie partie a plusieurs telephones est
+ * deja jouee par la campagne) ; l'envoi passe par l'API de la pile, avec son
+ * controle d'origine, sa validation et sa limite.
+ */
+async function roomFeedback() {
+  const sessionId = Number(psql(`INSERT INTO game_sessions (mode, state, room_code, total_rounds) VALUES ('friends', 'finished', '${ROOM_CODE}', 5) RETURNING id`).split("\n")[0])
+  psql(`INSERT INTO multiplayer_rooms (room_code, session_id, status) VALUES ('${ROOM_CODE}', ${sessionId}, 'finished')`)
+  const sent = await api("/api/feedback", { method: "POST", body: { kind: "bug", mode: "friends", gameCode: ROOM_CODE.toLowerCase(), message: ROOM_BUG_TEXT } })
+  check(sent.status === 201, `api : bug « a distance » accepte (${sent.status})`)
+  const refused = await api("/api/feedback", { method: "POST", body: { kind: "avis", mode: "tele" } })
+  check(refused.status === 400 && refused.error?.code === "invalid_mode", `api : mode inconnu refuse (${refused.status} ${refused.error?.code})`)
+  const row = psql(`SELECT mode, session_id, game_code FROM game_feedback WHERE message = '${ROOM_BUG_TEXT.replace(/'/g, "''")}'`)
+  check(row === `friends|${sessionId}|${ROOM_CODE}`, `base : bug « a distance » rattache a sa partie par le code de salle (${row})`)
+  return sessionId
 }
 
 /* ------------------------- tableau de bord ------------------------- */
@@ -168,6 +195,9 @@ function startAdminServer(port, apiPort) {
       req.pipe(up)
       return
     }
+    if (url === "/blindz/logo.png" && fs.existsSync("/opt/dev/blindz/logo.png")) {
+      res.writeHead(200, { "Content-Type": "image/png" }); res.end(fs.readFileSync("/opt/dev/blindz/logo.png")); return
+    }
     if (url === "/blindz/" || url.startsWith("/blindz/#") || url.startsWith("/blindz/?")) {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }); res.end(page); return
     }
@@ -185,7 +215,7 @@ async function waitHttp(url, seconds = 20) {
   return false
 }
 
-async function adminCheck(browser) {
+async function adminCheck(browser, roomSessionId) {
   const children = []
   const servers = []
   try {
@@ -205,20 +235,26 @@ async function adminCheck(browser) {
     await page.goto("http://127.0.0.1:3103/blindz/#retours", { waitUntil: "networkidle" })
     await page.locator(".retour").first().waitFor({ timeout: 10000 })
     const cards = await page.locator(".retour").count()
-    check(cards === 3, `tableau de bord : 3 retours affiches (${cards})`)
-    const first = await page.locator(".retour").first().innerText()
-    check(first.includes("oui") && !first.includes("pas trop"), "tableau de bord : le plus recent d'abord (avis « oui » du solo ordinateur)")
-    const bugText = await page.locator(".retour.bug .texte").innerText()
+    check(cards === 4, `tableau de bord : 4 retours affiches (${cards})`)
+    // textContent et pas innerText : les pastilles sont en capitales (CSS).
+    const order = await page.locator(".retour .texte, .retour .aide").allTextContents()
+    check(order[0] === ROOM_BUG_TEXT && order[1] === "avis rapide, sans texte" && order[2] === BUG_TEXT,
+      "tableau de bord : le plus recent d'abord (bug a distance, puis avis oui, puis bug du telephone)")
+    const kpis = await page.locator("#retours .kpi .v").allTextContents()
+    check(kpis.join() === "1,1,2", `tableau de bord : compteurs oui / pas trop / bugs (${kpis.join(" / ")})`)
+    const bugText = await page.locator(".retour.bug .texte").nth(1).textContent()
     check(bugText === BUG_TEXT, "tableau de bord : le texte du bug est affiche tel quel, balises comprises")
     check(await page.locator(".retour img").count() === 0 && scripts.length === 0, "tableau de bord : aucune balise injectee, aucun script execute")
     await shot(page, "7-admin-retours-1440x900")
     await page.locator("#filtre-retours button[data-f='bug']").click()
     await page.locator(".retour").first().waitFor()
-    check(await page.locator(".retour").count() === 1, "tableau de bord : le filtre « bugs » ne garde que le bug")
+    check(await page.locator(".retour").count() === 2 && await page.locator(".retour.bug").count() === 2, "tableau de bord : le filtre « bugs » ne garde que les 2 bugs")
     await shot(page, "8-admin-retours-bugs-1440x900")
+    const links = await page.locator(".retour .lien").allTextContents()
+    check(links.length === 1 && links[0] === `partie ${roomSessionId}`, `tableau de bord : seul le bug a distance a un lien vers sa partie (${links.join(", ") || "aucun"})`)
     await page.locator(".retour .lien").first().click()
-    await page.locator(".tiroir").waitFor({ timeout: 10000 })
-    check(await page.locator(".tiroir").isVisible(), "tableau de bord : le lien « partie N » ouvre le detail de la partie")
+    await page.locator(".tiroir h2").waitFor({ timeout: 10000 })
+    check(await page.locator(".tiroir h2").textContent() === `Partie ${roomSessionId}`, "tableau de bord : le lien « partie N » ouvre le detail de la partie")
     await page.keyboard.press("Escape")
     await page.setViewportSize({ width: 390, height: 844 })
     await page.locator("#filtre-retours button[data-f='']").click()
@@ -249,7 +285,8 @@ try {
   await phoneGame(browser)
   await desktopGame(browser)
   checkRows()
-  await adminCheck(browser)
+  const roomSessionId = await roomFeedback()
+  await adminCheck(browser, roomSessionId)
 } catch (e) {
   problems.push(`arret : ${String(e.message).split("\n").slice(0, 4).join(" / ").slice(0, 400)}`)
   console.log(`[ECHEC] arret : ${e.message}`)
