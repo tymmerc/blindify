@@ -46,14 +46,16 @@ function ShareScoreButton({ stats, roundStates }: { stats: ChallengeScore; round
   )
 }
 
-function ReplayActions({ primary, onReplay }: { primary: boolean; onReplay: () => void }) {
+// Venu pour defier : Rejouer passe en secondaire et "Changer de playlist"
+// ramene sur l'onglet du defi, pas sur le classique.
+function ReplayActions({ challenge, onReplay }: { challenge: boolean; onReplay: () => void }) {
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
-      <button type="button" className={primary ? "btn-neon justify-center" : OUTLINE_BUTTON} onClick={onReplay}>
+      <button type="button" className={challenge ? OUTLINE_BUTTON : "btn-neon justify-center"} onClick={onReplay}>
         <RotateCcw className="h-4 w-4" />
         Rejouer
       </button>
-      <Link href="/solo" className={OUTLINE_BUTTON}>
+      <Link href={challenge ? "/solo?tab=challenge" : "/solo"} className={OUTLINE_BUTTON}>
         Changer de playlist
       </Link>
     </div>
@@ -74,7 +76,7 @@ export function SoloEndScreen({ stats, accuracy, roundStates, tracks, playerName
             {goodAnswers} · série max {stats.bestStreak} · précision {accuracy}&nbsp;%
           </p>
         </div>
-        {!challengeFirst && <ReplayActions primary onReplay={onReplay} />}
+        {!challengeFirst && <ReplayActions challenge={false} onReplay={onReplay} />}
       </section>
 
       {showChallenge && (
@@ -86,7 +88,7 @@ export function SoloEndScreen({ stats, accuracy, roundStates, tracks, playerName
         />
       )}
 
-      {challengeFirst && <ReplayActions primary={false} onReplay={onReplay} />}
+      {challengeFirst && <ReplayActions challenge onReplay={onReplay} />}
 
       <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-3 text-sm">
         <ShareScoreButton stats={stats} roundStates={roundStates} />
