@@ -168,7 +168,26 @@ async function comparatif(view) {
   await page.context().close()
 }
 
+// Le HTML brut (sans navigateur) : c'est ce que lisent les moteurs, et c'est le
+// texte que go-prod-front.sh cherchera sur blindz.app pour prouver la mise en prod.
+const ATTENDU = "encore en bêta, il reste sûrement quelques bugs"
+async function rawHtml() {
+  say("-- HTML brut")
+  const get = async route => {
+    // 127.0.0.1 et pas blindz-test.localhost : hors Chrome, ce nom se resout en ::1, ou le proxy n'ecoute pas.
+    const r = await fetch(`http://127.0.0.1:3180/blindify${route}`, { headers: { "X-E2E-Key": KEY } })
+    return r.ok ? r.text() : ""
+  }
+  const home = await get("/")
+  expect(home.includes(ATTENDU), `accueil : le texte attendu par go-prod-front.sh est dans le HTML brut (« ${ATTENDU} »)`)
+  const comp = await get("/comparatif-blind-test/")
+  expect(/<td[^>]*>Blinest<\/td>/.test(comp), "comparatif : la ligne Blinest est dans le HTML pre-rendu")
+  const faqHtml = await get("/faq/")
+  expect(faqHtml.includes("marqué « bêta »"), "faq : la question beta est dans le HTML pre-rendu")
+}
+
 try {
+  await rawHtml()
   for (const view of VIEWS) {
     await landing(view)
     await faq(view)
