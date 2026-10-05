@@ -78,6 +78,12 @@ try {
       await page.screenshot({ path: `${OUT}/${slug}-${tag}-haut.png` })
       await page.screenshot({ path: `${OUT}/${slug}-${tag}-entiere.png`, fullPage: true })
     }
+    // Guides plus anciens qui partagent le gabarit des etapes (Steps) : capture seule.
+    for (const slug of ["blind-test-spotify", "blind-test-deezer"]) {
+      await page.goto(`${APP}/${slug}/`, { waitUntil: "networkidle", timeout: 60000 })
+      await sleep(600)
+      await page.screenshot({ path: `${OUT}/${slug}-${tag}-entiere.png`, fullPage: true })
+    }
     // Le CTA mene bien au jeu (navigation client Next).
     await page.goto(`${APP}/blind-test-tv/`, { waitUntil: "networkidle" })
     await page.getByRole("link", { name: "Jouer, c'est gratuit" }).click()
