@@ -36,6 +36,8 @@
   .logo { width:36px; height:36px; border-radius:9px; background:var(--cream); display:grid; place-items:center; flex:none; }
   .logo img { width:26px; height:26px; object-fit:contain; display:block; }
   .htxt { flex:1 1 200px; }
+  header a.vers { font-size:13px; color:var(--txt-2); text-decoration:none; border:1px solid var(--line-2); border-radius:6px; padding:6px 11px; }
+  header a.vers:hover { color:var(--amber); border-color:var(--amber); }
   .maj { font-family:"IBM Plex Mono",monospace; font-size:10.5px; color:var(--txt-3); text-transform:uppercase; letter-spacing:.1em; }
 
   /* ---- santé ---- */
@@ -198,6 +200,8 @@
   <header>
     <span class="logo"><img src="logo.png" alt=""></span>
     <div class="htxt"><h1>Administration Blindz</h1><p class="maj" id="maj">chargement</p></div>
+    <!-- Rapport GoAccess du journal nginx de blindz.app, regenere chaque heure (infra/visites/). -->
+    <a class="vers" href="visites/">Visites du site</a>
   </header>
 
   <div class="sante" id="sante" aria-live="polite">

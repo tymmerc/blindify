@@ -1,0 +1,31 @@
+# Rapport de visites de blindz.app (GoAccess), lance par blindz-visites.timer.
+#
+# Installation (copies hors git, a refaire si ces fichiers changent) :
+#   install -m 755 infra/visites/blindz-visites.sh /usr/local/sbin/blindz-visites
+#   install -d -m 755 /opt/dev/blindz/visites
+#   install -m 644 infra/visites/blindz-visites.service infra/visites/blindz-visites.timer /etc/systemd/system/
+#   systemctl daemon-reload && systemctl enable --now blindz-visites.timer
+# Lancer a la main : systemctl start blindz-visites ; journal : journalctl -u blindz-visites
+# Retirer : systemctl disable --now blindz-visites.timer, supprimer les deux
+# unites, /usr/local/sbin/blindz-visites, /var/lib/blindz-visites et
+# /opt/dev/blindz/visites, puis systemctl daemon-reload.
+[Unit]
+Description=Rapport de visites de blindz.app (GoAccess)
+After=network-online.target nginx.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/blindz-visites
+StateDirectory=blindz-visites
+StateDirectoryMode=0700
+# Tache de fond legere (quelques Mo de journal par jour) : jamais devant le jeu.
+Nice=19
+IOSchedulingClass=idle
+MemoryMax=384M
+TimeoutStartSec=10min
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/blindz-visites /opt/dev/blindz/visites
