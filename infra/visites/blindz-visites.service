@@ -1,14 +1,17 @@
 # Rapport de visites de blindz.app (GoAccess), lance par blindz-visites.timer.
 #
 # Installation (copies hors git, a refaire si ces fichiers changent) :
+#   useradd --system --user-group --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin blindz-visites
 #   install -m 755 infra/visites/blindz-visites.sh /usr/local/sbin/blindz-visites
-#   install -d -m 755 /opt/dev/blindz/visites
+#   install -D -m 644 infra/visites/anonymiser.py /usr/local/lib/blindz-visites/anonymiser.py
+#   install -d -m 755 -o blindz-visites -g blindz-visites /opt/dev/blindz/visites
 #   install -m 644 infra/visites/blindz-visites.service infra/visites/blindz-visites.timer /etc/systemd/system/
 #   systemctl daemon-reload && systemctl enable --now blindz-visites.timer
 # Lancer a la main : systemctl start blindz-visites ; journal : journalctl -u blindz-visites
 # Retirer : systemctl disable --now blindz-visites.timer, supprimer les deux
-# unites, /usr/local/sbin/blindz-visites, /var/lib/blindz-visites et
-# /opt/dev/blindz/visites, puis systemctl daemon-reload.
+# unites, /usr/local/sbin/blindz-visites, /usr/local/lib/blindz-visites,
+# /var/lib/blindz-visites et /opt/dev/blindz/visites, userdel blindz-visites,
+# puis systemctl daemon-reload.
 [Unit]
 Description=Rapport de visites de blindz.app (GoAccess)
 After=network-online.target nginx.service
@@ -17,8 +20,14 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 ExecStart=/usr/local/sbin/blindz-visites
+# Utilisateur dedie, sans root : il lit les journaux nginx (groupe adm, comme
+# logrotate les cree en www-data:adm 640) et n'ecrit que sa base et le rapport.
+User=blindz-visites
+Group=blindz-visites
+SupplementaryGroups=adm
 StateDirectory=blindz-visites
 StateDirectoryMode=0700
+UMask=0077
 # Tache de fond legere (quelques Mo de journal par jour) : jamais devant le jeu.
 Nice=19
 IOSchedulingClass=idle
@@ -29,3 +38,22 @@ PrivateTmp=yes
 ProtectHome=yes
 ProtectSystem=strict
 ReadWritePaths=/var/lib/blindz-visites /opt/dev/blindz/visites
+# Durcissement (systemd-analyze security blindz-visites) : aucune capacite,
+# reseau limite a IP et sockets locales (curl du garde-fou 401), noyau et
+# peripheriques hors d'atteinte, appels systeme d'un service ordinaire.
+# Pas de ProcSubset=pid : le filtre lit les adresses du VPS dans /proc/net.
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+PrivateDevices=yes
+LockPersonality=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
