@@ -1,0 +1,94 @@
+{
+  "SchemaVersion": 2,
+  "Trivy": { "Version": "0.74.0" },
+  "ArtifactName": "exemple:test",
+  "ArtifactType": "container_image",
+  "Metadata": { "OS": { "Family": "alpine", "Name": "3.24.2" } },
+  "Results": [
+    {
+      "Target": "exemple:test (alpine 3.24.2)",
+      "Class": "os-pkgs",
+      "Type": "alpine",
+      "Vulnerabilities": [
+        {
+          "VulnerabilityID": "CVE-2099-0002",
+          "PkgName": "busybox",
+          "InstalledVersion": "1.37.0-r1",
+          "Status": "affected",
+          "Severity": "CRITICAL",
+          "PrimaryURL": "https://exemple.invalid/adresse avec espace"
+        },
+        {
+          "VulnerabilityID": "CVE-2099-0001",
+          "PkgName": "libcrypto3",
+          "InstalledVersion": "3.5.0-r0",
+          "FixedVersion": "3.5.1-r0",
+          "Status": "fixed",
+          "Severity": "CRITICAL",
+          "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2099-0001"
+        }
+      ]
+    },
+    {
+      "Target": "Node.js",
+      "Class": "lang-pkgs",
+      "Type": "node-pkg",
+      "Vulnerabilities": [
+        {
+          "VulnerabilityID": "CVE-2099-0003",
+          "PkgName": "paquet|piege",
+          "PkgPath": "app/node_modules/paquet/package.json",
+          "InstalledVersion": "1.0.0",
+          "FixedVersion": "1.0.1",
+          "Status": "fixed",
+          "Severity": "HIGH",
+          "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2099-0003"
+        },
+        {
+          "VulnerabilityID": "CVE-2099-0004",
+          "PkgName": "<img src=x>",
+          "PkgPath": "usr/local/lib/node_modules/npm/node_modules/x/package.json",
+          "InstalledVersion": "2.0.0",
+          "FixedVersion": "2.0.1",
+          "Status": "fixed",
+          "Severity": "HIGH"
+        },
+        {
+          "VulnerabilityID": "CVE-2099-0005",
+          "PkgName": "moyen",
+          "PkgPath": "app/node_modules/moyen/package.json",
+          "InstalledVersion": "1.0.0",
+          "FixedVersion": "1.0.2",
+          "Status": "fixed",
+          "Severity": "MEDIUM"
+        },
+        {
+          "VulnerabilityID": "CVE-2099-0006",
+          "PkgName": "faible",
+          "PkgPath": "app/node_modules/faible/package.json",
+          "InstalledVersion": "1.0.0",
+          "Status": "will_not_fix",
+          "Severity": "LOW"
+        }
+      ]
+    },
+    {
+      "Target": "/app/.env",
+      "Class": "secret",
+      "Secrets": [
+        {
+          "RuleID": "exemple-cle",
+          "Category": "Exemple",
+          "Severity": "HIGH",
+          "Title": "Cle d'exemple",
+          "StartLine": 3,
+          "EndLine": 3,
+          "Match": "API_KEY=valeur-qui-ne-doit-pas-sortir",
+          "Code": {
+            "Lines": [{ "Number": 3, "Content": "API_KEY=valeur-qui-ne-doit-pas-sortir" }]
+          }
+        }
+      ]
+    }
+  ]
+}
