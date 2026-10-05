@@ -295,4 +295,29 @@ describe("clientApi", () => {
       await expect(clientApi.login("bob", "pass")).rejects.toThrow(TypeError)
     })
   })
+
+  describe("sendFeedback", () => {
+    it("POSTe le retour et passe le signal d'abandon a fetch", async () => {
+      mockFetch.mockResolvedValueOnce(okResponse({ received: true }))
+      const controller = new AbortController()
+
+      await clientApi.sendFeedback({ kind: "avis", answer: "oui", mode: "solo" }, controller.signal)
+
+      const [url, init] = mockFetch.mock.calls[0]
+      expect(url).toContain("/api/feedback")
+      expect(init.method).toBe("POST")
+      expect(init.signal).toBe(controller.signal)
+      expect(JSON.parse(init.body)).toEqual({ kind: "avis", answer: "oui", mode: "solo" })
+    })
+
+    it("remonte un 429 en ApiError avec son statut", async () => {
+      mockFetch.mockResolvedValueOnce(errorResponse(429, "rate_limited", "Trop de retours d'un coup."))
+
+      await expect(clientApi.sendFeedback({ kind: "bug", mode: "chrono" })).rejects.toMatchObject({
+        name: "ApiError",
+        status: 429,
+        code: "rate_limited",
+      })
+    })
+  })
 })

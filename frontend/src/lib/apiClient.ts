@@ -1,4 +1,5 @@
 import { API_BASE_URL } from "./config"
+import type { FeedbackPayload } from "./feedback"
 import type {
   GameHistoryEntry,
   GameSessionSummary,
@@ -415,6 +416,15 @@ export const clientApi = {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message, pageUrl }),
+    })
+  },
+  /** Retour de fin de partie (avis rapide ou bug), voir lib/feedback.ts. */
+  async sendFeedback(payload: FeedbackPayload, signal?: AbortSignal): Promise<{ received: boolean }> {
+    return request<{ received: boolean }>("/api/feedback", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal,
     })
   },
   async detailedStats(): Promise<{

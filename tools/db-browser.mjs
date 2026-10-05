@@ -15,19 +15,24 @@ import { createRequire } from "module"
 
 const { Pool, escapeIdentifier, DatabaseError } = createRequire("/opt/blindify/backend/package.json")("pg")
 
-const PORT = 3101
+const PORT = Number(process.env.DB_BROWSER_PORT) || 3101
 const MAX_LIGNES = 500
 const DELAI_MS = 8000
 
-const pool = new Pool({
-  host: "127.0.0.1",
-  port: 5432,
-  user: "blindz_ro",
-  password: fs.readFileSync("/root/.blindz-ro-pass", "utf8").trim(),
-  database: "blindify",
-  max: 4,
-  idleTimeoutMillis: 30000,
-})
+// DB_BROWSER_URL sert aux essais sur la pile de test (base jetable, voir
+// tools/test-stack/retours-e2e.mjs) : le service tourne alors sur cette base
+// au lieu de la prod. Sans elle, rien ne change : role blindz_ro, base de prod.
+const pool = new Pool(process.env.DB_BROWSER_URL
+  ? { connectionString: process.env.DB_BROWSER_URL, max: 4, idleTimeoutMillis: 30000 }
+  : {
+      host: "127.0.0.1",
+      port: 5432,
+      user: "blindz_ro",
+      password: fs.readFileSync("/root/.blindz-ro-pass", "utf8").trim(),
+      database: "blindify",
+      max: 4,
+      idleTimeoutMillis: 30000,
+    })
 
 /** Execute en lecture seule, avec un delai maximal. */
 async function lire(sql, params = []) {
@@ -123,6 +128,37 @@ const server = http.createServer(async (req, res) => {
         `SELECT u.username AS joueur, p.score, p.accuracy, p.best_streak AS serie
          FROM game_participants p LEFT JOIN users u ON u.id=p.user_id WHERE p.session_id=$1 ORDER BY p.score DESC`, [id])
       return json(res, 200, { partie: partie[0], manches, reponses, participants })
+    }
+
+    // Retours de fin de partie (table game_feedback, migration 004), les plus
+    // recents d'abord. Avant le deploiement la table n'existe pas : on le dit
+    // au lieu de repondre 500. Meme chose si blindz_ro n'a pas recu le GRANT.
+    if (chemin === "/retours") {
+      const { rows: etat } = await lire(
+        `SELECT to_regclass('public.game_feedback') IS NOT NULL AS existe,
+                COALESCE(has_table_privilege(to_regclass('public.game_feedback'), 'SELECT'), false) AS lisible`
+      )
+      if (!etat[0].existe) return json(res, 200, { table: false })
+      if (!etat[0].lisible) return json(res, 200, { table: true, lisible: false })
+      const type = url.searchParams.get("type")
+      const filtre = type === "avis" || type === "bug" ? type : null
+      const { rows: retours } = await lire(
+        `SELECT id, kind AS type, answer AS reponse, message, mode, session_id, game_code,
+                user_agent, app_version,
+                to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI') AS le
+         FROM game_feedback
+         WHERE $1::text IS NULL OR kind = $1
+         ORDER BY created_at DESC, id DESC
+         LIMIT ${MAX_LIGNES}`, [filtre]
+      )
+      const { rows: compte } = await lire(
+        `SELECT count(*)::int AS total,
+                count(*) FILTER (WHERE answer = 'oui')::int AS oui,
+                count(*) FILTER (WHERE answer = 'pas_trop')::int AS pas_trop,
+                count(*) FILTER (WHERE kind = 'bug')::int AS bugs
+         FROM game_feedback`
+      )
+      return json(res, 200, { table: true, lisible: true, filtre, compte: compte[0], retours, tronque: retours.length >= MAX_LIGNES })
     }
 
     // Liste des tables avec leur nombre de lignes réel.
