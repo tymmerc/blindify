@@ -7,6 +7,10 @@
 //   node tools/pcfixes-e2e.mjs --pile   sur la pile de test : le bouton d'import
 //                                       est teste pour de vrai, il interroge le
 //                                       faux Deezer local (aucun risque Akamai)
+//
+// Variables utiles pour rejouer un passage (voir test-stack/serie-pcfixes.mjs) :
+//   PCFIXES_PROFIL=4321   profil factice impose au lieu d'un tirage (--pile)
+//   PCFIXES_SHOTS=/dossier  ou ranger les captures
 import { chromium, devices } from "@playwright/test"
 import fs from "fs"
 import { seedLibrary, cleanupSeeded } from "./seed-library.mjs"
@@ -14,7 +18,7 @@ import { seedLibrary, cleanupSeeded } from "./seed-library.mjs"
 const PILE = process.argv.includes("--pile")
 const B = PILE ? "http://blindz-test.localhost:3180/blindify" : "https://dev.tymmerc.eu/blindify"
 const KEY = fs.readFileSync("/opt/blindify/.e2e-bypass-key", "utf8").trim()
-const SHOTS = "/opt/blindify/maquettes/shots/pcfixes"
+const SHOTS = process.env.PCFIXES_SHOTS || "/opt/blindify/maquettes/shots/pcfixes"
 fs.mkdirSync(SHOTS, { recursive: true })
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 const problems = []
@@ -31,6 +35,14 @@ host.on("pageerror", e => bad(`HOTE crash: ${String(e).slice(0, 120)}`))
 let hostId = null
 host.on("response", async r => {
   if (/\/api\/auth\/(guest|me)/.test(r.url())) { try { hostId = (await r.json())?.data?.user?.id ?? hostId } catch { /* autre */ } }
+  // Reponse de l'API au lancement : si la partie ne demarre pas, la sortie dit
+  // pourquoi (ex. insufficient_tracks) au lieu du seul "bras jamais leve".
+  if (/\/api\/rooms\/[A-Z0-9]+\/start$/.test(new URL(r.url()).pathname)) {
+    const body = await r.json().catch(() => null)
+    say(`  lancement : HTTP ${r.status()}`, body?.error
+      ? `${body.error.code} ${JSON.stringify(body.error.details ?? {})}`
+      : `${body?.data?.session?.totalRounds ?? "?"} manche(s)`)
+  }
 })
 await host.goto(`${B}/jouer/`, { waitUntil: "networkidle", timeout: 90000 })
 await host.locator("input").first().fill("Tymeo")
@@ -39,7 +51,8 @@ if (PILE) {
   // Profil factice different a chaque passage : la regle "le premier importeur
   // garde le titre" donnerait sinon 0 titre au second import du meme profil
   // sur une pile deja utilisee (vu le 30/09, c'est un vrai sujet produit).
-  const profil = 3000 + Math.floor(Math.random() * 6000)
+  const profil = Number(process.env.PCFIXES_PROFIL) || 3000 + Math.floor(Math.random() * 6000)
+  say(`  profil factice ${profil}`)
   await host.locator('input[placeholder^="https://"]').fill(`https://www.deezer.com/profile/${profil}`)
   await host.getByRole("button", { name: /importer ma musique/i }).click()
   await host.getByText(/titres? importés?/).waitFor({ timeout: 90000 })
