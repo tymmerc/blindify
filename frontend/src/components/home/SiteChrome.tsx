@@ -63,7 +63,7 @@ export function SiteFooter() {
             un souci : le formulaire existant (table bug_reports). */}
         <p className="mb-6 max-w-[40rem] text-[15px] leading-relaxed">
           blindz.app est encore en bêta, il reste sûrement quelques bugs. Si tu tombes sur un truc qui
-          cloche, <BugReportLink>signale-le ici</BugReportLink>.
+          cloche, <BugReportLink>signale-le</BugReportLink>.
         </p>
         {/* Guides : maillage interne, les moteurs y trouvent les pages de contenu. */}
         <nav aria-label="Guides" className="mb-6 flex flex-wrap gap-x-5 gap-y-2 font-mono text-[11px] font-bold uppercase tracking-[0.14em]">

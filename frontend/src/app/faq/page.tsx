@@ -69,7 +69,7 @@ const FAQ: Array<{ q: string; a: string }> = [
   },
   {
     q: "Pourquoi blindz.app est marqué « bêta » ?",
-    a: "Parce que le jeu est encore jeune. On peut déjà y jouer en entier, gratuitement, mais il reste sûrement des bugs, et des choses changent encore au fil des semaines. Si quelque chose ne marche pas comme prévu, dis-le-nous : le lien « signale-le ici », en bas de cette page et de l'accueil, ouvre un petit formulaire, et une fois dans le jeu c'est « Signaler un bug » dans le menu du compte, en haut à droite.",
+    a: "Parce que le jeu est encore jeune. On peut déjà y jouer en entier, gratuitement, mais il reste sûrement des bugs, et des choses changent encore au fil des semaines. Si quelque chose ne marche pas comme prévu, dis-le-nous : le lien « signale-le », en bas de cette page et de l'accueil, ouvre un petit formulaire, et une fois dans le jeu c'est « Signaler un bug » dans le menu du compte, en haut à droite.",
   },
 ]
 

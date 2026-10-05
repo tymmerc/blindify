@@ -24,9 +24,12 @@ describe("SiteChrome : mention beta", () => {
   it("le lien du pied de page ouvre le signalement de bug", () => {
     const opened = vi.fn()
     window.addEventListener(BUG_REPORT_EVENT, opened)
-    render(<SiteFooter />)
-    fireEvent.click(screen.getByRole("button", { name: "signale-le ici" }))
-    window.removeEventListener(BUG_REPORT_EVENT, opened)
+    try {
+      render(<SiteFooter />)
+      fireEvent.click(screen.getByRole("button", { name: "signale-le" }))
+    } finally {
+      window.removeEventListener(BUG_REPORT_EVENT, opened)
+    }
     expect(opened).toHaveBeenCalledTimes(1)
   })
 
