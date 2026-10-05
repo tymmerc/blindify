@@ -1,0 +1,11 @@
+# Toutes les heures a :17 (gen-stats.sh tourne a :07). Persistent : un passage
+# manque pendant un arret de la machine est rattrape au demarrage.
+[Unit]
+Description=Rapport de visites de blindz.app toutes les heures
+
+[Timer]
+OnCalendar=*-*-* *:17:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
