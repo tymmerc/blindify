@@ -550,6 +550,13 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
         emitRoomError(socket, roomCode, "Aucune partie en cours.");
         return;
       }
+      // Partie deja finie (l'etat FINISHED reste une minute en memoire) : un
+      // "pret" tardif ne repasse pas par la fin de partie, sinon user_stats
+      // compterait la partie et l'XP une deuxieme fois. Il recoit juste l'etat.
+      if (existing.phase === "FINISHED") {
+        sendStateToSocket(roomCode);
+        return;
+      }
       logger.debug(`game:ready phase before markReady: ${existing.phase}, round: ${existing.currentRound}`);
       const beforeRound = existing.currentRound;
       const state = markReadyState(roomCode, currentUser.id);

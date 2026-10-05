@@ -136,7 +136,11 @@ export function startRoundAndBroadcast(
   logger.debug(`startRoundAndBroadcast ${roomCode}: round=${state?.currentRound}, phase=${state?.phase}, revealAt=${state?.timing?.revealAt}`);
   if (!state) return undefined;
   if (state.phase === "FINISHED") {
-    emitGameOver(io, state);
+    // Fin de partie par le filet anti-AFK (personne n'a clique "pret" apres la
+    // derniere manche) : meme chemin que game:ready, sinon les resultats
+    // n'etaient jamais ecrits en base (trouve le 05/10/2026).
+    emitState(io, roomCode);
+    broadcastGameOver(io, roomCode);
     return state;
   }
   // Emit complete state FIRST so clients have everything before processing
