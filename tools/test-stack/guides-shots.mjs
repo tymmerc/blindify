@@ -39,8 +39,12 @@ async function checkSeo(page, slug, h1) {
     overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
   }))
   info.h1s.length === 1 && h1.test(info.h1s[0]) ? ok(`${slug}: un seul H1 « ${info.h1s[0]} »`) : bad(`${slug}: H1 ${JSON.stringify(info.h1s)}`)
-  info.title.endsWith("· blindz.app") ? ok(`${slug}: titre « ${info.title} »`) : bad(`${slug}: titre ${info.title}`)
-  info.desc.length > 80 ? ok(`${slug}: description (${info.desc.length} car.)`) : bad(`${slug}: description absente`)
+  info.title.endsWith("· blindz.app") && info.title.length <= 60
+    ? ok(`${slug}: titre « ${info.title} » (${info.title.length} car.)`)
+    : bad(`${slug}: titre ${info.title} (${info.title.length} car.)`)
+  info.desc.length > 80 && info.desc.length <= 160
+    ? ok(`${slug}: description (${info.desc.length} car.)`)
+    : bad(`${slug}: description de ${info.desc.length} car.`)
   info.canonical === `https://blindz.app/${slug}/` ? ok(`${slug}: canonique`) : bad(`${slug}: canonique ${info.canonical}`)
   const types = info.ld.map(t => { try { return JSON.parse(t)["@type"] } catch { return "INVALIDE" } })
   types.includes("WebPage") && types.includes("FAQPage") ? ok(`${slug}: JSON-LD ${types.join(" + ")}`) : bad(`${slug}: JSON-LD ${types}`)
@@ -61,10 +65,14 @@ try {
   const sitemap = await (await fetch(`${APP}/sitemap.xml`)).text()
   const missing = PAGES.filter(p => !sitemap.includes(`https://blindz.app/${p.slug}/`))
   missing.length === 0 ? ok("sitemap.xml : les 5 pages y sont") : bad(`sitemap.xml : manque ${missing.map(p => p.slug)}`)
-  const home = await (await fetch(`${APP}/`)).text()
-  home.includes("Blind test d&#x27;anniversaire") || home.includes("Blind test d'anniversaire")
+  // React ecrit l'apostrophe &#x27; dans le HTML : on la remet pour comparer.
+  const home = (await (await fetch(`${APP}/`)).text()).replaceAll("&#x27;", "'")
+  home.includes("Blind test d'anniversaire")
     ? ok("accueil : le pied de page liste les nouvelles pages")
     : bad("accueil : nouvelles pages absentes du pied de page")
+  // Texte attendu de go-prod-front.sh (grep -F sur le HTML brut de l'accueil).
+  home.includes("Blind test EVJF et EVG") ? ok("accueil : texte attendu « Blind test EVJF et EVG » present") : bad("accueil : texte attendu absent")
+  home.includes("12 places, écran compris") ? ok("accueil : mode Autour d'une table, « 12 places, écran compris »") : bad("accueil : libelle des 12 places absent")
 
   for (const [tag, opts] of VIEWS) {
     const ctx = await browser.newContext(opts)
