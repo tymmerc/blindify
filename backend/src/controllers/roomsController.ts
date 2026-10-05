@@ -269,10 +269,11 @@ export const roomsController = {
       await pool.query(`UPDATE users SET username=$1 WHERE id=$2`, [nickname, user.id]);
     }
 
+    // Un join rejoue sans pseudo (relance, F5) garde celui deja choisi.
     await pool.query(
       `INSERT INTO room_participants (room_id, user_id, nickname)
        VALUES ($1,$2,$3)
-       ON CONFLICT (room_id, user_id) DO UPDATE SET nickname=EXCLUDED.nickname`,
+       ON CONFLICT (room_id, user_id) DO UPDATE SET nickname=COALESCE(EXCLUDED.nickname, room_participants.nickname)`,
       [room.id, user.id, nickname]
     );
 

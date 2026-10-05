@@ -81,4 +81,11 @@ describe("roomsController.joinRoom", () => {
     expect(params).toEqual([41, 7]);
     expect(mockEmit).toHaveBeenCalledWith("player-joined", expect.objectContaining({ userId: 7, roomCode: "ABC123" }));
   });
+
+  it("garde le pseudo deja enregistre quand le join rejoue arrive sans pseudo", async () => {
+    roomWith(1, 1);
+    await roomsController.joinRoom(mockReq(), mockRes());
+    const upsert = mockQuery.mock.calls.find(([sql]) => /INSERT INTO room_participants/.test(sql));
+    expect(upsert?.[0]).toMatch(/nickname=COALESCE\(EXCLUDED\.nickname, room_participants\.nickname\)/);
+  });
 });
