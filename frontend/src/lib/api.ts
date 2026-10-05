@@ -24,20 +24,20 @@ export const api = {
   async login(username: string, password: string): Promise<{ user: UserSummary; sessionToken: string }> {
     return clientApi.login(username, password)
   },
-  async checkAuth(): Promise<CurrentUserPayload | null> {
-    return clientApi.currentUser()
+  async checkAuth(opts?: { signal?: AbortSignal }): Promise<CurrentUserPayload | null> {
+    return clientApi.currentUser(opts)
   },
-  async ensureUserSession(nickname?: string): Promise<CurrentUserPayload | null> {
+  async ensureUserSession(nickname?: string, opts?: { signal?: AbortSignal }): Promise<CurrentUserPayload | null> {
     try {
-      const existing = await clientApi.currentUser()
+      const existing = await clientApi.currentUser(opts)
       if (existing) return existing
     } catch (err) {
       console.error("ensure_session_check_failed", err)
     }
 
     try {
-      await clientApi.createGuestSession(nickname)
-      return await clientApi.currentUser()
+      await clientApi.createGuestSession(nickname, opts)
+      return await clientApi.currentUser(opts)
     } catch (err) {
       console.error("ensure_guest_session_failed", err)
       return null
@@ -82,8 +82,8 @@ export const api = {
   }): Promise<{ room: MultiplayerRoom }> {
     return clientApi.createRoom(options)
   },
-  async joinRoom(code: string, nickname?: string): Promise<{ room: MultiplayerRoom }> {
-    return clientApi.joinRoom(code, nickname)
+  async joinRoom(code: string, nickname?: string, opts?: { signal?: AbortSignal }): Promise<{ room: MultiplayerRoom }> {
+    return clientApi.joinRoom(code, nickname, opts)
   },
   async roomDetails(code: string): Promise<{ room: MultiplayerRoom; participants: MultiplayerParticipant[]; selfPreference: RoomSelfPreference }> {
     return clientApi.roomDetails(code)
