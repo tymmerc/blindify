@@ -1,15 +1,15 @@
 "use client"
 
-import { useState, type FormEvent } from "react"
+import type { FormEvent } from "react"
 import { useRouter } from "next/navigation"
-import { buildSoloGamePath } from "@/lib/soloSetup"
-import { FormCard, MusicLinkField, OptionPicker, ROUND_OPTIONS, useStoredLink } from "./SoloFormParts"
+import { buildSoloGamePath, type SoloTab } from "@/lib/soloSetup"
+import { FormCard, MusicLinkField, OptionPicker, ROUND_OPTIONS, type SoloSettings } from "./SoloFormParts"
 
-export function ClassicForm({ onChallenge }: { onChallenge: () => void }) {
+const CROSS_LINK = "font-bold text-[#2e2014] underline decoration-[#c65133] decoration-2 underline-offset-2 hover:text-[#c65133]"
+
+export function ClassicForm({ settings, onJump }: { settings: SoloSettings; onJump: (tab: SoloTab) => void }) {
   const router = useRouter()
-  const link = useStoredLink()
-  const [roundCount, setRoundCount] = useState(10)
-  const [progressive, setProgressive] = useState(false)
+  const { link, roundCount, setRoundCount, progressive, setProgressive } = settings
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
@@ -45,14 +45,26 @@ export function ClassicForm({ onChallenge }: { onChallenge: () => void }) {
         </button>
       </form>
       {/* Le defi se lance depuis son onglet : on le rappelle ici, c'est la
-          question qu'on se pose une fois sa playlist collee. */}
-      <p className="border-t-2 border-dotted border-[rgba(46,32,20,.3)] pt-4 text-sm text-[#6b573f]">
-        Envie de jouer contre un pote ?{" "}
-        <button type="button" onClick={onChallenge} className="font-bold text-[#2e2014] underline decoration-[#c65133] decoration-2 underline-offset-2 hover:text-[#c65133]">
-          Lance un défi
-        </button>
-        , il rejouera les mêmes morceaux que toi.
-      </p>
+          question qu'on se pose une fois sa playlist collee. Le lien et le
+          nombre de titres suivent. Le bouton "Chrono" garde aussi en marche
+          les scripts de campagne d'avant les onglets ARIA (browser-solo.mjs y
+          cliquait un bouton "Chrono", c'est maintenant un onglet). */}
+      <div className="space-y-2 border-t-2 border-dotted border-[rgba(46,32,20,.3)] pt-4 text-sm text-[#6b573f]">
+        <p>
+          Envie de jouer contre un pote ?{" "}
+          <button type="button" onClick={() => onJump("challenge")} className={CROSS_LINK}>
+            Lance un défi
+          </button>
+          , il rejouera les mêmes morceaux que toi.
+        </p>
+        <p>
+          Plutôt contre la montre ? Essaie le{" "}
+          <button type="button" onClick={() => onJump("chrono")} className={CROSS_LINK}>
+            Chrono
+          </button>
+          , les titres s&apos;enchaînent sans pause.
+        </p>
+      </div>
     </FormCard>
   )
 }

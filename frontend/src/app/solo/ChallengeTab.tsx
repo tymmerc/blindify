@@ -3,8 +3,8 @@
 import { useState, type FormEvent } from "react"
 import { useRouter } from "next/navigation"
 import { publicPath } from "@/lib/publicPath"
-import { buildSoloGamePath, isChallengeCode, normalizeChallengeCode } from "@/lib/soloSetup"
-import { FormCard, MusicLinkField, OptionPicker, ROUND_OPTIONS, useStoredLink } from "./SoloFormParts"
+import { buildSoloGamePath, extractChallengeCode, isChallengeCode } from "@/lib/soloSetup"
+import { FormCard, MusicLinkField, OptionPicker, ROUND_OPTIONS, type SoloSettings } from "./SoloFormParts"
 
 // Onglet "Defier un ami" : on CREE un defi (partie normale, puis lien a
 // envoyer), et en dessous on REJOINT celui d'un pote. Avant, cet onglet ne
@@ -33,7 +33,8 @@ function JoinChallenge() {
           id="challenge-code"
           type="text"
           value={code}
-          onChange={e => setCode(normalizeChallengeCode(e.target.value).slice(0, 12))}
+          // Le lien recu colle en entier donne son code, pas "HTTPSBLINDZA".
+          onChange={e => setCode(extractChallengeCode(e.target.value).slice(0, 12))}
           placeholder="Ex. K7Q2M9XA"
           autoComplete="off"
           className="min-w-0 flex-1 rounded-md border-[1.5px] border-[rgba(46,32,20,.35)] bg-[#efe5d0] px-3 py-3 text-center font-display text-lg font-semibold tracking-[0.2em] text-[#2e2014] outline-none transition placeholder:font-sans placeholder:text-sm placeholder:italic placeholder:tracking-normal placeholder:text-[#b3a182] focus:border-[#c65133]"
@@ -50,10 +51,9 @@ function JoinChallenge() {
   )
 }
 
-export function ChallengeTab() {
+export function ChallengeTab({ settings }: { settings: SoloSettings }) {
   const router = useRouter()
-  const link = useStoredLink()
-  const [roundCount, setRoundCount] = useState(10)
+  const { link, roundCount, setRoundCount } = settings
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
@@ -76,7 +76,7 @@ export function ChallengeTab() {
         >
           Jouer et lancer le défi
         </button>
-        <p className="text-center text-[12px] text-[#8a7558]">
+        <p className="text-center text-[12px] text-[#6b573f]">
           Le lien à envoyer s&apos;affiche à la fin de ta partie.
         </p>
       </form>

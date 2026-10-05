@@ -1,17 +1,18 @@
 "use client"
 
-import { useEffect, useState, type ReactNode } from "react"
+import { useEffect, useId, useState, type ReactNode } from "react"
 import { PROFILE_URL_KEY, readStored } from "@/lib/soloSetup"
 
 // Briques communes aux trois onglets du lobby solo (classique, chrono, defi).
 
-export const FIELD_LABEL = "text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]"
+export const FIELD_LABEL = "text-[11px] font-bold uppercase tracking-[0.22em] text-[#6b573f]"
 
 export function FormCard({ title, intro, children }: { title: string; intro: ReactNode; children: ReactNode }) {
   return (
     <section className="flex flex-col gap-5 rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-5 shadow-[4px_4px_0_rgba(46,32,20,.18)] sm:p-7">
       <div className="space-y-2">
-        <h2 className="font-display text-2xl font-semibold text-[#2e2014]">{title}</h2>
+        {/* tabIndex -1 : le focus vient ici quand un lien du formulaire change d'onglet. */}
+        <h2 tabIndex={-1} className="font-display text-2xl font-semibold text-[#2e2014] outline-none">{title}</h2>
         <p className="text-sm leading-relaxed text-[#6b573f]">{intro}</p>
       </div>
       {children}
@@ -31,16 +32,20 @@ export interface StoredLink {
 /** Lien de musique pre-rempli depuis /jouer, modifiable a la demande. */
 export function useStoredLink(): StoredLink {
   const [url, setUrl] = useState("")
+  // Confirmation seulement pour le lien venu de /jouer. Avant, elle dependait
+  // du champ lui-meme : la premiere lettre tapee faisait disparaitre le champ.
+  const [fromStore, setFromStore] = useState(false)
   const [editing, setEditing] = useState(false)
   useEffect(() => {
     const stored = readStored(PROFILE_URL_KEY)
-    if (stored) setUrl(stored)
+    if (!stored) return
+    setUrl(stored)
+    setFromStore(true)
   }, [])
-  const hasLink = url.trim().length > 0
   return {
     url,
     setUrl,
-    showInput: editing || !hasLink,
+    showInput: editing || !fromStore,
     provider: /deezer/i.test(url) ? "Deezer" : "Spotify",
     startEditing: () => setEditing(true),
   }
@@ -90,10 +95,11 @@ export function OptionPicker({ label, options, value, onChange }: {
   value: number
   onChange: (value: number) => void
 }) {
+  const labelId = useId()
   return (
     <div className="space-y-1.5">
-      <p className={FIELD_LABEL}>{label}</p>
-      <div className="flex gap-2">
+      <p id={labelId} className={FIELD_LABEL}>{label}</p>
+      <div role="group" aria-labelledby={labelId} className="flex gap-2">
         {options.map(opt => {
           const isActive = value === opt.value
           return (
@@ -118,3 +124,26 @@ export function OptionPicker({ label, options, value, onChange }: {
 }
 
 export const ROUND_OPTIONS: PickerOption[] = [5, 10, 15, 20].map(n => ({ label: String(n), value: n }))
+
+/**
+ * Reglages partages par les trois onglets, tenus par le lobby : changer
+ * d'onglet ne perd ni le lien colle ni le nombre de titres (avant, chaque
+ * formulaire avait les siens et repartait de zero).
+ */
+export interface SoloSettings {
+  link: StoredLink
+  roundCount: number
+  setRoundCount: (value: number) => void
+  progressive: boolean
+  setProgressive: (value: boolean) => void
+  duration: number
+  setDuration: (value: number) => void
+}
+
+export function useSoloSettings(): SoloSettings {
+  const link = useStoredLink()
+  const [roundCount, setRoundCount] = useState(10)
+  const [progressive, setProgressive] = useState(false)
+  const [duration, setDuration] = useState(180)
+  return { link, roundCount, setRoundCount, progressive, setProgressive, duration, setDuration }
+}

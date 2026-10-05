@@ -1,11 +1,16 @@
-import { describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it } from "vitest"
 import {
+  NICKNAME_KEY,
   buildChallengeShareText,
   buildSoloGamePath,
   cleanPlayerName,
+  extractChallengeCode,
   isChallengeCode,
   normalizeChallengeCode,
   parseSoloTab,
+  rememberNicknameIfNone,
+  searchWithTab,
+  tabForKey,
 } from "./soloSetup"
 
 describe("buildSoloGamePath", () => {
@@ -75,5 +80,71 @@ describe("buildChallengeShareText", () => {
     expect(buildChallengeShareText({ name: "Tym", points: 1, tracks: 1 })).toBe(
       "Tym te défie sur Blindz : 1 morceau, 1 pt à battre."
     )
+  })
+})
+
+describe("extractChallengeCode", () => {
+  it("prend le code dans le lien recu, pas tout le lien", () => {
+    expect(extractChallengeCode("https://blindz.app/challenge/?code=K7Q2M9XA")).toBe("K7Q2M9XA")
+    expect(extractChallengeCode("Viens ! https://dev.tymmerc.eu/blindify/challenge/?code=k7q2m9xa&utm=x")).toBe("K7Q2M9XA")
+  })
+
+  it("garde le code tape a la main", () => {
+    expect(extractChallengeCode(" k7q2-m9xa ")).toBe("K7Q2M9XA")
+  })
+
+  it("rend une chaine vide pour un lien sans code", () => {
+    expect(extractChallengeCode("https://blindz.app/challenge/?code=")).toBe("")
+  })
+})
+
+describe("rememberNicknameIfNone", () => {
+  afterEach(() => localStorage.clear())
+
+  it("retient le nom quand aucun pseudo n'est connu", () => {
+    rememberNicknameIfNone("Rival")
+    expect(localStorage.getItem(NICKNAME_KEY)).toBe("Rival")
+  })
+
+  it("n'ecrase jamais le pseudo deja connu", () => {
+    localStorage.setItem(NICKNAME_KEY, "Tym")
+    rememberNicknameIfNone("Nom du jour")
+    expect(localStorage.getItem(NICKNAME_KEY)).toBe("Tym")
+  })
+
+  it("ne retient ni un nom vide ni le nom par defaut", () => {
+    rememberNicknameIfNone("")
+    rememberNicknameIfNone("Joueur")
+    expect(localStorage.getItem(NICKNAME_KEY)).toBeNull()
+  })
+})
+
+describe("tabForKey", () => {
+  it("passe a l'onglet voisin avec les fleches, en boucle", () => {
+    expect(tabForKey("classic", "ArrowRight")).toBe("chrono")
+    expect(tabForKey("challenge", "ArrowRight")).toBe("classic")
+    expect(tabForKey("classic", "ArrowLeft")).toBe("challenge")
+  })
+
+  it("va au premier ou au dernier onglet avec Debut et Fin", () => {
+    expect(tabForKey("chrono", "Home")).toBe("classic")
+    expect(tabForKey("chrono", "End")).toBe("challenge")
+  })
+
+  it("ignore les autres touches", () => {
+    expect(tabForKey("chrono", "Enter")).toBeNull()
+    expect(tabForKey("chrono", "ArrowDown")).toBeNull()
+  })
+})
+
+describe("searchWithTab", () => {
+  it("ecrit l'onglet dans l'adresse et garde les autres parametres", () => {
+    expect(searchWithTab("", "challenge")).toBe("?tab=challenge")
+    expect(searchWithTab("?utm=x&tab=chrono", "challenge")).toBe("?utm=x&tab=challenge")
+  })
+
+  it("retire ?tab= pour le classique, l'onglet par defaut", () => {
+    expect(searchWithTab("?tab=chrono", "classic")).toBe("")
+    expect(searchWithTab("?utm=x&tab=chrono", "classic")).toBe("?utm=x")
   })
 })

@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, type FormEvent } from "react"
+import type { FormEvent } from "react"
 import { useRouter } from "next/navigation"
-import { FormCard, MusicLinkField, OptionPicker, useStoredLink, type PickerOption } from "./SoloFormParts"
+import { FormCard, MusicLinkField, OptionPicker, type PickerOption, type SoloSettings } from "./SoloFormParts"
 
 const DURATION_OPTIONS: PickerOption[] = [
   { label: "1 min", value: 60 },
@@ -11,10 +11,9 @@ const DURATION_OPTIONS: PickerOption[] = [
   { label: "5 min", value: 300 },
 ]
 
-export function ChronoForm() {
+export function ChronoForm({ settings }: { settings: SoloSettings }) {
   const router = useRouter()
-  const link = useStoredLink()
-  const [duration, setDuration] = useState(180)
+  const { link, duration, setDuration } = settings
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()

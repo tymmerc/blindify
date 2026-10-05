@@ -132,7 +132,8 @@ export async function chronoCheck(browser, seed, out) {
   const { ctx, page: p } = await newPage(browser, { ...devices["iPhone 13"] }, "chrono", problems)
   try {
     await p.goto(`${APP}/solo/`, { waitUntil: "networkidle", timeout: 60000 })
-    await p.getByRole("button", { name: /^chrono$/i }).click()
+    // Onglet au sens ARIA depuis la refonte du lobby solo (role tab, plus button).
+    await p.getByRole("tab", { name: /^chrono$/i }).click()
     await p.getByPlaceholder(/open\.spotify\.com\/user/).first().fill(`${LINK}${(seed + 7) % 40}`)
     await p.getByRole("button", { name: "1 min", exact: true }).click()
     await p.getByRole("button", { name: /lancer le chrono/i }).click()
