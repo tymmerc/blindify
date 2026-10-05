@@ -7,7 +7,10 @@
 //   - la largeur du document (scrollWidth) contre celle de l'ecran (clientWidth) ;
 //   - la boite de chaque controle visible (boutons, champs, en-tete, carte de
 //     reponse, recap, podium) : aucune ne doit depasser a gauche ou a droite,
-//     sauf dans une bande qui defile expres (le choix « qui a ajoute ? »).
+//     sauf dans une bande qui defile expres (le choix « qui a ajoute ? ») ;
+//   - dans l'ecran de jeu, que le libelle « Extrait en cours », la platine et
+//     le compte des reponses tiennent entre l'en-tete et la carte de reponse
+//     (en telephone couche, la platine tournait par-dessus le champ Titre).
 // Ecrans : partie a distance (l'hote, avec PAUSE, et un invite) en manche, a la
 // revelation et a la fin ; autour d'une table (ecran central + telephone) ; un
 // seul tel (buzzer). Tailles 320x568, 375x667, 390x844, 430x932, et pour la
@@ -77,7 +80,23 @@ function audit() {
     .flatMap(h => [...h.querySelectorAll("button, input, .theater-pill, .theater-brand")])
     .filter(shown)
     .map(box)
-  return { vw, innerWidth: window.innerWidth, vh: window.innerHeight, scrollWidth: de.scrollWidth, scrollHeight: de.scrollHeight, out, header }
+  // Le centre de l'ecran de jeu entre l'en-tete et la carte de reponse.
+  const overlaps = []
+  const bar = document.querySelector(".theater-topbar")
+  if (bar && root === document) {
+    const dock = document.querySelector(".theater-dock")
+    const from = bar.getBoundingClientRect().bottom
+    const to = dock && shown(dock) ? dock.getBoundingClientRect().top : Infinity
+    for (const el of document.querySelectorAll(".theater-show-label, .theater-arena, .theater-status-row")) {
+      if (!shown(el)) continue
+      const r = el.getBoundingClientRect()
+      if (r.top < from - 1 || r.bottom > to + 1) overlaps.push({ el: name(el), top: Math.round(r.top), bottom: Math.round(r.bottom), from: Math.round(from), to: Math.round(to) })
+    }
+  }
+  // Pour info : le bouton Valider se voit-il sans defiler ?
+  const submit = document.querySelector('.theater-dock button[type="submit"]')
+  const submitBottom = submit && shown(submit) ? Math.round(submit.getBoundingClientRect().bottom) : null
+  return { vw, innerWidth: window.innerWidth, vh: window.innerHeight, scrollWidth: de.scrollWidth, scrollHeight: de.scrollHeight, out, header, overlaps, submitBottom }
 }
 
 /** Met la page a la taille voulue, mesure, et garde une capture (en pixels CSS). */
@@ -92,14 +111,19 @@ async function check(page, { eng, screen, role, size }) {
   measures.push({ tag, eng, screen, role, width, height, ...m })
   const sideways = m.scrollWidth > m.vw
   const head = m.header.map(b => `${b.el.replace(/^(button|input|div)\.?/, "")} ${b.left}..${b.right}`).join(" | ")
-  if (!sideways && m.out.length === 0) {
+  if (!sideways && m.out.length === 0 && m.overlaps.length === 0) {
     say(`  [ok] ${tag} : document ${m.scrollWidth}/${m.vw}`)
   } else {
-    const what = [sideways ? `le document fait ${m.scrollWidth} px pour ${m.vw}` : null, ...m.out.map(b => `${b.el} ${b.left}..${b.right}`)].filter(Boolean)
-    problems.push(`${tag} : ${what.length} element(s) hors de l'ecran`)
+    const what = [
+      sideways ? `le document fait ${m.scrollWidth} px pour ${m.vw}` : null,
+      ...m.out.map(b => `${b.el} ${b.left}..${b.right}`),
+      ...m.overlaps.map(b => `${b.el} ${b.top}..${b.bottom} hors de ${b.from}..${b.to} (chevauche l'en-tete ou la carte)`),
+    ].filter(Boolean)
+    problems.push(`${tag} : ${what.length} element(s) hors de l'ecran ou qui se chevauchent`)
     say(`  !! ${tag} : ${what.join(" ; ")}`)
   }
   if (head) say(`       en-tete : ${head}`)
+  if (m.submitBottom != null && m.submitBottom > m.vh) say(`       (info) Valider sous le bord de l'ecran : bas a ${m.submitBottom} px pour ${m.vh}, il faut defiler`)
 }
 
 const both = (pages, opts) => Promise.all(pages.map(([role, p]) => check(p, { ...opts, role })))

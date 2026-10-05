@@ -1343,12 +1343,19 @@ const theaterStyles = `
     .theater-dock{grid-template-columns:1fr 1fr !important}
     .theater-dock > .theater-field:nth-child(3){grid-column:1 / -1}
     .theater-submit{grid-column:1 / -1; width:100%}
+    /* La regle du dessus vise le bouton, mais c'est sa rangee qui est dans la
+       grille : sans ca, Valider ma reponse passait sur deux lignes. */
+    .theater-actions{grid-column:1 / -1}
   }
 
   /* ===== Téléphone : le chrono + les 3 champs doivent tenir SANS scroller.
      On bride la platine pour laisser la place au dock de réponse. ===== */
   @media (max-width:640px){
     .theater-stage{padding:8px 12px 12px !important; gap:8px !important; overflow-x:hidden}
+    /* Le centre garde la hauteur de son contenu : s'il deborde, l'ecran defile
+       (overflow-x hidden rend la scene defilable en hauteur) au lieu de passer
+       sous l'en-tete, la ou aucun defilement ne va. */
+    .theater-stage > div:nth-child(2){min-height:auto}
     /* Top bar : sur telephone le slider + CHAT + Quitter debordaient (contenu plus large
        que l'ecran). On reduit le gap, masque le slider et le CHAT (secondaire).
        Pause et Quitter deviennent des icones de la taille du bouton du son, et le
@@ -1400,6 +1407,12 @@ const theaterStyles = `
     .theater-brand{display:none}
     .theater-topbar{grid-template-columns:minmax(0,1fr) auto !important}
     .theater-submit-tail{display:none}
+  }
+  /* Telephone couche (375 px de haut) : il n'y a pas la place pour la platine
+     entre l'en-tete et la carte de reponse, elle tournait par-dessus le champ
+     Titre. Elle saute ; « Extrait en cours » et le compte des reponses restent. */
+  @media (orientation:landscape) and (max-height:500px){
+    .theater-arena, .theater-wave{display:none}
   }
   /* Ecran court (568 px de haut) : la platine reduit et la mention 33 tours
      (decorative) saute, sinon « Extrait en cours » passe sous l'en-tete. */
