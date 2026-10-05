@@ -7,10 +7,10 @@
 -- coûteuses.
 --
 -- Comptes de test (05/10) : une seule liste, en tête de requête, et tout le
--- JSON s'en sert. Les parties gardent un drapeau "test" (le tableau de bord
--- les masque par défaut, une case les remet) ; le reste est compté hors
--- tests, avec le nombre exclu à côté quand c'est utile. Testé par
--- tools/stats.test.sh.
+-- JSON s'en sert. Les parties gardent un drapeau "test" et un drapeau
+-- "orpheline" (le tableau de bord les masque par défaut, une case remet
+-- chacune) ; le reste est compté hors tests et hors orphelines, avec le
+-- nombre écarté à côté quand c'est utile. Testé par tools/stats.test.sh.
 
 WITH
 -- Pseudos des comptes de test. Un script qui recrée son invité à chaque
@@ -41,12 +41,28 @@ comptes_test AS (
      OR username LIKE 'sonde-pile-%'  -- témoin de tools/test-stack/stack.sh, écrit en base de test : par précaution
      OR id IN (SELECT id FROM ids_test)
 ),
--- Une partie est de test dès qu'un compte de test l'héberge ou y joue.
+-- Une partie est de test si un compte de test y est (hôte ou joueur) et
+-- qu'aucun vrai compte n'y est, ni comme hôte ni comme joueur : un vrai
+-- invité qui s'appelle Max ou Lea ne fait pas passer sa soirée en test.
 parties_test AS (
   SELECT g.id FROM game_sessions g
-  WHERE g.host_user_id IN (SELECT id FROM comptes_test)
-     OR EXISTS (SELECT 1 FROM game_participants p
-                WHERE p.session_id = g.id AND p.user_id IN (SELECT id FROM comptes_test))
+  WHERE (g.host_user_id IN (SELECT id FROM comptes_test)
+         OR EXISTS (SELECT 1 FROM game_participants p
+                    WHERE p.session_id = g.id AND p.user_id IN (SELECT id FROM comptes_test)))
+    AND (g.host_user_id IS NULL OR g.host_user_id IN (SELECT id FROM comptes_test))
+    AND NOT EXISTS (SELECT 1 FROM game_participants p
+                    WHERE p.session_id = g.id AND p.user_id NOT IN (SELECT id FROM comptes_test))
+),
+-- Partie orpheline : ni hôte ni joueur enregistré. Au 05/10/2026, 244
+-- parties du 11/06 au 28/08, d'avant l'enregistrement des participants. On
+-- ne sait pas qui a joué : ni test ni vraie, comptée à part.
+parties_orphelines AS (
+  SELECT g.id FROM game_sessions g
+  WHERE g.host_user_id IS NULL
+    AND NOT EXISTS (SELECT 1 FROM game_participants p WHERE p.session_id = g.id)
+),
+parties_ecartees AS (
+  SELECT id FROM parties_test UNION SELECT id FROM parties_orphelines
 )
 SELECT json_build_object(
   'genere_le', to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS'),
@@ -66,7 +82,7 @@ SELECT json_build_object(
       'id', id, 'mode', mode, 'etat', etat, 'debut', debut, 'fin', fin, 'hote', hote,
       'joueurs', joueurs, 'manches', manches, 'repondues', repondues, 'reponses', reponses,
       'bonnes', bonnes, 'proches', proches, 'devinettes', devinettes, 'devinettes_justes', devinettes_justes,
-      'delai_s', delai_s, 'duree_s', duree_s, 'test', test
+      'delai_s', delai_s, 'duree_s', duree_s, 'test', test, 'orpheline', orpheline
     ) ORDER BY debut), '[]'::json) FROM (
       SELECT g.id,
              coalesce(g.mode,'?') AS mode,
@@ -86,8 +102,9 @@ SELECT json_build_object(
              (SELECT count(*) FROM round_responses r JOIN game_rounds gr ON gr.id=r.round_id WHERE gr.session_id=g.id AND r.source_correct)::int AS devinettes_justes,
              (SELECT EXTRACT(EPOCH FROM min(r.created_at) - g.started_at)::int FROM round_responses r JOIN game_rounds gr ON gr.id=r.round_id WHERE gr.session_id=g.id) AS delai_s,
              CASE WHEN g.ended_at IS NOT NULL THEN EXTRACT(EPOCH FROM g.ended_at - g.started_at)::int END AS duree_s,
-             -- Partie de test (liste en tete de requete).
-             (g.id IN (SELECT id FROM parties_test)) AS test
+             -- Partie de test, partie orpheline (voir en tete de requete).
+             (g.id IN (SELECT id FROM parties_test)) AS test,
+             (g.id IN (SELECT id FROM parties_orphelines)) AS orpheline
       FROM game_sessions g LEFT JOIN users u ON u.id=g.host_user_id
       WHERE g.started_at IS NOT NULL) s),
 
@@ -106,9 +123,10 @@ SELECT json_build_object(
              count(r.id) FILTER (WHERE r.is_correct)::int AS bonnes,
              count(r.id) FILTER (WHERE r.verdict='close')::int AS proches
       FROM game_rounds gr LEFT JOIN round_responses r ON r.round_id=gr.id
-      -- Hors parties de test : les personas des scripts repondent toujours
-      -- faux et rendraient n'importe quel titre "introuvable".
-      WHERE gr.correct_title IS NOT NULL AND gr.session_id NOT IN (SELECT id FROM parties_test)
+      -- Hors parties de test (les personas des scripts repondent toujours
+      -- faux et rendraient n'importe quel titre "introuvable") et hors
+      -- orphelines (on ne sait pas qui jouait).
+      WHERE gr.correct_title IS NOT NULL AND gr.session_id NOT IN (SELECT id FROM parties_ecartees)
       GROUP BY 1,2 HAVING count(DISTINCT gr.id) >= 2
       ORDER BY joue DESC LIMIT 60) t),
 
@@ -147,8 +165,8 @@ SELECT json_build_object(
       SELECT b.message, b.page_url AS page, to_char(b.created_at,'YYYY-MM-DD HH24:MI') AS le, u.username AS pseudo
       FROM bug_reports b LEFT JOIN users u ON u.id=b.user_id ORDER BY b.created_at DESC LIMIT 30) r),
 
-  -- Totaux bruts (tests compris), puis les memes hors tests, puis ce qui a
-  -- ete exclu.
+  -- Totaux bruts (tests compris), puis les vrais (hors tests et hors
+  -- orphelines ; joueurs et comptes : hors tests), puis ce qui a ete ecarte.
   'totaux', (SELECT json_build_object(
       'joueurs', (SELECT count(*) FROM users),
       'comptes', (SELECT count(*) FROM users WHERE password_hash IS NOT NULL),
@@ -157,16 +175,17 @@ SELECT json_build_object(
       'manches', (SELECT count(*) FROM game_rounds),
       'reponses', (SELECT count(*) FROM round_responses)
   )),
-  'totaux_hors_tests', (SELECT json_build_object(
+  'totaux_reels', (SELECT json_build_object(
       'joueurs', (SELECT count(*) FROM users WHERE id NOT IN (SELECT id FROM comptes_test)),
       'comptes', (SELECT count(*) FROM users WHERE password_hash IS NOT NULL AND id NOT IN (SELECT id FROM comptes_test)),
-      'parties', (SELECT count(*) FROM game_sessions WHERE started_at IS NOT NULL AND id NOT IN (SELECT id FROM parties_test)),
-      'manches', (SELECT count(*) FROM game_rounds WHERE session_id NOT IN (SELECT id FROM parties_test)),
+      'parties', (SELECT count(*) FROM game_sessions WHERE started_at IS NOT NULL AND id NOT IN (SELECT id FROM parties_ecartees)),
+      'manches', (SELECT count(*) FROM game_rounds WHERE session_id NOT IN (SELECT id FROM parties_ecartees)),
       'reponses', (SELECT count(*) FROM round_responses r JOIN game_rounds gr ON gr.id=r.round_id
-                   WHERE gr.session_id NOT IN (SELECT id FROM parties_test))
+                   WHERE gr.session_id NOT IN (SELECT id FROM parties_ecartees))
   )),
   'exclus', (SELECT json_build_object(
       'comptes_test', (SELECT count(*) FROM comptes_test),
-      'parties_test', (SELECT count(*) FROM game_sessions WHERE started_at IS NOT NULL AND id IN (SELECT id FROM parties_test))
+      'parties_test', (SELECT count(*) FROM game_sessions WHERE started_at IS NOT NULL AND id IN (SELECT id FROM parties_test)),
+      'orphelines', (SELECT count(*) FROM game_sessions WHERE started_at IS NOT NULL AND id IN (SELECT id FROM parties_orphelines))
   ))
 ) AS data;
