@@ -8,10 +8,14 @@ import { parseProfileUrl, fetchPublicPlaylists, fetchPlaylistTracks, type Import
 import { upsertLink, claimLegacyTracks } from "./linksController";
 import axios from "axios";
 import { deezerPreviewService } from "../services/deezerPreviewService";
-import { isImportProvider, isPlaylistIdFor, normalizeSyncAllRequest } from "../utils/importLimits";
+import { isImportProvider, isPlaylistIdFor, normalizeSyncAllRequest, type ImportProvider } from "../utils/importLimits";
+import { providerBudget, ProviderBudgetError, isProviderRateLimited } from "../services/providerBudget";
 
 /** How many tracks to pre-resolve Deezer previews for after import (fire-and-forget). */
 const PRE_RESOLVE_BATCH = 50;
+
+/** Echecs de suite apres lesquels sync-all arrete d'appeler le fournisseur. */
+export const MAX_CONSECUTIVE_FAILURES = 3;
 
 /** Store track metadata in audio_sources (no Deezer call). */
 async function upsertTrack(
@@ -71,6 +75,9 @@ function preResolveInBackground(userId: number): void {
 
       let resolved = 0;
       for (const row of rows) {
+        // Travail de confort : il s'efface des que Deezer est occupe (parties,
+        // imports). Les extraits manquants seront cherches au lancement.
+        if (!providerBudget.hasBackgroundRoom("deezer")) break;
         try {
           const result = await deezerPreviewService.searchTrack(row.title, row.artist);
           if (result?.preview) {
@@ -88,6 +95,83 @@ function preResolveInBackground(userId: number): void {
       logger.error("pre_resolve_failed", { userId, error: err });
     }
   })();
+}
+
+type StopReason = "provider_busy" | "rate_limited" | "failing";
+
+interface ImportBilan {
+  synced: number;
+  total: number;
+  failedPlaylists: number;
+  /** Playlists jamais demandees au fournisseur, la boucle s'etant arretee avant. */
+  skippedPlaylists: number;
+  stopped: StopReason | null;
+}
+
+/** Raison d'arreter la boucle apres un echec, ou null pour passer a la playlist suivante. */
+function stopAfterFailure(err: unknown, consecutiveFailures: number): StopReason | null {
+  if (isProviderRateLimited(err)) return "rate_limited";
+  return consecutiveFailures >= MAX_CONSECUTIVE_FAILURES ? "failing" : null;
+}
+
+/**
+ * Lit les playlists une par une, chaque appel passant par la garde commune
+ * des fournisseurs (services/providerBudget.ts), et range les titres.
+ * Une playlist en erreur (privee, supprimee) est sautee : avant, le joueur
+ * recevait une 500 et relancait tout, ce qui refaisait tous les appels. Mais
+ * la boucle s'arrete net quand insister ne sert qu'a se faire bloquer : garde
+ * saturee, fournisseur qui demande de ralentir (429), ou 3 echecs de suite
+ * (fournisseur en panne, adresse du VPS bloquee).
+ */
+async function importPlaylists(
+  userId: number,
+  provider: ImportProvider,
+  playlistIds: readonly string[],
+  perPlaylistLimit: number,
+  linkId: number | null,
+): Promise<ImportBilan> {
+  const seen = new Set<string>();
+  let synced = 0;
+  let total = 0;
+  let failedPlaylists = 0;
+  let consecutiveFailures = 0;
+  let attempted = 0;
+  let stopped: StopReason | null = null;
+
+  for (const playlistId of playlistIds) {
+    let tracks: ImportedTrack[];
+    try {
+      tracks = await providerBudget.runImport(provider, () => fetchPlaylistTracks(provider, playlistId, perPlaylistLimit));
+      attempted++;
+      consecutiveFailures = 0;
+    } catch (err) {
+      if (err instanceof ProviderBudgetError) {
+        stopped = "provider_busy";
+        break;
+      }
+      attempted++;
+      failedPlaylists++;
+      consecutiveFailures++;
+      logger.warn("import_playlist_failed", { provider, playlistId, error: err });
+      stopped = stopAfterFailure(err, consecutiveFailures);
+      if (stopped) break;
+      continue;
+    }
+    for (const track of tracks) {
+      const key = `${track.provider}:${track.externalId}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      total++;
+      try {
+        await upsertTrack(userId, track, playlistId, linkId);
+        synced++;
+      } catch (err) {
+        logger.error("import_track_failed", { title: track.title, error: err });
+      }
+    }
+  }
+
+  return { synced, total, failedPlaylists, skippedPlaylists: playlistIds.length - attempted, stopped };
 }
 
 export const importController = {
@@ -236,39 +320,19 @@ export const importController = {
     }
 
     try {
-      const seen = new Set<string>();
-      let synced = 0;
-      let total = 0;
-      let failedPlaylists = 0;
-
-      for (const playlistId of playlistIds) {
-        // Une playlist en erreur (privee, supprimee, limite du fournisseur) ne
-        // fait plus echouer tout l'import : avant, le joueur recevait une 500
-        // et relancait tout, ce qui refaisait tous les appels au fournisseur.
-        let tracks: ImportedTrack[];
-        try {
-          tracks = await fetchPlaylistTracks(provider, playlistId, perPlaylistLimit);
-        } catch (err) {
-          failedPlaylists++;
-          logger.warn("import_playlist_failed", { provider, playlistId, error: err });
-          continue;
-        }
-        for (const track of tracks) {
-          const key = `${track.provider}:${track.externalId}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
-          total++;
-
-          try {
-            await upsertTrack(context.user.id, track, playlistId, linkId);
-            synced++;
-          } catch (err) {
-            logger.error("import_track_failed", { title: track.title, error: err });
-          }
-        }
+      const { synced, total, failedPlaylists, skippedPlaylists, stopped } =
+        await importPlaylists(context.user.id, provider, playlistIds, perPlaylistLimit, linkId);
+      if (stopped) {
+        logger.warn("import_sync_all_stopped", { userId: context.user.id, provider, reason: stopped, failedPlaylists, skippedPlaylists });
       }
 
-      if (total === 0 && failedPlaylists === playlistIds.length) {
+      if (total === 0 && (stopped === "provider_busy" || stopped === "rate_limited")) {
+        fail(res, "import_busy", "Beaucoup d'imports en ce moment. Réessaye dans une minute.", 503);
+        return;
+      }
+      // Rien d'importe et tout ce qui a ete demande a echoue (ou la boucle
+      // s'est arretee sur des pannes) : vraie erreur, pas une playlist vide.
+      if (total === 0 && (stopped === "failing" || failedPlaylists === playlistIds.length - skippedPlaylists)) {
         logger.error("import_sync_all_failed", { provider, playlists: playlistIds.length });
         fail(res, "sync_failed", "Erreur lors de la synchronisation des titres.", 500);
         return;
@@ -278,7 +342,7 @@ export const importController = {
         return;
       }
 
-      ok(res, { synced, failed: total - synced, total, failedPlaylists });
+      ok(res, { synced, failed: total - synced, total, failedPlaylists, skippedPlaylists });
 
       // Pre-resolve a batch of Deezer previews in background
       preResolveInBackground(context.user.id);
