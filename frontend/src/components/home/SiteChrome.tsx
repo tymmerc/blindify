@@ -27,7 +27,8 @@ export function SiteHeader() {
             A 390 px il n'y a pas la place a cote du nom sans pousser la nav :
             le mot passe dessous, dans la hauteur du logo. */}
         <span className="flex flex-col leading-none sm:flex-row sm:items-baseline sm:gap-2">
-          blindz.app
+          {/* L'espace ne se voit pas (flex) mais garde "blindz.app bêta" en deux mots pour les moteurs. */}
+          blindz.app{" "}
           <span className="mt-0.5 font-display text-[13px] font-medium italic tracking-normal text-[#6b573f] sm:mt-0 sm:text-[15px]">
             bêta
           </span>
