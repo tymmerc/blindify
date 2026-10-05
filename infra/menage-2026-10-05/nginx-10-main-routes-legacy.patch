@@ -1,0 +1,93 @@
+Menage des anciennes routes Blindz sur tymmerc.eu (audit du 05/10/2026).
+
+Cible : /etc/nginx/sites-enabled/10-main.conf (serveur tymmerc.eu).
+Fait contre la version en service le 05/10/2026, empreinte sha256
+80265e9f6b65d7fc1da8d6ad31efee2992cae680aa1a445d8388fa0c74f0938d.
+S'applique avec scripts/go-prod-2026-10-05-routes-legacy.sh (apres GO de Tym),
+qui sauvegarde, verifie avec nginx -t, recharge et controle.
+
+Retire :
+  - le catch-all de la racine (/auth, /settings, /demo...) -> /blindify ;
+  - les relais /blindify/api/, /blindify/auth/spotify/login, /blindify/socket.io/ ;
+  - l'alias /blindify/_next/static/ ;
+  - les trois blocs /demo/blindify-game (jamais atteints, le catch-all passait devant).
+Garde : /blindify et /blindify/... en 301 vers blindz.app (meme chemin).
+
+--- a/10-main.conf
++++ b/10-main.conf
+@@ -37,11 +37,6 @@
+         return 301 https://portfolio.tymmerc.eu/$1$is_args$args;
+     }
+ 
+-    # --- Blindify catch-all redirects ---
+-    location ~ ^/(auth|friends|modes|playlists|profile|settings|leaderboard|game|solo|multiplayer|history|stats|results|menu|landing|upload|streamer|chat|event|demo|analyse-visage|produits)(/.*)?$ {
+-        return 301 /blindify$request_uri;
+-    }
+-
+     # --- Assistant ---
+     location = /assistant { return 301 /assistant/; }
+     location /assistant/ {
+@@ -56,28 +51,13 @@
+         include /etc/nginx/snippets/proxy-params.conf;
+     }
+ 
+-    # --- Blindify API ---
+-    location ~ ^/blindify/api/(.*)$ {
+-        proxy_pass http://blindify_backend/api/$1$is_args$args;
+-        include /etc/nginx/snippets/proxy-params.conf;
+-    }
+-
+-    # --- Blindify Auth (server-side OAuth) ---
+-    location = /blindify/auth/spotify/login {
+-        proxy_pass http://blindify_backend/auth/spotify/login$is_args$args;
+-        include /etc/nginx/snippets/proxy-params.conf;
+-    }
+-
+-    # --- Blindify Socket.io ---
+-    location = /blindify/socket.io { return 308 /blindify/socket.io/; }
+-    location /blindify/socket.io/ {
+-        proxy_pass http://blindify_backend/socket.io/;
+-        include /etc/nginx/snippets/proxy-params-ws.conf;
+-    }
+-
+-
+-
+     # --- Blindify -> Blindz : l'app a demenage sur blindz.app (redirection permanente) ---
++    # Tout /blindify/... part en 301 vers blindz.app, meme chemin, memes
++    # parametres. Garde volontairement : le partage de score du solo affiche
++    # encore "tymmerc.eu/blindify" et d'anciens liens de defi circulent. Les
++    # relais d'API, de socket.io et de fichiers, ainsi que l'ancien catch-all
++    # de la racine (/auth, /settings...), ont ete retires apres l'audit du
++    # 05/10/2026 : aucun usage hors du VPS lui-meme en 14 jours de journaux.
+     location = /blindify { return 301 https://blindz.app/; }
+     location /blindify/ {
+         rewrite ^/blindify/(.*)$ https://blindz.app/$1 permanent;
+@@ -155,28 +135,6 @@
+         proxy_read_timeout 60s;
+     }
+ 
+-    # --- Blindify static assets ---
+-    location /blindify/_next/static/ {
+-        alias /opt/blindify/frontend/out/_next/static/;
+-        access_log off;
+-        expires 7d;
+-        add_header Cache-Control "public, max-age=604800" always;
+-    }
+-
+-    # --- Demo page (Blindify static export) ---
+-    location = /demo/blindify-game { return 301 /demo/blindify-game/; }
+-    location /demo/blindify-game/ {
+-        root /opt/blindify/frontend/out;
+-        try_files $uri $uri/ /demo/blindify-game/index.html;
+-        add_header Cache-Control "public, max-age=300" always;
+-    }
+-    location ~* ^/demo/blindify-game/(.*\.html)$ {
+-        root /opt/blindify/frontend/out;
+-        try_files $uri /demo/blindify-game/index.html;
+-        expires -1;
+-        add_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0" always;
+-    }
+-
+     # --- Alva static site ---
+     location = /alva { return 301 /alva/; }
+     location /alva/ {
