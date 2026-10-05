@@ -183,7 +183,9 @@ describe("multiplayer socket integration — N players, no desync", () => {
       for (const u of users) clients.push(await connectClient(server.port, u));
       await joinRoom(server.io, roomCode, clients);
 
-      startGame(server.io, roomCode, users, 1, 8000); // long round; rely on all-answered, not timer
+      // Long round; rely on all-answered, not timer. Grace de reconnexion
+      // raccourcie : le joueur 5 coupe sans repondre, on l'attend 300 ms.
+      startGame(server.io, roomCode, users, 1, 8000, undefined, { reconnectGraceMs: 300 });
 
       await waitFor(() => clients.every(c => c.roundStarts.length >= 1), 5000, "round start");
 
@@ -283,7 +285,9 @@ describe("multiplayer socket integration — N players, no desync", () => {
     try {
       for (const u of users) clients.push(await connectClient(server.port, u));
       await joinRoom(server.io, roomCode, clients);
-      startGame(server.io, roomCode, users, 2, 8000, sessionId); // long round: only the disconnect can reveal
+      // Long round: only the disconnect can reveal (apres une grace de
+      // reconnexion raccourcie ici a 300 ms, voir reconnect-grace.spec.ts).
+      startGame(server.io, roomCode, users, 2, 8000, sessionId, { reconnectGraceMs: 300 });
 
       await waitFor(
         () => clients.every(c => c.lastState()?.phase === "GUESSING" && c.lastState()?.currentRound === 1),
@@ -322,10 +326,12 @@ describe("multiplayer socket integration — N players, no desync", () => {
     }
   });
 
-  it("never starts the next round while the host has paused, even after a disconnect reveal", async () => {
+  it("never reveals nor starts the next round while the host has paused, even after a disconnect", async () => {
     // Relu le 02/10/2026 avant la mise en prod : la revelation par deconnexion
     // posait le filet anti-AFK (10 s) sans regarder la pause. La manche suivante
     // serait partie en pleine pause (telephone verrouille pendant une pause).
+    // Depuis la grace de reconnexion (05/10/2026), une coupure pendant la pause
+    // ne revele plus rien du tout : la revelation anticipee attend la reprise.
     const users = await seedUsers(3);
     const roomCode = await seedRoom(users);
     const clients: GameClient[] = [];
@@ -333,7 +339,7 @@ describe("multiplayer socket integration — N players, no desync", () => {
     try {
       for (const u of users) clients.push(await connectClient(server.port, u));
       await joinRoom(server.io, roomCode, clients);
-      startGame(server.io, roomCode, users, 2, 8000);
+      startGame(server.io, roomCode, users, 2, 8000, undefined, { reconnectGraceMs: 300 });
 
       await waitFor(
         () => clients.every(c => c.lastState()?.phase === "GUESSING" && c.lastState()?.currentRound === 1),
@@ -350,15 +356,20 @@ describe("multiplayer socket integration — N players, no desync", () => {
       host.socket.emit("game:pause", { roomCode });
       await waitFor(() => host.lastState()?.paused === true, 5000, "paused");
       late.socket.close();
-      await waitFor(() => [host, b].every(c => c.lastState()?.phase === "REVEAL"), 5000, "REVEAL after disconnect");
 
-      // Le filet anti-AFK part a 10 s : on attend au-dela.
-      await new Promise(r => setTimeout(r, 12_000));
+      // Bien au-dela de la grace (300 ms) : toujours la manche 1, en pause, rien de revele.
+      await new Promise(r => setTimeout(r, 2_000));
       for (const c of [host, b]) {
         expect(c.lastState()?.currentRound).toBe(1);
-        expect(c.lastState()?.phase).toBe("REVEAL");
+        expect(c.lastState()?.phase).toBe("GUESSING");
         expect(c.lastState()?.paused).toBe(true);
+        expect(c.reveals).toHaveLength(0);
       }
+
+      // A la reprise, la grace est ecoulee : la manche 1 est revelee, pas plus.
+      host.socket.emit("game:resume", { roomCode });
+      await waitFor(() => [host, b].every(c => c.lastState()?.phase === "REVEAL"), 5000, "REVEAL at resume");
+      for (const c of [host, b]) expect(c.lastState()?.currentRound).toBe(1);
     } finally {
       clients.forEach(c => c.socket.close());
       cleanupGame(roomCode);

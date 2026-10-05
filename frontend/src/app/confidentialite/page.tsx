@@ -27,7 +27,7 @@ export default function ConfidentialitePage() {
           <h1 className="font-display text-4xl font-semibold md:text-5xl">
             Politique de <em className="font-medium italic text-[#c65133]">confidentialité</em>
           </h1>
-          <p className="text-sm text-[#8a7558]">Dernière mise à jour : 5 août 2026</p>
+          <p className="text-sm text-[#8a7558]">Dernière mise à jour : 5 octobre 2026</p>
         </div>
 
         <div className="space-y-6">
@@ -102,8 +102,9 @@ export default function ConfidentialitePage() {
 
           <Section title="Hébergement" accent="#c65133">
             <p>
-              Les données sont hébergées en France, chez OVH. L'infrastructure et la localisation
-              respectent le cadre européen de protection des données.
+              Le site et ses données sont hébergés en Allemagne, chez Hetzner Online GmbH, dans son
+              centre de données de Falkenstein. Les données restent donc dans l'Union européenne, où
+              s'applique le RGPD.
             </p>
           </Section>
 

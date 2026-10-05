@@ -248,11 +248,16 @@ export const roomsController = {
       }
     }
 
-    const participants = await pool.query(
-      `SELECT COUNT(*)::INT AS total FROM room_participants WHERE room_id=$1`,
-      [room.id]
+    // Un joueur deja inscrit n'est jamais refuse pour "salle pleine" : il
+    // renvoie le meme join (F5, ou relance du front quand la premiere reponse
+    // n'est pas arrivee a temps). Le join reste ainsi rejouable sans risque.
+    const participants = await pool.query<{ total: number; self: number }>(
+      `SELECT COUNT(*)::INT AS total, COUNT(*) FILTER (WHERE user_id=$2)::INT AS self
+       FROM room_participants WHERE room_id=$1`,
+      [room.id, user.id]
     );
-    if (participants.rows[0]?.total >= room.max_players) {
+    const counts = participants.rows[0] ?? { total: 0, self: 0 };
+    if (!counts.self && counts.total >= room.max_players) {
       fail(res, "room_full", "La salle est pleine", 409);
       return;
     }
@@ -264,10 +269,11 @@ export const roomsController = {
       await pool.query(`UPDATE users SET username=$1 WHERE id=$2`, [nickname, user.id]);
     }
 
+    // Un join rejoue sans pseudo (relance, F5) garde celui deja choisi.
     await pool.query(
       `INSERT INTO room_participants (room_id, user_id, nickname)
        VALUES ($1,$2,$3)
-       ON CONFLICT (room_id, user_id) DO UPDATE SET nickname=EXCLUDED.nickname`,
+       ON CONFLICT (room_id, user_id) DO UPDATE SET nickname=COALESCE(EXCLUDED.nickname, room_participants.nickname)`,
       [room.id, user.id, nickname]
     );
 

@@ -1,3 +1,5 @@
+import { siteLabel } from "./publicPath"
+
 const BG_COLOR = "#f4ecdb"
 const CARD_COLOR = "#ece1c8"
 const INK = "#2e2014"
@@ -153,7 +155,7 @@ function drawWatermark(ctx: CanvasRenderingContext2D): void {
   ctx.font = `400 15px ${FONT}`
   ctx.fillStyle = FADED
   ctx.textAlign = "center"
-  ctx.fillText("tymmerc.eu/blindify", WIDTH / 2, HEIGHT - 48)
+  ctx.fillText(siteLabel(), WIDTH / 2, HEIGHT - 48)
 }
 
 function truncate(text: string, maxLen: number): string {
