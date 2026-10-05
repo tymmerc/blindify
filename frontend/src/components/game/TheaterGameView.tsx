@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Play, Trophy, Volume2, VolumeX } from "lucide-react"
+import { Pause, Play, Trophy, Volume2, VolumeX, X } from "lucide-react"
 import type { MultiplayerGameState, UserSummary } from "@/lib/types"
 
 type ChatMessage = {
@@ -140,7 +140,10 @@ export function TheaterGameView(props: Props) {
     <div className="theater-root relative min-h-screen overflow-hidden" style={{ background: "transparent", color: INK }}>
       <style jsx global>{theaterStyles}</style>
 
-      <div className="theater-stage relative z-[3] grid h-screen px-6 pt-4 pb-5 gap-2" style={{ gridTemplateRows: "auto 1fr auto" }}>
+      {/* minmax(0, 1fr) : sans ca, la colonne unique de la grille prend la
+          largeur minimale de son contenu le plus large (l'en-tete sur
+          telephone) et TOUT l'ecran deborde a droite, carte de reponse comprise. */}
+      <div className="theater-stage relative z-[3] grid h-screen px-6 pt-4 pb-5 gap-2" style={{ gridTemplateRows: "auto 1fr auto", gridTemplateColumns: "minmax(0, 1fr)" }}>
 
         {/* ====================== TOP BAR ====================== */}
         <div className="grid items-center gap-4 theater-topbar" style={{ gridTemplateColumns: "1fr auto 1fr" }}>
@@ -151,7 +154,7 @@ export function TheaterGameView(props: Props) {
 
           <div className="flex flex-col items-center gap-2">
             <div className="theater-pill">
-              <span className="theater-round">ROUND <b>{String(currentRound).padStart(2, "0")} / {String(totalRounds).padStart(2, "0")}</b></span>
+              <span className="theater-round"><span className="theater-round-word">ROUND</span> <b>{String(currentRound).padStart(2, "0")} / {String(totalRounds).padStart(2, "0")}</b></span>
               <span className="theater-sep" />
               <span className={`theater-timer ${timerUrgent ? "urgent" : ""}`}>{timerLabel}</span>
             </div>
@@ -165,7 +168,9 @@ export function TheaterGameView(props: Props) {
             </div>
           </div>
 
-          <div className="flex items-center justify-end gap-2">
+          {/* Sur telephone, Pause et Quitter passent en icones carrees comme le
+              bouton du son ; leur nom accessible ne change pas (aria-label). */}
+          <div className="theater-controls flex items-center justify-end gap-2">
             <button className="theater-vol" onClick={onToggleMute} title={muted ? "Activer le son" : "Couper le son"}>
               {muted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
             </button>
@@ -179,16 +184,22 @@ export function TheaterGameView(props: Props) {
               aria-label="Volume"
             />
             {isHost && onPauseToggle && (
-              <button className="theater-quit" onClick={onPauseToggle}>Pause</button>
+              <button className="theater-quit" onClick={onPauseToggle} aria-label="Pause">
+                <Pause className="theater-quit-icon" aria-hidden />
+                <span className="theater-quit-text">Pause</span>
+              </button>
             )}
             {onExit && (
-              <button className="theater-quit" onClick={onExit}>Quitter</button>
+              <button className="theater-quit" onClick={onExit} aria-label="Quitter">
+                <X className="theater-quit-icon" aria-hidden />
+                <span className="theater-quit-text">Quitter</span>
+              </button>
             )}
           </div>
         </div>
 
         {/* ====================== CENTER ====================== */}
-        <div className="grid items-center gap-9 min-h-0" style={{ gridTemplateColumns: "1fr 320px" }}>
+        <div className="grid items-center gap-9 min-h-0" style={{ gridTemplateColumns: "minmax(0, 1fr) 320px" }}>
           <AnimatePresence mode="wait">
             {isRevealed ? (
               <RevealStage
@@ -384,7 +395,7 @@ export function TheaterGameView(props: Props) {
               </p>
             )}
 
-            <div className="flex items-center gap-2">
+            <div className="theater-actions flex items-center gap-2">
               <button
                 type="submit"
                 className="theater-submit flex-1"
@@ -729,6 +740,7 @@ const theaterStyles = `
   .theater-round{
     font-family:var(--font-sans, 'Karla'), sans-serif; font-weight:700;
     font-size:10px; letter-spacing:.22em; text-transform:uppercase; color:var(--muted);
+    white-space:nowrap;
   }
   .theater-round b{color:${INK}}
   .theater-sep{width:2px; height:20px; background:var(--line)}
@@ -778,6 +790,7 @@ const theaterStyles = `
     transition:background .15s, color .15s;
   }
   .theater-quit:hover, .theater-chat-btn:hover{background:${INK}; color:${PAPER}}
+  .theater-quit-icon{display:none; width:16px; height:16px}
   .theater-chat-btn .dot{
     width:6px; height:6px; border-radius:50%; background:${TERRA};
     animation:rec 1.2s ease-in-out infinite;
@@ -1253,7 +1266,7 @@ const theaterStyles = `
   /* Responsive */
   @media (max-width:1180px){
     .theater-stage{padding:14px 16px 16px}
-    .theater-stage > div:nth-child(2){grid-template-columns:1fr 260px !important; gap:20px !important}
+    .theater-stage > div:nth-child(2){grid-template-columns:minmax(0,1fr) 260px !important; gap:20px !important}
   }
   /* ---------- Finale ---------- */
   .finale-overlay{
@@ -1322,7 +1335,7 @@ const theaterStyles = `
   .finale-btn:not(.primary):hover{background:${INK}; color:${PAPER}}
 
   @media (max-width:900px){
-    .theater-stage > div:nth-child(2){grid-template-columns:1fr !important}
+    .theater-stage > div:nth-child(2){grid-template-columns:minmax(0,1fr) !important}
     .theater-score-col{display:none}
     .theater-dock{grid-template-columns:1fr 1fr !important}
     .theater-dock > .theater-field:nth-child(3){grid-column:1 / -1}
@@ -1334,19 +1347,28 @@ const theaterStyles = `
   @media (max-width:640px){
     .theater-stage{padding:8px 12px 12px !important; gap:8px !important; overflow-x:hidden}
     /* Top bar : sur telephone le slider + CHAT + Quitter debordaient (contenu plus large
-       que l'ecran). On reduit le gap, masque le slider et le CHAT (secondaire), compacte Quitter. */
-    .theater-topbar{gap:8px !important; grid-template-columns:auto 1fr auto !important}
+       que l'ecran). On reduit le gap, masque le slider et le CHAT (secondaire).
+       Pause et Quitter deviennent des icones de la taille du bouton du son, et le
+       mot ROUND saute (01 / 10 a cote du chrono se lit tout seul) : a 390 px,
+       BLINDZ + manche + son + PAUSE + QUITTER faisaient ~440 px. */
+    .theater-topbar{gap:8px !important; grid-template-columns:auto minmax(0,1fr) auto !important}
+    .theater-topbar .theater-controls{gap:6px}
     .theater-volume-slider{display:none}
     .theater-chat-btn{display:none}
     .theater-vol{width:30px; height:30px}
-    .theater-quit{font-size:11px; padding:5px 9px}
+    .theater-quit{width:30px; height:30px; padding:0; justify-content:center; border-radius:6px; background:var(--paper-deep)}
+    .theater-quit-text{display:none}
+    .theater-quit-icon{display:block}
     .theater-brand{font-size:14px}
     .theater-brand small{display:none}
-    .theater-pill{gap:12px; padding:7px 14px}
+    .theater-round-word{display:none}
+    .theater-pill{gap:10px; padding:6px 12px}
     .theater-timer{font-size:24px; min-width:36px}
     .theater-rdots{display:none}
     .theater-show{gap:8px}
-    .theater-arena{max-height:30vh; max-width:62vw}
+    /* Une largeur ET une hauteur maximales cassaient le carre : le disque
+       devenait une ellipse qui tournait. Une seule taille, carree. */
+    .theater-arena{width:min(62vw, 30vh); max-width:none; max-height:none}
     .theater-status-row{font-size:11px}
     .theater-wave{display:none}
     .theater-dock{grid-template-columns:1fr !important; padding:12px !important; gap:10px !important}
@@ -1360,9 +1382,24 @@ const theaterStyles = `
     .theater-pick .pick-avatar{width:38px; height:38px; font-size:14px}
     .theater-pick .pick-name{font-size:10px}
     .theater-submit{padding:14px; font-size:14px}
+    .theater-actions .theater-submit{min-width:0}
     .theater-reveal-card{flex-direction:column; text-align:center; gap:14px}
+    .theater-recap{width:100%}
+    .theater-recap-row{grid-template-columns:18px minmax(56px, 110px) minmax(0, 1fr) auto auto; gap:8px; padding:7px 10px}
     .theater-reveal-cover{width:120px; height:120px}
     .finale-disc{width:104px; height:104px}
     .finale-board{max-width:100%}
+  }
+  /* Petits telephones (iPhone SE 1re generation, 320 px) : la marque saute et
+     les deux boutons de reponse passent l'un sous l'autre. */
+  @media (max-width:359px){
+    .theater-brand{display:none}
+    .theater-topbar{grid-template-columns:minmax(0,1fr) auto !important}
+    .theater-actions{flex-direction:column; align-items:stretch}
+  }
+  /* Ecran court (568 px de haut) : la platine reduit pour que le libelle
+     « Extrait en cours » ne passe plus sous l'en-tete. */
+  @media (max-width:640px) and (max-height:600px){
+    .theater-arena{width:min(62vw, 20vh)}
   }
 `
