@@ -6,12 +6,12 @@ import assert from "node:assert/strict"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { runOnce } from "./passage.mjs"
+import { runOnce, exitCode, EXIT } from "./passage.mjs"
 import { DEEZER, SPOTIFY, json, quickPlayOk, quickPlayKo, fakeFetch, prodRoutes, noSleep } from "./fakes.mjs"
 
 const ROOT = fs.mkdtempSync(path.join(os.tmpdir(), "sonde-passage-"))
 after(() => fs.rmSync(ROOT, { recursive: true, force: true }))
-const config = () => ({ to: "tym@example.com", key: "re_cle_de_test", missing: [] })
+const config = () => ({ to: "tym@example.com", from: "Blindz Sonde <sonde@example.com>", key: "re_cle_de_test", missing: [] })
 const silent = () => {}
 
 function files() {
@@ -64,15 +64,26 @@ test("vert, panne, panne, vert : un e-mail de panne puis un de retour, une ligne
   assert.ok(lines.every(l => !l.includes("@") && !l.includes("re_cle_de_test")), "ni adresse ni cle dans le journal")
 })
 
-test("Resend en panne : l'e-mail de panne est retente au passage suivant", async () => {
+test("Resend en panne : trois essais dans le passage, puis l'e-mail de panne est retente au passage suivant", async () => {
   const where = files()
   const failed = await pass(prodDown(() => json({ message: "erreur" }, 500)), where)
-  assert.deepEqual([failed.mail, failed.mailFailed], ["panne:echec(Resend HTTP 500)", true])
+  assert.deepEqual([failed.mail, failed.mailFailed], ["panne:echec(Resend HTTP 500 « erreur », 3 essais)", true])
+  assert.equal(failed.mails.length, 3)
+  assert.equal(exitCode(failed), EXIT.SONDE)
   assert.equal(readState(where.statePath).announced, "OK", "Tym n'a rien recu")
   const retried = await pass(prodDown(), where)
   assert.deepEqual([retried.mail, retried.mailFailed], ["panne:envoye", false])
+  assert.equal(exitCode(retried), EXIT.PANNE)
   const quiet = await pass(prodDown(), where)
   assert.deepEqual([quiet.mail, quiet.mailFailed], ["aucun", false], "pas d'e-mail du, pas d'echec")
+})
+
+test("codes de sortie : 0 tout va bien, 10 prod en panne, 2 sonde en panne ; jamais 1, le code de Node", () => {
+  assert.equal(exitCode({ ok: true, mailFailed: false }), 0)
+  assert.equal(exitCode({ ok: false, mailFailed: false }), 10)
+  assert.equal(exitCode({ ok: false, mailFailed: true }), 2)
+  assert.equal(exitCode({ ok: true, mailFailed: true }), 2, "retour qui n'a pas pu partir")
+  assert.ok(!Object.values(EXIT).includes(1))
 })
 
 test("cle ou destinataire absent : la sonde s'arrete avant tout appel, sauf en essai", async () => {

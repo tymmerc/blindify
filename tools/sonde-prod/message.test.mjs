@@ -6,8 +6,8 @@ import { cause, composeMail, formatLogLine, formatDuration, parisTime } from "./
 const AT = "2026-10-05T10:15:00.000Z" // 12:15 a Paris
 const api = { id: "api", label: "API (/api/health)", ok: true, suspect: null, detail: "ok" }
 const page = { id: "page", label: "Page du solo (/solo/)", ok: true, suspect: null, detail: "ok" }
-const deezerOk = { id: "deezer", label: "Deezer, playlist Top France", url: "https://www.deezer.com/fr/playlist/1109890291", ok: true, suspect: null, tracks: 10, ms: 5123, attempts: 1, detail: "ok" }
-const spotifyOk = { id: "spotify", label: "Spotify, playlist test", url: "https://open.spotify.com/playlist/6QfyfBMAoQy8YxbbPL0hkZ", ok: true, suspect: null, tracks: 9, ms: 7300, attempts: 1, detail: "ok" }
+const deezerOk = { id: "deezer", provider: "deezer", label: "Deezer, playlist Top France", url: "https://www.deezer.com/fr/playlist/1109890291", ok: true, suspect: null, tracks: 10, ms: 5123, attempts: 1, detail: "ok" }
+const spotifyOk = { id: "spotify", provider: "spotify", label: "Spotify, playlist test", url: "https://open.spotify.com/playlist/6QfyfBMAoQy8YxbbPL0hkZ", ok: true, suspect: null, tracks: 9, ms: 7300, attempts: 1, detail: "ok" }
 const deezerNoPreview = {
   ...deezerOk, ok: false, suspect: "deezer", code: "insufficient_tracks", http: 400, tracks: 2, attempts: 2,
   detail: "HTTP 400 insufficient_tracks « Pas assez de titres avec extrait audio disponible. » (2 titres jouables)",
@@ -55,6 +55,17 @@ test("cause : seule la playlist Spotify casse", () => {
   assert.equal(c.side, "spotify")
 })
 
+test("cause : seule la playlist Spotify manque d'extraits, Deezer passe : la playlist Spotify, pas notre recherche", () => {
+  const spotifyNoPreview = { ...spotifyOk, ok: false, suspect: "deezer", code: "insufficient_tracks", http: 400, tracks: 3, attempts: 2, detail: "HTTP 400 insufficient_tracks (3 titres jouables)" }
+  const c = cause(run([api, page, deezerOk, spotifyNoPreview], { status: "ok", detail: "Deezer répond normalement" }))
+  assert.equal(c.side, "spotify")
+  assert.match(c.text, /playlist Spotify qui a changé/)
+  assert.match(c.text, /targets\.mjs/)
+  assert.doesNotMatch(c.text, /deezerPreviewService/)
+  const both = cause(run([api, page, deezerNoPreview, spotifyNoPreview], { status: "ok", detail: "Deezer répond normalement" }))
+  assert.match(both.text, /deezerPreviewService/, "les deux en manque : c'est bien notre recherche")
+})
+
 test("cause : la playlist Deezer de la sonde a disparu, Deezer va bien", () => {
   const gone = { ...deezerOk, ok: false, suspect: "deezer", code: "no_playlists", http: 400, detail: "HTTP 400 no_playlists" }
   const c = cause(run([api, page, gone], { status: "ok", detail: "Deezer répond normalement" }))
@@ -84,12 +95,12 @@ test("e-mail de panne : quoi, pourquoi, comment rejouer", () => {
   const r = run([api, page, deezerNoPreview, spotifyOk], { status: "empty", detail: "la recherche Deezer ne renvoie plus aucun résultat" })
   const mail = composeMail("panne", r, null)
   assert.equal(mail.subject, "[Blindz] Le solo par lien ne marche plus sur blindz.app")
-  assert.match(mail.text, /le 05\/10 à 12:15/)
+  assert.match(mail.text, /le 05\/10 à 12:15\)\. Ce qui est en échec ci-dessous a raté deux fois, à une minute d'écart\./)
   assert.match(mail.text, /Ça ressemble à Deezer/)
   assert.match(mail.text, /- Deezer, playlist Top France : en échec, HTTP 400 insufficient_tracks/)
   assert.match(mail.text, /- Spotify, playlist test : ok, 9 titres jouables en 7\.3 s/)
   assert.match(mail.text, /curl -s -X POST https:\/\/blindz\.app\/api\/quick-play .*"url":"https:\/\/www\.deezer\.com\/fr\/playlist\/1109890291","count":10/)
-  assert.match(mail.text, /toutes les 6 h/)
+  assert.match(mail.text, /environ toutes les 6 h/)
 })
 
 test("e-mail de rappel : depuis quand", () => {
@@ -97,6 +108,7 @@ test("e-mail de rappel : depuis quand", () => {
   const mail = composeMail("rappel", r, { downSince: "2026-10-05T04:00:00.000Z" })
   assert.equal(mail.subject, "[Blindz] Le solo par lien est toujours en panne (depuis 6 h 15)")
   assert.match(mail.text, /première sonde en échec le 05\/10 à 06:00/)
+  assert.match(mail.text, /Prochain rappel dans 6 h environ/)
 })
 
 test("e-mail de retour : c'est reparti, et la duree de la panne", () => {
@@ -134,6 +146,11 @@ test("ligne du journal : compacte, sans adresse ni secret", () => {
     "2026-10-05T10:15:00Z etat=KO annonce=KO api=ok page=ok deezer=KO[insufficient_tracks;HTTP 400;2 titres;suspect=deezer] spotify=ok[9 titres;7.3s;2e essai] cause=deezer deezer_direct=empty mail=panne:envoye duree=75s",
   )
   assert.doesNotMatch(line, /@/)
+})
+
+test("ligne du journal : API ou page passees au 2e essai", () => {
+  const line = formatLogLine(run([{ ...api, attempts: 2 }, { ...page, attempts: 1 }]), { announced: "OK" }, "aucun")
+  assert.match(line, / api=ok\[2e essai\] page=ok /)
 })
 
 test("ligne du journal d'une sonde verte", () => {

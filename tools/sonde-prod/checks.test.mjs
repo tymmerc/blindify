@@ -3,8 +3,8 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import {
-  checkApi, checkSoloPage, checkLink, checkPreview, checkTarget, diagnoseDeezer, runProbe,
-  allowedByCsp, parseMediaSrc, looksLikeMp3, suspectFor, reason, USER_AGENT,
+  checkApi, checkSoloPage, checkLink, checkPreview, checkTarget, diagnoseDeezer, runProbe, withRetry,
+  allowedByCsp, parseMediaSrc, looksLikeMp3, suspectFor, reason, USER_AGENT, RETRY_PAUSE_MS,
 } from "./checks.mjs"
 import {
   BASE, CSP, PREVIEW, DEEZER, SPOTIFY, json, tracks, quickPlayOk, quickPlayKo, audio, soloHtml, fakeFetch, prodRoutes, noSleep,
@@ -67,6 +67,17 @@ test("playlist introuvable : le fournisseur du lien est suspect", async () => {
   assert.equal(suspectFor("insufficient_tracks", "spotify"), "deezer", "les extraits viennent de Deezer")
   assert.equal(suspectFor("quick_play_failed", "deezer"), "app")
   assert.equal(suspectFor("rate_limited", "deezer"), "app")
+})
+
+test("code d'erreur du backend : seul le format attendu passe (il finit dans le journal)", async () => {
+  const odd = await checkLink(fakeFetch(prodRoutes({ quickPlay: () => quickPlayKo("Bad Code; rm -rf /\nx=1") })).fn, DEEZER)
+  assert.deepEqual([odd.ok, odd.code, odd.suspect], [false, "inconnu", "app"])
+  const long = await checkLink(fakeFetch(prodRoutes({ quickPlay: () => quickPlayKo("x".repeat(41)) })).fn, DEEZER)
+  assert.equal(long.code, "inconnu")
+  const notString = await checkLink(fakeFetch(prodRoutes({ quickPlay: () => json({ success: false, error: { code: 42, message: "a\n\nb ".repeat(100) } }, 400) })).fn, DEEZER)
+  assert.equal(notString.code, "inconnu")
+  assert.doesNotMatch(notString.detail, /\n/, "le message du backend tient sur une ligne")
+  assert.ok(notString.detail.length < 260, "et il est coupe")
 })
 
 test("lancement : reponse non JSON (nginx 504) ou delai depasse, blindz.app suspect", async () => {
@@ -164,22 +175,60 @@ test("diagnostic Deezer en direct : bloque, vide, erreur, normal, injoignable", 
   assert.equal(await run(new Error("getaddrinfo ENOTFOUND")), "unreachable")
 })
 
+test("une verification : refaite une fois apres la pause, jamais plus", async () => {
+  const pauses = []
+  const answers = [{ ok: false }, { ok: false }, { ok: true }]
+  const r = await withRetry(async () => answers.shift(), { sleep: async ms => { pauses.push(ms) } })
+  assert.deepEqual([r.ok, r.attempts, pauses], [false, 2, [RETRY_PAUSE_MS]])
+  assert.equal(answers.length, 1, "pas de troisieme essai")
+})
+
 test("sonde complete verte : 4 verifications, pas de diagnostic Deezer", async () => {
   const { fn, calls } = fakeFetch(prodRoutes())
   const r = await runProbe({ fetchFn: fn, targets: [DEEZER, SPOTIFY], sleep: noSleep })
   assert.equal(r.ok, true)
   assert.deepEqual(r.checks.map(c => c.id), ["api", "page", "deezer", "spotify"])
+  assert.deepEqual(r.checks.map(c => c.attempts), [1, 1, 1, 1])
+  assert.deepEqual(r.checks.map(c => c.provider), [undefined, undefined, "deezer", "spotify"], "le service du lien reste, pour la cause")
   assert.equal(r.deezerDiagnosis, null)
   assert.ok(!calls.some(c => new URL(c.url).hostname === "api.deezer.com"), "Deezer n'est appele en direct qu'en cas de panne")
   assert.ok(r.checks.every(c => !("previews" in c) && !("mediaSrc" in c)), "pas de liste d'extraits dans le rapport")
 })
 
-test("sonde complete, API par terre : on s'arrete la, sans attendre les liens", async () => {
+test("sonde complete, API par terre : refaite apres 60 s, puis on s'arrete la, sans attendre les liens", async () => {
   const { fn, calls } = fakeFetch(() => new Response("Bad Gateway", { status: 502 }))
-  const r = await runProbe({ fetchFn: fn, targets: [DEEZER, SPOTIFY], sleep: noSleep })
+  const pauses = []
+  const r = await runProbe({ fetchFn: fn, targets: [DEEZER, SPOTIFY], sleep: async ms => { pauses.push(ms) } })
   assert.equal(r.ok, false)
-  assert.deepEqual(r.checks.map(c => c.id), ["api"])
-  assert.equal(calls.length, 1)
+  assert.deepEqual(r.checks.map(c => [c.id, c.attempts]), [["api", 2]])
+  assert.equal(calls.length, 2)
+  assert.deepEqual(pauses, [RETRY_PAUSE_MS])
+})
+
+test("sonde complete : API qui rate une fois (nginx recharge pendant un deploiement), pas de panne", async () => {
+  const routes = prodRoutes()
+  const health = [new Response("Bad Gateway", { status: 502 })]
+  const { fn } = fakeFetch((url, init) => (url.endsWith("/api/health") && health.length ? health.shift() : routes(url, init)))
+  const r = await runProbe({ fetchFn: fn, targets: [DEEZER], sleep: noSleep })
+  assert.equal(r.ok, true)
+  assert.deepEqual(r.checks.map(c => [c.id, c.attempts]), [["api", 2], ["page", 1], ["deezer", 1]])
+})
+
+test("sonde complete : page du solo en delai depasse une fois, pas de panne", async () => {
+  const routes = prodRoutes()
+  const solo = [Object.assign(new Error("aborted"), { name: "TimeoutError" })]
+  const { fn } = fakeFetch((url, init) => (url.endsWith("/solo/") && solo.length ? solo.shift() : routes(url, init)))
+  const r = await runProbe({ fetchFn: fn, targets: [DEEZER], sleep: noSleep })
+  assert.equal(r.ok, true)
+  assert.equal(r.checks.find(c => c.id === "page").attempts, 2)
+})
+
+test("sonde complete : page du solo en panne deux fois, les liens sont quand meme essayes", async () => {
+  const routes = prodRoutes()
+  const { fn } = fakeFetch((url, init) => (url.endsWith("/solo/") ? new Response("Bad Gateway", { status: 502 }) : routes(url, init)))
+  const r = await runProbe({ fetchFn: fn, targets: [DEEZER], sleep: noSleep })
+  assert.equal(r.ok, false)
+  assert.deepEqual(r.checks.map(c => [c.id, c.ok, c.attempts]), [["api", true, 1], ["page", false, 2], ["deezer", true, 1]])
 })
 
 test("sonde complete, panne d'extraits : retentee puis diagnostic Deezer", async () => {

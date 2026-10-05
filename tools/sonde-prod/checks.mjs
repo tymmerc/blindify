@@ -18,6 +18,8 @@ const SHORT_TIMEOUT_MS = 15_000
 // diagnostic quand la sonde echoue (un appel, jamais a chaque passage).
 const DEEZER_SEARCH = "https://api.deezer.com/search?q=daft%20punk%20one%20more%20time&limit=3"
 const SOLO_CHUNK = /\/_next\/static\/chunks\/app\/solo\/page-[a-f0-9]+\.js/
+// Code d'erreur du backend : il finit dans le journal, on n'y laisse passer que ce format.
+const ERROR_CODE = /^[a-z_]{1,40}$/
 
 const headers = extra => ({ "User-Agent": USER_AGENT, ...extra })
 const timeout = ms => AbortSignal.timeout(ms)
@@ -119,9 +121,10 @@ export function suspectFor(code, provider) {
 }
 
 function linkFailure(check, res, body, ms) {
-  const code = typeof body.error?.code === "string" ? body.error.code : "inconnu"
+  const code = typeof body.error?.code === "string" && ERROR_CODE.test(body.error.code) ? body.error.code : "inconnu"
   const found = Number.isInteger(body.error?.details?.found) ? body.error.details.found : undefined
-  const message = typeof body.error?.message === "string" ? ` « ${body.error.message} »` : ""
+  const text = typeof body.error?.message === "string" ? body.error.message.replace(/\s+/g, " ").trim().slice(0, 200) : ""
+  const message = text ? ` « ${text} »` : ""
   const count = found != null ? ` (${found} titres jouables)` : ""
   return { ...check, ok: false, suspect: suspectFor(code, check.provider), code, http: res.status, ms, tracks: found, detail: `HTTP ${res.status} ${code}${message}${count}` }
 }
@@ -151,8 +154,11 @@ export async function checkLink(fetchFn, target, base = BASE) {
   if (previews.length < MIN_TRACKS) {
     return { ...check, ok: false, suspect: "app", code: "trop_peu", http: res.status, ms, tracks: previews.length, detail: `partie lancée avec ${previews.length} extraits seulement (minimum ${MIN_TRACKS})` }
   }
-  // Chaque titre doit venir du service du lien : un lien Spotify lu « a cote »
-  // (repli sur une playlist Deezer du meme nom) ne prouve pas que l'import Spotify marche.
+  // Controle de contrat : chaque titre doit venir du service du lien. Aujourd'hui
+  // il ne peut pas echouer (quickPlayController prend les titres avec
+  // pickRandomTracks(parsed.provider) et type = track.provider). On le garde
+  // pour le jour ou un repli arriverait (playlist Deezer du meme nom pour un lien
+  // Spotify, par exemple) : la sonde dirait alors que l'import Spotify n'est plus prouve.
   const foreign = tracks.filter(t => t?.type !== target.provider).length
   if (foreign > 0) {
     return { ...check, ok: false, suspect: target.provider, code: "autre_service", http: res.status, ms, tracks: previews.length, detail: `${foreign} titres sur ${tracks.length} ne viennent pas de ${target.provider} : le lien n'a pas été lu par son service` }
@@ -225,15 +231,20 @@ async function checkTargetOnce(fetchFn, target, mediaSrc, base) {
 }
 
 /**
- * Un lien de playlist, avec un second essai apres une pause en cas d'echec :
- * un Deezer lent une seule fois ne doit pas reveiller Tym.
+ * Une verification, refaite une fois apres une pause si elle echoue : un
+ * Deezer lent, un delai depasse ou nginx recharge pendant un deploiement ne
+ * doivent pas reveiller Tym. Rien de plus (pas de « deux passages KO de suite »).
  */
-export async function checkTarget(fetchFn, target, { mediaSrc = null, base = BASE, pauseMs = RETRY_PAUSE_MS, sleep = defaultSleep } = {}) {
-  const first = await checkTargetOnce(fetchFn, target, mediaSrc, base)
+export async function withRetry(attempt, { pauseMs = RETRY_PAUSE_MS, sleep = defaultSleep } = {}) {
+  const first = await attempt()
   if (first.ok) return { ...first, attempts: 1 }
   await sleep(pauseMs)
-  const second = await checkTargetOnce(fetchFn, target, mediaSrc, base)
-  return { ...second, attempts: 2 }
+  return { ...(await attempt()), attempts: 2 }
+}
+
+/** Un lien de playlist, retente une fois en cas d'echec. */
+export function checkTarget(fetchFn, target, { mediaSrc = null, base = BASE, ...retry } = {}) {
+  return withRetry(() => checkTargetOnce(fetchFn, target, mediaSrc, base), retry)
 }
 
 /** Deezer en direct depuis le VPS, sans passer par blindz.app : qui est en cause ? */
@@ -254,19 +265,21 @@ export async function diagnoseDeezer(fetchFn) {
   }
 }
 
-const publicFields = ({ mediaSrc, previews, provider, ...check }) => check
+const publicFields = ({ mediaSrc, previews, ...check }) => check
 
 /**
- * La sonde complete. L'API d'abord : si elle est par terre, inutile d'attendre
- * 90 s par lien (blindz-uptime previent deja de ce cas). Les liens ensuite, un
- * par un, pour rester leger pour Deezer.
+ * La sonde complete. Chaque verification en echec est refaite une fois apres
+ * la pause (withRetry). L'API d'abord : si elle reste par terre, inutile
+ * d'attendre 90 s par lien (blindz-uptime previent aussi de ce cas). Les liens
+ * ensuite, un par un, pour rester leger pour Deezer.
  */
 export async function runProbe({ fetchFn = fetch, targets, base = BASE, pauseMs = RETRY_PAUSE_MS, sleep = defaultSleep, now = () => new Date() }) {
   const started = now()
-  const api = await checkApi(fetchFn, base)
-  const page = api.ok ? await checkSoloPage(fetchFn, base) : null
+  const retry = { pauseMs, sleep }
+  const api = await withRetry(() => checkApi(fetchFn, base), retry)
+  const page = api.ok ? await withRetry(() => checkSoloPage(fetchFn, base), retry) : null
   const links = api.ok
-    ? await targets.reduce(async (acc, target) => [...await acc, await checkTarget(fetchFn, target, { mediaSrc: page.mediaSrc, base, pauseMs, sleep })], Promise.resolve([]))
+    ? await targets.reduce(async (acc, target) => [...await acc, await checkTarget(fetchFn, target, { mediaSrc: page.mediaSrc, base, ...retry })], Promise.resolve([]))
     : []
   const providerTrouble = links.some(c => !c.ok && c.suspect !== "app")
   const deezerDiagnosis = providerTrouble ? await diagnoseDeezer(fetchFn) : null

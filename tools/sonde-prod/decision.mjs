@@ -6,6 +6,7 @@
 //   annonce OK + sonde OK -> rien
 //   annonce OK + sonde KO -> e-mail « panne », annonce KO
 //   annonce KO + sonde KO -> rien, ou un rappel si le dernier e-mail date de 6 h
+//                            (environ toutes les 6 h : 6 h 30 avec un passage toutes les 65 min)
 //   annonce KO + sonde OK -> e-mail « retour » (c'est reparti), annonce OK
 // Un e-mail qui ne part pas (Resend en panne, cle absente) ne change pas ce que
 // Tym sait : la sonde suivante retentera le meme e-mail (commitState).

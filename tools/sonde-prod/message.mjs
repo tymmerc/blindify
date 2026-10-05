@@ -3,7 +3,7 @@
 //
 // Une sonde (run, voir checks.mjs) ressemble a :
 //   { ok, at, durationMs, checks: [{ id, label, ok, suspect, detail, code,
-//     http, tracks, ms, attempts, url }], deezerDiagnosis: { status, detail } | null }
+//     http, tracks, ms, attempts, url, provider }], deezerDiagnosis: { status, detail } | null }
 // suspect : qui est probablement en cause quand la verification echoue
 // ("app" = blindz.app, "deezer", "spotify").
 
@@ -38,6 +38,12 @@ export function cause(run) {
   const diag = run.deezerDiagnosis
   if (diag?.status === "blocked") {
     return { side: "deezer", text: "Deezer bloque l'adresse du VPS (Access Denied d'Akamai) : le backend ne peut plus rien lui demander et tous les joueurs sont touchés. Ça arrive après trop d'appels depuis le VPS (des tests ?) et ça se lève en général seul en quelques heures." }
+  }
+  // Les extraits des deux playlists viennent de la recherche Deezer : si celle de
+  // Deezer passe, la recherche marche, et c'est la playlist Spotify qui coince.
+  const deezerLinkOk = run.checks.some(c => c.provider === "deezer" && c.ok)
+  if (deezerLinkOk && ko.every(c => c.provider === "spotify" && c.code === "insufficient_tracks")) {
+    return { side: "spotify", text: "Seule la playlist Spotify ne donne plus assez de titres avec extrait, et la playlist Deezer passe : la recherche des extraits marche. Sans doute la playlist Spotify qui a changé (titres retirés ou remplacés) ou des titres que la recherche Deezer ne retrouve pas. Si une autre playlist Spotify se lance à la main, c'est la sonde à mettre à jour (tools/sonde-prod/targets.mjs)." }
   }
   const sides = new Set(ko.map(c => c.suspect))
   if (sides.size === 1 && sides.has("spotify")) {
@@ -94,17 +100,19 @@ export function composeMail(type, run, previous, logPath = LOG_PATH) {
     const since = previous?.downSince ?? run.at
     return {
       subject: `[Blindz] Le solo par lien est toujours en panne (depuis ${formatDuration(Date.parse(run.at) - Date.parse(since))})`,
-      text: `Toujours en panne : première sonde en échec le ${parisTime(since)}, dernier essai le ${at}.\n\n${why}\n\n${details(run)}\n\n${replay}\n\nProchain rappel dans 6 h si ça ne revient pas.\n${footer}`,
+      text: `Toujours en panne : première sonde en échec le ${parisTime(since)}, dernier essai le ${at}.\n\n${why}\n\n${details(run)}\n\n${replay}\n\nProchain rappel dans 6 h environ si ça ne revient pas.\n${footer}`,
     }
   }
   return {
     subject: "[Blindz] Le solo par lien ne marche plus sur blindz.app",
-    text: `La sonde n'arrive plus à lancer un solo par lien sur blindz.app (le ${at}, deux essais à une minute d'écart).\n\n${why}\n\n${details(run)}\n\n${replay}\n\nJe te renvoie un mail toutes les 6 h tant que ça ne revient pas, et un dernier quand c'est reparti.\n${footer}`,
+    text: `La sonde n'arrive plus à lancer un solo par lien sur blindz.app (le ${at}). Ce qui est en échec ci-dessous a raté deux fois, à une minute d'écart.\n\n${why}\n\n${details(run)}\n\n${replay}\n\nJe te renvoie un mail environ toutes les 6 h tant que ça ne revient pas, et un dernier quand c'est reparti.\n${footer}`,
   }
 }
 
 function logField(c) {
-  if (c.ok) return c.tracks != null ? `${c.id}=ok[${c.tracks} titres;${(c.ms / 1000).toFixed(1)}s${c.attempts > 1 ? ";2e essai" : ""}]` : `${c.id}=ok`
+  const retry = c.attempts > 1 ? "2e essai" : null
+  if (c.ok && c.tracks != null) return `${c.id}=ok[${[`${c.tracks} titres`, `${(c.ms / 1000).toFixed(1)}s`, retry].filter(Boolean).join(";")}]`
+  if (c.ok) return retry ? `${c.id}=ok[${retry}]` : `${c.id}=ok`
   const parts = [c.code ?? "echec", c.http ? `HTTP ${c.http}` : null, c.tracks != null ? `${c.tracks} titres` : null, `suspect=${c.suspect ?? "?"}`]
   return `${c.id}=KO[${parts.filter(Boolean).join(";")}]`
 }
