@@ -207,11 +207,12 @@ export const clientApi = {
       body: JSON.stringify(options),
     })
   },
-  async joinRoom(code: string, nickname?: string): Promise<{ room: MultiplayerRoom }> {
+  async joinRoom(code: string, nickname?: string, opts?: { signal?: AbortSignal }): Promise<{ room: MultiplayerRoom }> {
     return request<{ room: MultiplayerRoom }>(`/api/rooms/${code}/join`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ nickname }),
+      signal: opts?.signal,
     })
   },
   async roomDetails(code: string): Promise<{ room: MultiplayerRoom; participants: MultiplayerParticipant[]; selfPreference: RoomSelfPreference }> {

@@ -32,6 +32,14 @@ import { ResultsView } from "./LobbyViews"
 import { ENTRY_ROUTE, HEADER_COPY } from "./lobbyCopy"
 import type { LobbyRendererProps, LobbyViewState } from "./lobbyTypes"
 import { initialLobbyContext, lobbyReducer } from "./lobbyMachine"
+import { RequestTimeoutError, withTimeoutRetry } from "@/lib/withTimeoutRetry"
+
+// Entree dans un salon : un essai sans reponse au bout de 8 s est abandonne et
+// relance, trois essais en tout. Rejouer le join est sans risque (le backend
+// fait un ON CONFLICT DO UPDATE). Filet de securite : sans lui, une requete
+// perdue laissait le joueur sur "Preparation du lobby" pour toujours.
+const JOIN_TIMEOUT_MS = 8000
+const JOIN_ATTEMPTS = 3
 
 // Phases du mode streamer ou la partie est lancee (vue "en jeu").
 const STREAMER_PLAYING_PHASES: readonly string[] = [
@@ -143,6 +151,8 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   const [gameState, setGameState] = useState<MultiplayerGameState | StreamerState | null>(null)
   const [starting, setStarting] = useState(false)
   const [joining, setJoining] = useState(false)
+  // Le join en cours a deja depasse son delai au moins une fois (relance visible).
+  const [joinRetrying, setJoinRetrying] = useState(false)
   // Code d'erreur structure du dernier join (ex: "room_in_progress") : les vues
   // s'en servent pour afficher un ecran adapte plutot qu'un bandeau generique.
   const [errorCode, setErrorCode] = useState<string | null>(null)
@@ -1002,7 +1012,10 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         setError(null)
         dispatchLobby({ type: "joining" })
         setFlowStarted(true)
-        const { room: joined } = await api.joinRoom(normalizedCode, initialNickname || undefined)
+        const { room: joined } = await withTimeoutRetry(
+          signal => api.joinRoom(normalizedCode, initialNickname || undefined, { signal }),
+          { timeoutMs: JOIN_TIMEOUT_MS, attempts: JOIN_ATTEMPTS, onRetry: () => setJoinRetrying(true) }
+        )
         setErrorCode(null)
         setRoom(joined)
         setGameState(null)
@@ -1039,13 +1052,16 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         console.error("join_room_failed", err)
         const code = err instanceof ApiError ? err.code ?? null : null
         setErrorCode(code)
-        const message = err instanceof ApiError && err.message ? err.message : friendlyError(mode, "join")
+        const message = err instanceof RequestTimeoutError
+          ? "Le serveur ne répond pas. Vérifie ton réseau, puis appuie sur « Rejoindre la partie »."
+          : err instanceof ApiError && err.message ? err.message : friendlyError(mode, "join")
         // "Partie en cours" a son propre ecran d'attente : pas de bandeau en double.
         setError(code === "room_in_progress" ? null : message)
         dispatchLobby({ type: "error", message })
         setFlowStarted(false)
       } finally {
         setJoining(false)
+        setJoinRetrying(false)
       }
     },
     [
@@ -1473,7 +1489,9 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         <div className="space-y-3 text-center">
           <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#c65133]" />
           <p className="text-sm">Préparation du lobby…</p>
-          <p className="text-xs text-[#8a7558]">Si l’attente dure, reviens au menu et relance.</p>
+          <p className="text-xs text-[#8a7558]">
+            {joinRetrying ? "Le réseau traîne, on réessaie tout seul…" : "Si l’attente dure, reviens au menu et relance."}
+          </p>
         </div>
       </div>
     )

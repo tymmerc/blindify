@@ -82,8 +82,8 @@ export const api = {
   }): Promise<{ room: MultiplayerRoom }> {
     return clientApi.createRoom(options)
   },
-  async joinRoom(code: string, nickname?: string): Promise<{ room: MultiplayerRoom }> {
-    return clientApi.joinRoom(code, nickname)
+  async joinRoom(code: string, nickname?: string, opts?: { signal?: AbortSignal }): Promise<{ room: MultiplayerRoom }> {
+    return clientApi.joinRoom(code, nickname, opts)
   },
   async roomDetails(code: string): Promise<{ room: MultiplayerRoom; participants: MultiplayerParticipant[]; selfPreference: RoomSelfPreference }> {
     return clientApi.roomDetails(code)

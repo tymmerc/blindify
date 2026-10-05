@@ -7,9 +7,13 @@
  * rappelait socket.connect() pendant la poignee de main. Le second CONNECT
  * faisait fermer la connexion par le serveur : room:join perdu, websocket
  * coupe, reconnexion apres une a cinq secondes.
+ *
+ * Filet de securite en plus : un join reste sans reponse est abandonne au bout
+ * de 8 s et relance (trois essais), au lieu de laisser "Preparation du lobby"
+ * pour toujours.
  */
 import { act, render, screen, waitFor } from "@testing-library/react"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { ModeProvider } from "@/contexts/ModeContext"
 import { GAME_MODES } from "@/lib/gameModes"
 
@@ -84,7 +88,7 @@ vi.mock("@/hooks/useServerTime", () => ({ useServerTime: () => Date.now() }))
 // Les vues du salon ne sont pas testees ici : seul compte d'y arriver.
 vi.mock("./EventLobbyView", () => ({
   EventLobbyView: (props: { room: { room_code: string } | null }) =>
-    props.room ? <p>Tu es dans la partie {props.room.room_code}</p> : null,
+    props.room ? <p>Tu es dans la partie {props.room.room_code}</p> : <p>Formulaire du code</p>,
 }))
 vi.mock("./FriendsLobbyView", () => ({ FriendsLobbyView: () => null }))
 vi.mock("./StreamerLobbyView", () => ({ StreamerLobbyView: () => null }))
@@ -102,6 +106,13 @@ const guestSession = () => ({
   user: { id: 7, username: "Lea", provider: "guest" },
   providerConnection: null,
 })
+
+// Join qui ne repond jamais, sauf pour signaler son abandon (comme fetch).
+function hangingJoin(_code: string, _nickname: string | undefined, opts: { signal: AbortSignal }) {
+  return new Promise((_, reject) => {
+    opts.signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")))
+  })
+}
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -139,7 +150,7 @@ describe("ModeLobbyView : un invite entre par le lien du QR", () => {
     renderLobby()
 
     await waitFor(() => expect(mocks.api.joinRoom).toHaveBeenCalledTimes(1))
-    expect(mocks.api.joinRoom).toHaveBeenCalledWith("ABC123", "Lea")
+    expect(mocks.api.joinRoom.mock.calls[0].slice(0, 2)).toEqual(["ABC123", "Lea"])
     expect(screen.getByText(/Préparation du lobby/)).toBeInTheDocument()
 
     // Le serveur n'a pas encore accepte le socket quand la reponse du join arrive.
@@ -163,5 +174,43 @@ describe("ModeLobbyView : un invite entre par le lien du QR", () => {
       expect.objectContaining({ roomCode: "ABC123", user: expect.objectContaining({ id: 7 }) })
     )
     expect(mocks.socket!.connect).toHaveBeenCalledTimes(1)
+  })
+
+  describe("filet de securite : join sans reponse", () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it("relance le join, le dit au joueur, puis l'emmene dans le salon", async () => {
+      const second = deferred<{ room: typeof ROOM }>()
+      mocks.api.joinRoom.mockImplementationOnce(hangingJoin).mockReturnValueOnce(second.promise)
+      renderLobby()
+      await waitFor(() => expect(mocks.api.joinRoom).toHaveBeenCalledTimes(1))
+      expect(screen.getByText(/Si l’attente dure/)).toBeInTheDocument()
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(8000) })
+      expect(mocks.api.joinRoom).toHaveBeenCalledTimes(2)
+      expect(mocks.api.joinRoom.mock.calls[0][2].signal.aborted).toBe(true)
+      expect(screen.getByText(/Le réseau traîne, on réessaie tout seul/)).toBeInTheDocument()
+
+      await act(async () => { second.resolve({ room: ROOM }) })
+      expect(await screen.findByText(/Tu es dans la partie ABC123/)).toBeInTheDocument()
+    })
+
+    it("apres trois essais sans reponse, rend la main avec un message clair", async () => {
+      mocks.api.joinRoom.mockImplementation(hangingJoin)
+      renderLobby()
+      await waitFor(() => expect(mocks.api.joinRoom).toHaveBeenCalledTimes(1))
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(3 * 8000) })
+      expect(mocks.api.joinRoom).toHaveBeenCalledTimes(3)
+      expect(await screen.findByText(/Le serveur ne répond pas/)).toBeInTheDocument()
+      expect(screen.getByText("Formulaire du code")).toBeInTheDocument()
+      expect(screen.queryByText(/Préparation du lobby/)).not.toBeInTheDocument()
+    })
   })
 })

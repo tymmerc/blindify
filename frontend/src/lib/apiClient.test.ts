@@ -213,6 +213,17 @@ describe("clientApi", () => {
       expect(init.method).toBe("POST")
       expect(result.room).toEqual({ id: 1, code: "WXYZ" })
     })
+
+    it("transmet le signal d'abandon a fetch (delai de l'entree en salle)", async () => {
+      mockFetch.mockResolvedValueOnce(okResponse({ room: { id: 1, code: "WXYZ" } }))
+      const controller = new AbortController()
+
+      await clientApi.joinRoom("WXYZ", "Lea", { signal: controller.signal })
+
+      const [, init] = mockFetch.mock.calls[0]
+      expect(init.signal).toBe(controller.signal)
+      expect(JSON.parse(init.body)).toEqual({ nickname: "Lea" })
+    })
   })
 
   describe("quickPlay", () => {

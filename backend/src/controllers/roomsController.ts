@@ -248,11 +248,16 @@ export const roomsController = {
       }
     }
 
-    const participants = await pool.query(
-      `SELECT COUNT(*)::INT AS total FROM room_participants WHERE room_id=$1`,
-      [room.id]
+    // Un joueur deja inscrit n'est jamais refuse pour "salle pleine" : il
+    // renvoie le meme join (F5, ou relance du front quand la premiere reponse
+    // n'est pas arrivee a temps). Le join reste ainsi rejouable sans risque.
+    const participants = await pool.query<{ total: number; self: number }>(
+      `SELECT COUNT(*)::INT AS total, COUNT(*) FILTER (WHERE user_id=$2)::INT AS self
+       FROM room_participants WHERE room_id=$1`,
+      [room.id, user.id]
     );
-    if (participants.rows[0]?.total >= room.max_players) {
+    const counts = participants.rows[0] ?? { total: 0, self: 0 };
+    if (!counts.self && counts.total >= room.max_players) {
       fail(res, "room_full", "La salle est pleine", 409);
       return;
     }
