@@ -55,6 +55,27 @@ test("cause : seule la playlist Spotify casse", () => {
   assert.equal(c.side, "spotify")
 })
 
+test("cause : la playlist Deezer de la sonde a disparu, Deezer va bien", () => {
+  const gone = { ...deezerOk, ok: false, suspect: "deezer", code: "no_playlists", http: 400, detail: "HTTP 400 no_playlists" }
+  const c = cause(run([api, page, gone], { status: "ok", detail: "Deezer répond normalement" }))
+  assert.equal(c.side, "deezer")
+  assert.match(c.text, /targets\.mjs/)
+})
+
+test("cause : seuls les extraits ne se lisent pas depuis le VPS", () => {
+  const cdn = { ...deezerOk, ok: false, suspect: "deezer", code: "extrait", detail: "extrait refusé, HTTP 403 (cdnt-preview.dzcdn.net)" }
+  const c = cause(run([api, page, cdn], { status: "ok", detail: "Deezer répond normalement" }))
+  assert.equal(c.side, "deezer")
+  assert.match(c.text, /CDN de Deezer/)
+})
+
+test("cause : echecs melanges, pas de certitude", () => {
+  const gone = { ...deezerOk, ok: false, suspect: "deezer", code: "no_playlists", detail: "x" }
+  const cdn = { ...spotifyOk, ok: false, suspect: "deezer", code: "extrait", detail: "y" }
+  const c = cause(run([api, page, gone, cdn], { status: "ok", detail: "ok" }))
+  assert.deepEqual([c.side, /sans certitude/.test(c.text)], ["inconnu", true])
+})
+
 test("cause : rien en echec", () => {
   assert.equal(cause(run([api, page, deezerOk])).side, "aucun")
 })

@@ -47,7 +47,13 @@ export function cause(run) {
   if (diag?.status === "ok" && ko.some(c => c.code === "insufficient_tracks")) {
     return { side: "app", text: "Deezer répond normalement en direct, mais l'app ne trouve plus d'extraits : sans doute un changement chez Deezer que notre recherche ne suit plus (comme le 02/10), donc à corriger chez nous (deezerPreviewService)." }
   }
-  return { side: "deezer", text: "Ça ressemble à Deezer ou Spotify plutôt qu'à notre code, sans certitude : voir le détail." }
+  if (ko.every(c => c.code === "no_playlists" || c.code === "no_tracks")) {
+    return { side: ko[0].suspect, text: "La playlist de la sonde n'est plus lue (supprimée, rendue privée, ou l'API a changé) alors que Deezer répond en direct. Si une autre playlist se lance à la main, c'est la sonde à mettre à jour (tools/sonde-prod/targets.mjs)." }
+  }
+  if (ko.every(c => c.code === "extrait")) {
+    return { side: "deezer", text: "Le CDN de Deezer ne sert plus les extraits au VPS. Les joueurs passent par leur propre connexion et ne sont peut-être pas touchés : un essai à la main depuis un téléphone le dira." }
+  }
+  return { side: "inconnu", text: "Ça ressemble à Deezer ou Spotify plutôt qu'à notre code, sans certitude : voir le détail." }
 }
 
 function checkLine(c) {
