@@ -34,6 +34,24 @@ const contextFields = ({ mode, sessionId, gameCode }: FeedbackContext) => ({
   ...(APP_VERSION ? { appVersion: APP_VERSION } : {}),
 })
 
+/**
+ * Contexte du retour sur l'ecran de resultats multijoueur, ou null quand le
+ * bloc ne doit pas s'afficher : ecran central d'une partie autour d'une table
+ * (l'hote presente sans jouer), mode streamer (masque) ou mode inconnu.
+ */
+export function multiplayerFeedbackContext(options: {
+  mode: string
+  roomCode?: string | null
+  isHost: boolean
+  hostPlays: boolean
+}): FeedbackContext | null {
+  const { roomCode, isHost, hostPlays } = options
+  const mode: FeedbackMode | null = options.mode === "friends" || options.mode === "event" ? options.mode : null
+  if (!mode) return null
+  if (mode === "event" && isHost && !hostPlays) return null
+  return { mode, gameCode: roomCode ?? null }
+}
+
 export function buildAnswerPayload(context: FeedbackContext, answer: FeedbackAnswer): FeedbackPayload {
   return { kind: "avis", answer, ...contextFields(context) }
 }

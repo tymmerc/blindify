@@ -4,8 +4,6 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type RefObjec
 import { motion, AnimatePresence } from "framer-motion"
 import { Play, Trophy, Volume2, VolumeX } from "lucide-react"
 import type { MultiplayerGameState, UserSummary } from "@/lib/types"
-import type { FeedbackContext } from "@/lib/feedback"
-import { EndFeedback } from "./EndFeedback"
 
 type ChatMessage = {
   userId: number
@@ -76,8 +74,6 @@ type Props = {
   onReady: () => void
   onRematch?: () => void
   onExit?: () => void
-  /** Retour de fin de partie sous le classement final ; null = pas de bloc. */
-  endFeedback?: FeedbackContext | null
   chatMessages: ChatMessage[]
   chatInput: string
   setChatInput: (s: string) => void
@@ -106,7 +102,7 @@ export function TheaterGameView(props: Props) {
     muted, volume, onToggleMute, onVolumeChange,
     manualPlayRequired, isAudioPhase, onManualPlay,
     currentTrack, trackOwnerUsername, player, revealCountdown,
-    onReady, onRematch, onExit, endFeedback,
+    onReady, onRematch, onExit,
     chatMessages, chatInput, setChatInput, onSendChat, chatScrollRef,
   } = props
 
@@ -419,7 +415,6 @@ export function TheaterGameView(props: Props) {
             meId={me}
             onRematch={onRematch}
             onExit={onExit}
-            feedback={endFeedback ?? null}
           />
         )}
       </div>
@@ -606,13 +601,11 @@ function TheaterFinale({
   meId,
   onRematch,
   onExit,
-  feedback,
 }: {
   players: PlayerRow[]
   meId: number
   onRematch?: () => void
   onExit?: () => void
-  feedback: FeedbackContext | null
 }) {
   // Classement : points, puis vitesse cumulee en departage.
   const ranked = [...players].sort((a, b) => {
@@ -700,8 +693,6 @@ function TheaterFinale({
         {onRematch && <button className="finale-btn primary" onClick={onRematch}>Remettre un disque</button>}
         {onExit && <button className="finale-btn" onClick={onExit}>Retour au lobby</button>}
       </motion.div>
-
-      {feedback && <EndFeedback context={feedback} className="mt-4" />}
     </motion.div>
   )
 }
@@ -1269,10 +1260,6 @@ const theaterStyles = `
     position:fixed; inset:0; z-index:80;
     background:${PAPER};
     display:flex; flex-direction:column; align-items:center; justify-content:center;
-    /* "safe" : si le contenu depasse l'ecran (beaucoup de joueurs, formulaire de
-       bug ouvert), il part du haut au lieu d'etre coupe au-dessus du defilement.
-       Les navigateurs qui ne le connaissent pas gardent la ligne precedente. */
-    justify-content:safe center;
     gap:10px; padding:28px 20px; overflow-y:auto;
   }
   .finale-label{

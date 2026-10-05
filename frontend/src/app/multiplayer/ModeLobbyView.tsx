@@ -29,6 +29,7 @@ import { FriendsLobbyView } from "./FriendsLobbyView"
 import { EventLobbyView } from "./EventLobbyView"
 import { StreamerLobbyView } from "./StreamerLobbyView"
 import { ResultsView } from "./LobbyViews"
+import { multiplayerFeedbackContext } from "@/lib/feedback"
 import { ENTRY_ROUTE, HEADER_COPY } from "./lobbyCopy"
 import type { LobbyRendererProps, LobbyViewState } from "./lobbyTypes"
 import { initialLobbyContext, lobbyReducer } from "./lobbyMachine"
@@ -1681,6 +1682,13 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         accentColor={accentColor}
         isHost={isHost}
         isGuest={isGuest}
+        feedback={multiplayerFeedbackContext({
+          mode,
+          roomCode: room?.room_code,
+          isHost,
+          // Sans etat de partie, l'hote d'un event est traite en presentateur : pas de bloc.
+          hostPlays: (gameState as MultiplayerGameState | null)?.hostPlays === true,
+        })}
         onReturn={() => router.replace("/modes")}
         onReplay={async () => {
           if (!room || !isHost) return
