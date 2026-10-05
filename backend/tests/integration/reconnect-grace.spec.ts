@@ -352,6 +352,35 @@ describe("grace de reconnexion apres une coupure reseau", () => {
     }
   });
 
+  it("\"Quitter\" depuis le nouveau socket : la mort tardive de l'ancien n'ouvre pas de grace", async () => {
+    // Revenu sur un nouveau socket apres une coupure, il clique "Quitter".
+    // L'ancien socket, mort sans prevenir, ne tombe qu'apres : ce n'est pas une
+    // coupure a attendre, il est deja parti.
+    const t = await openTable(3, { grace: 4_000 });
+    const [a, b, late] = t.clients;
+    let fresh: GameClient | undefined;
+    try {
+      const second = await connectClient(server.port, late.user);
+      fresh = second;
+      second.socket.emit("room:join", { roomCode: t.roomCode });
+      await waitFor(() => second.states.length >= 1, 5000, "second socket joined");
+      second.socket.emit("room:leave", { roomCode: t.roomCode });
+      second.socket.emit("game:leave", { roomCode: t.roomCode });
+      await waitFor(
+        () => getGameState(t.roomCode)?.players[late.user.id]?.disconnected === true,
+        3000,
+        "marked as left",
+      );
+
+      late.socket.close();
+      await sleep(300);
+      await answerAll([a, b], t.roomCode, 1);
+      await waitFor(inPhase([a, b], "REVEAL"), 1_500, "immediate REVEAL, no grace for a player who left");
+    } finally {
+      await closeTable(t, [fresh]);
+    }
+  });
+
   it("game:sync qui revele une manche en retard ecrit ses reponses et ne revele qu'une fois", async () => {
     const t = await openTable(3, { roundMs: 1_000, session: true });
     const [a, b] = t.clients;

@@ -840,6 +840,9 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
           }
         }
         if (state && state.phase === "GUESSING") {
+          // Deja marque parti : "Quitter" depuis un nouveau socket, l'ancien ne
+          // meurt qu'apres. Ce n'est pas une coupure, pas de grace a ouvrir.
+          const alreadyLeft = state.players[currentUser.id]?.disconnected === true;
           // Mark the player as disconnected instead of recording an empty answer.
           // This way they are excluded from allAnswerablePlayers() and won't
           // trigger a premature reveal that steals time from other players.
@@ -847,7 +850,7 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
           // Coupure reseau (pas "Quitter") : s'il n'a pas repondu, il a 5 s pour
           // revenir avant une revelation anticipee (grace de reconnexion,
           // DISCONNECT_GRACE_MS). Le minuteur de manche, lui, ne l'attend pas.
-          startReconnectGrace(roomCode, currentUser.id);
+          if (!alreadyLeft) startReconnectGrace(roomCode, currentUser.id);
           tryEarlyReveal(io, roomCode);
           broadcastState(io, roomCode);
         } else if (state && state.phase === "REVEAL") {
