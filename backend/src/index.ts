@@ -323,7 +323,10 @@ async function bootstrap() {
 // reference, un premier deploiement sans la table crash-loopait le serveur.
 // Bibliotheque par joueur (migration 005) : la prod l'a deja, la pile de test
 // et la CI partent du schema de la prod. Apres les liens, sa table y fait reference.
-ensureLinksSchema()
+// Le serveur n'ouvre qu'apres (await plus bas) : sur une base neuve, une
+// requete arrivee avant la table repondait en erreur. En cas d'echec, on
+// ouvre quand meme et on le dit dans les logs, comme avant.
+const userTracksReady = ensureLinksSchema()
   .catch(err => logger.error("links_schema_boot_failed", { error: err }))
   .then(() => ensureUserTracksSchema())
   .catch(err => logger.error("user_tracks_schema_boot_failed", { error: err }));
@@ -424,6 +427,7 @@ process.on("unhandledRejection", (reason) => {
   logger.error("unhandled_rejection", { reason: String(reason) });
 });
 
+await userTracksReady;
 server.listen(PORT, "0.0.0.0", () => {
     logger.info(`🚀 Blindify API listening on port ${PORT}`);
   });

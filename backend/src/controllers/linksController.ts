@@ -11,7 +11,22 @@ import { logger } from "../utils/logger";
  * seules les cartes du PROPRIETAIRE exposent la liste complete, a sa demande.
  */
 
-export async function ensureLinksSchema(): Promise<void> {
+// Une fois par processus : l'ALTER TABLE prend un verrou ACCESS EXCLUSIVE sur
+// audio_sources AVANT de regarder si la colonne existe. Rejoue a chaque import
+// de carte et a chaque lancement, il faisait la queue derriere toute longue
+// transaction (la migration 005) en bloquant les lectures d'audio_sources
+// derriere lui. Un echec n'est pas retenu : l'appel suivant recommence.
+let linksSchema: Promise<void> | null = null;
+
+export function ensureLinksSchema(): Promise<void> {
+  linksSchema ??= createLinksSchema().catch(err => {
+    linksSchema = null;
+    throw err;
+  });
+  return linksSchema;
+}
+
+async function createLinksSchema(): Promise<void> {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS imported_links (
       id SERIAL PRIMARY KEY,
