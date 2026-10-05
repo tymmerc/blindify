@@ -63,7 +63,7 @@ export default function MentionsLegalesPage() {
               <br />
               Allemagne
               <br />
-              Téléphone : +49 9831 5050
+              Téléphone : +49 9831 505-0
             </p>
           </Section>
 
