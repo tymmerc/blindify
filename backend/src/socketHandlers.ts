@@ -532,6 +532,13 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
         emitRoomError(socket, roomCode, "Aucune partie en cours.");
         return;
       }
+      // Partie deja finie (l'etat FINISHED reste une minute en memoire) : un
+      // "pret" tardif ne repasse pas par la fin de partie, sinon user_stats
+      // compterait la partie et l'XP une deuxieme fois. Il recoit juste l'etat.
+      if (existing.phase === "FINISHED") {
+        sendStateToSocket(roomCode);
+        return;
+      }
       logger.debug(`game:ready phase before markReady: ${existing.phase}, round: ${existing.currentRound}`);
       const beforeRound = existing.currentRound;
       const state = markReadyState(roomCode, currentUser.id);
@@ -562,9 +569,20 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
       }
     });
 
-    socket.on("game:sync", async ({ roomCode }: { roomCode: string }) => {
+    socket.on("game:sync", async (payload: { roomCode?: unknown }) => {
+      const roomCode = validRoomCode(payload?.roomCode);
       if (!roomCode) return;
       if (!allowEvent(socket.id, "sync", 4, 5_000)) return;
+      // Membres de la salle seulement, comme room:join : sans ce controle, un
+      // compte qui connaissait le code rejoignait la room socket d'une partie en
+      // cours (reveals avec la reponse, scores), pouvait forcer un reveal ou
+      // solder la room (trouve le 05/10/2026). Refus muet : le client repond a
+      // room:error par un room:join, inutile pour un non-membre.
+      const access = await requireRoomAccess(roomCode, currentUser.id);
+      if (!access) {
+        logger.debug(`game:sync DENIED for user ${currentUser.id} - no access to ${roomCode}`);
+        return;
+      }
       const state = getRealtimeState(roomCode);
       if (!state) {
         // Une partie STREAMER vit dans une autre map memoire : si elle est
