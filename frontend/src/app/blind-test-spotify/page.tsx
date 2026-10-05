@@ -10,7 +10,7 @@ import { BLUE, FaqList, GuideShell, Li, Section, Steps, faqJsonLd, howToJsonLd, 
 const URL = "https://blindz.app/blind-test-spotify/"
 const TITLE = "Faire un blind test avec ses playlists Spotify"
 const DESC =
-  "Comment faire un blind test avec ses propres playlists Spotify, entre amis, sans que personne ne se connecte à Spotify : copier le lien d'une playlist publique ou d'un profil, le coller, et jouer."
+  "Un blind test entre amis sur ses playlists Spotify, sans que personne ne se connecte : copier le lien d'une playlist publique ou d'un profil, le coller, jouer."
 const UPDATED = "2026-09-08"
 
 export const metadata: Metadata = {
