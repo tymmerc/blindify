@@ -184,12 +184,22 @@ const chrome = await chromium.launch()
 // 1. HTML pre-rendu : la premiere fin seulement, d'un seul tenant
 {
   const { ctx, page } = await ouvrir(chrome, { viewport: { width: 1440, height: 900 } })
-  const html = await page.evaluate(() => fetch(location.href).then(r => r.text()))
-  const h1 = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/)?.[1] ?? ""
-  const texte = propre(h1.replace(/<[^>]+>/g, "").replace(/&#x27;|&#39;/g, "'").replace(/&nbsp;/g, " "))
+  // Le HTML tel que le serveur l'envoie, lu par le navigateur (DOMParser, pas
+  // d'expression reguliere sur du HTML) ; go-prod-front.sh cherche titre-fin
+  // dans la page brute, d'ou le test sur le texte brut.
+  const pre = await page.evaluate(async () => {
+    const brut = await fetch(location.href).then(r => r.text())
+    const h1 = new DOMParser().parseFromString(brut, "text/html").querySelector("h1")
+    return {
+      texte: h1?.textContent ?? "",
+      rotation: Boolean(h1?.querySelector("[data-etat], .volet")),
+      repere: Boolean(h1?.querySelector(".titre-fin")) && brut.includes("titre-fin"),
+    }
+  })
+  const texte = propre(pre.texte)
   if (texte !== PREMIERE) mal(`HTML pre-rendu : titre « ${texte} »`)
-  else if (/data-etat|volet/.test(h1)) mal("HTML pre-rendu : la rotation est deja dans le HTML")
-  else if (!h1.includes("titre-fin")) mal("HTML pre-rendu : pas de titre-fin (texte attendu par go-prod-front.sh)")
+  else if (pre.rotation) mal("HTML pre-rendu : la rotation est deja dans le HTML")
+  else if (!pre.repere) mal("HTML pre-rendu : pas de titre-fin (texte attendu par go-prod-front.sh)")
   else bon(`HTML pre-rendu : « ${texte} », rien d'autre dans le h1, repere titre-fin present`)
   await ctx.close()
 }
