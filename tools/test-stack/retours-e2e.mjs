@@ -7,6 +7,10 @@
 //      resultats : bug signale depuis le telephone, le backend doit retrouver
 //      la partie par le code de la salle ;
 //   4. les lignes de game_feedback dans la base DE TEST ;
+//   (apres la revue) un 429 simule a l'ecran, l'affichage du tableau de bord
+//   quand on change vite de filtre, puis par l'API : version hors format
+//   gardee sans version, texte nettoye (sens d'ecriture, invisibles, lignes
+//   vides) et vrai 429 de la limite par adresse ;
 //   5. l'onglet Retours du tableau de bord, servi en local contre la base de
 //      test, puis contre une base vide (« table pas encore creee »).
 //
@@ -113,6 +117,18 @@ async function desktopGame(browser) {
     check(await region.isVisible(), "ordinateur : le bloc est sous les resultats du solo")
     await region.scrollIntoViewIfNeeded()
     await shot(page, "5-solo-fin-1440x900")
+    // Premier envoi refuse par un 429 simule (rien n'arrive au backend) : le
+    // message doit dire qu'il y a eu trop d'envois, et laisser reessayer.
+    await page.route("**/api/feedback", route => route.fulfill({
+      status: 429,
+      contentType: "application/json",
+      body: JSON.stringify({ success: false, data: null, error: { code: "rate_limited", message: "Trop de retours d'un coup." } }),
+    }))
+    await region.getByRole("button", { name: "Oui" }).click()
+    await page.getByText(/Beaucoup d'envois d'un coup/).waitFor({ timeout: 10000 })
+    check(await region.getByRole("button", { name: "Oui" }).isEnabled(), "ordinateur : 429 simule, message « Beaucoup d'envois d'un coup », bouton de nouveau actif")
+    await shot(page, "5b-solo-429-1440x900")
+    await page.unroute("**/api/feedback")
     await region.getByRole("button", { name: "Oui" }).click()
     await page.getByText("Merci, c'est noté.").waitFor({ timeout: 10000 })
     check(true, "ordinateur : « Oui » envoye et confirme")
@@ -307,6 +323,23 @@ async function adminCheck(browser, roomSessionId) {
     await shot(page, "10-admin-retours-390x844", { fullPage: true })
 
     await page.setViewportSize({ width: 1440, height: 900 })
+    const texteStyle = await page.locator(".retour .texte").first().evaluate(el => {
+      const st = getComputedStyle(el)
+      return `${st.maxHeight} ${st.overflowY}`
+    })
+    check(/^\d+(\.\d+)?px auto$/.test(texteStyle), `tableau de bord : un texte long defile dans sa carte (max-height et overflow : ${texteStyle})`)
+    // Course entre filtres : la reponse « bugs » est retardee et arrive APRES
+    // celle de « tous ». L'ecran doit garder « tous » (la derniere demande).
+    await page.route("**/api/retours?*type=bug*", async route => {
+      await sleep(1500)
+      await route.continue()
+    })
+    await page.locator("#filtre-retours button[data-f='bug']").click()
+    await page.locator("#filtre-retours button[data-f='']").click()
+    await sleep(2500)
+    const apresCourse = await page.locator(".retour").count()
+    check(apresCourse === 4, `tableau de bord : filtre change vite (bugs puis tous), la reponse lente des bugs n'ecrase pas « tous » (${apresCourse} cartes)`)
+    await page.unroute("**/api/retours?*type=bug*")
     await page.goto("http://127.0.0.1:3105/blindz/#retours", { waitUntil: "networkidle" })
     await page.getByText(/Table pas encore créée/).waitFor({ timeout: 10000 })
     check(true, "tableau de bord : base sans la table, message « table pas encore créée »")
@@ -321,6 +354,30 @@ async function adminCheck(browser, roomSessionId) {
   }
 }
 
+/* ---------------- corrections de la revue, par l'API ---------------- */
+
+async function apiChecks() {
+  const version = await api("/api/feedback", { method: "POST", body: { kind: "bug", mode: "chrono", message: "e2e version", appVersion: "<pas une version>" } })
+  const stored = psql(`SELECT coalesce(app_version, 'NULL') FROM game_feedback WHERE message = 'e2e version'`)
+  check(version.status === 201 && stored === "NULL", `api : version hors format, retour garde sans version (${version.status}, ${stored})`)
+
+  const sale = "e2e texte \u202Eexe.txt\u202C\u200B fin\u2028ligne\n\n\n\n\nbas\u0085"
+  const cleaned = await api("/api/feedback", { method: "POST", body: { kind: "bug", mode: "buzzer", message: sale } })
+  const text = psql(`SELECT replace(message, E'\n', '|') FROM game_feedback WHERE message LIKE 'e2e texte%'`)
+  check(cleaned.status === 201 && text === "e2e texte exe.txt fin|ligne||bas",
+    `api : texte nettoye en base (sens d'ecriture, invisibles, U+2028, lignes vides) : ${JSON.stringify(text)}`)
+
+  // Vraie limite par adresse : tout vient de 127.0.0.1, au plus 40 envois en
+  // 10 minutes. Le 429 doit arriver avant 45 envois, avec son code.
+  let first429 = 0
+  let code = ""
+  for (let i = 1; i <= 45 && !first429; i++) {
+    const r = await api("/api/feedback", { method: "POST", body: { kind: "avis", answer: "oui", mode: "solo" } })
+    if (r.status === 429) { first429 = i; code = r.error?.code }
+  }
+  check(first429 > 0 && code === "rate_limited", `api : limite par adresse atteinte, 429 rate_limited (au ${first429}e envoi de la rafale)`)
+}
+
 // Memes options que browser.mjs : son autorise et chaine audio complete, la
 // sonde reconnait le morceau a sa frequence pour donner la bonne reponse.
 const browser = await chromium.launch({ args: ["--autoplay-policy=no-user-gesture-required"], ignoreDefaultArgs: ["--mute-audio"] })
@@ -332,6 +389,7 @@ try {
   const room = await remoteGame(browser)
   checkRows(room)
   await adminCheck(browser, room.sessionId)
+  await apiChecks()
 } catch (e) {
   problems.push(`arret : ${String(e.message).split("\n").slice(0, 4).join(" / ").slice(0, 400)}`)
   console.log(`[ECHEC] arret : ${e.message}`)
