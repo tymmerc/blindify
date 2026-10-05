@@ -2,19 +2,20 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { FaqList, GuideShell, Li, Section, Steps, VERMILION, faqJsonLd, webPageJsonLd } from "@/components/home/Guide"
 
-// Guide "blind test en soiree". Chiffres verifies dans le code : manches de
-// 10/15/20/30 s (20 par defaut), parties de 5/10/15/20 manches, 12 joueurs par
-// salle, 5 sur un seul telephone (multi-touch iPhone), ecran de l'hote maintenu
-// allume (wake lock), retardataires qui entrent entre deux parties.
+// Guide "blind test en soiree" (couvre aussi l'apero entre potes : une page a
+// part aurait dit la meme chose). Chiffres verifies dans le code : manches de
+// 10/15/20/30 s (20 par defaut), parties de 5/10/15/20 manches, 12 places par
+// salle hote compris, 5 sur un seul telephone (multi-touch iPhone), ecran de
+// l'hote maintenu allume (wake lock), retardataires qui entrent entre deux parties.
 
 const URL = "https://blindz.app/blind-test-soiree/"
-const TITLE = "Organiser un blind test en soirée : écran central, QR code ou un seul téléphone"
+const TITLE = "Organiser un blind test en soirée ou à l'apéro entre potes : écran central, QR code ou un seul téléphone"
 const DESC =
-  "Comment organiser un blind test en soirée sans rien préparer : un écran au milieu et les téléphones des invités, ou un seul téléphone à doigt posé. Réglages, déroulé, pièges à éviter."
-const UPDATED = "2026-09-08"
+  "Organiser un blind test en soirée ou à l'apéro entre potes sans rien préparer : un écran au milieu et les téléphones des invités, ou un seul téléphone. Réglages, déroulé, pièges."
+const UPDATED = "2026-10-05"
 
 export const metadata: Metadata = {
-  title: "Organiser un blind test en soirée",
+  title: "Organiser un blind test en soirée ou à l'apéro",
   description: DESC,
   alternates: { canonical: URL },
   openGraph: { title: TITLE, description: DESC, url: URL, type: "article", locale: "fr_FR" },
@@ -54,7 +55,7 @@ const FAQ = [
   },
   {
     q: "On est plus de 12, on fait comment ?",
-    a: "Deux salles, avec deux écrans : une salle accepte 12 joueurs au plus. Et quel que soit le nombre, pensez aux manches : chaque manche joue le morceau d'un seul joueur, donc avec 5 manches et 10 joueurs, la moitié de la table ne verra jamais passer sa musique. Nombreux, prenez 15 ou 20 manches.",
+    a: "Deux salles, avec deux écrans : une salle a 12 places, l'écran central compris s'il présente seulement. Et quel que soit le nombre, pensez aux manches : chaque manche joue le morceau d'un seul joueur, donc avec 5 manches et 10 joueurs, la moitié de la table ne verra jamais passer sa musique. Nombreux, prenez 15 ou 20 manches.",
   },
 ]
 
@@ -63,9 +64,9 @@ export default function Page() {
     <GuideShell
       tag="Guide soirée"
       tagColor={VERMILION}
-      title={<>Organiser un blind test en <em className="font-medium italic text-[#cc4830]">soirée</em></>}
+      title={<>Organiser un blind test en <em className="font-medium italic text-[#cc4830]">soirée</em> ou à l'apéro</>}
       intro="Un écran au milieu et les téléphones des invités, ou un seul téléphone qui passe de main en main. Dans les deux cas il n'y a rien à préparer : chacun ramène sa playlist, la partie se génère toute seule. Voilà comment ça se déroule, et les deux ou trois pièges à éviter."
-      updated="8 septembre 2026"
+      updated="5 octobre 2026"
       currentHref="/blind-test-soiree/"
       jsonLd={[webPageJsonLd(URL, TITLE, DESC, UPDATED), faqJsonLd(FAQ)]}
     >
@@ -81,12 +82,22 @@ export default function Page() {
           Les guides pour copier le bon lien : <Link href="/blind-test-spotify/">côté Spotify</Link> et{" "}
           <Link href="/blind-test-deezer/">côté Deezer</Link>. Les deux se mélangent dans la même partie.
         </p>
+        <p>
+          À l'apéro, quand les gens arrivent au compte-gouttes, lance des parties courtes de 5 manches : ceux qui
+          arrivent pendant une partie entrent tout seuls à la fin de celle-ci, et personne n'attend longtemps.
+        </p>
+        <p>
+          Pour une occasion précise, il y a un guide à part : <Link href="/blind-test-anniversaire/">l'anniversaire</Link>,{" "}
+          <Link href="/blind-test-evjf-evg/">l'EVJF ou l'EVG</Link>, <Link href="/blind-test-entre-collegues/">entre
+          collègues</Link>, et pour <Link href="/blind-test-tv/">brancher la télé</Link>.
+        </p>
       </Section>
 
       <Section tag="Autour d'une table" title="Un écran au milieu, un téléphone par joueur" tone="ink">
         <p>
           Le mode fait pour une soirée. L'écran central, c'est la télé avec un PC branché, un ordinateur posé sur la
-          table, ou tout simplement le téléphone de l'organisateur avec une enceinte. Jusqu'à 12 joueurs.
+          table, ou tout simplement le téléphone de l'organisateur avec une enceinte. Une salle a 12 places, l'écran
+          central compris s'il présente seulement.
         </p>
         <Steps light items={TABLE_STEPS} />
       </Section>
