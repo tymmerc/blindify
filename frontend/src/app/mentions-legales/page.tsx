@@ -26,7 +26,7 @@ export default function MentionsLegalesPage() {
           <h1 className="font-display text-4xl font-semibold md:text-5xl">
             Mentions <em className="font-medium italic text-[#c65133]">légales</em>
           </h1>
-          <p className="text-sm text-[#8a7558]">Dernière mise à jour : 5 août 2026</p>
+          <p className="text-sm text-[#8a7558]">Dernière mise à jour : 5 octobre 2026</p>
         </div>
 
         <div className="space-y-6">
@@ -55,13 +55,15 @@ export default function MentionsLegalesPage() {
           <Section title="Hébergeur" accent="#7d9471">
             <p>Le site est hébergé par :</p>
             <p className="mt-3">
-              <strong>OVH SAS</strong>
+              <strong>Hetzner Online GmbH</strong>
               <br />
-              2 rue Kellermann
+              Industriestrasse 25
               <br />
-              59100 Roubaix
+              91710 Gunzenhausen
               <br />
-              France
+              Allemagne
+              <br />
+              Téléphone : +49 9831 505-0
             </p>
           </Section>
 

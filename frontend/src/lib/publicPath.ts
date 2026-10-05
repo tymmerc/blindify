@@ -21,3 +21,8 @@ export function absoluteUrl(path: string): string {
   const origin = typeof window !== "undefined" ? window.location.origin : ""
   return `${origin}${publicPath(path)}`
 }
+
+/** Adresse du site a afficher (texte ou image partages) : "blindz.app" en prod. */
+export function siteLabel(): string {
+  return absoluteUrl("/").replace(/^https?:\/\//, "").replace(/\/+$/, "")
+}

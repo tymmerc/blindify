@@ -251,7 +251,7 @@ function ModeSelectionContent() {
           ))}
           <VinylSleeve
             title="Solo"
-            subtitle="Toi, une playlist, le chrono."
+            subtitle="Seul sur ta playlist, ou en défi contre un pote."
             accent="#a8b8c8"
             posture="Rapide"
             rpm="33⅓ RPM · STÉRÉO"

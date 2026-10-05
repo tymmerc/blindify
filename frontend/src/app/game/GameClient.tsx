@@ -6,9 +6,14 @@ import { api } from "@/lib/api"
 import type { CurrentUserPayload } from "@/lib/api"
 import type { SoloGameResponse, SoloTrack } from "@/lib/types"
 import { SoloGameClient } from "@/components/game/SoloGameClient"
-import { Button } from "@/components/ui/button"
-import { AlertTriangle } from "lucide-react"
+import { SoloLoading, SoloProblem } from "@/components/game/SoloStatus"
 import { clearUserDashboardCache } from "@/lib/userData"
+import { DEFAULT_PLAYER_NAME, NICKNAME_KEY, readStored } from "@/lib/soloSetup"
+import { playerErrorText } from "@/lib/errorText"
+
+// Texte montre quand l'erreur n'a pas de message du backend (reseau coupe,
+// proxy) : jamais "Failed to fetch" ou "Load failed" a l'ecran.
+const START_FAILED = "Impossible de joindre Blindz pour lancer la partie. Vérifie ta connexion, puis réessaie."
 
 function normalizeDifficulty(value: string | null): "easy" | "normal" | "hard" {
   return value === "easy" || value === "hard" ? value : "normal"
@@ -46,6 +51,10 @@ export default function GameClient() {
   const quickUrl = searchParams.get("quickUrl")
   const progressive = searchParams.get("progressive") === "true"
   const isQuickPlay = source === "quickplay" && Boolean(quickUrl)
+  // Partie lancee depuis l'onglet "Defier un ami" : la fin met le defi en avant.
+  const challengeIntent = searchParams.get("challenge") === "1"
+  // Retour au lobby sur l'onglet d'ou l'on venait.
+  const lobbyPath = challengeIntent ? "/solo?tab=challenge" : "/solo"
   const roundsCount = (() => {
     const raw = searchParams.get("count")
     const parsed = raw ? Number(raw) : NaN
@@ -66,8 +75,11 @@ export default function GameClient() {
           const decoded = decodeURIComponent(quickUrl)
           const result = await api.quickPlay(decoded, roundsCount)
           if (!active) return
+          // Le pseudo saisi a l'entree (/jouer) : c'est lui qu'un ami voit sur le
+          // defi. Avant, tout defi lance d'ici s'appelait "Defi de Joueur".
+          const username = readStored(NICKNAME_KEY) || DEFAULT_PLAYER_NAME
           setUserPayload({
-            user: { id: 0, provider: "guest", provider_id: "quick", username: "Joueur", email: null, avatar: null },
+            user: { id: 0, provider: "guest", provider_id: "quick", username, email: null, avatar: null },
             providerConnection: null,
           })
           setSessionInfo(result.session as SoloGameResponse["session"])
@@ -96,11 +108,7 @@ export default function GameClient() {
       } catch (err) {
         console.error("solo_game_start_failed", err)
         if (!active) return
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Unable to start a new game. Try syncing more tracks or switching providers."
-        )
+        setError(playerErrorText(err, START_FAILED))
       } finally {
         if (active) setLoading(false)
       }
@@ -135,40 +143,18 @@ export default function GameClient() {
     [sessionInfo?.id]
   )
 
-  if (loading) {
-    return (
-      <div className="grid min-h-screen place-items-center">
-        <div className="rounded-full border border-white/10 bg-white/5 px-6 py-3 text-sm uppercase tracking-[0.5em] text-slate-300">
-          Initialising game
-        </div>
-      </div>
-    )
-  }
+  if (loading) return <SoloLoading />
 
   if (error) {
-    return (
-      <div className="grid min-h-screen place-items-center px-6">
-        <div className="surface flex max-w-md flex-col items-center gap-4 rounded-3xl border border-white/10 p-8 text-center">
-          <AlertTriangle className="h-10 w-10 text-neon" />
-          <p className="text-sm text-slate-300">{error}</p>
-          <Button variant="outline" onClick={() => router.replace("/modes")} className="gap-2">
-            Return to menu
-          </Button>
-        </div>
-      </div>
-    )
+    return <SoloProblem message={error} onBack={() => router.replace(lobbyPath)} />
   }
 
   if (!userPayload || !sessionInfo || !hasTracks) {
     return (
-      <div className="grid min-h-screen place-items-center px-6">
-        <div className="surface flex max-w-md flex-col items-center gap-3 rounded-3xl border border-white/10 p-8 text-center text-sm text-slate-300">
-          <p>No playable tracks were found for this configuration.</p>
-          <Button variant="outline" onClick={() => router.replace("/modes")}>
-            Back to menu
-          </Button>
-        </div>
-      </div>
+      <SoloProblem
+        message="Aucun titre jouable avec ce lien. Les playlists sont peut-être privées, ou sans extrait disponible."
+        onBack={() => router.replace(lobbyPath)}
+      />
     )
   }
 
@@ -182,6 +168,7 @@ export default function GameClient() {
         difficulty={difficulty}
         source={source}
         progressive={progressive}
+        challengeIntent={challengeIntent}
         onGameComplete={handleGameComplete}
       />
     </main>

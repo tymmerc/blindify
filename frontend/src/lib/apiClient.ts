@@ -139,11 +139,11 @@ export const clientApi = {
       body: JSON.stringify({ username, password }),
     })
   },
-  async currentUser(): Promise<{ user: UserSummary; providerConnection: ProviderConnectionSummary | null } | null> {
+  async currentUser(opts?: { signal?: AbortSignal }): Promise<{ user: UserSummary; providerConnection: ProviderConnectionSummary | null } | null> {
     try {
       return await request<{ user: UserSummary; providerConnection: ProviderConnectionSummary | null }>(
         "/api/auth/me",
-        { cache: "no-store" }
+        { cache: "no-store", signal: opts?.signal }
       )
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
@@ -207,11 +207,12 @@ export const clientApi = {
       body: JSON.stringify(options),
     })
   },
-  async joinRoom(code: string, nickname?: string): Promise<{ room: MultiplayerRoom }> {
+  async joinRoom(code: string, nickname?: string, opts?: { signal?: AbortSignal }): Promise<{ room: MultiplayerRoom }> {
     return request<{ room: MultiplayerRoom }>(`/api/rooms/${code}/join`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ nickname }),
+      signal: opts?.signal,
     })
   },
   async roomDetails(code: string): Promise<{ room: MultiplayerRoom; participants: MultiplayerParticipant[]; selfPreference: RoomSelfPreference }> {
@@ -399,13 +400,14 @@ export const clientApi = {
       method: "DELETE",
     })
   },
-  async createGuestSession(nickname?: string): Promise<{ sessionToken: string }> {
+  async createGuestSession(nickname?: string, opts?: { signal?: AbortSignal }): Promise<{ sessionToken: string }> {
     return request<{ sessionToken: string }>("/api/auth/guest", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ nickname }),
+      signal: opts?.signal,
     })
   },
   async reportBug(message: string, pageUrl?: string): Promise<{ received: boolean }> {
