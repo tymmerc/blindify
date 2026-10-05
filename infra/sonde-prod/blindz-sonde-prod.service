@@ -1,0 +1,48 @@
+# Sonde de prod de Blindz : un vrai solo par lien sur https://blindz.app, et un
+# e-mail a Tym si ca casse. Lancee par blindz-sonde-prod.timer. Le code
+# (tools/sonde-prod du depot) est copie dans /opt/monitoring/sonde-prod par
+# tools/sonde-prod/installer.sh : la sonde ne depend pas de la branche du
+# dossier /opt/blindify, qui sert le site de dev et change souvent.
+#
+#   systemctl start blindz-sonde-prod.service      un passage tout de suite
+#   journalctl -u blindz-sonde-prod -n 30          ce qu'elle a vu
+#   tail /var/log/blindz-sonde-prod/sonde.log      une ligne par passage
+[Unit]
+Description=Blindz : sonde de prod (solo par lien sur blindz.app, e-mail si panne)
+Documentation=https://github.com/tymmerc/blindify/tree/main/tools/sonde-prod
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/root/.nvm/versions/node/v22.21.1/bin/node /opt/monitoring/sonde-prod/sonde.mjs
+# 1 = la prod est en panne, pas la sonde : l'e-mail s'en charge, l'unite ne
+# passe pas en echec. 2 (sonde cassee) la met en echec (systemctl --failed).
+SuccessExitStatus=1
+# /var/lib/blindz-sonde-prod (etat) et /var/log/blindz-sonde-prod (journal).
+StateDirectory=blindz-sonde-prod
+StateDirectoryMode=0700
+LogsDirectory=blindz-sonde-prod
+LogsDirectoryMode=0700
+# Deux lancements de 90 s au plus, chacun retente une fois apres 60 s.
+TimeoutStartSec=15min
+
+# Garde-fous memoire (gel du VPS le 30/09) : une petite tache, un petit plafond.
+MemoryMax=256M
+MemorySwapMax=0
+CPUQuota=50%
+Nice=10
+IOSchedulingClass=idle
+
+# Lecture seule partout, sauf ses deux dossiers. Elle lit la cle Resend et le
+# destinataire (memes fichiers que blindz-uptime), et node dans /root/.nvm.
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+PrivateDevices=yes
+NoNewPrivileges=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK

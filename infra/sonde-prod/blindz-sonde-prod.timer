@@ -1,0 +1,16 @@
+# Toutes les 65 minutes plutot que toutes les heures pile : le backend garde
+# les recherches Deezer en cache une heure (deezerPreviewService). A 60 minutes,
+# la sonde pourrait relire le cache de son propre passage precedent au lieu
+# d'interroger Deezer, et rater une panne comme celle du 02/10.
+[Unit]
+Description=Blindz : sonde de prod toutes les 65 minutes
+
+[Timer]
+# Premier passage 5 min apres le demarrage du minuteur (ou de la machine),
+# puis 65 min apres le debut du passage precedent. Jamais deux en meme temps.
+OnActiveSec=5min
+OnUnitActiveSec=65min
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target
