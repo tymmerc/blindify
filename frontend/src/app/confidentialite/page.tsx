@@ -66,10 +66,20 @@ export default function ConfidentialitePage() {
               </Item>
               <Item>
                 <strong>Ton retour de fin de partie</strong>, seulement si tu en donnes un : ta réponse à
-                « Ça s'est bien passé ? », le texte que tu écris si tu signales un bug, le mode de jeu et
-                le type de navigateur. Quand on la connaît, le retour est rattaché à la partie concernée,
-                mais on n'y enregistre ni ton pseudo ni ton adresse IP. Ça sert uniquement à corriger les bugs et à améliorer le
-                jeu.
+                « Ça s'est bien passé ? », le texte que tu écris si tu signales un bug, le mode de jeu, le
+                code de la partie, la version du site et la signature technique de ton navigateur (le
+                « user agent », coupé à 300 caractères). Il n'y a ni pseudo ni adresse IP dans la table des
+                retours, mais l'envoi passe quand même par les journaux du serveur décrits juste en dessous.
+                Quand on la connaît, le retour est rattaché à la partie jouée, qui garde la liste de ses
+                joueurs : un retour n'est donc pas anonyme, il est pseudonyme. Le texte libre contient ce que
+                tu y écris, alors évite d'y mettre des infos personnelles. Les retours servent uniquement à
+                corriger les bugs et à améliorer le jeu, et sont effacés automatiquement au bout de 12 mois.
+              </Item>
+              <Item>
+                <strong>Les journaux techniques du serveur.</strong> Comme sur la plupart des sites, notre
+                serveur web (nginx) note chaque requête reçue : adresse IP, date et heure, page demandée,
+                page d'où tu viens et navigateur. Ces journaux servent à la sécurité et à comprendre les
+                pannes. Ils sont effacés automatiquement au bout de 15 jours au plus.
               </Item>
             </ul>
           </Section>
@@ -109,8 +119,8 @@ export default function ConfidentialitePage() {
 
           <Section title="Hébergement" accent="#c65133">
             <p>
-              Les données sont hébergées en France, chez OVH. L'infrastructure et la localisation
-              respectent le cadre européen de protection des données.
+              Le site et ses données sont hébergés en Allemagne, chez Hetzner Online GmbH, dans son centre
+              de données de Falkenstein. Elles restent donc dans l'Union européenne, où s'applique le RGPD.
             </p>
           </Section>
 
