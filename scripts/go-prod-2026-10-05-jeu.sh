@@ -19,12 +19,14 @@
 #   #48 statistiques (chiffres de jeu sans les comptes de test, page admin)
 #   #38 retours de fin de partie : migration 004 (table game_feedback), route
 #       POST /api/feedback, bloc de fin de partie, onglet Retours de l'admin
+#   #55 anti-triche : la reponse du lancement ne donne plus a l'hote les titres
+#       et artistes de toutes les manches (seulement numero et type)
 #   + les mises a jour de dependances deja sur main (pg 8.23.1, socket.io
 #     4.8.4, front : React 19.3...), testees par la campagne
 #   + retrait de E2E_BYPASS_KEY de la prod et du backend de dev (decision de
 #     Tym : la cle est consideree comme exposee, la prod n'en a pas besoin)
-# Ne part PAS : #54 (premier importeur, migration 005), #55 (anti-triche) :
-# le script s'arrete s'il les trouve dans main.
+# Ne part PAS : #54 (premier importeur, migration 005) : le script s'arrete
+# s'il le trouve dans main.
 #
 # Ordre : verifs du code source (rien ne change encore), sauvegardes
 # verifiees, migration (additive), cle E2E, backend (avec retour automatique
@@ -77,6 +79,7 @@ present 'abouti a temps' frontend/src/lib/withTimeoutRetry.ts                   
 present 't-retours' infra/blindz-admin/index.html                                # 38
 present 'orphelin' infra/blindz-admin/index.html                                 # 48
 present 'visites' infra/blindz-admin/index.html                                  # 48
+present 'hiddenTrackRow' backend/src/controllers/roomsController.ts              # 55
 echo "  commit deploye : $(git rev-parse --short HEAD) (main ; campagne verte sur ${TESTE_SHA:0:7})"
 precedent="$(ls -t /opt/backups/env-prod-avant-* 2>/dev/null | head -1 || true)"
 [ -n "$precedent" ] && echo "  NOTE : sauvegarde de config precedente trouvee ($precedent). En cas de relance apres un echec, le vrai retour arriere est celui du PREMIER passage."
@@ -194,6 +197,7 @@ verifie "API en ligne" "curl -sf -m 15 https://blindz.app/api/health >/dev/null"
 verifie "#36 grace de 5 s presente" "dans_dist DISCONNECT_GRACE_MS"
 verifie "#52 game:sync reserve aux membres" "dans_dist 'game:sync DENIED'"
 verifie "#47 join rejouable (pseudo garde)" "dans_dist 'COALESCE(EXCLUDED.nickname, room_participants.nickname)'"
+verifie "#55 lancement sans les titres des manches" "dans_dist hiddenTrackRow"
 verifie "#38 route des retours : un corps vide est refuse (400, pas 404)" "[ \"\$(code_post /api/feedback https://blindz.app)\" = 400 ]"
 verifie "plus de cle E2E dans le conteneur" "docker exec blindify-backend sh -c 'test -z \"\${E2E_BYPASS_KEY:-}\"'"
 verifie "POST depuis blindz.app accepte (404 = route inconnue, origine admise)" "[ \"\$(code_post /api/__controle_origine https://blindz.app)\" = 404 ]"
@@ -259,4 +263,4 @@ echo "  - effacer les copies de config une fois tout valide : /opt/backups/env-*
 echo "  - parcours complets sur blindz.app, un a la fois :"
 echo "      cd /opt/blindify/tools && heavy node soiree.mjs prod"
 echo "      cd /opt/blindify/tools && heavy node party-4-joueurs.mjs prod"
-echo "      cd /opt/blindify/tools && heavy node anticheat-e2e.mjs prod"
+echo "      cd /opt/blindify/tools && heavy node anticheat-e2e.mjs prod   (verifie aussi la reponse du lancement, #55)"
