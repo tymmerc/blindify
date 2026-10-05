@@ -7,7 +7,9 @@ import { api } from "@/lib/api"
 import { SoloGameClient, type RoundStats } from "@/components/game/SoloGameClient"
 import type { SoloTrack, UserSummary } from "@/lib/types"
 import { Loader2 } from "lucide-react"
-import { absoluteUrl, publicPath } from "@/lib/publicPath"
+import { publicPath } from "@/lib/publicPath"
+import { NICKNAME_KEY, cleanPlayerName, isChallengeCode, normalizeChallengeCode, readStored, writeStored } from "@/lib/soloSetup"
+import { ChallengeLeaderboard, type LeaderboardEntry } from "./ChallengeLeaderboard"
 
 type ChallengeData = {
   code: string
@@ -30,15 +32,6 @@ type ChallengeData = {
   attempts: LeaderboardEntry[]
 }
 
-type LeaderboardEntry = {
-  playerName: string
-  score: number
-  correct: number
-  total: number
-  bestStreak: number
-  completedAt: string
-}
-
 type Phase = "loading" | "intro" | "playing" | "leaderboard" | "error" | "no-code"
 
 function ChallengeContent() {
@@ -53,6 +46,12 @@ function ChallengeContent() {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
   const [currentPlayerName, setCurrentPlayerName] = useState("")
   const [codeInput, setCodeInput] = useState("")
+
+  // Pseudo deja saisi sur Blindz (ecran d'entree ou defi precedent) : pre-rempli.
+  useEffect(() => {
+    const stored = readStored(NICKNAME_KEY)
+    if (stored) setPlayerName(stored)
+  }, [])
 
   // Ensure user session exists (guest if needed)
   useEffect(() => {
@@ -89,7 +88,8 @@ function ChallengeContent() {
   }, [challenge])
 
   const handleStart = useCallback(() => {
-    const name = playerName.trim()
+    const name = cleanPlayerName(playerName)
+    writeStored(NICKNAME_KEY, name)
     setCurrentPlayerName(name)
     setPhase("playing")
   }, [playerName])
@@ -115,8 +115,8 @@ function ChallengeContent() {
   }, [code, currentPlayerName, challenge])
 
   const handleCodeSubmit = useCallback(() => {
-    const trimmed = codeInput.trim().toUpperCase()
-    if (trimmed.length >= 4) {
+    const trimmed = normalizeChallengeCode(codeInput)
+    if (isChallengeCode(trimmed)) {
       // publicPath : pas de /blindify en dur, la prod est servie a la racine.
       window.location.href = `${publicPath("/challenge/")}?code=${encodeURIComponent(trimmed)}`
     }
@@ -126,14 +126,15 @@ function ChallengeContent() {
     return (
       <div className="flex min-h-screen items-center justify-center px-6 text-[#2e2014]">
         <div className="w-full max-w-md space-y-6 text-center">
-          <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-[#c65133]">Défi</p>
           <h1 className="font-display text-3xl font-semibold">Rejoindre un défi</h1>
-          <p className="text-sm text-[#6b573f]">Entre le code du défi pour commencer</p>
+          <p className="text-sm text-[#6b573f]">Un pote t&apos;a lancé un défi ? Tape le code qu&apos;il t&apos;a envoyé.</p>
           <div className="flex gap-3">
+            <label htmlFor="challenge-code" className="sr-only">Code du défi</label>
             <input
+              id="challenge-code"
               type="text"
               value={codeInput}
-              onChange={(e) => setCodeInput(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))}
+              onChange={(e) => setCodeInput(normalizeChallengeCode(e.target.value))}
               placeholder="CODE DU DÉFI"
               maxLength={12}
               className="flex-1 rounded-md border-[1.5px] border-[rgba(46,32,20,.35)] bg-[#efe5d0] px-4 py-3 text-center font-display text-lg font-semibold tracking-[0.3em] text-[#2e2014] outline-none transition placeholder:font-sans placeholder:text-sm placeholder:italic placeholder:tracking-[0.15em] placeholder:text-[#b3a182] focus:border-[#c65133]"
@@ -143,11 +144,18 @@ function ChallengeContent() {
           <button
             type="button"
             onClick={handleCodeSubmit}
-            disabled={codeInput.trim().length < 4}
+            disabled={!isChallengeCode(codeInput)}
             className="btn-neon w-full justify-center text-sm disabled:cursor-not-allowed disabled:opacity-40"
           >
             Rejoindre
           </button>
+          <p className="text-sm text-[#6b573f]">
+            Tu veux lancer le tien ?{" "}
+            <a href={`${publicPath("/solo/")}?tab=challenge`} className="font-bold text-[#2e2014] underline decoration-[#c65133] decoration-2 underline-offset-2">
+              Crée un défi
+            </a>{" "}
+            depuis le solo.
+          </p>
         </div>
       </div>
     )
@@ -183,12 +191,11 @@ function ChallengeContent() {
       <div className="flex min-h-screen items-center justify-center px-6 text-[#2e2014]">
         <div className="w-full max-w-md space-y-6">
           <div className="space-y-2 text-center">
-            <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-[#c65133]">Défi</p>
             <h1 className="font-display text-3xl font-semibold">
               Défi de <em className="font-medium italic text-[#c65133]">{challenge.creatorName}</em>
             </h1>
             <p className="text-sm text-[#6b573f]">
-              {challenge.trackCount} titre{challenge.trackCount > 1 ? "s" : ""}
+              {challenge.trackCount} morceau{challenge.trackCount > 1 ? "x" : ""}, les mêmes que {challenge.creatorName}, dans le même ordre. À toi de faire mieux.
             </p>
           </div>
 
@@ -203,18 +210,24 @@ function ChallengeContent() {
             </div>
             {challenge.attempts.length > 0 && (
               <div className="border-t-2 border-dotted border-[rgba(46,32,20,.45)] pt-3 text-xs text-[#8a7558]">
-                {challenge.attempts.length} joueur{challenge.attempts.length > 1 ? "s" : ""} ont déjà relevé le défi
+                {challenge.attempts.length > 1
+                  ? `${challenge.attempts.length} joueurs ont déjà relevé le défi`
+                  : "1 joueur a déjà relevé le défi"}
               </div>
             )}
           </div>
 
           <div className="space-y-3">
+            <label htmlFor="challenger-name" className="block text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">
+              Ton nom au classement
+            </label>
             <input
+              id="challenger-name"
               type="text"
               value={playerName}
               onChange={(e) => setPlayerName(e.target.value)}
               placeholder="Ton pseudo"
-              maxLength={120}
+              maxLength={24}
               className="w-full border-0 border-b-2 border-[#2e2014] bg-transparent px-1 py-2 font-display text-lg text-[#2e2014] outline-none transition placeholder:italic placeholder:text-[#b3a182] focus:border-[#c65133]"
             />
             <button
@@ -247,91 +260,7 @@ function ChallengeContent() {
   }
 
   if (phase === "leaderboard" && challenge) {
-    // Build full leaderboard: creator + attempts
-    const allEntries = [
-      {
-        playerName: challenge.creatorName,
-        score: challenge.creatorScore,
-        correct: challenge.creatorCorrect,
-        total: challenge.creatorTotal,
-        bestStreak: challenge.creatorBestStreak,
-        isCreator: true,
-        isCurrent: false,
-      },
-      ...leaderboard.map((entry) => ({
-        ...entry,
-        isCreator: false,
-        isCurrent: entry.playerName === currentPlayerName,
-      })),
-    ].sort((a, b) => b.score - a.score)
-
-    return (
-      <div className="flex min-h-screen items-center justify-center px-6 text-[#2e2014]">
-        <div className="w-full max-w-lg space-y-6">
-          <div className="text-center space-y-2">
-            <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-[#c65133]">Face B · Classement</p>
-            <h1 className="font-display text-3xl font-semibold">Résultats du défi</h1>
-          </div>
-
-          <div className="rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-6 shadow-[4px_4px_0_rgba(46,32,20,.18)]">
-            {allEntries.map((entry, idx) => {
-              const isHighlighted = entry.isCurrent
-              return (
-                <div
-                  key={`${entry.playerName}-${idx}`}
-                  className="flex items-baseline gap-3 py-2.5"
-                >
-                  <span className="w-8 shrink-0 text-xs font-bold text-[#8a7558]">
-                    A{idx + 1}
-                  </span>
-                  <div className="flex min-w-0 items-baseline gap-2">
-                    <span className={`truncate font-display text-base font-semibold ${isHighlighted ? "text-[#c65133]" : "text-[#2e2014]"}`}>
-                      {entry.playerName}
-                    </span>
-                    {entry.isCreator && (
-                      <span className="shrink-0 rounded-full border-[1.5px] border-[#e0a32e] bg-[#e0a32e] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[#2e2014]">
-                        Créateur
-                      </span>
-                    )}
-                    {isHighlighted && (
-                      <span className="shrink-0 rounded-full border-[1.5px] border-[#7d9471] bg-[#7d9471] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[#f4ecdb]">
-                        Toi
-                      </span>
-                    )}
-                  </div>
-                  <span className="flex-1 -translate-y-1 border-b-2 border-dotted border-[rgba(46,32,20,.45)]" />
-                  <span className="shrink-0 text-right">
-                    <span className="font-display text-base font-bold text-[#2e2014]">{entry.score} pts</span>
-                    <span className="block text-[10px] text-[#8a7558]">
-                      {entry.correct}/{entry.total} · série {entry.bestStreak}
-                    </span>
-                  </span>
-                </div>
-              )
-            })}
-          </div>
-
-          <div className="flex flex-wrap justify-center gap-3 pt-2">
-            <a
-              href={publicPath("/solo/")}
-              className="rounded-full border-[1.5px] border-[#2e2014] px-5 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
-            >
-              Retour
-            </a>
-            <button
-              type="button"
-              onClick={() => {
-                const challengeUrl = `${absoluteUrl("/challenge/")}?code=${encodeURIComponent(code)}`
-                navigator.clipboard.writeText(challengeUrl).catch(() => {})
-              }}
-              className="btn-neon text-sm"
-            >
-              Copier le lien du défi
-            </button>
-          </div>
-        </div>
-      </div>
-    )
+    return <ChallengeLeaderboard challenge={challenge} attempts={leaderboard} currentPlayerName={currentPlayerName} />
   }
 
   return (
