@@ -7,7 +7,11 @@
 // meme base (nuit du 02/10/2026) et restait vert sur base neuve. La campagne ne
 // garde que les problemes, pas la sortie complete : la cause n'etait pas prouvee.
 //
-//   tools/test-stack/campagne-ref.sh <branche> --script /chemin/tools/test-stack/serie-pcfixes.mjs [--passages 6] [--out DOSSIER]
+//   tools/test-stack/campagne-ref.sh <branche> --script /chemin/tools/test-stack/serie-pcfixes.mjs [--passages 6] [--out DOSSIER] [--garder-titres]
+//
+// --garder-titres rejoue sans la liberation des titres que fait le script E2E
+// avant l'import : c'est la reproduction du sujet produit (un hote qui importe
+// des titres deja a quelqu'un n'en recoit aucun et ne peut pas lancer).
 //
 // Le script E2E lance est celui qui est a cote de ce fichier (../pcfixes-e2e.mjs),
 // donc celui de la branche, pas celui du depot. Le dernier passage reprend le
@@ -26,6 +30,7 @@ const SCRIPT = path.join(HERE, "..", "pcfixes-e2e.mjs")
 const RUN = "/opt/blindify/.test-stack"
 const arg = (name, fallback) => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : fallback }
 const PASSAGES = Number(arg("--passages", "6"))
+const GARDER = process.argv.includes("--garder-titres")
 const OUT = path.resolve(arg("--out", path.join(RUN, "serie-pcfixes", new Date().toISOString().replace(/[:.]/g, "-"))))
 if (!Number.isInteger(PASSAGES) || PASSAGES < 2) { console.error("--passages : au moins 2"); process.exit(2) }
 fs.mkdirSync(OUT, { recursive: true })
@@ -81,13 +86,15 @@ const tranche = (f, depuis) => { try { return fs.readFileSync(f).subarray(depuis
 const BACKEND_LOG = `${RUN}/logs/backend.log`
 const STUB_LOG = `${RUN}/logs/deezer-stub.log`
 
-say(`serie de ${PASSAGES} passages de ${SCRIPT} --pile, sortie complete dans ${OUT}`)
+say(`serie de ${PASSAGES} passages de ${SCRIPT} --pile${GARDER ? " (titres gardes)" : ""}, sortie complete dans ${OUT}`)
 write("base-0-avant.txt", etatBase())
 const passages = []
 for (let n = 1; n <= PASSAGES; n++) {
   const avant = { lien: dernierLien(), backend: taille(BACKEND_LOG), stub: taille(STUB_LOG) }
   const prisAvant = Number(lire(`SELECT count(*) FROM audio_sources a WHERE ${FAUX_DEEZER} AND a.user_id IS NOT NULL`))
   const env = { ...process.env, PATH: `${path.dirname(process.execPath)}:${process.env.PATH}`, PCFIXES_SHOTS: path.join(OUT, "captures", `passage-${n}`) }
+  if (GARDER) env.PCFIXES_GARDER_TITRES = "1"
+  else delete env.PCFIXES_GARDER_TITRES
   if (n === PASSAGES && passages[0]?.profil) env.PCFIXES_PROFIL = String(passages[0].profil)
   else delete env.PCFIXES_PROFIL
   const t = Date.now()
@@ -114,7 +121,7 @@ for (let n = 1; n <= PASSAGES; n++) {
 }
 
 const lignes = [
-  `serie pcfixes --pile, ${PASSAGES} passages sur la meme base (${new Date().toISOString()})`,
+  `serie pcfixes --pile${GARDER ? " --garder-titres" : ""}, ${PASSAGES} passages sur la meme base (${new Date().toISOString()})`,
   `commit teste : ${fs.existsSync(`${RUN}/front.commit`) ? fs.readFileSync(`${RUN}/front.commit`, "utf8").split(" ")[0] : "?"}`,
   "",
   "passage | profil (titres k) | titres du faux Deezer deja pris avant | titres recus par l'hote | lancement | salle | resultat",

@@ -11,6 +11,8 @@
 // Variables utiles pour rejouer un passage (voir test-stack/serie-pcfixes.mjs) :
 //   PCFIXES_PROFIL=4321   profil factice impose au lieu d'un tirage (--pile)
 //   PCFIXES_SHOTS=/dossier  ou ranger les captures
+//   PCFIXES_GARDER_TITRES=1 ne libere pas les titres du profil avant l'import
+//                         (--pile) : reproduit le sujet produit decrit plus bas
 import { chromium, devices } from "@playwright/test"
 import fs from "fs"
 import { seedLibrary, cleanupSeeded } from "./seed-library.mjs"
@@ -77,7 +79,8 @@ if (PILE) {
   // (les profils se partagent les 48 titres du faux Deezer), d'ou la liberation.
   const profil = Number(process.env.PCFIXES_PROFIL) || 3000 + Math.floor(Math.random() * 6000)
   say(`  profil factice ${profil}`)
-  await libererTitresDuProfil(profil)
+  if (process.env.PCFIXES_GARDER_TITRES === "1") say("  titres du profil laisses a leurs proprietaires (PCFIXES_GARDER_TITRES)")
+  else await libererTitresDuProfil(profil)
   await host.locator('input[placeholder^="https://"]').fill(`https://www.deezer.com/profile/${profil}`)
   await host.getByRole("button", { name: /importer ma musique/i }).click()
   await host.getByText(/titres? importés?/).waitFor({ timeout: 90000 })
