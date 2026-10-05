@@ -8,7 +8,12 @@ import type { SoloGameResponse, SoloTrack } from "@/lib/types"
 import { SoloGameClient } from "@/components/game/SoloGameClient"
 import { SoloLoading, SoloProblem } from "@/components/game/SoloStatus"
 import { clearUserDashboardCache } from "@/lib/userData"
-import { NICKNAME_KEY, readStored } from "@/lib/soloSetup"
+import { DEFAULT_PLAYER_NAME, NICKNAME_KEY, readStored } from "@/lib/soloSetup"
+import { playerErrorText } from "@/lib/errorText"
+
+// Texte montre quand l'erreur n'a pas de message du backend (reseau coupe,
+// proxy) : jamais "Failed to fetch" ou "Load failed" a l'ecran.
+const START_FAILED = "Impossible de joindre Blindz pour lancer la partie. Vérifie ta connexion, puis réessaie."
 
 function normalizeDifficulty(value: string | null): "easy" | "normal" | "hard" {
   return value === "easy" || value === "hard" ? value : "normal"
@@ -48,6 +53,8 @@ export default function GameClient() {
   const isQuickPlay = source === "quickplay" && Boolean(quickUrl)
   // Partie lancee depuis l'onglet "Defier un ami" : la fin met le defi en avant.
   const challengeIntent = searchParams.get("challenge") === "1"
+  // Retour au lobby sur l'onglet d'ou l'on venait.
+  const lobbyPath = challengeIntent ? "/solo?tab=challenge" : "/solo"
   const roundsCount = (() => {
     const raw = searchParams.get("count")
     const parsed = raw ? Number(raw) : NaN
@@ -70,7 +77,7 @@ export default function GameClient() {
           if (!active) return
           // Le pseudo saisi a l'entree (/jouer) : c'est lui qu'un ami voit sur le
           // defi. Avant, tout defi lance d'ici s'appelait "Defi de Joueur".
-          const username = readStored(NICKNAME_KEY) || "Joueur"
+          const username = readStored(NICKNAME_KEY) || DEFAULT_PLAYER_NAME
           setUserPayload({
             user: { id: 0, provider: "guest", provider_id: "quick", username, email: null, avatar: null },
             providerConnection: null,
@@ -101,11 +108,7 @@ export default function GameClient() {
       } catch (err) {
         console.error("solo_game_start_failed", err)
         if (!active) return
-        setError(
-          err instanceof Error && err.message
-            ? err.message
-            : "Impossible de lancer la partie. Vérifie ton lien et réessaie."
-        )
+        setError(playerErrorText(err, START_FAILED))
       } finally {
         if (active) setLoading(false)
       }
@@ -143,14 +146,14 @@ export default function GameClient() {
   if (loading) return <SoloLoading />
 
   if (error) {
-    return <SoloProblem message={error} onBack={() => router.replace("/solo")} />
+    return <SoloProblem message={error} onBack={() => router.replace(lobbyPath)} />
   }
 
   if (!userPayload || !sessionInfo || !hasTracks) {
     return (
       <SoloProblem
         message="Aucun titre jouable avec ce lien. Les playlists sont peut-être privées, ou sans extrait disponible."
-        onBack={() => router.replace("/solo")}
+        onBack={() => router.replace(lobbyPath)}
       />
     )
   }

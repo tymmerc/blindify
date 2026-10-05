@@ -1,6 +1,5 @@
-import { describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { buildShareText } from "./shareText"
-import { siteLabel } from "./publicPath"
 
 const stats = { rounds: 5, correct: 3, bestStreak: 2, points: 12 }
 
@@ -25,8 +24,24 @@ describe("buildShareText", () => {
 })
 
 describe("siteLabel", () => {
-  it("donne l'adresse courante sans protocole ni barre finale", () => {
-    expect(siteLabel()).toBe(`${window.location.host}${process.env.NEXT_PUBLIC_BASE_PATH ?? "/blindify"}`.replace(/\/+$/, ""))
-    expect(siteLabel()).not.toMatch(/^https?:|\/$/)
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    vi.resetModules()
+  })
+
+  // jsdom tourne sur http://localhost:3000 : c'est le "site courant" des tests.
+  async function siteLabelWith(basePath: string) {
+    vi.stubEnv("NEXT_PUBLIC_BASE_PATH", basePath)
+    vi.resetModules()
+    return (await import("./publicPath")).siteLabel()
+  }
+
+  it("garde le chemin du site sous-dossier (dev.tymmerc.eu/blindify), sans protocole ni barre finale", async () => {
+    expect(await siteLabelWith("/blindify")).toBe("localhost:3000/blindify")
+    expect(await siteLabelWith("/blindify/")).toBe("localhost:3000/blindify")
+  })
+
+  it("site servi a la racine (blindz.app) : le domaine seul", async () => {
+    expect(await siteLabelWith("")).toBe("localhost:3000")
   })
 })

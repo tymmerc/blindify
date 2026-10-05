@@ -6,11 +6,21 @@ import { clientApi } from "@/lib/apiClient"
 import { api } from "@/lib/api"
 import { SoloGameClient, type RoundStats } from "@/components/game/SoloGameClient"
 import type { SoloTrack, UserSummary } from "@/lib/types"
-import { Loader2 } from "lucide-react"
 import { publicPath } from "@/lib/publicPath"
-import { NICKNAME_KEY, cleanPlayerName, isChallengeCode, normalizeChallengeCode, readStored, writeStored } from "@/lib/soloSetup"
-import { ChallengeLeaderboard, type LeaderboardEntry } from "./ChallengeLeaderboard"
+import type { LeaderboardEntry } from "@/lib/challengeLeaderboard"
+import { challengeLoadProblem, type ChallengeLoadProblem } from "@/lib/errorText"
+import {
+  NICKNAME_KEY,
+  cleanPlayerName,
+  extractChallengeCode,
+  isChallengeCode,
+  normalizeChallengeCode,
+  readStored,
+  rememberNicknameIfNone,
+} from "@/lib/soloSetup"
+import { ChallengeLeaderboard } from "./ChallengeLeaderboard"
 import { ChallengeShell } from "./ChallengeShell"
+import { ChallengeLoading, ChallengeProblem } from "./ChallengeStatus"
 
 type ChallengeData = {
   code: string
@@ -41,7 +51,9 @@ function ChallengeContent() {
 
   const [phase, setPhase] = useState<Phase>(code ? "loading" : "no-code")
   const [challenge, setChallenge] = useState<ChallengeData | null>(null)
-  const [error, setError] = useState("")
+  const [problem, setProblem] = useState<ChallengeLoadProblem>("network")
+  // Incremente par "Reessayer" : relance le chargement du defi.
+  const [loadAttempt, setLoadAttempt] = useState(0)
   const [playerName, setPlayerName] = useState("")
   const [user, setUser] = useState<UserSummary | null>(null)
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
@@ -61,17 +73,29 @@ function ChallengeContent() {
     }).catch(() => {})
   }, [])
 
-  // Fetch challenge data
+  // Chargement du defi. Les messages du serveur et du navigateur ne sont
+  // jamais montres tels quels : 400/404 = defi introuvable, le reste se retente.
   useEffect(() => {
     if (!code) return
+    let active = true
     clientApi.getChallenge(code).then((data) => {
+      if (!active) return
       setChallenge(data)
       setPhase("intro")
     }).catch((err) => {
-      setError(err instanceof Error ? err.message : "Défi introuvable")
+      if (!active) return
+      setProblem(challengeLoadProblem(err))
       setPhase("error")
     })
-  }, [code])
+    return () => {
+      active = false
+    }
+  }, [code, loadAttempt])
+
+  const handleRetry = useCallback(() => {
+    setPhase("loading")
+    setLoadAttempt((n) => n + 1)
+  }, [])
 
   const soloTracks: SoloTrack[] = useMemo(() => {
     if (!challenge) return []
@@ -90,7 +114,6 @@ function ChallengeContent() {
 
   const handleStart = useCallback(() => {
     const name = cleanPlayerName(playerName)
-    writeStored(NICKNAME_KEY, name)
     setCurrentPlayerName(name)
     setPhase("playing")
   }, [playerName])
@@ -106,6 +129,8 @@ function ChallengeContent() {
         bestStreak: stats.bestStreak,
       })
       setLeaderboard(result.leaderboard)
+      // Nom retenu pour la prochaine fois, sans ecraser le pseudo de /jouer.
+      rememberNicknameIfNone(currentPlayerName)
     } catch {
       // Still show leaderboard from challenge data if submit fails
       if (challenge) {
@@ -135,9 +160,9 @@ function ChallengeContent() {
               id="challenge-code"
               type="text"
               value={codeInput}
-              onChange={(e) => setCodeInput(normalizeChallengeCode(e.target.value))}
+              // Pas de maxLength : le lien entier peut etre colle ici, on en garde le code.
+              onChange={(e) => setCodeInput(extractChallengeCode(e.target.value).slice(0, 12))}
               placeholder="CODE DU DÉFI"
-              maxLength={12}
               className="flex-1 rounded-md border-[1.5px] border-[rgba(46,32,20,.35)] bg-[#efe5d0] px-4 py-3 text-center font-display text-lg font-semibold tracking-[0.3em] text-[#2e2014] outline-none transition placeholder:font-sans placeholder:text-sm placeholder:italic placeholder:tracking-[0.15em] placeholder:text-[#b3a182] focus:border-[#c65133]"
               onKeyDown={(e) => e.key === "Enter" && handleCodeSubmit()}
             />
@@ -162,40 +187,19 @@ function ChallengeContent() {
     )
   }
 
-  if (phase === "loading") {
-    return (
-      <div className="flex min-h-screen items-center justify-center text-[#2e2014]">
-        <Loader2 className="h-8 w-8 animate-spin text-[#c65133]" />
-      </div>
-    )
-  }
+  if (phase === "loading") return <ChallengeLoading />
 
-  if (phase === "error") {
-    return (
-      <ChallengeShell>
-        <div className="space-y-4 border-2 border-[#2e2014] bg-[#ece1c8] p-8 text-center shadow-[4px_4px_0_rgba(46,32,20,.18)]">
-          <h1 className="font-display text-2xl font-semibold text-[#9c2f1d]">Défi introuvable</h1>
-          <p className="text-sm text-[#6b573f]">{error}</p>
-          <a
-            href={publicPath("/challenge/")}
-            className="inline-block rounded-full border-[1.5px] border-[#2e2014] px-6 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
-          >
-            Entrer un code
-          </a>
-        </div>
-      </ChallengeShell>
-    )
-  }
+  if (phase === "error") return <ChallengeProblem problem={problem} onRetry={handleRetry} />
 
   if (phase === "intro" && challenge) {
     return (
       <ChallengeShell>
         <div className="space-y-6">
           <div className="space-y-2 text-center">
-            <h1 className="font-display text-3xl font-semibold">
+            <h1 className="break-words font-display text-3xl font-semibold">
               Défi de <em className="font-medium italic text-[#c65133]">{challenge.creatorName}</em>
             </h1>
-            <p className="text-sm text-[#6b573f]">
+            <p className="break-words text-sm text-[#6b573f]">
               Un blind test sur {challenge.trackCount} morceau{challenge.trackCount > 1 ? "x" : ""}, les mêmes que {challenge.creatorName} et dans le même ordre. Trouve le titre et l&apos;artiste, et bats son score.
             </p>
           </div>
@@ -210,7 +214,7 @@ function ChallengeContent() {
               <span>Série max : {challenge.creatorBestStreak}</span>
             </div>
             {challenge.attempts.length > 0 && (
-              <div className="border-t-2 border-dotted border-[rgba(46,32,20,.45)] pt-3 text-xs text-[#8a7558]">
+              <div className="border-t-2 border-dotted border-[rgba(46,32,20,.45)] pt-3 text-xs text-[#6b573f]">
                 {challenge.attempts.length > 1
                   ? `${challenge.attempts.length} joueurs ont déjà relevé le défi`
                   : "1 joueur a déjà relevé le défi"}
@@ -219,7 +223,7 @@ function ChallengeContent() {
           </div>
 
           <div className="space-y-3">
-            <label htmlFor="challenger-name" className="block text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">
+            <label htmlFor="challenger-name" className="block text-[11px] font-bold uppercase tracking-[0.22em] text-[#6b573f]">
               Ton nom au classement
             </label>
             <input
@@ -264,16 +268,12 @@ function ChallengeContent() {
     return <ChallengeLeaderboard challenge={challenge} attempts={leaderboard} currentPlayerName={currentPlayerName} />
   }
 
-  return (
-    <div className="flex min-h-screen items-center justify-center text-[#2e2014]">
-      <Loader2 className="h-8 w-8 animate-spin text-[#c65133]" />
-    </div>
-  )
+  return <ChallengeLoading />
 }
 
 export default function ChallengePage() {
   return (
-    <Suspense fallback={<div className="grid min-h-screen place-items-center text-sm text-[#6b573f]">Chargement...</div>}>
+    <Suspense fallback={<ChallengeLoading />}>
       <ChallengeContent />
     </Suspense>
   )

@@ -1,11 +1,11 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Check, Loader2, Send, Share2 } from "lucide-react"
 import { clientApi } from "@/lib/apiClient"
 import { absoluteUrl } from "@/lib/publicPath"
 import type { SoloTrack } from "@/lib/types"
-import { NICKNAME_KEY, buildChallengeShareText, cleanPlayerName, writeStored } from "@/lib/soloSetup"
+import { DEFAULT_PLAYER_NAME, buildChallengeShareText, cleanPlayerName, rememberNicknameIfNone } from "@/lib/soloSetup"
 
 // Bloc "Defier un ami" de la fin de partie solo. Avant : un bouton parmi six,
 // qui copiait le lien en silence ("Lien copie !" 3 s, rien d'autre). Sur
@@ -27,6 +27,8 @@ interface Invite {
 }
 
 type Phase = "idle" | "creating" | "ready" | "error"
+/** "failed" : le navigateur a refuse la copie (frequent sur iPhone). */
+type CopyState = "idle" | "done" | "failed"
 
 async function copyText(text: string): Promise<boolean> {
   try {
@@ -37,27 +39,45 @@ async function copyText(text: string): Promise<boolean> {
   }
 }
 
-const BUTTON_BASE = "inline-flex items-center justify-center gap-2 rounded-md border-2 border-[#2e2014] px-5 py-3 text-sm font-bold text-[#f4ecdb] shadow-[4px_4px_0_rgba(46,32,20,.3)] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgba(46,32,20,.3)] disabled:cursor-not-allowed disabled:opacity-50"
-const INK_BUTTON = `${BUTTON_BASE} bg-[#2e2014]`
-// Confirmation = sauge (guide Club analogique).
-const DONE_BUTTON = `${BUTTON_BASE} bg-[#7d9471]`
+/** Menu de partage ferme par le joueur : ce n'est pas une erreur. */
+function isAbort(err: unknown): boolean {
+  return typeof err === "object" && err !== null && (err as { name?: unknown }).name === "AbortError"
+}
+
+const BUTTON_BASE = "inline-flex items-center justify-center gap-2 rounded-md border-2 border-[#2e2014] px-5 py-3 text-sm font-bold shadow-[4px_4px_0_rgba(46,32,20,.3)] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgba(46,32,20,.3)] disabled:cursor-not-allowed disabled:opacity-50"
+const INK_BUTTON = `${BUTTON_BASE} bg-[#2e2014] text-[#f4ecdb]`
+// Confirmation = bloc sauge, texte encre (creme sur sauge : 2,8:1, illisible).
+const DONE_BUTTON = `${BUTTON_BASE} bg-[#7d9471] text-[#2e2014]`
+
+const COPY_HINT: Record<CopyState, string> = {
+  done: "Copié, tu n'as plus qu'à le coller dans ta conversation.",
+  failed: "Ton navigateur a refusé la copie : le lien est sélectionné, copie-le à la main.",
+  idle: "Copie le lien pour l'envoyer.",
+}
 
 function InviteReady({ invite, score, tracks, autoCopied }: { invite: Invite; score: ChallengeScore; tracks: number; autoCopied: boolean }) {
-  const [copied, setCopied] = useState(autoCopied)
+  const [copy, setCopy] = useState<CopyState>(autoCopied ? "done" : "idle")
   const [canShare, setCanShare] = useState(false)
+  const linkRef = useRef<HTMLInputElement>(null)
+  const copied = copy === "done"
 
   useEffect(() => {
     setCanShare(typeof navigator !== "undefined" && typeof navigator.share === "function")
   }, [])
 
-  const handleCopy = async () => setCopied(await copyText(invite.url))
+  const handleCopy = async () => {
+    const ok = await copyText(invite.url)
+    setCopy(ok ? "done" : "failed")
+    // Copie refusee : le lien est selectionne (onFocus), pret a copier a la main.
+    if (!ok) linkRef.current?.focus()
+  }
 
   const handleSend = async () => {
     try {
       await navigator.share({ title: "Défi Blindz", text: buildChallengeShareText({ name: invite.name, points: score.points, tracks }), url: invite.url })
     } catch (err) {
-      if (err instanceof DOMException && err.name === "AbortError") return
-      setCopied(await copyText(invite.url))
+      if (isAbort(err)) return
+      await handleCopy()
     }
   }
 
@@ -69,6 +89,7 @@ function InviteReady({ invite, score, tracks, autoCopied }: { invite: Invite; sc
       </p>
       <label htmlFor="challenge-link" className="sr-only">Lien du défi</label>
       <input
+        ref={linkRef}
         id="challenge-link"
         readOnly
         value={invite.url}
@@ -92,10 +113,8 @@ function InviteReady({ invite, score, tracks, autoCopied }: { invite: Invite; sc
         )}
       </div>
       <p aria-live="polite" className="text-[13px] text-[#6b573f]">
-        {copied
-          ? "Copié, tu n'as plus qu'à le coller dans ta conversation."
-          : canShare ? "Copie le lien, ou envoie-le directement." : "Copie le lien pour l'envoyer."}
-        <span className="block text-[#8a7558]">Code du défi : <strong className="tracking-[0.12em] text-[#2e2014]">{invite.code}</strong></span>
+        {copy === "idle" && canShare ? "Copie le lien, ou envoie-le directement." : COPY_HINT[copy]}
+        <span className="block text-[#6b573f]">Code du défi : <strong className="tracking-[0.12em] text-[#2e2014]">{invite.code}</strong></span>
       </p>
     </div>
   )
@@ -109,7 +128,7 @@ export function ChallengeInvite({ tracks, score, defaultName, featured }: {
   /** Partie lancee depuis l'onglet "Defier un ami" : le bloc passe au premier plan. */
   featured: boolean
 }) {
-  const [name, setName] = useState(defaultName === "Joueur" ? "" : defaultName)
+  const [name, setName] = useState(defaultName === DEFAULT_PLAYER_NAME ? "" : defaultName)
   const [phase, setPhase] = useState<Phase>("idle")
   const [invite, setInvite] = useState<Invite | null>(null)
   const [autoCopied, setAutoCopied] = useState(false)
@@ -117,8 +136,7 @@ export function ChallengeInvite({ tracks, score, defaultName, featured }: {
   const handleCreate = async () => {
     if (phase === "creating") return
     setPhase("creating")
-    const creatorName = cleanPlayerName(name) || "Joueur"
-    if (creatorName !== "Joueur") writeStored(NICKNAME_KEY, creatorName)
+    const creatorName = cleanPlayerName(name) || DEFAULT_PLAYER_NAME
     try {
       const { code } = await clientApi.createChallenge({
         tracks,
@@ -128,6 +146,8 @@ export function ChallengeInvite({ tracks, score, defaultName, featured }: {
         total: score.rounds,
         bestStreak: score.bestStreak,
       })
+      // Nom retenu seulement une fois le defi cree, et sans ecraser le pseudo de /jouer.
+      rememberNicknameIfNone(creatorName)
       const url = `${absoluteUrl("/challenge/")}?code=${encodeURIComponent(code)}`
       // Copie tout de suite, au plus pres du clic : marche sur ordinateur et
       // Android, souvent refusee sur iPhone (d'ou le lien affiche + Copier).
@@ -157,7 +177,7 @@ export function ChallengeInvite({ tracks, score, defaultName, featured }: {
             </p>
           </div>
           <div className="space-y-1.5">
-            <label htmlFor="challenge-name" className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">
+            <label htmlFor="challenge-name" className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#6b573f]">
               Ton nom sur le défi
             </label>
             <input
