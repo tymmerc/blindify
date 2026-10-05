@@ -132,7 +132,7 @@ verify_deployment() {
     sleep 3
 
     # Check backend health
-    if curl -f -s https://tymmerc.eu/blindify/api/health > /dev/null; then
+    if curl -f -s https://blindz.app/api/health > /dev/null; then
         log_success "Backend is healthy"
     else
         log_error "Backend health check failed!"
@@ -141,7 +141,7 @@ verify_deployment() {
     fi
 
     # Check frontend
-    if curl -f -s https://tymmerc.eu/blindify > /dev/null; then
+    if curl -f -s https://blindz.app/ > /dev/null; then
         log_success "Frontend is accessible"
     else
         log_warning "Frontend may not be accessible"
@@ -217,7 +217,7 @@ main() {
 
     echo ""
     log_info "Monitor logs with: pm2 logs"
-    log_info "View site at: https://tymmerc.eu/blindify"
+    log_info "View site at: https://blindz.app/"
 }
 
 # Run main function

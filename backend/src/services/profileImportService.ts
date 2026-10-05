@@ -3,6 +3,10 @@ import { DEEZER_API } from "../config/deezer";
 import { Buffer } from "node:buffer";
 import { logger } from "../utils/logger";
 import { isDeezerId, isSpotifyId } from "../utils/providerIds";
+import { ProviderRateLimitedError } from "./providerBudget";
+
+/** Erreur Deezer "Quota limit exceeded" (api.deezer.com/errors). */
+const DEEZER_QUOTA_ERROR_CODE = 4;
 
 // ---------------------------------------------------------------------------
 // URL Parsing
@@ -321,32 +325,55 @@ async function fetchSpotifyPlaylistTracks(playlistId: string, maxTracks = 500): 
   return tracks;
 }
 
+interface DeezerTracksPage {
+  data?: Array<{
+    id?: number;
+    title?: string;
+    artist?: { name?: string };
+    album?: { title?: string; cover_medium?: string; cover_big?: string };
+    duration?: number;
+  }>;
+  error?: { code?: number };
+  next?: string | null;
+}
+
 async function fetchDeezerPlaylistTracks(playlistId: string, maxTracks = 500): Promise<ImportedTrack[]> {
   const tracks: ImportedTrack[] = [];
   const pageSize = Math.min(maxTracks, 100);
   let cursor: string | null = `${DEEZER_API}/playlist/${encodeURIComponent(playlistId)}/tracks?limit=${pageSize}`;
+  let firstPage = true;
 
   while (cursor && tracks.length < maxTracks) {
+    let page: DeezerTracksPage;
     try {
-      const { data } = await axios.get(cursor, { timeout: 15_000 }) as { data: { data?: any[]; error?: any; next?: string | null } };
-      if (data?.error) break;
-      for (const item of data?.data ?? []) {
-        if (tracks.length >= maxTracks) break;
-        if (!item?.id || !item.title) continue;
-        tracks.push({
-          title: item.title,
-          artist: item.artist?.name ?? "",
-          album: item.album?.title ?? null,
-          cover: item.album?.cover_medium ?? item.album?.cover_big ?? null,
-          externalId: String(item.id),
-          provider: "deezer",
-          durationMs: item.duration ? item.duration * 1000 : null,
-        });
-      }
-      cursor = data?.next ?? null;
-    } catch {
+      page = (await axios.get<DeezerTracksPage>(cursor, { timeout: 15_000 })).data;
+    } catch (err) {
+      // Panne ou refus des la premiere page : on le dit, l'import en masse
+      // compte les echecs et s'arrete sur un 429. Avant, une panne de Deezer
+      // passait pour une playlist vide. Plus loin, on garde ce qui est lu.
+      if (firstPage) throw err;
       break;
     }
+    if (page?.error) {
+      if (page.error.code === DEEZER_QUOTA_ERROR_CODE) throw new ProviderRateLimitedError("deezer");
+      // Playlist privee ou supprimee : vide, comme avant.
+      break;
+    }
+    firstPage = false;
+    for (const item of page?.data ?? []) {
+      if (tracks.length >= maxTracks) break;
+      if (!item?.id || !item.title) continue;
+      tracks.push({
+        title: item.title,
+        artist: item.artist?.name ?? "",
+        album: item.album?.title ?? null,
+        cover: item.album?.cover_medium ?? item.album?.cover_big ?? null,
+        externalId: String(item.id),
+        provider: "deezer",
+        durationMs: item.duration ? item.duration * 1000 : null,
+      });
+    }
+    cursor = page?.next ?? null;
   }
 
   return tracks;

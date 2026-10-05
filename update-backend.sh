@@ -41,6 +41,6 @@ docker logs --tail 20 blindify-backend
 echo ""
 echo -e "${GREEN}✅ Backend updated and restarted!${NC}"
 echo ""
-echo "Test it: curl https://tymmerc.eu/blindify/api/health"
+echo "Test it: curl https://blindz.app/api/health"
 echo "View logs: docker logs -f blindify-backend"
 echo ""

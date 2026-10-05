@@ -1,13 +1,10 @@
 import axios from "axios";
 import { DEEZER_API } from "../config/deezer";
 import { logger } from "../utils/logger";
+import { providerBudget } from "./providerBudget";
 
 const DEEZER_SEARCH_URL = `${DEEZER_API}/search`;
 const DEEZER_TRACK_URL = `${DEEZER_API}/track`;
-
-// Deezer rate limit: 50 requests per 5 seconds
-const RATE_LIMIT_WINDOW_MS = 5_000;
-const RATE_LIMIT_MAX = 50;
 
 const CACHE_TTL_MS = 60 * 60 * 1_000; // 1 hour
 
@@ -76,20 +73,16 @@ function pickMatch(items: DeezerSearchItem[], title: string, artist?: string): D
 
 export class DeezerPreviewService {
   private cache = new Map<string, CacheEntry>();
-  private requestTimestamps: number[] = [];
 
-  /** Throttle requests to stay within Deezer rate limits. */
+  /**
+   * Quota de Deezer (50 appels par 5 s), commun a tout le processus : les
+   * imports passent par la meme garde (services/providerBudget.ts), et les
+   * appels des parties y comptent, ce qui fait reculer les imports d'abord.
+   * Avant, ce compteur etait propre a ce service : les imports n'y figuraient
+   * pas, et des appels simultanes pouvaient repartir ensemble apres l'attente.
+   */
   private async throttle(): Promise<void> {
-    const now = Date.now();
-    this.requestTimestamps = this.requestTimestamps.filter(
-      ts => now - ts < RATE_LIMIT_WINDOW_MS
-    );
-    if (this.requestTimestamps.length >= RATE_LIMIT_MAX) {
-      const oldest = this.requestTimestamps[0];
-      const waitMs = RATE_LIMIT_WINDOW_MS - (now - oldest) + 50;
-      await new Promise(resolve => setTimeout(resolve, waitMs));
-    }
-    this.requestTimestamps.push(Date.now());
+    await providerBudget.pace("deezer");
   }
 
   private cacheKey(title: string, artist?: string): string {

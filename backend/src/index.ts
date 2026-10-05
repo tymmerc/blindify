@@ -39,6 +39,7 @@ import { expireOldInvitations, getAcceptedFriendIds, type ExpiredInvitation } fr
 import { registerSocketHandlers, broadcastFriendPresence } from "./socketHandlers";
 import { logger } from "./utils/logger";
 import { buildAllowedOrigins, matchesAllowedOrigin } from "./utils/origins";
+import { listenHost } from "./config/listen";
 
 dotenv.config();
 
@@ -440,8 +441,8 @@ process.on("unhandledRejection", (reason) => {
   logger.error("unhandled_rejection", { reason: String(reason) });
 });
 
-server.listen(PORT, "0.0.0.0", () => {
-    logger.info(`🚀 Blindify API listening on port ${PORT}`);
+server.listen(PORT, listenHost(), () => {
+    logger.info(`🚀 Blindify API listening on ${listenHost()}:${PORT}`);
   });
 }
 

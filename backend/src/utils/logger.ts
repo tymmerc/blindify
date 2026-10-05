@@ -1,3 +1,4 @@
+import path from 'path';
 import winston from 'winston';
 
 const logLevel = process.env.LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'info' : 'debug');
@@ -100,11 +101,21 @@ export const logger = winston.createLogger({
   ]
 });
 
+/**
+ * Dossier des journaux fichiers (production seulement). Par defaut logs/ dans
+ * le dossier courant : c'est ce que le conteneur de prod monte sur l'hote. Le
+ * backend de DEV, lance depuis le meme dossier, ecrivait dans les MEMES
+ * fichiers : il recoit son propre LOG_DIR (infra/menage-2026-10-05).
+ */
+export function logDirectory(env: NodeJS.ProcessEnv = process.env): string {
+  return env.LOG_DIR?.trim() || 'logs';
+}
+
 // Add file transports in production
 if (process.env.NODE_ENV === 'production') {
   logger.add(
     new winston.transports.File({
-      filename: 'logs/error.log',
+      filename: path.join(logDirectory(), 'error.log'),
       level: 'error',
       maxsize: 5242880, // 5MB
       maxFiles: 5
@@ -113,7 +124,7 @@ if (process.env.NODE_ENV === 'production') {
 
   logger.add(
     new winston.transports.File({
-      filename: 'logs/combined.log',
+      filename: path.join(logDirectory(), 'combined.log'),
       maxsize: 5242880, // 5MB
       maxFiles: 5
     })
