@@ -48,7 +48,7 @@ export default function Page() {
       tag="Guide télé"
       tagColor={BLUE}
       title={<>Un blind test sur la <em className="font-medium italic text-[#cc4830]">télé</em>, les téléphones pour répondre</>}
-      intro="C'est le mode Autour d'une table : la télé diffuse la musique et affiche les scores, et chacun répond depuis son téléphone après avoir scanné un QR code. Le jeu lui-même ne demande rien de spécial. Le vrai sujet, c'est de faire arriver l'image et le son sur la télé, alors voilà les solutions, de la plus sûre à la plus bricolée."
+      intro="C'est le mode Autour d'une table : la télé diffuse la musique et affiche les scores, et chacun répond depuis son téléphone après avoir scanné un QR code. Le jeu lui-même ne demande rien de spécial. Le vrai sujet, c'est de faire arriver l'image et le son sur la télé, alors voilà les solutions possibles, en commençant par la plus simple."
       updated="5 octobre 2026"
       currentHref="/blind-test-tv/"
       jsonLd={[webPageJsonLd(URL, TITLE, DESC, UPDATED), faqJsonLd(FAQ)]}
