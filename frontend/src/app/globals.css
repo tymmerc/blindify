@@ -290,11 +290,13 @@
    L'ancienne fin part en 170 ms, la nouvelle arrive 90 ms apres avec un
    leger rebond ; 14 ms d'ecart entre deux lettres (passage complet ≈ 0,6 s
    pour la fin la plus longue). Transform et opacite seulement : aucun calcul
-   de mise en page. L'entree ne garde pas son etat final (backwards) : une
-   fois posees, les lettres n'ont plus de transform. Ceux qui demandent moins
-   d'animations ne voient jamais ce bloc (le composant reste fixe). Les autres
-   variantes essayees : dev.tymmerc.eu/blindz/apercu-titre/ (description de
-   la PR pour passer de l'une a l'autre). */
+   de mise en page. Opacite 0 quand la lettre est de profil (90 degres) :
+   sinon Safari en dessine un trait au milieu de la ligne. L'entree ne garde
+   pas son etat final (backwards) : une fois posees, les lettres n'ont plus de
+   transform. Ceux qui demandent moins d'animations ne voient jamais ce bloc
+   (le composant reste fixe). Les autres variantes essayees :
+   dev.tymmerc.eu/blindz/apercu-titre/ (description de la PR pour passer de
+   l'une a l'autre). */
 .titre-fin [data-etat="attend"] {
   visibility: hidden;
 }
@@ -313,11 +315,11 @@
 
 @keyframes volet-sort {
   from { transform: perspective(3em) rotateX(0); }
-  to { transform: perspective(3em) rotateX(-90deg); opacity: 0.5; }
+  to { transform: perspective(3em) rotateX(-90deg); opacity: 0; }
 }
 
 @keyframes volet-entre {
-  0% { transform: perspective(3em) rotateX(90deg); opacity: 0.5; }
+  0% { transform: perspective(3em) rotateX(90deg); opacity: 0; }
   62% { transform: perspective(3em) rotateX(-16deg); opacity: 1; }
   100% { transform: perspective(3em) rotateX(0); }
 }

@@ -11,7 +11,7 @@ import fs from "node:fs"
 const APP = "http://blindz-test.localhost:3180/blindify"
 const OUT = process.argv[2] ?? "/opt/mira/dossier/preuves/2026-10-05-blindz-anim/pile"
 const LARGEURS = [320, 390, 768, 1024, 1440]
-const FIGES = [0, 60, 140, 220, 300, 420, 650]
+const FIGES = [0, 60, 140, 220, 300, 420, 650, 1000]
 const PREMIERE = "Le blind test avec vos playlists."
 fs.mkdirSync(OUT, { recursive: true })
 
