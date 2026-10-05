@@ -212,8 +212,8 @@ export default function Page() {
           mini-jeux en solo. Pour jouer sur sa propre musique, on crée une playlist Blinest, connecté à son compte, en
           important une playlist publique Spotify, Deezer ou Apple Music (ou titre par titre), puis on la rattache à
           une room. On peut rejoindre une room en invité ; créer une room ou une playlist demande un compte. Gratuit,
-          financé par la publicité et les dons : la pub est coupée pour tout le monde les mois où l'objectif de dons
-          est atteint. Dans le navigateur, sur ordinateur et mobile, en français, anglais et espagnol. C'est un site
+          avec de la publicité et un objectif de dons mensuel : quand il est atteint, la pub est coupée pour tout le
+          monde jusqu'au mois suivant. Dans le navigateur, sur ordinateur et mobile, en français, anglais et espagnol. C'est un site
           personnel tenu par un développeur seul, avec des modérateurs bénévoles, et son code est ouvert. Nombre de
           joueurs par room non précisé, pas de mécanisme « qui a ajouté ce morceau » trouvé. Sources :{" "}
           <a href="https://blinest.com/docs/faq" rel="noopener nofollow">leur FAQ</a>,{" "}
