@@ -15,6 +15,8 @@ import gamesRoutes from "./routes/games";
 import likesRoutes from "./routes/likes";
 import roomsRoutes from "./routes/rooms";
 import reportsRoutes from "./routes/reports";
+import feedbackRoutes from "./routes/feedback";
+import { ensureFeedbackSchema } from "./services/feedback";
 import statsRoutes from "./routes/stats";
 import audioSourcesRoutes from "./routes/audioSources";
 import friendsRoutes from "./routes/friends";
@@ -296,6 +298,7 @@ app.use("/api/links", linksRoutes);
 app.use("/api/quick-play", quickPlayRoutes);
 app.use("/api/challenges", challengeRoutes);
 app.use("/api/reports", reportsRoutes);
+app.use("/api/feedback", feedbackRoutes);
 
 app.use((_req, res) => {
   fail(res, "not_found", "Ressource introuvable", 404);
@@ -321,6 +324,9 @@ async function bootstrap() {
 // reference, un premier deploiement sans la table crash-loopait le serveur.
 ensureLinksSchema().catch(err => logger.error("links_schema_boot_failed", { error: err }));
 ensureResponseSchema().catch(err => logger.error("response_schema_boot_failed", { error: err }));
+// Retours de fin de partie : la migration 004 cree la table en prod ; le
+// demarrage la cree la ou elle manque encore (pile de test, CI).
+ensureFeedbackSchema().catch(err => logger.error("feedback_schema_boot_failed", { error: err }));
 
 // Index manquants sur les colonnes FK les plus sollicitees : sans eux, chaque
 // suppression en cascade (sessions, rooms, invites) declenche des seq scans.
