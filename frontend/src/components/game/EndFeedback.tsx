@@ -227,7 +227,7 @@ function BugForm({ id, text, onText, status, onSubmit, onCancel }: BugFormProps)
         className="w-full resize-none rounded-md border-[1.5px] border-[rgba(46,32,20,.35)] bg-[#efe5d0] px-3 py-2 text-sm text-[#2e2014] outline-none placeholder:italic placeholder:text-[#8a7558] focus:border-[#c65133]"
       />
       <p id={hintId} className="flex justify-between gap-3 text-[11px] text-[#6b573f]">
-        <span>Facultatif. On l&apos;enregistre avec la partie et ton type de navigateur, sans ton pseudo.</span>
+        <span>Facultatif. On l&apos;enregistre avec le mode de jeu et ton type de navigateur, sans ton pseudo.</span>
         <span className="shrink-0 tabular-nums">{text.length}/{FEEDBACK_MESSAGE_MAX}</span>
       </p>
       {status === "error" ? <p role="alert" className="text-xs font-semibold text-[#9c2f1d]">{SEND_FAILED}</p> : null}

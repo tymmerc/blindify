@@ -67,8 +67,8 @@ export default function ConfidentialitePage() {
               <Item>
                 <strong>Ton retour de fin de partie</strong>, seulement si tu en donnes un : ta réponse à
                 « Ça s'est bien passé ? », le texte que tu écris si tu signales un bug, le mode de jeu et
-                le type de navigateur. Le retour est rattaché à la partie concernée, mais on n'y enregistre
-                ni ton pseudo ni ton adresse IP. Ça sert uniquement à corriger les bugs et à améliorer le
+                le type de navigateur. Quand on la connaît, le retour est rattaché à la partie concernée,
+                mais on n'y enregistre ni ton pseudo ni ton adresse IP. Ça sert uniquement à corriger les bugs et à améliorer le
                 jeu.
               </Item>
             </ul>

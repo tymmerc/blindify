@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { EndFeedback } from "./EndFeedback"
 import { clientApi } from "@/lib/apiClient"
-import { buildBugPayload } from "@/lib/feedback"
+import { buildAnswerPayload, buildBugPayload } from "@/lib/feedback"
 
 vi.mock("@/lib/apiClient", () => ({
   clientApi: { sendFeedback: vi.fn() },
@@ -97,5 +97,13 @@ describe("buildBugPayload", () => {
     expect(payload.message).toHaveLength(1000)
     expect(payload).not.toHaveProperty("sessionId")
     expect(payload).not.toHaveProperty("gameCode")
+  })
+})
+
+describe("buildAnswerPayload", () => {
+  it("n'envoie pas l'identifiant 0 du solo lance par un lien (aucune partie en base)", () => {
+    const payload = buildAnswerPayload({ mode: "solo", sessionId: 0 }, "pas_trop")
+    expect(payload).toMatchObject({ kind: "avis", answer: "pas_trop", mode: "solo" })
+    expect(payload).not.toHaveProperty("sessionId")
   })
 })
