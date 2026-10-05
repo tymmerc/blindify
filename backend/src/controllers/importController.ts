@@ -8,6 +8,7 @@ import { parseProfileUrl, fetchPublicPlaylists, fetchPlaylistTracks, type Import
 import { upsertLink, claimLegacyTracks } from "./linksController";
 import axios from "axios";
 import { deezerPreviewService } from "../services/deezerPreviewService";
+import { isImportProvider, isPlaylistIdFor, normalizeSyncAllRequest } from "../utils/importLimits";
 
 /** How many tracks to pre-resolve Deezer previews for after import (fire-and-forget). */
 const PRE_RESOLVE_BATCH = 50;
@@ -173,8 +174,13 @@ export const importController = {
       fail(res, "missing_params", "provider et playlistId requis.");
       return;
     }
-    if (provider !== "spotify" && provider !== "deezer") {
+    if (!isImportProvider(provider)) {
       fail(res, "invalid_provider", "Provider doit être 'spotify' ou 'deezer'.");
+      return;
+    }
+    // Format verifie avant tout appel au fournisseur (meme regle que sync-all).
+    if (!isPlaylistIdFor(provider, playlistId)) {
+      fail(res, "invalid_playlist_id", "Identifiant de playlist invalide.");
       return;
     }
 
@@ -207,34 +213,46 @@ export const importController = {
 
   /**
    * POST /api/import/sync-all
-   * Body: { provider: "spotify" | "deezer", playlistIds: string[] }
+   * Body: { provider: "spotify" | "deezer", playlistIds: string[], maxTracksPerPlaylist?: number, linkId?: number }
+   * Bornes (nombre de playlists, titres par playlist, format des ids) : utils/importLimits.ts.
    */
   async syncAll(req: Request, res: Response): Promise<void> {
     const context = await getSessionContext(req, res);
     if (!context) return;
 
-    const { provider, playlistIds, maxTracksPerPlaylist, linkId } = req.body as { provider?: string; playlistIds?: string[]; maxTracksPerPlaylist?: number; linkId?: number };
-    if (!provider || !Array.isArray(playlistIds) || playlistIds.length === 0) {
-      fail(res, "missing_params", "provider et playlistIds requis.");
+    const demande = normalizeSyncAllRequest(req.body);
+    if (!demande.ok) {
+      fail(res, demande.code, demande.message);
       return;
     }
-    if (provider !== "spotify" && provider !== "deezer") {
-      fail(res, "invalid_provider", "Provider doit être 'spotify' ou 'deezer'.");
-      return;
+    const { provider, playlistIds, perPlaylistLimit, linkId } = demande;
+    if (demande.ignored > 0 || demande.truncated > 0) {
+      logger.warn("import_sync_all_bounded", {
+        userId: context.user.id,
+        provider,
+        ignored: demande.ignored,
+        truncated: demande.truncated,
+      });
     }
-
-    // Default: 10 tracks per playlist (quick import). Full import requires explicit opt-in.
-    const perPlaylistLimit = Number.isFinite(maxTracksPerPlaylist) && maxTracksPerPlaylist! > 0
-      ? Math.min(maxTracksPerPlaylist!, 500)
-      : 10;
 
     try {
       const seen = new Set<string>();
       let synced = 0;
       let total = 0;
+      let failedPlaylists = 0;
 
       for (const playlistId of playlistIds) {
-        const tracks = await fetchPlaylistTracks(provider, playlistId, perPlaylistLimit);
+        // Une playlist en erreur (privee, supprimee, limite du fournisseur) ne
+        // fait plus echouer tout l'import : avant, le joueur recevait une 500
+        // et relancait tout, ce qui refaisait tous les appels au fournisseur.
+        let tracks: ImportedTrack[];
+        try {
+          tracks = await fetchPlaylistTracks(provider, playlistId, perPlaylistLimit);
+        } catch (err) {
+          failedPlaylists++;
+          logger.warn("import_playlist_failed", { provider, playlistId, error: err });
+          continue;
+        }
         for (const track of tracks) {
           const key = `${track.provider}:${track.externalId}`;
           if (seen.has(key)) continue;
@@ -242,7 +260,7 @@ export const importController = {
           total++;
 
           try {
-            await upsertTrack(context.user.id, track, playlistId, linkId ?? null);
+            await upsertTrack(context.user.id, track, playlistId, linkId);
             synced++;
           } catch (err) {
             logger.error("import_track_failed", { title: track.title, error: err });
@@ -250,12 +268,17 @@ export const importController = {
         }
       }
 
+      if (total === 0 && failedPlaylists === playlistIds.length) {
+        logger.error("import_sync_all_failed", { provider, playlists: playlistIds.length });
+        fail(res, "sync_failed", "Erreur lors de la synchronisation des titres.", 500);
+        return;
+      }
       if (total === 0) {
         fail(res, "empty_playlists", "Aucun titre trouvé dans ces playlists.");
         return;
       }
 
-      ok(res, { synced, failed: total - synced, total });
+      ok(res, { synced, failed: total - synced, total, failedPlaylists });
 
       // Pre-resolve a batch of Deezer previews in background
       preResolveInBackground(context.user.id);
