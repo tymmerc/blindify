@@ -7,6 +7,11 @@ import path from "node:path"
 import { APP, judgeAudio, newPage, sleep, heardTrack } from "./probe.mjs"
 
 const LINK = "https://www.deezer.com/fr/playlist/"
+// Numero de playlist factice tire de la graine, jamais 0 : le backend lit un id
+// 0 comme "pas de playlist" (!data.id), et un vrai id Deezer n'est jamais 0.
+// La graine 520 tombait dessus (solo rouge sans rapport avec l'appli). 0 devient
+// 40, toutes les autres graines gardent leur playlist d'avant.
+export const playlistDe = n => n % 40 || 40
 
 /** Joue une manche solo : ecoute, reconnait le morceau, repond selon `kind`. */
 async function playSoloRound(p, kind, windows, idx) {
@@ -50,7 +55,7 @@ export async function soloCheck(browser, seed, out) {
     const p = a.page
     await a.ctx.grantPermissions(["clipboard-read", "clipboard-write"], { origin })
     await p.goto(`${APP}/solo/`, { waitUntil: "networkidle", timeout: 60000 })
-    await p.getByPlaceholder(/open\.spotify\.com\/user/).first().fill(`${LINK}${seed % 40}`)
+    await p.getByPlaceholder(/open\.spotify\.com\/user/).first().fill(`${LINK}${playlistDe(seed)}`)
     await p.getByRole("button", { name: "5", exact: true }).first().click()
     await shot(p, "1-reglages")
     await p.getByRole("button", { name: /lancer le blind test/i }).click()
@@ -128,7 +133,7 @@ export async function chronoCheck(browser, seed, out) {
   try {
     await p.goto(`${APP}/solo/`, { waitUntil: "networkidle", timeout: 60000 })
     await p.getByRole("button", { name: /^chrono$/i }).click()
-    await p.getByPlaceholder(/open\.spotify\.com\/user/).first().fill(`${LINK}${(seed + 7) % 40}`)
+    await p.getByPlaceholder(/open\.spotify\.com\/user/).first().fill(`${LINK}${playlistDe(seed + 7)}`)
     await p.getByRole("button", { name: "1 min", exact: true }).click()
     await p.getByRole("button", { name: /lancer le chrono/i }).click()
     const title = p.getByPlaceholder("Titre...")
