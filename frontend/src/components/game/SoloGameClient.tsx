@@ -13,6 +13,7 @@ import { audioManager, DEFAULT_AUDIO_VOLUME } from "@/lib/audioManager"
 import { RoundUiState, roundFlowReducer, computeScore, resolveModeFlags, ROUND_FEEDBACK_MS, type ScoreBreakdown } from "@/lib/roundFlow"
 import { getListeningDuration } from "@/lib/progressiveDifficulty"
 import { HintButton } from "./HintButton"
+import { EndFeedback } from "./EndFeedback"
 import { useMode } from "@/contexts/ModeContext"
 import { evaluateGuess as evaluateGuessShared, evaluateGuessSeparate, normalize, tokenize, type Verdict } from "@/lib/matching"
 
@@ -1141,6 +1142,8 @@ export function SoloGameClient({
         showChallenge={!challengeCode}
         challengeIntent={challengeIntent}
         onReplay={handleReplay}
+        // Defi : le retour se donne sur l'ecran du classement (ChallengeLeaderboard).
+        footer={challengeCode ? undefined : <EndFeedback context={{ mode: "solo", sessionId }} />}
       />
     )
   }

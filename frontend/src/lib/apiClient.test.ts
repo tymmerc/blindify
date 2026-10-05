@@ -120,6 +120,17 @@ describe("clientApi", () => {
 
       expect(result).toBeNull()
     })
+
+    it("transmet le signal d'abandon a fetch (delai de la lecture de session)", async () => {
+      mockFetch.mockResolvedValueOnce(okResponse({ user: { id: 1, username: "alice" }, providerConnection: null }))
+      const controller = new AbortController()
+
+      await clientApi.currentUser({ signal: controller.signal })
+
+      const [, init] = mockFetch.mock.calls[0]
+      expect(init.signal).toBe(controller.signal)
+      expect(init.cache).toBe("no-store")
+    })
   })
 
   describe("createGuestSession", () => {
@@ -134,6 +145,16 @@ describe("clientApi", () => {
       expect(init.method).toBe("POST")
       expect(JSON.parse(init.body)).toEqual({ nickname: "Player1" })
       expect(result.sessionToken).toBe("guest-tok")
+    })
+
+    it("transmet le signal d'abandon a fetch (delai de la creation d'invite)", async () => {
+      mockFetch.mockResolvedValueOnce(okResponse({ sessionToken: "guest-tok" }))
+      const controller = new AbortController()
+
+      await clientApi.createGuestSession("Player1", { signal: controller.signal })
+
+      const [, init] = mockFetch.mock.calls[0]
+      expect(init.signal).toBe(controller.signal)
     })
   })
 
@@ -213,6 +234,17 @@ describe("clientApi", () => {
       expect(init.method).toBe("POST")
       expect(result.room).toEqual({ id: 1, code: "WXYZ" })
     })
+
+    it("transmet le signal d'abandon a fetch (delai de l'entree en salle)", async () => {
+      mockFetch.mockResolvedValueOnce(okResponse({ room: { id: 1, code: "WXYZ" } }))
+      const controller = new AbortController()
+
+      await clientApi.joinRoom("WXYZ", "Lea", { signal: controller.signal })
+
+      const [, init] = mockFetch.mock.calls[0]
+      expect(init.signal).toBe(controller.signal)
+      expect(JSON.parse(init.body)).toEqual({ nickname: "Lea" })
+    })
   })
 
   describe("quickPlay", () => {
@@ -261,6 +293,31 @@ describe("clientApi", () => {
       mockFetch.mockRejectedValueOnce(new TypeError("Failed to fetch"))
 
       await expect(clientApi.login("bob", "pass")).rejects.toThrow(TypeError)
+    })
+  })
+
+  describe("sendFeedback", () => {
+    it("POSTe le retour et passe le signal d'abandon a fetch", async () => {
+      mockFetch.mockResolvedValueOnce(okResponse({ received: true }))
+      const controller = new AbortController()
+
+      await clientApi.sendFeedback({ kind: "avis", answer: "oui", mode: "solo" }, controller.signal)
+
+      const [url, init] = mockFetch.mock.calls[0]
+      expect(url).toContain("/api/feedback")
+      expect(init.method).toBe("POST")
+      expect(init.signal).toBe(controller.signal)
+      expect(JSON.parse(init.body)).toEqual({ kind: "avis", answer: "oui", mode: "solo" })
+    })
+
+    it("remonte un 429 en ApiError avec son statut", async () => {
+      mockFetch.mockResolvedValueOnce(errorResponse(429, "rate_limited", "Trop de retours d'un coup."))
+
+      await expect(clientApi.sendFeedback({ kind: "bug", mode: "chrono" })).rejects.toMatchObject({
+        name: "ApiError",
+        status: 429,
+        code: "rate_limited",
+      })
     })
   })
 })

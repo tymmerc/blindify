@@ -48,6 +48,46 @@ const EVENT_ROUND_DURATION_MS = 20_000;
 // Decompte 3-2-1 avant la toute premiere manche (audio + chrono demarrent apres).
 const FIRST_ROUND_PREROLL_MS = 3_000;
 
+/**
+ * Manche non revelee, telle qu'elle sort de l'API REST (/state, /start) : son
+ * numero et son type, rien d'autre. Ni titre, ni artiste, ni qui-a-ajoute, ni
+ * pochette, ni identifiant chez le fournisseur, ni meme l'extrait.
+ */
+function hiddenTrackRow(round: unknown, type: unknown) {
+  return {
+    round,
+    audioSourceId: null,
+    type,
+    track_id: null,
+    title: null,
+    artist: null,
+    album_cover: null,
+    audio_url: null,
+    metadata: { owner_user_id: null, owner_username: null },
+  };
+}
+
+/**
+ * Lignes game_rounds + audio_sources pretes a partir : caviardees au-dela de
+ * revealedUpTo (voir revealedRoundCeiling). Pour les manches revelees, on
+ * re-injecte l'attribution "qui a ajoute" dans metadata (perdue sinon : owner_*
+ * n'est calcule qu'au lancement en memoire, jamais persiste dans
+ * audio_sources.metadata).
+ */
+function publicTrackRows(rows: Array<Record<string, unknown>>, revealedUpTo: number) {
+  return rows.map(row => {
+    if (Number(row.round) > revealedUpTo) return hiddenTrackRow(row.round, row.type);
+    return {
+      ...row,
+      metadata: {
+        ...((row.metadata as Record<string, unknown> | null) ?? {}),
+        owner_user_id: row.owner_user_id ?? null,
+        owner_username: row.owner_username ?? null,
+      },
+    };
+  });
+}
+
 async function syncPlaylistTracks(userId: number, playlistId: string, accessToken: string): Promise<void> {
   const url = `https://api.spotify.com/v1/playlists/${encodeURIComponent(playlistId)}/tracks`;
   let nextUrl: string | null = `${url}?limit=100`;
@@ -248,11 +288,16 @@ export const roomsController = {
       }
     }
 
-    const participants = await pool.query(
-      `SELECT COUNT(*)::INT AS total FROM room_participants WHERE room_id=$1`,
-      [room.id]
+    // Un joueur deja inscrit n'est jamais refuse pour "salle pleine" : il
+    // renvoie le meme join (F5, ou relance du front quand la premiere reponse
+    // n'est pas arrivee a temps). Le join reste ainsi rejouable sans risque.
+    const participants = await pool.query<{ total: number; self: number }>(
+      `SELECT COUNT(*)::INT AS total, COUNT(*) FILTER (WHERE user_id=$2)::INT AS self
+       FROM room_participants WHERE room_id=$1`,
+      [room.id, user.id]
     );
-    if (participants.rows[0]?.total >= room.max_players) {
+    const counts = participants.rows[0] ?? { total: 0, self: 0 };
+    if (!counts.self && counts.total >= room.max_players) {
       fail(res, "room_full", "La salle est pleine", 409);
       return;
     }
@@ -264,10 +309,11 @@ export const roomsController = {
       await pool.query(`UPDATE users SET username=$1 WHERE id=$2`, [nickname, user.id]);
     }
 
+    // Un join rejoue sans pseudo (relance, F5) garde celui deja choisi.
     await pool.query(
       `INSERT INTO room_participants (room_id, user_id, nickname)
        VALUES ($1,$2,$3)
-       ON CONFLICT (room_id, user_id) DO UPDATE SET nickname=EXCLUDED.nickname`,
+       ON CONFLICT (room_id, user_id) DO UPDATE SET nickname=COALESCE(EXCLUDED.nickname, room_participants.nickname)`,
       [room.id, user.id, nickname]
     );
 
@@ -463,32 +509,7 @@ export const roomsController = {
     // ne sort JAMAIS de l'API. Avant ce fix, ouvrir l'onglet Reseau au round 1
     // donnait le corrige complet de la partie.
     const revealedUpTo = revealedRoundCeiling(room.room_code, room.status);
-
-    // Re-injecte l'attribution "qui a ajoute" dans le metadata (perdue sinon : owner_* n'est
-    // calcule qu'au lancement en memoire, jamais persiste dans audio_sources.metadata).
-    const trackRows = trackRowsRaw.map((row: Record<string, unknown>) => {
-      if (Number(row.round) > revealedUpTo) {
-        return {
-          round: row.round,
-          audioSourceId: null,
-          type: row.type,
-          track_id: null,
-          title: null,
-          artist: null,
-          album_cover: null,
-          audio_url: null,
-          metadata: { owner_user_id: null, owner_username: null },
-        };
-      }
-      return {
-        ...row,
-        metadata: {
-          ...((row.metadata as Record<string, unknown> | null) ?? {}),
-          owner_user_id: row.owner_user_id ?? null,
-          owner_username: row.owner_username ?? null,
-        },
-      };
-    });
+    const trackRows = publicTrackRows(trackRowsRaw, revealedUpTo);
 
     ok(res, {
       room,
@@ -766,16 +787,11 @@ export const roomsController = {
          ORDER BY gr.round_index ASC`,
         [session.id]
       );
-      const trackRows = trackRowsRaw.map((row: Record<string, unknown>) => ({
-        ...row,
-        metadata: {
-          ...((row.metadata as Record<string, unknown> | null) ?? {}),
-          owner_user_id: row.owner_user_id ?? null,
-          owner_username: row.owner_username ?? null,
-        },
-      }));
+      // Meme vue que /state : l'hote qui relance en pleine partie (double clic,
+      // 2e onglet) ne recupere pas le corrige au passage.
+      const trackRows = publicTrackRows(trackRowsRaw, revealedRoundCeiling(room.room_code, room.status));
 
-      const gameState = getGameState(room.room_code) ?? null;
+      const gameState = gameStateSnapshot(room.room_code) ?? null;
 
       ok(res, {
         session: {
@@ -1236,6 +1252,12 @@ export const roomsController = {
       metadata: t.metadata ?? {},
     }));
 
+    // Anti-triche : cette reponse part chez l'hote, qui joue souvent lui aussi
+    // (a distance, "je joue aussi", streamer). Elle ne dit que le nombre de
+    // manches ; chaque reponse sort a son reveal, par le socket. L'ecran de
+    // resultats recharge la playlist complete par /state en fin de partie.
+    const publicTracks = normalizedTracks.map(t => hiddenTrackRow(t.round, t.type));
+
     if (room.mode === GameMode.STREAMER) {
       const subModeRaw = typeof req.body?.subMode === "string" ? req.body.subMode.toLowerCase() : "duo";
       const soloSourceRaw = typeof req.body?.soloSource === "string" ? req.body.soloSource.toLowerCase() : "streamer";
@@ -1286,7 +1308,7 @@ export const roomsController = {
           startedAt: session.started_at,
           roomCode: room.room_code,
         },
-        tracks: normalizedTracks,
+        tracks: publicTracks,
         gameState: state,
       });
       return;
@@ -1315,7 +1337,7 @@ export const roomsController = {
     // Pre-roll : la 1re manche demarre 3s plus tard pour laisser passer le
     // decompte 3-2-1 (avant, la musique jouait PENDANT le decompte). Le chrono
     // et l'audio partent donc ensemble, a la fin du decompte.
-    const snapshot = startRoundAndBroadcast(io, room.room_code, {
+    startRoundAndBroadcast(io, room.room_code, {
       startAt: Date.now() + FIRST_ROUND_PREROLL_MS,
     });
 
@@ -1329,8 +1351,10 @@ export const roomsController = {
         startedAt: session.started_at,
         roomCode: room.room_code,
       },
-      tracks: normalizedTracks,
-      gameState: snapshot,
+      tracks: publicTracks,
+      // Vue publique, comme sur le socket : startRoundAndBroadcast rend l'etat
+      // INTERNE, ou la manche 1 est en clair.
+      gameState: gameStateSnapshot(room.room_code) ?? null,
     });
   },
 };

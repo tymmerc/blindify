@@ -4,6 +4,7 @@ import { useState } from "react"
 import { Check } from "lucide-react"
 import { absoluteUrl, publicPath } from "@/lib/publicPath"
 import { buildLeaderboardRows, type ChallengeSummary, type LeaderboardEntry } from "@/lib/challengeLeaderboard"
+import { EndFeedback } from "@/components/game/EndFeedback"
 import { ChallengeShell } from "./ChallengeShell"
 
 // Classement d'un defi, une fois la partie de l'ami terminee. On y propose de
@@ -75,6 +76,8 @@ export function ChallengeLeaderboard({ challenge, attempts, currentPlayerName }:
             Copie impossible ici. Le code du défi : <strong>{challenge.code}</strong>
           </p>
         )}
+
+        <EndFeedback context={{ mode: "defi", gameCode: challenge.code }} />
       </div>
     </ChallengeShell>
   )
