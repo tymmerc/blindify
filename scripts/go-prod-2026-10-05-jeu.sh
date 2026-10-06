@@ -219,7 +219,9 @@ echo "── 6. Front (voie rapide) ──"
 # texte present, et on prouve la nouvelle version par le build id et les chunks.
 echo "  parties en cours juste avant le front : $(en_cours) (le front est reconstruit en place : quelques secondes de 404 sur les pages)"
 AVANT_FRONT="$(ls -dt /opt/backups/front-out-avant-* 2>/dev/null | head -1 || true)"
-if ! bash scripts/go-prod-front.sh "titre-fin"; then
+# Le umask 077 de ce script (sauvegardes) ne doit pas passer au build du front :
+# le 06/10, il a rendu frontend/out illisible pour nginx (500 pendant 18 s).
+if ! ( umask 022; bash scripts/go-prod-front.sh "titre-fin" ); then
   NOUVEAU="$(ls -dt /opt/backups/front-out-avant-* 2>/dev/null | head -1 || true)"
   if [ ! -f frontend/out/index.html ] && [ -n "$NOUVEAU" ] && [ "$NOUVEAU" != "$AVANT_FRONT" ]; then
     rsync -a --delete "$NOUVEAU"/ frontend/out/ && echo "  front d'avant remis depuis $NOUVEAU (le build avait vide out/)"
