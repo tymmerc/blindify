@@ -4,18 +4,16 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import Image from "next/image"
 import Link from "next/link"
 import { api } from "@/lib/api"
-import { clientApi } from "@/lib/apiClient"
 import type { SoloTrack, UserSummary } from "@/lib/types"
-import { ArrowRight, Loader2, Play, Share2, Sparkles, Volume2, VolumeX } from "lucide-react"
+import { ArrowRight, Play, Sparkles, Volume2, VolumeX } from "lucide-react"
 import { StreakEffects } from "./StreakEffects"
-import { buildShareText } from "@/lib/shareText"
-import { absoluteUrl } from "@/lib/publicPath"
-import { ShareImageButton } from "./ShareImageButton"
+import { SoloEndScreen } from "./SoloEndScreen"
 import { getSocket } from "@/lib/socket"
 import { audioManager, DEFAULT_AUDIO_VOLUME } from "@/lib/audioManager"
 import { RoundUiState, roundFlowReducer, computeScore, resolveModeFlags, ROUND_FEEDBACK_MS, type ScoreBreakdown } from "@/lib/roundFlow"
 import { getListeningDuration } from "@/lib/progressiveDifficulty"
 import { HintButton } from "./HintButton"
+import { EndFeedback } from "./EndFeedback"
 import { useMode } from "@/contexts/ModeContext"
 import { evaluateGuess as evaluateGuessShared, evaluateGuessSeparate, normalize, tokenize, type Verdict } from "@/lib/matching"
 
@@ -50,6 +48,8 @@ export interface SoloGameClientProps {
   onGameComplete?: (stats: RoundStats) => void
   challengeCode?: string
   onChallengeComplete?: (stats: RoundStats) => void
+  /** Partie lancee depuis l'onglet "Defier un ami" du lobby solo. */
+  challengeIntent?: boolean
 }
 
 export interface RoundStats {
@@ -145,6 +145,7 @@ export function SoloGameClient({
   progressive = false,
   challengeCode,
   onChallengeComplete,
+  challengeIntent = false,
 }: SoloGameClientProps) {
   const { accentColor: modeAccent } = useMode()
   const accentColor = ANALOG_ACCENTS[modeAccent.toLowerCase()] ?? modeAccent
@@ -278,9 +279,6 @@ export function SoloGameClient({
   const accuracy = stats.rounds > 0 ? Math.round((stats.correct / stats.rounds) * 100) : 0
   const currentListeningDuration = progressive ? getListeningDuration(index, total) : LISTENING_DURATION
   const currentListeningDurationMs = currentListeningDuration * 1000
-  const [shareLabel, setShareLabel] = useState("Partager")
-  const [challengeLabel, setChallengeLabel] = useState("Défier un ami")
-  const [challengeLoading, setChallengeLoading] = useState(false)
 
   const history = useMemo(
     () =>
@@ -477,41 +475,6 @@ export function SoloGameClient({
     lastDialogRoundRef.current = 0
     startTrackForRound(1)
   }, [trackList, startTrackForRound])
-
-  const handleShare = useCallback(() => {
-    const text = buildShareText(stats, roundStates)
-    navigator.clipboard.writeText(text).then(() => {
-      setShareLabel("Copié !")
-      setTimeout(() => setShareLabel("Partager"), 2000)
-    }).catch(() => {
-      setShareLabel("Erreur")
-      setTimeout(() => setShareLabel("Partager"), 2000)
-    })
-  }, [stats, roundStates])
-
-  const handleChallenge = useCallback(async () => {
-    if (challengeLoading) return
-    setChallengeLoading(true)
-    try {
-      const { code } = await clientApi.createChallenge({
-        tracks: trackList,
-        creatorName: user.username || "Joueur",
-        score: stats.points,
-        correct: stats.correct,
-        total: stats.rounds,
-        bestStreak: stats.bestStreak,
-      })
-      const challengeUrl = `${absoluteUrl("/challenge/")}?code=${encodeURIComponent(code)}`
-      await navigator.clipboard.writeText(challengeUrl)
-      setChallengeLabel("Lien copié !")
-      setTimeout(() => setChallengeLabel("Défier un ami"), 3000)
-    } catch {
-      setChallengeLabel("Erreur")
-      setTimeout(() => setChallengeLabel("Défier un ami"), 2000)
-    } finally {
-      setChallengeLoading(false)
-    }
-  }, [challengeLoading, trackList, user.username, stats])
 
   const finalizeRound = useCallback(
     (nextVerdict: Verdict, reason: FinalizeReason, track: SoloTrack, submittedGuess: string) => {
@@ -1170,53 +1133,18 @@ export function SoloGameClient({
 
   if (gameFinished && !resultDialog) {
     return (
-      <div className="flex flex-col items-center gap-6 rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-10 text-center shadow-[4px_4px_0_rgba(46,32,20,.18)]">
-        <Sparkles className="h-12 w-12 text-[#c65133]" />
-        <h2 className="font-display text-3xl font-semibold text-[#2e2014]">Partie terminée !</h2>
-        <p className="text-sm text-[#6b573f]">
-          {stats.correct} / {stats.rounds} correct · {stats.points} pts · Série max : {stats.bestStreak} · Précision {accuracy}%
-        </p>
-        <div className="flex flex-wrap justify-center gap-3">
-          <Link
-            href="/modes"
-            className="inline-flex items-center rounded-md border-2 border-[#2e2014] px-5 py-2.5 text-sm font-bold text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
-          >
-            Retour aux modes
-          </Link>
-          <Link
-            href="/solo"
-            className="inline-flex items-center rounded-md border-2 border-[#2e2014] px-5 py-2.5 text-sm font-bold text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
-          >
-            Changer de playlist
-          </Link>
-          <button
-            type="button"
-            className="inline-flex items-center rounded-md border-2 border-[#2e2014] px-5 py-2.5 text-sm font-bold text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
-            onClick={handleShare}
-          >
-            {shareLabel}
-          </button>
-          <ShareImageButton
-            stats={stats}
-            roundStates={roundStates}
-            tracks={trackList.map((t) => ({ title: t.title, artist: t.artist }))}
-          />
-          {!challengeCode && (
-            <button
-              type="button"
-              className="inline-flex items-center rounded-md border-2 border-[#2e2014] bg-[#2e2014] px-5 py-2.5 text-sm font-bold text-[#f4ecdb] shadow-[4px_4px_0_rgba(46,32,20,.3)] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgba(46,32,20,.3)] disabled:cursor-not-allowed disabled:opacity-50"
-              onClick={handleChallenge}
-              disabled={challengeLoading}
-            >
-              {challengeLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Share2 className="mr-2 h-4 w-4" />}
-              {challengeLabel}
-            </button>
-          )}
-          <button type="button" className="btn-neon" onClick={handleReplay}>
-            Rejouer
-          </button>
-        </div>
-      </div>
+      <SoloEndScreen
+        stats={stats}
+        accuracy={accuracy}
+        roundStates={roundStates}
+        tracks={trackList}
+        playerName={user.username || "Joueur"}
+        showChallenge={!challengeCode}
+        challengeIntent={challengeIntent}
+        onReplay={handleReplay}
+        // Defi : le retour se donne sur l'ecran du classement (ChallengeLeaderboard).
+        footer={challengeCode ? undefined : <EndFeedback context={{ mode: "solo", sessionId }} />}
+      />
     )
   }
 

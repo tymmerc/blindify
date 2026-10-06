@@ -1,7 +1,8 @@
 // Verifie que la reponse d'une manche ne sort JAMAIS du serveur avant le
 // reveal, ni par le socket (game:state / game:round:start), ni par l'API REST
-// (/rooms/:code/state), et que le reveal + l'ecran de resultats marchent
-// toujours (le caviardage ne doit rien casser).
+// (/rooms/:code/state, reponse de /rooms/:code/start a l'hote), et que le
+// reveal + l'ecran de resultats marchent toujours (le caviardage ne doit rien
+// casser).
 //
 // Methode : hote presentateur + 2 joueuses (bibliotheques seedees par SQL,
 // zero appel Deezer), plus un espion socket.io connecte avec le token d'une
@@ -120,6 +121,11 @@ spy.on("game:round:reveal", (p) => {
 spy.on("connect", () => spy.emit("room:join", { roomCode: code }))
 
 // ── Lancement ──
+// La reponse HTTP de /start arrive chez l'hote : elle ne doit pas porter le corrige.
+const startBodyP = host.waitForResponse(
+  r => r.request().method() === "POST" && /\/api\/rooms\/[^/]+\/start$/.test(new URL(r.url()).pathname),
+  { timeout: 30000 },
+).then(r => r.text()).catch(() => null)
 await host.getByRole("button", { name: /lancer la partie/i }).click()
 await sleep(2500)
 const sessionId = psql(`SELECT session_id FROM multiplayer_rooms WHERE room_code='${code}'`)
@@ -129,6 +135,13 @@ const answers = Object.fromEntries(answerRows.split("\n").filter(Boolean).map(l 
 }))
 const totalRounds = Object.keys(answers).length
 say(`session ${sessionId}, ${totalRounds} manches, corrige charge depuis la base`)
+const startBody = await startBodyP
+if (!startBody) bad("reponse HTTP de /start introuvable cote hote")
+else {
+  const leakedStart = Object.entries(answers).filter(([, t]) => t && startBody.includes(t))
+  if (leakedStart.length) bad(`la reponse HTTP de /start donne a l'hote les titres des manches ${leakedStart.map(([r]) => r).join(",")}`)
+  else okk("la reponse HTTP de /start ne contient aucun titre du corrige")
+}
 
 // ── Boucle de partie : tout le monde passe, on observe ──
 let lastRound = 0

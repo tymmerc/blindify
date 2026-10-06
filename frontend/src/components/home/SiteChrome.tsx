@@ -1,18 +1,16 @@
 import Image from "next/image"
 import Link from "next/link"
 import { publicPath } from "@/lib/publicPath"
+import { GUIDES } from "@/lib/guides"
+import { BugReportLink } from "@/components/home/BugReportLink"
 
 // En-tete et pied de page communs a la landing et aux guides. Composants
-// SERVEUR (aucun hook) : tout est dans le HTML pre-rendu.
+// SERVEUR (aucun hook) : tout est dans le HTML pre-rendu. Seul ilot client :
+// le bouton qui ouvre le signalement de bug (BugReportLink).
 // Palette du logo : vermillon, ambre, sauge, bleu acier sur encre et papier.
 
-export const GUIDES = [
-  { href: "/blind-test-en-ligne-gratuit/", label: "Blind test en ligne gratuit" },
-  { href: "/blind-test-spotify/", label: "Blind test avec Spotify" },
-  { href: "/blind-test-deezer/", label: "Blind test avec Deezer" },
-  { href: "/blind-test-soiree/", label: "Blind test en soirée" },
-  { href: "/comparatif-blind-test/", label: "Comparatif des blind tests" },
-] as const
+// La liste des guides vit dans lib/guides (lue aussi par les tests).
+export { GUIDES }
 
 export function SiteHeader() {
   return (
@@ -20,7 +18,17 @@ export function SiteHeader() {
       <Link href="/" className="flex items-center gap-3 font-display text-2xl font-semibold tracking-tight">
         {/* Le logo (cle de sol) : sur papier creme, son B noir se lit sans tuile. */}
         <Image src={publicPath("/logo-mark.png")} alt="" width={40} height={40} priority className="h-10 w-10 object-contain" />
-        blindz.app
+        {/* Mention beta voulue par Tym (02/10) : un mot en italique, minuscule,
+            couleur sourde. Ni pastille, ni point, ni majuscules espacees (refuses).
+            A 390 px il n'y a pas la place a cote du nom sans pousser la nav :
+            le mot passe dessous, dans la hauteur du logo. */}
+        <span className="flex flex-col leading-none sm:flex-row sm:items-baseline sm:gap-2">
+          {/* L'espace ne se voit pas (flex) mais garde "blindz.app bêta" en deux mots pour les moteurs. */}
+          blindz.app{" "}
+          <span className="mt-0.5 font-display text-[13px] font-medium italic tracking-normal text-[#6b573f] sm:mt-0 sm:text-[15px]">
+            bêta
+          </span>
+        </span>
       </Link>
       <nav aria-label="Navigation principale" className="flex items-center gap-5 text-[12px] font-bold uppercase tracking-[0.14em]">
         {/* FAQ en pastille bordee : en texte nu elle passait inapercue a cote
@@ -47,6 +55,12 @@ export function SiteFooter() {
   return (
     <footer className="border-t-2 border-[#2e2014] bg-[#2e2014] text-[#f4ecdb]">
       <div className="mx-auto max-w-6xl px-5 py-8 sm:px-8">
+        {/* La beta dite simplement, en phrase normale, avec de quoi signaler
+            un souci : le formulaire existant (table bug_reports). */}
+        <p className="mb-6 max-w-[40rem] text-[15px] leading-relaxed">
+          blindz.app est encore en bêta, il reste sûrement quelques bugs. Si tu tombes sur un truc qui
+          cloche, <BugReportLink>signale-le</BugReportLink>.
+        </p>
         {/* Guides : maillage interne, les moteurs y trouvent les pages de contenu. */}
         <nav aria-label="Guides" className="mb-6 flex flex-wrap gap-x-5 gap-y-2 font-mono text-[11px] font-bold uppercase tracking-[0.14em]">
           {GUIDES.map(g => (

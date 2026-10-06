@@ -6,7 +6,9 @@ import { ArrowLeft, PartyPopper, ShieldCheck, Share2, ChevronDown } from "lucide
 import { Button } from "@/components/ui/button"
 import { ConfettiBurst } from "@/components/game/ConfettiBurst"
 import { InstallApp } from "@/components/InstallApp"
+import { EndFeedback } from "@/components/game/EndFeedback"
 import type { GameModeConfig } from "@/lib/gameModes"
+import type { FeedbackContext } from "@/lib/feedback"
 
 const UUID_LIKE_REGEX = /^[0-9a-fA-F-]{10,}$/
 import { api } from "@/lib/api"
@@ -76,6 +78,7 @@ export function ResultsView({
   isHost = true,
   isGuest = false,
   roomCode,
+  feedback = null,
 }: {
   leaderboard: Array<{
     userId: number
@@ -96,6 +99,8 @@ export function ResultsView({
   isGuest?: boolean
   /** Code de la salle : sert a recuperer le bilan manche par manche. */
   roomCode?: string | null
+  /** Bloc « Ça s'est bien passé ? » ; null sur l'ecran central d'une partie autour d'une table. */
+  feedback?: FeedbackContext | null
 }) {
 
   const podium = leaderboard.slice(0, 3)
@@ -519,6 +524,8 @@ export function ResultsView({
           {isHost ? "Rejouer" : "L'hôte peut relancer"}
         </Button>
       </div>
+
+      {feedback ? <EndFeedback context={feedback} /> : null}
     </section>
   )
 }
