@@ -350,7 +350,7 @@ prod_backend_image() { # image
 pile_backend_commit() { # commit : arrete le backend de la pile, le relance sur ce commit
   local run=/opt/blindify/.test-stack pid
   pid="$(cat "$run/run/backend.pid" 2>/dev/null || true)"
-  if [ -n "$pid" ] && tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null | grep -qF no-egress.cjs; then
+  if [ -n "$pid" ] && [ -r "/proc/$pid/cmdline" ] && tr '\0' ' ' < "/proc/$pid/cmdline" | grep -qF no-egress.cjs; then
     kill "$pid"
     for i in $(seq 1 15); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
     kill -9 "$pid" 2>/dev/null || true
