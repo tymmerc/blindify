@@ -11,7 +11,22 @@ import { logger } from "../utils/logger";
  * seules les cartes du PROPRIETAIRE exposent la liste complete, a sa demande.
  */
 
-export async function ensureLinksSchema(): Promise<void> {
+// Une fois par processus : l'ALTER TABLE prend un verrou ACCESS EXCLUSIVE sur
+// audio_sources AVANT de regarder si la colonne existe. Rejoue a chaque import
+// de carte et a chaque lancement, il faisait la queue derriere toute longue
+// transaction (la migration 005) en bloquant les lectures d'audio_sources
+// derriere lui. Un echec n'est pas retenu : l'appel suivant recommence.
+let linksSchema: Promise<void> | null = null;
+
+export function ensureLinksSchema(): Promise<void> {
+  linksSchema ??= createLinksSchema().catch(err => {
+    linksSchema = null;
+    throw err;
+  });
+  return linksSchema;
+}
+
+async function createLinksSchema(): Promise<void> {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS imported_links (
       id SERIAL PRIMARY KEY,
@@ -72,13 +87,13 @@ export async function upsertLink(params: {
 }
 
 /**
- * Les titres importes AVANT la bibliotheque n'ont pas de link_id : on les range
+ * Les titres importes AVANT la bibliotheque n'ont pas de carte : on les range
  * une fois pour toutes dans une carte "Imports precedents", pour que tout soit
  * activable/desactivable de la meme facon.
  */
 export async function claimLegacyTracks(userId: number): Promise<void> {
   const { rows } = await pool.query<{ n: string }>(
-    `SELECT count(*) AS n FROM audio_sources WHERE user_id=$1 AND link_id IS NULL`,
+    `SELECT count(*) AS n FROM user_audio_sources WHERE user_id=$1 AND link_id IS NULL`,
     [userId]
   );
   if (Number(rows[0]?.n ?? 0) === 0) return;
@@ -90,6 +105,8 @@ export async function claimLegacyTracks(userId: number): Promise<void> {
     label: "Imports précédents",
     imageUrl: null,
   });
+  await pool.query(`UPDATE user_audio_sources SET link_id=$1 WHERE user_id=$2 AND link_id IS NULL`, [legacyId, userId]);
+  // Colonne historique du premier importeur, tenue a jour pour un retour arriere.
   await pool.query(`UPDATE audio_sources SET link_id=$1 WHERE user_id=$2 AND link_id IS NULL`, [legacyId, userId]);
 }
 
@@ -109,6 +126,18 @@ function validLinkId(id: number): boolean {
   return Number.isInteger(id) && id > 0 && id <= 2147483647;
 }
 
+/**
+ * La carte envoyee par le client avec un import, si elle est bien a ce joueur.
+ * Sinon null : les titres arrivent sans carte et rejoignent "Imports
+ * precedents", jamais la carte de quelqu'un d'autre.
+ */
+export async function ownLinkId(userId: number, raw: unknown): Promise<number | null> {
+  const id = Number(raw);
+  if (raw == null || !validLinkId(id)) return null;
+  const { rows } = await pool.query(`SELECT 1 FROM imported_links WHERE id=$1 AND user_id=$2`, [id, userId]);
+  return rows.length ? id : null;
+}
+
 export const linksController = {
   /** GET /api/links : mes cartes, avec compte de titres en temps reel. */
   async list(req: Request, res: Response): Promise<void> {
@@ -120,7 +149,7 @@ export const linksController = {
       const { rows } = await pool.query(
         `SELECT l.id, l.url, l.provider, l.kind, l.label, l.image_url, l.active, l.times_played,
                 l.last_import_at,
-                (SELECT count(*) FROM audio_sources a WHERE a.link_id = l.id AND a.user_id = l.user_id) AS track_count
+                (SELECT count(*) FROM user_audio_sources ua WHERE ua.link_id = l.id AND ua.user_id = l.user_id) AS track_count
          FROM imported_links l
          WHERE l.user_id = $1
          ORDER BY l.last_import_at DESC`,
@@ -171,9 +200,18 @@ export const linksController = {
     }
     try {
       // DETACHER, jamais detruire : la ligne audio_sources est PARTAGEE par toute
-      // la plateforme (likes d'autres joueurs, historique game_rounds). On retire
-      // seulement le titre de la bibliotheque de CE joueur.
-      await pool.query(`UPDATE audio_sources SET user_id=NULL, link_id=NULL WHERE link_id=$1 AND user_id=$2`, [id, context.user.id]);
+      // la plateforme (autres importeurs, likes, historique game_rounds). On
+      // retire seulement les liens de CE joueur, et la colonne historique s'il
+      // etait le premier importeur (sinon la migration 005 rejouee au
+      // demarrage recreerait le lien).
+      await pool.query(
+        `WITH gone AS (
+           DELETE FROM user_audio_sources WHERE link_id=$1 AND user_id=$2 RETURNING audio_source_id
+         )
+         UPDATE audio_sources SET user_id=NULL, link_id=NULL
+         WHERE user_id=$2 AND (link_id=$1 OR id IN (SELECT audio_source_id FROM gone))`,
+        [id, context.user.id]
+      );
       const { rowCount } = await pool.query(`DELETE FROM imported_links WHERE id=$1 AND user_id=$2`, [id, context.user.id]);
       if (!rowCount) {
         fail(res, "not_found", "Lien introuvable.", 404);
@@ -208,28 +246,30 @@ export const linksController = {
         fail(res, "not_found", "Lien introuvable.", 404);
         return;
       }
+      // Les morceaux de CETTE carte, par les liens du joueur (un morceau peut
+      // etre aussi a d'autres joueurs).
+      const ofCard = `FROM user_audio_sources ua JOIN audio_sources a ON a.id = ua.audio_source_id
+         WHERE ua.link_id=$1 AND ua.user_id=$2`;
       const { rows: stats } = await pool.query(
         `SELECT count(*) AS total,
-                count(*) FILTER (WHERE audio_url IS NOT NULL AND audio_url <> '') AS playable,
-                count(DISTINCT artist) AS artists
-         FROM audio_sources WHERE link_id=$1 AND user_id=$2`,
+                count(*) FILTER (WHERE a.audio_url IS NOT NULL AND a.audio_url <> '') AS playable,
+                count(DISTINCT a.artist) AS artists
+         ${ofCard}`,
         [id, context.user.id]
       );
       const { rows: decades } = await pool.query(
-        `SELECT (substring(metadata->>'release_date' FROM '^\\d{4}')::int / 10) * 10 AS decade, count(*) AS n
-         FROM audio_sources
-         WHERE link_id=$1 AND user_id=$2 AND metadata->>'release_date' ~ '^\\d{4}'
+        `SELECT (substring(a.metadata->>'release_date' FROM '^\\d{4}')::int / 10) * 10 AS decade, count(*) AS n
+         ${ofCard} AND a.metadata->>'release_date' ~ '^\\d{4}'
          GROUP BY 1 ORDER BY 1`,
         [id, context.user.id]
       );
       const { rows: covers } = await pool.query(
-        `SELECT album_cover FROM audio_sources
-         WHERE link_id=$1 AND user_id=$2 AND album_cover IS NOT NULL
+        `SELECT a.album_cover ${ofCard} AND a.album_cover IS NOT NULL
          ORDER BY random() LIMIT 12`,
         [id, context.user.id]
       );
       const { rows: tracks } = await pool.query(
-        `SELECT title, artist FROM audio_sources WHERE link_id=$1 AND user_id=$2 ORDER BY title LIMIT 500`,
+        `SELECT a.title, a.artist ${ofCard} ORDER BY a.title LIMIT 500`,
         [id, context.user.id]
       );
       ok(res, {

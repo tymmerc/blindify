@@ -185,16 +185,23 @@ export const authController = {
     try {
       await client.query("BEGIN");
 
-      // audio_sources : FK ON DELETE SET NULL vers users, donc supprimer users
-      // ne les efface pas. On les retire explicitement (RGPD, pas d'orphelines).
+      // Morceaux : on retire les liens de ce joueur (user_audio_sources), puis
+      // les morceaux que personne d'autre n'a importes (RGPD, pas d'orphelines).
+      // Un morceau encore lie a un autre joueur reste : c'est sa bibliotheque.
       // used_tracks référence audio_sources en ON DELETE CASCADE : on le vide
-      // d'abord via les audio_sources de l'user pour rester explicite.
-      await client.query(
-        `DELETE FROM used_tracks
-         WHERE audio_source_id IN (SELECT id FROM audio_sources WHERE user_id=$1)`,
+      // d'abord pour rester explicite.
+      const { rows: unlinked } = await client.query<{ audio_source_id: string }>(
+        `DELETE FROM user_audio_sources WHERE user_id=$1 RETURNING audio_source_id`,
         [userId]
       );
-      await client.query(`DELETE FROM audio_sources WHERE user_id=$1`, [userId]);
+      const onlyMine = `(a.user_id=$1 OR a.id = ANY($2::uuid[]))
+         AND NOT EXISTS (SELECT 1 FROM user_audio_sources ua WHERE ua.audio_source_id = a.id)`;
+      const mine = [userId, unlinked.map(r => r.audio_source_id)];
+      await client.query(
+        `DELETE FROM used_tracks WHERE audio_source_id IN (SELECT a.id FROM audio_sources a WHERE ${onlyMine})`,
+        mine
+      );
+      await client.query(`DELETE FROM audio_sources a WHERE ${onlyMine}`, mine);
 
       // Les tables suivantes ont une FK ON DELETE CASCADE vers users : supprimer
       // la ligne users suffirait, mais on efface explicitement pour l'audit RGPD.

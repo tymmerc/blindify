@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { audioManager } from "@/lib/audioManager"
 import { GAME_MODES, type GameModeConfig, type GameMode } from "@/lib/gameModes"
 import { useWakeLock } from "@/lib/useWakeLock"
+import { shortGameNotice } from "@/lib/roundCount"
 import { ConfettiBurst } from "./ConfettiBurst"
 import { TheaterGameView } from "./TheaterGameView"
 
@@ -704,6 +705,9 @@ export function MultiplayerGameClient({
     </div>
   ) : null
 
+  // Partie plus courte que demandee (titres sans extrait) : dit pendant la 1re manche.
+  const shortNotice = shortGameNotice(state)
+
   // Event mode keeps its dedicated presenter/participant rendering below.
   if (mode !== "event") {
     return (
@@ -915,6 +919,16 @@ export function MultiplayerGameClient({
             </div>
           </div>
         </header>
+
+        {shortNotice && (
+          <p
+            className={`px-5 pt-3 text-center text-xs text-[var(--muted)] transition-opacity duration-500 lg:px-10 ${shortNotice.visible ? "" : "opacity-0"}`}
+            role={shortNotice.visible ? "status" : undefined}
+            aria-hidden={!shortNotice.visible}
+          >
+            {shortNotice.text}
+          </p>
+        )}
 
         {/* Main content */}
         <div className="mx-auto flex w-full flex-1 flex-col gap-5 px-5 pb-8 pt-5 lg:flex-row lg:items-stretch lg:px-10">

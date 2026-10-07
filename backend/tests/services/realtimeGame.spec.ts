@@ -277,6 +277,64 @@ describe("revealRound - scoring", () => {
     // title(40) + artist(30) + speed + source(10)
     expect(state?.players[2].score).toBe(3); // titre + artiste + bonne source
   });
+
+  // Morceau partage : le joueur 3 l'a apporte ce soir, le joueur 2 l'avait
+  // importe aussi. Les deux sont de bonnes reponses au « qui a mis quoi ».
+  it("counts every importer of a shared track as a right owner guess", () => {
+    const shared: RoundTrack[] = [{
+      round: 1, trackId: "t1", title: "Song 1", artist: "Artist 1", previewUrl: null,
+      metadata: { owner_user_id: 3, owner_user_ids: [2, 3] },
+    }];
+    setupGame({ tracks: shared });
+    startNextRound(ROOM);
+    recordAnswer(ROOM, 1, "", 2, "", "");
+    recordAnswer(ROOM, 2, "", 2, "", "");
+    recordAnswer(ROOM, 3, "", 1, "", "");
+    const state = revealRound(ROOM);
+    expect(state?.players[1].lastGained).toBe(1);
+    expect(state?.players[2].lastGained).toBe(1);
+    expect(state?.players[3].lastGained).toBe(0);
+  });
+});
+
+describe("startNextRound - owner choices", () => {
+  const fourPlayers = [
+    { userId: 1, username: "Host" },
+    { userId: 2, username: "Player2" },
+    { userId: 3, username: "Player3" },
+    { userId: 4, username: "Player4" },
+  ];
+
+  it("offers the owner and two decoys who did not import the track", () => {
+    for (let i = 0; i < 20; i++) {
+      setupGame({
+        participants: fourPlayers,
+        tracks: [{ round: 1, trackId: "t1", title: "S", artist: "A", previewUrl: null, metadata: { owner_user_id: 3, owner_user_ids: [2, 3] } }],
+      });
+      const choices = startNextRound(ROOM)?.currentTrack?.ownerChoices ?? [];
+      expect(choices).toHaveLength(3);
+      expect(choices).toContain(3);
+      expect(choices).not.toContain(2);
+    }
+  });
+
+  it("fills with the other importers when there are not enough decoys", () => {
+    setupGame({
+      tracks: [{ round: 1, trackId: "t1", title: "S", artist: "A", previewUrl: null, metadata: { owner_user_id: 3, owner_user_ids: [2, 3] } }],
+    });
+    const choices = startNextRound(ROOM)?.currentTrack?.ownerChoices ?? [];
+    expect([...choices].sort()).toEqual([1, 2, 3]);
+  });
+
+  it("keeps a co-importer who plays when the contributor only presents", () => {
+    setupGame({
+      participants: fourPlayers.slice(1),
+      tracks: [{ round: 1, trackId: "t1", title: "S", artist: "A", previewUrl: null, metadata: { owner_user_id: 1, owner_user_ids: [1, 2] } }],
+    });
+    const choices = startNextRound(ROOM)?.currentTrack?.ownerChoices ?? [];
+    expect(choices).toContain(2);
+    expect(choices).toHaveLength(3);
+  });
 });
 
 describe("revealRound - streak tracking", () => {

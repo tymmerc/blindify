@@ -11,7 +11,8 @@ jest.mock("../../src/utils/logger", () => ({
 
 import { pool } from "../../src/config/db";
 import { deezerPreviewService } from "../../src/services/deezerPreviewService";
-import { hydratePreviewUrl, previewQueryFor, collectPlayableSources } from "../../src/services/trackResolution";
+import { hydratePreviewUrl, previewQueryFor, collectPlayableSources, hydrateWithinBudget } from "../../src/services/trackResolution";
+import { LookupGuard } from "../../src/services/lookupGuard";
 import type { AudioSourceRow } from "../../src/types/audio";
 
 const query = pool.query as jest.Mock;
@@ -83,7 +84,9 @@ describe("hydratePreviewUrl", () => {
 });
 
 describe("collectPlayableSources", () => {
-  it("hydrate par tranches de 6 et s'arrete des qu'il y a assez de morceaux jouables", async () => {
+  // Depuis #67, hydrateWithinBudget (6 a la fois) s'arrete des que la partie
+  // est servie : au plus les 5 manquants + les 5 autres recherches deja en vol.
+  it("6 recherches en vol au plus, et arret des qu'il y a assez de morceaux jouables", async () => {
     const rows = Array.from({ length: 20 }, (_, i) => source({ id: `s${i}`, external_id: `ext${i}`, audio_url: null }));
     query.mockResolvedValueOnce({ rows }).mockResolvedValue({ rows: [] });
     let inFlight = 0;
@@ -96,12 +99,12 @@ describe("collectPlayableSources", () => {
       return found("https://cdn.example/ok.mp3");
     });
     const got = await collectPlayableSources(1, 5, {});
-    expect(resolvePreview).toHaveBeenCalledTimes(6); // une tranche suffit pour 5 morceaux
+    expect(resolvePreview.mock.calls.length).toBeLessThanOrEqual(10); // pas les 20 candidats
     expect(peak).toBeLessThanOrEqual(6);
     expect(got).toHaveLength(5);
   });
 
-  it("continue tranche apres tranche tant qu'il manque des morceaux", async () => {
+  it("continue tant qu'il manque des morceaux, puis s'arrete", async () => {
     const rows = Array.from({ length: 20 }, (_, i) => source({ id: `s${i}`, external_id: `ext${i}`, audio_url: null }));
     query.mockResolvedValueOnce({ rows }).mockResolvedValue({ rows: [] });
     let n = 0;
@@ -109,7 +112,8 @@ describe("collectPlayableSources", () => {
     resolvePreview.mockImplementation(async () => (n++ % 2 === 0 ? found("https://cdn.example/ok.mp3") : { status: "none" }));
     const got = await collectPlayableSources(1, 5, {});
     expect(got).toHaveLength(5);
-    expect(resolvePreview).toHaveBeenCalledTimes(12); // 2 tranches : 3 + 3 jouables
+    expect(resolvePreview.mock.calls.length).toBeGreaterThanOrEqual(9); // 5 jouables sur 1 sur 2
+    expect(resolvePreview.mock.calls.length).toBeLessThanOrEqual(15); // + 5 en vol au plus, pas les 20
   });
 
   it("les extraits encore valides comptent sans appeler Deezer", async () => {
@@ -119,5 +123,30 @@ describe("collectPlayableSources", () => {
     const got = await collectPlayableSources(1, 5, {});
     expect(got).toHaveLength(5);
     expect(resolvePreview).not.toHaveBeenCalled();
+  });
+});
+
+// Le disjoncteur du lancement (#67) doit voir les erreurs Deezer, que le
+// service avale (quota, panne, file pleine) : sinon il les prend pour des
+// "pas d'extrait" et continue de chercher contre un Deezer en panne.
+describe("hydrateWithinBudget et le disjoncteur du lancement", () => {
+  const rows = () => Array.from({ length: 12 }, (_, i) => source({ id: `s${i}`, external_id: `ext${i}`, audio_url: null }));
+
+  it("une erreur Deezer compte comme un echec : le disjoncteur saute", async () => {
+    resolvePreview.mockResolvedValue({ status: "error" });
+    const guard = new LookupGuard(100);
+    await hydrateWithinBudget(rows(), guard);
+    expect(guard.stoppedBy).toBe("breaker");
+    expect(guard.failures).toBeGreaterThanOrEqual(6);
+    expect(query).not.toHaveBeenCalled(); // et rien n'est ecrit en base
+  });
+
+  it("un \"pas d'extrait\" n'est pas un echec", async () => {
+    resolvePreview.mockResolvedValue({ status: "none" });
+    const guard = new LookupGuard(100);
+    await hydrateWithinBudget(rows(), guard);
+    expect(guard.failures).toBe(0);
+    expect(guard.stoppedBy).toBeNull();
+    expect(guard.lookups).toBe(12);
   });
 });

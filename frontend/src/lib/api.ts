@@ -98,6 +98,8 @@ export const api = {
       totalRounds: number
       startedAt: string
       roomCode: string
+      requestedRounds?: number
+      shortReason?: "library" | "lookup" | null
       currentRound?: number | null
       autoAdvance?: boolean
     } | null
@@ -114,6 +116,8 @@ export const api = {
         totalRounds: number
         startedAt: string
         roomCode: string
+        requestedRounds?: number
+        shortReason?: "library" | "lookup" | null
         currentRound?: number | null
         autoAdvance?: boolean
       } | null
@@ -142,6 +146,8 @@ export const api = {
       totalRounds: number
       startedAt: string
       roomCode: string
+      requestedRounds?: number
+      shortReason?: "library" | "lookup" | null
       autoAdvance?: boolean
     }
     tracks: SoloTrack[]
@@ -156,6 +162,8 @@ export const api = {
         totalRounds: number
         startedAt: string
         roomCode: string
+        requestedRounds?: number
+        shortReason?: "library" | "lookup" | null
         autoAdvance?: boolean
       }
       tracks: SoloTrack[]
