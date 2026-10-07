@@ -59,7 +59,7 @@ async function nextBatch(pool: Pool, after: string): Promise<Row[]> {
   const { rows } = await pool.query<Row>(
     `SELECT external_id FROM audio_sources
      WHERE provider = 'spotify'
-       AND NOT (COALESCE(metadata, '{}'::jsonb) ? 'isrc')
+       AND metadata->>'isrc' IS NULL -- absente ou null (les imports ecrivent "isrc": null)
        AND external_id ~ '^[A-Za-z0-9]{22}$'
        AND external_id > $1
      ORDER BY external_id
@@ -112,7 +112,7 @@ async function writeBatch(pool: Pool, found: Array<[string, string]>): Promise<n
        FROM unnest($1::text[], $2::text[]) AS v(external_id, isrc)
        WHERE a.provider = 'spotify'
          AND a.external_id = v.external_id
-         AND NOT (COALESCE(a.metadata, '{}'::jsonb) ? 'isrc')`,
+         AND a.metadata->>'isrc' IS NULL`,
       [found.map(([id]) => id), found.map(([, isrc]) => isrc)]
     );
     await client.query("COMMIT");

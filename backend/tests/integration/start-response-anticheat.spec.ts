@@ -26,7 +26,7 @@ import { cleanupStreamer } from "../../src/services/streamerOrchestrator";
 
 jest.setTimeout(30000);
 
-type Seeded = { title: string; artist: string; externalId: string; cover: string; audioUrl: string };
+type Seeded = { title: string; artist: string; externalId: string; cover: string; audioUrl: string; isrc: string };
 
 /** Bibliotheque d'un joueur, avec des chaines uniques faciles a chercher dans la reponse. */
 async function seedLibrary(userId: number, count: number): Promise<Seeded[]> {
@@ -40,11 +40,14 @@ async function seedLibrary(userId: number, count: number): Promise<Seeded[]> {
       cover: `https://img.example.test/cover-${tag}.jpg`,
       // Pas de "exp=" : l'extrait est frais, aucun appel Deezer pendant le test.
       audioUrl: `https://cdn.example.test/preview-${tag}.mp3`,
+      // L'ISRC designe l'enregistrement : avec lui, on retrouve le titre en
+      // une recherche. Il ne doit pas sortir non plus avant le reveal.
+      isrc: `QZTST${String(Math.floor(Math.random() * 1e7)).padStart(7, "0")}`,
     };
     await pool.query(
       `INSERT INTO audio_sources (user_id, provider, external_id, title, artist, album_cover, audio_url, metadata)
-       VALUES ($1, 'deezer', $2, $3, $4, $5, $6, '{}'::jsonb)`,
-      [userId, s.externalId, s.title, s.artist, s.cover, s.audioUrl],
+       VALUES ($1, 'deezer', $2, $3, $4, $5, $6, $7::jsonb)`,
+      [userId, s.externalId, s.title, s.artist, s.cover, s.audioUrl, JSON.stringify({ isrc: s.isrc })],
     );
     out.push(s);
   }
@@ -63,7 +66,7 @@ async function callStart(code: string, hostId: number, body: Record<string, unkn
 /** Ce qui, dans la reponse, permettrait de connaitre une reponse avant le reveal. */
 function leakedSecrets(body: unknown, library: Seeded[]): string[] {
   const raw = JSON.stringify(body);
-  return library.flatMap(s => [s.title, s.artist, s.externalId, s.cover]).filter(v => raw.includes(v));
+  return library.flatMap(s => [s.title, s.artist, s.externalId, s.cover, s.isrc]).filter(v => raw.includes(v));
 }
 
 function previewsInBody(body: unknown, library: Seeded[]): number {

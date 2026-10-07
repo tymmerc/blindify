@@ -9,6 +9,7 @@ import {
   clearGame,
   upsertPlayer,
   removePlayer,
+  gameStateSnapshot,
   type RoundTrack,
 } from "../../src/services/realtimeGame";
 
@@ -436,5 +437,16 @@ describe("full game flow", () => {
 
     // Player 1 should have highest score (2 correct, with streak)
     expect(state.players[1].score).toBeGreaterThan(state.players[3].score);
+  });
+});
+
+describe("gameStateSnapshot : rien de la piste avant le reveal", () => {
+  it("ni l'ISRC ni le reste de metadata ne partent pendant la manche", () => {
+    const tracks = makeTracks(2).map(t => ({ ...t, metadata: { isrc: "JPZ921607277", album: "OST secret" } }));
+    setupGame({ tracks });
+    startNextRound(ROOM);
+    const raw = JSON.stringify(gameStateSnapshot(ROOM));
+    expect(raw).not.toContain("JPZ921607277");
+    expect(raw).not.toContain("OST secret");
   });
 });

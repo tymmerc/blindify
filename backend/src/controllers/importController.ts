@@ -14,8 +14,8 @@ import type { AudioSourceRow } from "../types/audio";
 /** How many tracks to pre-resolve Deezer previews for after import (fire-and-forget). */
 const PRE_RESOLVE_BATCH = 50;
 
-/** Store track metadata in audio_sources (no Deezer call). */
-async function upsertTrack(
+/** Store track metadata in audio_sources (no Deezer call). Exporte pour les tests. */
+export async function upsertTrack(
   userId: number,
   track: ImportedTrack,
   playlistId: string,
@@ -56,6 +56,11 @@ async function upsertTrack(
       linkId ?? null,
     ]
   );
+}
+
+/** Combien de morceaux importes arrivent avec leur ISRC (suivi du correctif des extraits). */
+function logImportIsrc(provider: string, tracks: ImportedTrack[]): void {
+  logger.info("import_isrc", { provider, total: tracks.length, withIsrc: tracks.filter(t => t.isrc).length });
 }
 
 /**
@@ -201,6 +206,7 @@ export const importController = {
         }
       }
 
+      logImportIsrc(provider, tracks);
       ok(res, { synced, failed: tracks.length - synced, total: tracks.length });
 
       // Pre-resolve a batch of Deezer previews in background
@@ -238,6 +244,7 @@ export const importController = {
       const seen = new Set<string>();
       let synced = 0;
       let total = 0;
+      let withIsrc = 0;
 
       for (const playlistId of playlistIds) {
         const tracks = await fetchPlaylistTracks(provider, playlistId, perPlaylistLimit);
@@ -246,6 +253,7 @@ export const importController = {
           if (seen.has(key)) continue;
           seen.add(key);
           total++;
+          if (track.isrc) withIsrc++;
 
           try {
             await upsertTrack(context.user.id, track, playlistId, linkId ?? null);
@@ -261,6 +269,7 @@ export const importController = {
         return;
       }
 
+      logger.info("import_isrc", { provider, total, withIsrc });
       ok(res, { synced, failed: total - synced, total });
 
       // Pre-resolve a batch of Deezer previews in background

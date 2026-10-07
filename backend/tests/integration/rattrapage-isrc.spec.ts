@@ -79,10 +79,12 @@ async function seedVariety() {
   await insert(id(1), { album: "OST", playlist_id: "3KpbWqSed1fgPwGW39uRJi", import_source: "spotify" });
   await insert(id(2), null);
   await insert(id(3), { album: "B" });
-  await insert(id(4), { album: "C" });
+  await insert(id(4), { album: "C", isrc: null }); // cle presente mais vide : a rattraper
   await insert(id(5), { album: "D", isrc: "GBAYE0000001" });
   await insert(id(6), { album: "E" }, "deezer");
+  await insert(id(7), { album: "F", isrc: null });
   catalogue = {
+    [id(7)]: "FRZZZ0000011",
     [id(1)]: "JPZ921607277",
     [id(2)]: "usrc17607839", // minuscules : normalise en majuscules
     [id(3)]: "pas un isrc",
@@ -97,7 +99,7 @@ describe("rattrapageIsrc", () => {
   it("essai : compte sans rien ecrire", async () => {
     await seedVariety();
     const totals = await run(false);
-    expect(totals).toMatchObject({ traites: 4, isrcTrouves: 2, sansIsrc: 2, erreurs: 0, ecrits: 0 });
+    expect(totals).toMatchObject({ traites: 5, isrcTrouves: 3, sansIsrc: 2, erreurs: 0, ecrits: 0 });
     expect(await metadataOf(id(1))).toEqual({ album: "OST", playlist_id: "3KpbWqSed1fgPwGW39uRJi", import_source: "spotify" });
     expect(await metadataOf(id(2))).toBeNull();
   });
@@ -105,11 +107,12 @@ describe("rattrapageIsrc", () => {
   it("ecriture : ajoute seulement isrc et garde les autres cles", async () => {
     await seedVariety();
     const totals = await run(true);
-    expect(totals).toMatchObject({ traites: 4, isrcTrouves: 2, sansIsrc: 2, erreurs: 0, ecrits: 2 });
+    expect(totals).toMatchObject({ traites: 5, isrcTrouves: 3, sansIsrc: 2, erreurs: 0, ecrits: 3 });
+    expect(await metadataOf(id(7))).toEqual({ album: "F", isrc: "FRZZZ0000011" });
     expect(await metadataOf(id(1))).toEqual({ album: "OST", playlist_id: "3KpbWqSed1fgPwGW39uRJi", import_source: "spotify", isrc: "JPZ921607277" });
     expect(await metadataOf(id(2))).toEqual({ isrc: "USRC17607839" });
     expect(await metadataOf(id(3))).toEqual({ album: "B" }); // ISRC mal forme : rien
-    expect(await metadataOf(id(4))).toEqual({ album: "C" }); // inconnu : rien
+    expect(await metadataOf(id(4))).toEqual({ album: "C", isrc: null }); // inconnu : rien
     expect(await metadataOf(id(5))).toEqual({ album: "D", isrc: "GBAYE0000001" }); // jamais remplace
     expect(await metadataOf(id(6), "deezer")).toEqual({ album: "E" }); // Deezer : pas touche
   });
@@ -146,7 +149,7 @@ describe("rattrapageIsrc", () => {
     const started = Date.now();
     const totals = await run(true);
     expect(Date.now() - started).toBeGreaterThanOrEqual(900);
-    expect(totals).toMatchObject({ ecrits: 2, erreurs: 0 });
+    expect(totals).toMatchObject({ ecrits: 3, erreurs: 0 });
   });
 
   it("Retry-After trop long : arret propre, rien d'ecrit, a relancer plus tard", async () => {
@@ -154,7 +157,7 @@ describe("rattrapageIsrc", () => {
     get.mockReset().mockRejectedValue({ isAxiosError: true, message: "Too Many Requests", response: { status: 429, headers: { "retry-after": "3600" } } });
     const totals = await run(true);
     expect(totals.arretAnticipe).toMatch(/3600 s/);
-    expect(totals).toMatchObject({ ecrits: 0, erreurs: 4 });
+    expect(totals).toMatchObject({ ecrits: 0, erreurs: 5 });
     expect(await metadataOf(id(1))).not.toHaveProperty("isrc");
   });
 
@@ -163,7 +166,7 @@ describe("rattrapageIsrc", () => {
     get.mockReset().mockRejectedValue({ isAxiosError: true, message: "Request failed with status code 500", response: { status: 500 }, config: { headers: { Authorization: "Bearer jeton" } } });
     const lines: string[] = [];
     const totals = await run(true, { log: l => lines.push(l) });
-    expect(totals).toMatchObject({ erreurs: 4, ecrits: 0 });
+    expect(totals).toMatchObject({ erreurs: 5, ecrits: 0 });
     expect(lines.join("\n")).not.toContain("jeton");
   }, 15_000);
 });

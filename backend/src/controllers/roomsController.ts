@@ -131,7 +131,7 @@ async function syncPlaylistTracks(userId: number, playlistId: string, accessToke
            artist=EXCLUDED.artist,
            album_cover=EXCLUDED.album_cover,
            duration_ms=EXCLUDED.duration_ms,
-           metadata=EXCLUDED.metadata,
+           metadata=EXCLUDED.metadata || jsonb_strip_nulls(jsonb_build_object('isrc', COALESCE(EXCLUDED.metadata->>'isrc', audio_sources.metadata->>'isrc'))),
            user_id=COALESCE(audio_sources.user_id, EXCLUDED.user_id)`,
         ["spotify", track.id, userId, track.name, artist, cover, track.duration_ms ?? null, metadata]
       );
@@ -176,7 +176,7 @@ async function syncTopTracks(
          artist=EXCLUDED.artist,
          album_cover=EXCLUDED.album_cover,
          duration_ms=EXCLUDED.duration_ms,
-         metadata=EXCLUDED.metadata,
+         metadata=EXCLUDED.metadata || jsonb_strip_nulls(jsonb_build_object('isrc', COALESCE(EXCLUDED.metadata->>'isrc', audio_sources.metadata->>'isrc'))),
          user_id=COALESCE(audio_sources.user_id, EXCLUDED.user_id)`,
       ["spotify", track.id, userId, track.name, artist, cover, track.duration_ms ?? null, metadata]
     );
