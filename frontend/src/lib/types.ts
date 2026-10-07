@@ -144,6 +144,8 @@ export type MultiplayerGameState = {
   totalRounds: number
   /** Manches demandees par l'hote ; plus que totalRounds s'il manquait des titres jouables. */
   requestedRounds?: number
+  /** Pourquoi moins de manches : playlists trop courtes, ou recherches d'extraits Deezer limitees. */
+  shortReason?: "library" | "lookup" | null
   currentTrack: {
     round: number
     trackId: string
@@ -237,6 +239,8 @@ export interface GameState {
   totalRounds: number
   /** Manches demandees par l'hote ; plus que totalRounds s'il manquait des titres jouables. */
   requestedRounds?: number
+  /** Pourquoi moins de manches : playlists trop courtes, ou recherches d'extraits Deezer limitees. */
+  shortReason?: "library" | "lookup" | null
   currentTrack: RoundTrack | null
   players: Record<number, PlayerState>
   paused?: boolean
@@ -280,6 +284,8 @@ export type StreamerState = {
   currentRound: number
   totalRounds: number
   requestedRounds?: number
+  /** Pourquoi moins de manches : playlists trop courtes, ou recherches d'extraits Deezer limitees. */
+  shortReason?: "library" | "lookup" | null
   currentTrack: StreamerRound | null
   timing: { startAt: number | null; endAt: number | null }
   chatScore: number

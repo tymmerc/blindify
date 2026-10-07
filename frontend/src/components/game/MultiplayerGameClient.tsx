@@ -921,8 +921,12 @@ export function MultiplayerGameClient({
         </header>
 
         {shortNotice && (
-          <p className="px-5 pt-3 text-center text-xs text-[var(--muted)] lg:px-10" role="status">
-            {shortNotice}
+          <p
+            className={`px-5 pt-3 text-center text-xs text-[var(--muted)] transition-opacity duration-500 lg:px-10 ${shortNotice.visible ? "" : "opacity-0"}`}
+            role={shortNotice.visible ? "status" : undefined}
+            aria-hidden={!shortNotice.visible}
+          >
+            {shortNotice.text}
           </p>
         )}
 

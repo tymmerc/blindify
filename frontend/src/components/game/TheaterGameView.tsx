@@ -168,7 +168,15 @@ export function TheaterGameView(props: Props) {
                 />
               ))}
             </div>
-            {shortNotice && <p className="theater-short" role="status">{shortNotice}</p>}
+            {shortNotice && (
+              <p
+                className={`theater-short ${shortNotice.visible ? "" : "is-gone"}`}
+                role={shortNotice.visible ? "status" : undefined}
+                aria-hidden={!shortNotice.visible}
+              >
+                {shortNotice.text}
+              </p>
+            )}
           </div>
 
           {/* Sur telephone, Pause et Quitter passent en icones carrees comme le
@@ -762,7 +770,10 @@ const theaterStyles = `
   .theater-short{
     max-width:280px; margin:0; text-align:center;
     font-size:12px; line-height:1.35; color:var(--muted);
+    transition:opacity .4s ease;
   }
+  /* Apres la 1re manche : efface, mais sa place reste (la grille ne saute pas). */
+  .theater-short.is-gone{opacity:0}
   .theater-rdot{
     width:18px; height:3px; background:rgba(46,32,20,.15); border-radius:1px;
   }

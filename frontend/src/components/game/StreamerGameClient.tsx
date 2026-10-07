@@ -31,6 +31,8 @@ export function StreamerGameClient({
   accent = "#22d3ee",
 }: Props) {
   const isHost = Boolean(state && state.hostUserId === userId)
+  // Partie plus courte que demandee : dit pendant la 1re manche, puis efface sans liberer sa place.
+  const shortNotice = shortGameNotice(state)
   const [guess, setGuess] = useState("")
   const [locked, setLocked] = useState(false)
   const [muted, setMuted] = useState(audioManager.getState().muted)
@@ -238,9 +240,13 @@ export function StreamerGameClient({
           </div>
         </header>
 
-        {shortGameNotice(state) && (
-          <p className="px-5 pt-3 text-center text-xs text-[var(--muted)]" role="status">
-            {shortGameNotice(state)}
+        {shortNotice && (
+          <p
+            className={`px-5 pt-3 text-center text-xs text-[var(--muted)] transition-opacity duration-500 ${shortNotice.visible ? "" : "opacity-0"}`}
+            role={shortNotice.visible ? "status" : undefined}
+            aria-hidden={!shortNotice.visible}
+          >
+            {shortNotice.text}
           </p>
         )}
 
