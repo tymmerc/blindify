@@ -158,18 +158,6 @@ export function shuffle<T>(arr: T[]): T[] {
 
 const HYDRATE_CONCURRENCY = 6;
 
-/** fn sur chaque element, `limit` a la fois au plus. */
-async function forEachLimit<T>(items: T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
-  let next = 0;
-  const worker = async () => {
-    while (next < items.length) {
-      const item = items[next++];
-      await fn(item);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
-}
-
 export async function collectPlayableSources(
   userIds: number | number[],
   desiredCount: number,
@@ -187,21 +175,24 @@ export async function collectPlayableSources(
     linkIds: opts.linkIds,
   });
 
-  // Hydrate / rafraichit les previews via Deezer (re-fetch si manquante OU expiree).
-  // 6 a la fois : 200 candidats lances d'un coup saturaient le debit Deezer.
-  await forEachLimit(candidates, HYDRATE_CONCURRENCY, async (source) => {
-    source.audio_url = await hydratePreviewUrl(source);
-  });
-
-  const playable = shuffle(candidates.filter((source) => Boolean(source.audio_url)));
+  // Hydrate / rafraichit les previews via Deezer (re-fetch si manquante OU expiree),
+  // par tranches de 6, et on s'arrete des qu'il y a assez de morceaux jouables :
+  // inutile de chercher les 4 x N candidats (les candidats sont deja tires au hasard).
   const unique = new Map<string, AudioSourceRow>();
-  for (const source of playable) {
-    const key = source.external_id ?? String(source.id);
-    if (unique.has(key)) continue;
-    unique.set(key, source);
-    if (unique.size >= desiredCount) break;
+  for (let i = 0; i < candidates.length && unique.size < desiredCount; i += HYDRATE_CONCURRENCY) {
+    const slice = candidates.slice(i, i + HYDRATE_CONCURRENCY);
+    await Promise.all(slice.map(async (source) => {
+      source.audio_url = await hydratePreviewUrl(source);
+    }));
+    for (const source of slice) {
+      if (!source.audio_url) continue;
+      const key = source.external_id ?? String(source.id);
+      if (unique.has(key)) continue;
+      unique.set(key, source);
+      if (unique.size >= desiredCount) break;
+    }
   }
-  return Array.from(unique.values());
+  return shuffle(Array.from(unique.values()));
 }
 
 // ---------------------------------------------------------------------------

@@ -83,7 +83,7 @@ describe("hydratePreviewUrl", () => {
 });
 
 describe("collectPlayableSources", () => {
-  it("hydrate 6 extraits a la fois au plus (le reste attend son tour)", async () => {
+  it("hydrate par tranches de 6 et s'arrete des qu'il y a assez de morceaux jouables", async () => {
     const rows = Array.from({ length: 20 }, (_, i) => source({ id: `s${i}`, external_id: `ext${i}`, audio_url: null }));
     query.mockResolvedValueOnce({ rows }).mockResolvedValue({ rows: [] });
     let inFlight = 0;
@@ -96,8 +96,28 @@ describe("collectPlayableSources", () => {
       return found("https://cdn.example/ok.mp3");
     });
     const got = await collectPlayableSources(1, 5, {});
-    expect(resolvePreview).toHaveBeenCalledTimes(20);
+    expect(resolvePreview).toHaveBeenCalledTimes(6); // une tranche suffit pour 5 morceaux
     expect(peak).toBeLessThanOrEqual(6);
     expect(got).toHaveLength(5);
+  });
+
+  it("continue tranche apres tranche tant qu'il manque des morceaux", async () => {
+    const rows = Array.from({ length: 20 }, (_, i) => source({ id: `s${i}`, external_id: `ext${i}`, audio_url: null }));
+    query.mockResolvedValueOnce({ rows }).mockResolvedValue({ rows: [] });
+    let n = 0;
+    // Un morceau sur deux seulement a une version sure.
+    resolvePreview.mockImplementation(async () => (n++ % 2 === 0 ? found("https://cdn.example/ok.mp3") : { status: "none" }));
+    const got = await collectPlayableSources(1, 5, {});
+    expect(got).toHaveLength(5);
+    expect(resolvePreview).toHaveBeenCalledTimes(12); // 2 tranches : 3 + 3 jouables
+  });
+
+  it("les extraits encore valides comptent sans appeler Deezer", async () => {
+    const valid = `https://cdn.example/x.mp3?hdnea=exp=${Math.floor(Date.now() / 1000) + 600}~acl`;
+    const rows = Array.from({ length: 8 }, (_, i) => source({ id: `s${i}`, external_id: `ext${i}`, audio_url: valid.replace("x.mp3", `x${i}.mp3`) }));
+    query.mockResolvedValueOnce({ rows }).mockResolvedValue({ rows: [] });
+    const got = await collectPlayableSources(1, 5, {});
+    expect(got).toHaveLength(5);
+    expect(resolvePreview).not.toHaveBeenCalled();
   });
 });
