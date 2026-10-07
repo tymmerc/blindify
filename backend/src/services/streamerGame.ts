@@ -97,6 +97,7 @@ export function bootstrapStreamerGame(params: {
   hostUserId: number;
   rounds: StreamerRound[];
   subMode: StreamerSubMode;
+  requestedRounds?: number;
 }): StreamerState {
   const state: StreamerState = {
     roomCode: params.roomCode,
@@ -105,6 +106,7 @@ export function bootstrapStreamerGame(params: {
     phase: "LOBBY",
     currentRound: 0,
     totalRounds: params.rounds.length,
+    requestedRounds: params.requestedRounds ?? params.rounds.length,
     currentTrack: null,
     timing: { startAt: null, endAt: null },
     chatScore: 0,

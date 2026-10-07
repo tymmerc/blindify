@@ -128,14 +128,45 @@ export function shuffle<T>(arr: T[]): T[] {
   return copy;
 }
 
-export async function collectPlayableSources(
+export type CollectOptions = {
+  likedOnly?: boolean;
+  playlistId?: string;
+  timeRange?: string;
+  provider?: ProviderFilter;
+  linkIds?: number[];
+  excludeKeys?: string[];
+  /** Nombre de titres tires en base (defaut : 4 x desiredCount, 200 au plus). */
+  drawLimit?: number;
+  /** Recherches Deezer permises (titres sans extrait ou extrait expire). Defaut : pas de limite. */
+  maxLookups?: number;
+};
+
+/** Ce qu'un tirage a donne : les titres jouables, ceux sans extrait, et le travail fait. */
+export type PlayableBatch = {
+  playable: AudioSourceRow[];
+  /** Cles (external_id ou id) des titres sans extrait : inutile de les retirer dans la meme partie. */
+  rejectedKeys: string[];
+  /** Lignes tirees en base. */
+  drawn: number;
+  /** Recherches d'extrait lancees (titre sans extrait ou extrait expire). */
+  lookups: number;
+};
+
+export const sourceKey = (source: Pick<AudioSourceRow, "external_id" | "id">): string =>
+  source.external_id ?? String(source.id);
+
+const needsLookup = (source: AudioSourceRow): boolean =>
+  !source.audio_url || isExpiredPreview(source.audio_url);
+
+export async function collectPlayableBatch(
   userId: number,
   desiredCount: number,
-  opts: { likedOnly?: boolean; playlistId?: string; timeRange?: string; provider?: ProviderFilter; linkIds?: number[]; excludeKeys?: string[] }
-): Promise<AudioSourceRow[]> {
+  opts: CollectOptions
+): Promise<PlayableBatch> {
   // Sur-fetch reduit (4x) : moins de recherches Deezer en parallele au lancement
   // (les previews expirent et doivent etre re-cherchees) tout en gardant une marge.
-  const candidateLimit = Math.min(desiredCount * 4, 200);
+  const candidateLimit = opts.drawLimit ?? Math.min(desiredCount * 4, 200);
+  if (candidateLimit <= 0 || desiredCount <= 0) return { playable: [], rejectedKeys: [], drawn: 0, lookups: 0 };
   const providerFilter = opts.provider ?? "any";
   const candidates = await fetchAudioSources(userId, providerFilter, candidateLimit, {
     likedOnly: opts.likedOnly,
@@ -145,22 +176,41 @@ export async function collectPlayableSources(
     excludeKeys: opts.excludeKeys,
   });
 
+  // Un extrait en cache encore frais ne coute rien ; les autres passent par
+  // Deezer, dans la limite permise. Ceux au-dela ne sont ni joues ni ecartes.
+  const maxLookups = opts.maxLookups ?? Number.POSITIVE_INFINITY;
+  const stale = candidates.filter(needsLookup);
+  const tried = new Set(stale.slice(0, Math.max(0, maxLookups)));
+  const toHydrate = candidates.filter(source => !needsLookup(source) || tried.has(source));
+
   // Hydrate / rafraichit les previews via Deezer (re-fetch si manquante OU expiree).
   await Promise.all(
-    candidates.map(async (source) => {
+    toHydrate.map(async (source) => {
       source.audio_url = await hydratePreviewUrl(source);
     })
   );
 
-  const playable = shuffle(candidates.filter((source) => Boolean(source.audio_url)));
+  const playable = shuffle(toHydrate.filter((source) => Boolean(source.audio_url)));
+  const playableKeys = new Set(playable.map(sourceKey));
+  const rejectedKeys = Array.from(new Set(
+    toHydrate.filter(source => !source.audio_url).map(sourceKey).filter(key => !playableKeys.has(key))
+  ));
   const unique = new Map<string, AudioSourceRow>();
   for (const source of playable) {
-    const key = source.external_id ?? String(source.id);
+    const key = sourceKey(source);
     if (unique.has(key)) continue;
     unique.set(key, source);
     if (unique.size >= desiredCount) break;
   }
-  return Array.from(unique.values());
+  return { playable: Array.from(unique.values()), rejectedKeys, drawn: candidates.length, lookups: tried.size };
+}
+
+export async function collectPlayableSources(
+  userId: number,
+  desiredCount: number,
+  opts: CollectOptions
+): Promise<AudioSourceRow[]> {
+  return (await collectPlayableBatch(userId, desiredCount, opts)).playable;
 }
 
 // ---------------------------------------------------------------------------

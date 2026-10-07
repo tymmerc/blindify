@@ -6,7 +6,7 @@ import { ok, fail } from "../utils/response";
 import { logger } from "../utils/logger";
 import type { AudioSourceRow } from "../types/audio";
 import axios from "axios";
-import { hydratePreviewUrl } from "../services/trackResolution";
+import { hydratePreviewUrl, isExpiredPreview } from "../services/trackResolution";
 import { linkTrackToUser, UNOWNED } from "../services/userTracks";
 import { isSpotifyId } from "../utils/providerIds";
 
@@ -324,11 +324,13 @@ async function collectPlayableSources(
     excludeExternalIds: opts.excludeExternalIds,
   });
 
-  // Split: already-playable vs needs-hydration
+  // Split: already-playable vs needs-hydration. Un extrait Deezer expire
+  // (signature `exp=` depassee) n'est PAS jouable : il repasse par Deezer, sinon
+  // la manche partait muette au lieu d'etre remplacee.
   const ready: AudioSourceRow[] = [];
   const needsHydration: AudioSourceRow[] = [];
   for (const source of candidates) {
-    if (source.audio_url) ready.push(source);
+    if (source.audio_url && !isExpiredPreview(source.audio_url)) ready.push(source);
     else needsHydration.push(source);
   }
 

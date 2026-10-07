@@ -17,10 +17,12 @@ import { bySmallestLibrary, linkTrackToUser, ownersAmong, PLAYS_TONIGHT } from "
 import { isSpotifyId } from "../utils/providerIds";
 import {
   hydratePreviewUrl,
-  collectPlayableSources,
+  collectPlayableBatch,
   shuffle,
+  type CollectOptions,
   type ProviderFilter,
 } from "../services/trackResolution";
+import { LOOKUPS_PER_ROUND, topUpPlayable } from "../services/roundTopUp";
 
 // crypto.randomInt et pas Math.random : un code de salle permet de rejoindre
 // une partie, et Math.random devient previsible quand on observe ses tirages.
@@ -968,6 +970,22 @@ export const roomsController = {
       const ids = linkFilter.get(pid);
       return ids === null || ids === undefined ? {} : { linkIds: ids };
     };
+    // Un titre sans extrait n'est cherche qu'une fois par lancement, et tout le
+    // lancement a un plafond de recherches Deezer (LOOKUPS_PER_ROUND par manche,
+    // ou par joueur s'ils sont plus nombreux que les manches) : une grosse
+    // bibliotheque injouable ne declenche pas des centaines d'appels.
+    const rejectedKeys = new Set<string>();
+    let lookupsLeft = Math.max(room.question_count, musicContributorIds.length) * LOOKUPS_PER_ROUND;
+    const collect = async (pid: number, desired: number, opts: CollectOptions): Promise<AudioSourceRow[]> => {
+      const batch = await collectPlayableBatch(pid, desired, {
+        ...opts,
+        excludeKeys: [...(opts.excludeKeys ?? []), ...rejectedKeys],
+        maxLookups: lookupsLeft,
+      });
+      lookupsLeft -= batch.lookups;
+      batch.rejectedKeys.forEach(key => rejectedKeys.add(key));
+      return batch.playable;
+    };
     const contribution = new Map<number, number>();
     // Un morceau peut etre a plusieurs joueurs : chacun ne tire que ce qui
     // n'est pas deja pris (excludeKeys), et les plus petites bibliotheques
@@ -989,9 +1007,9 @@ export const roomsController = {
       }
 
       // 1) D'abord les titres que CE joueur possede vraiment -> attribution "qui a ajoute" fiable.
-      // On passe par collectPlayableSources pour HYDRATER les previews Deezer : les titres
+      // On passe par collect pour HYDRATER les previews Deezer : les titres
       // importes ont audio_url NULL au depart et seraient sinon jetes par le filtre playable.
-      const owned = await collectPlayableSources(pid, perUserCount, {
+      const owned = await collect(pid, perUserCount, {
         likedOnly: likedChoice,
         playlistId: playlistChoice,
         timeRange: timeChoice,
@@ -1003,12 +1021,12 @@ export const roomsController = {
       pushUnique(owned);
 
       // 2) Complement, toujours dans la bibliotheque de CE joueur. On passe par
-      // collectPlayableSources pour hydrater les extraits et ecarter les titres
+      // collect (collectPlayableBatch) pour hydrater les extraits et ecarter les titres
       // sans audio (fetchAudioSources brut en laissait passer : manche muette).
       const need = perUserCount - owned.length;
       let extra = 0;
       if (need > 0) {
-        const slice = await collectPlayableSources(pid, need, {
+        const slice = await collect(pid, need, {
           provider: poolProvider,
           likedOnly: likedChoice,
           playlistId: playlistChoice,
@@ -1027,7 +1045,7 @@ export const roomsController = {
     if (collected.length < room.question_count) {
       for (const pid of musicContributorIds) {
         if (collected.length >= room.question_count) break;
-        const fill = await collectPlayableSources(pid, room.question_count - collected.length, {
+        const fill = await collect(pid, room.question_count - collected.length, {
           likedOnly: false,
           provider: poolProvider,
           excludeKeys: [...seen],
@@ -1044,7 +1062,7 @@ export const roomsController = {
       const existingKeys = new Set(sources.map(src => src.external_id ?? String(src.id)));
       for (const pid of musicContributorIds) {
         if (sources.length >= room.question_count) break;
-        const fallback = await collectPlayableSources(pid, room.question_count - sources.length, {
+        const fallback = await collect(pid, room.question_count - sources.length, {
           likedOnly: false,
           provider: "any",
           excludeKeys: [...existingKeys],
@@ -1065,10 +1083,10 @@ export const roomsController = {
       const hasOne = sources.some(src => src.user_id === pid);
       if (hasOne) continue;
       const existingKeys = new Set(sources.map(src => src.external_id ?? String(src.id)));
-      // collectPlayableSources (et pas fetchAudioSources brut) : il rafraichit les
+      // collect (et pas fetchAudioSources brut) : il rafraichit les
       // extraits et jette ceux sans audio. Sinon on pouvait injecter ici un titre
       // muet et la table restait 10 secondes dans le silence.
-      const personalPool = await collectPlayableSources(pid, 3, { provider: poolProvider, excludeKeys: [...existingKeys], ...linkOpts(pid) });
+      const personalPool = await collect(pid, 3, { provider: poolProvider, excludeKeys: [...existingKeys], ...linkOpts(pid) });
       for (const candidate of personalPool) {
         const key = candidate.external_id ?? String(candidate.id);
         if (existingKeys.has(key)) continue;
@@ -1083,7 +1101,45 @@ export const roomsController = {
 
     // Plus de repli sur le fonds commun : la promesse produit, c'est "VOS musiques".
     // S'il manque des titres, la partie aura simplement moins de manches
-    // (effectiveRounds s'ajuste plus bas sur sources.length).
+    // (effectiveRounds s'ajuste plus bas sur sources.length) et l'ecran de jeu le dit.
+
+    // Hydrate/rafraichit les previews via Deezer. On passe TOUS les titres (pas seulement ceux
+    // sans URL) : une URL Deezer en cache peut etre EXPIREE (signature `exp=`) -> 403 -> pas de son.
+    // hydratePreviewUrl renvoie l'URL cache si fraiche, re-fetch si manquante/expiree, null si injouable.
+    await Promise.all(
+      sources.map(async source => {
+        source.audio_url = await hydratePreviewUrl(source);
+      })
+    );
+    for (const source of sources) {
+      if (!source.audio_url) rejectedKeys.add(source.external_id ?? String(source.id));
+    }
+    // Keep only tracks with a playable audio URL
+    sources = sources.filter(s => Boolean(s.audio_url));
+
+    // Il manque des manches (titres sans extrait) : on retire dans les memes
+    // bibliotheques, memes regles (cartes cochees, titres deja pris ou sans
+    // extrait exclus), borne a TOP_UP_MAX_PASSES passes de question_count titres.
+    if (sources.length < room.question_count) {
+      const topUp = await topUpPlayable({
+        current: sources,
+        target: room.question_count,
+        contributorIds: musicContributorIds,
+        rejectedKeys,
+        draw: (pid, drawLimit, excludeKeys) =>
+          collectPlayableBatch(pid, drawLimit, {
+            provider: "any",
+            excludeKeys,
+            drawLimit,
+            maxLookups: lookupsLeft,
+            ...linkOpts(pid),
+          }).then(batch => {
+            lookupsLeft -= batch.lookups;
+            return batch;
+          }),
+      });
+      sources = topUp.sources;
+    }
 
     // Dernier filet : si rien du tout, on s'arrête avec un message explicite
     if (sources.length === 0) {
@@ -1096,18 +1152,6 @@ export const roomsController = {
 
     // Mélange final pour intercaler les sources entre joueurs (et accepter un nombre réduit si besoin)
     sources = shuffle(sources);
-
-    // Hydrate/rafraichit les previews via Deezer. On passe TOUS les titres (pas seulement ceux
-    // sans URL) : une URL Deezer en cache peut etre EXPIREE (signature `exp=`) -> 403 -> pas de son.
-    // hydratePreviewUrl renvoie l'URL cache si fraiche, re-fetch si manquante/expiree, null si injouable.
-    await Promise.all(
-      sources.map(async source => {
-        source.audio_url = await hydratePreviewUrl(source);
-      })
-    );
-
-    // Keep only tracks with a playable audio URL
-    sources = sources.filter(s => Boolean(s.audio_url));
 
     const cappedCount = Math.max(1, Math.min(sources.length, room.question_count));
     // Equite entre joueurs : la coupe en fin de liste amputait au hasard la part
@@ -1299,6 +1343,7 @@ export const roomsController = {
         hostUserId: room.host_user_id,
         rounds: streamerRounds,
         subMode,
+        requestedRounds: room.question_count,
       });
       ok(res, {
         session: {
@@ -1307,6 +1352,7 @@ export const roomsController = {
           difficulty: session.difficulty,
           provider: session.source_provider,
           totalRounds: session.total_rounds,
+          requestedRounds: room.question_count,
           startedAt: session.started_at,
           roomCode: room.room_code,
         },
@@ -1323,6 +1369,7 @@ export const roomsController = {
       singleContributor,
       mode: session.mode as GameMode,
       tracks: roundTracks,
+      requestedRounds: room.question_count,
       participants: participantIds.map(id => ({
         userId: id,
         username: usernameMap.get(id) ?? null,
@@ -1350,6 +1397,7 @@ export const roomsController = {
         difficulty: session.difficulty,
         provider: session.source_provider,
         totalRounds: session.total_rounds,
+        requestedRounds: room.question_count,
         startedAt: session.started_at,
         roomCode: room.room_code,
       },

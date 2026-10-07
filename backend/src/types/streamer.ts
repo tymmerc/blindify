@@ -38,6 +38,8 @@ export interface StreamerState {
   phase: StreamerPhase;
   currentRound: number;
   totalRounds: number;
+  /** Manches demandees par l'hote (plus que totalRounds s'il manquait des titres jouables). */
+  requestedRounds?: number;
   currentTrack: StreamerRound | null;
   timing: {
     startAt: number | null;

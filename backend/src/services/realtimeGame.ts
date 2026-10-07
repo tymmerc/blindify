@@ -53,6 +53,11 @@ export type GameState = {
   phase: "LOBBY" | "GUESSING" | "REVEAL" | "FINISHED";
   currentRound: number;
   totalRounds: number;
+  /**
+   * Manches demandees par l'hote. Plus grand que totalRounds quand les
+   * bibliotheques n'avaient pas assez de titres jouables : l'ecran le dit.
+   */
+  requestedRounds?: number;
   currentTrack: RoundTrack | null;
   timing: {
     startAt: number | null;
@@ -100,6 +105,8 @@ export function bootstrapGameState(params: {
   hostPlays?: boolean;
   singleContributor?: boolean;
   tracks: RoundTrack[];
+  /** Manches demandees (question_count) ; par defaut, le nombre de pistes. */
+  requestedRounds?: number;
   participants: Array<{ userId: number; username: string | null; avatar?: string | null }>;
   mode?: string;
   config?: { roundDurationMs?: number; autoAdvance?: boolean };
@@ -134,6 +141,7 @@ export function bootstrapGameState(params: {
     phase: "LOBBY",
     currentRound: 0,
     totalRounds: params.tracks.length,
+    requestedRounds: params.requestedRounds ?? params.tracks.length,
     currentTrack: null,
     timing: {
       startAt: null,
