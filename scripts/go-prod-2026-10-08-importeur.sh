@@ -23,7 +23,14 @@
 #      git -C /opt/blindify fetch -q origin && git -C /opt/blindify show origin/main:scripts/attendre-parties.sh | bash
 #   2. systemctl stop blindify-dev-backend
 #   3. git -C /opt/blindify pull --ff-only
-#   4. HEAVY_WAIT=14400 heavy bash /opt/blindify/scripts/go-prod-2026-10-08-importeur.sh SHA_TESTE_SUR_LA_PILE
+#   4. setsid nohup bash -c 'HEAVY_WAIT=14400 heavy bash /opt/blindify/scripts/go-prod-2026-10-08-importeur.sh SHA_TESTE_SUR_LA_PILE' \
+#        > /opt/backups/go-prod-importeur-lancement.log 2>&1 &
+#      puis suivre : tail -f /opt/backups/go-prod-importeur-*.log
+#
+# Toujours detache (setsid nohup, ou en tache de fond), jamais dans un SSH nu :
+# une coupure tuerait le script au milieu. Jamais via systemd-run hors de
+# user.slice (garde-fous memoire du VPS). Un arret (Ctrl-C, kill) passe par la
+# fin du script, qui dit l'etape atteinte, l'etat reel et la commande de retour.
 #
 # L'arret du backend de dev AVANT le git pull compte : il tourne en
 # ts-node-dev depuis /opt/blindify et repart tout seul quand ses fichiers
@@ -116,9 +123,52 @@ JOURNAL="$SAUVE/go-prod-importeur-$HORO.log"
 # frontend/out illisible pour nginx (500 pendant 18 s).
 ( umask 077; : > "$JOURNAL" )
 # Tout ce qui s'affiche part aussi dans le journal. Aucun secret n'est affiche.
-exec > >(tee -a "$JOURNAL") 2>&1
-RETOUR="(pas encore de changement)"
-die() { echo "  !! $1"; echo "  RETOUR ARRIERE : $RETOUR"; exit 1; }
+# tee ignore les signaux : un Ctrl-C ou une coupure ne coupe pas le journal
+# avant que la fin du script ait dit ou on en est.
+exec > >(trap '' INT HUP TERM; exec tee -a "$JOURNAL") 2>&1
+RETOUR="(pas encore de fichier de retour)"
+RETOUR_FRONT=""
+DUMP=""
+# L'etat reel, dit par finir() a chaque sortie.
+ETAPE="1. garde-fous"
+ETAT_005="pas appliquee par ce passage"
+ETAT_BACKEND="ancien (rien n'a ete redemarre)"
+ETAT_FRONT="ancien"
+if [ "$CIBLE" = prod ]; then ETAT_DEV="pas encore verifie (laisse tel quel)"; else ETAT_DEV="sans objet (pile)"; fi
+die() { echo "  !! $1"; exit 1; }
+finir() {
+  local code=$1
+  trap - EXIT
+  [ "$code" = 0 ] && return 0
+  echo
+  echo "== ARRET a l'etape « $ETAPE » (code $code, $(date -u +%H:%M:%S) UTC) =="
+  echo "  migration 005  : $ETAT_005"
+  echo "  backend        : $ETAT_BACKEND"
+  echo "  front          : $ETAT_FRONT"
+  case "$ETAT_BACKEND" in
+    nouveau*) echo "  le lot tourne ; retour du backend seulement si besoin : $RETOUR" ;;
+    INCONNU*) echo "  A FAIRE TOUT DE SUITE : $RETOUR" ;;
+    *) echo "  backend : rien a remettre, l'ancien tourne" ;;
+  esac
+  [ "$ETAT_FRONT" = "en reconstruction" ] && echo "  front d'avant : $RETOUR_FRONT"
+  if [ "$CIBLE" = prod ] && [ "$ETAT_DEV" = "arrete expres (avant le pull)" ]; then
+    # Le backend de dev tourne sur ce main : il applique la 005 en demarrant.
+    # On ne le relance que si la base est sauvegardee.
+    if [ -n "$DUMP" ] && [ -s "$DUMP" ]; then
+      if systemctl start blindify-dev-backend; then ETAT_DEV="relance (base sauvegardee : $DUMP)"; else ETAT_DEV="RELANCE EN ECHEC (systemctl status blindify-dev-backend)"; fi
+      if [ "$ETAT_005" = appliquee ]; then
+        systemctl restart blindz-db-browser && echo "  explorateur relance (il lit la colonne de la 005)"
+      fi
+    else
+      ETAT_DEV="laisse arrete EXPRES : ne PAS le relancer sur ce main sans sauvegarde, il appliquerait la 005"
+      echo "  explorateur : laisse tel quel (ancien code, il tourne)"
+    fi
+  fi
+  echo "  backend de dev : $ETAT_DEV"
+  echo "  journal        : $JOURNAL"
+}
+trap 'finir $?' EXIT
+trap 'exit 130' INT TERM HUP
 heure() { date -u +%H:%M:%S; }
 ms_depuis() { echo $(( ($(date +%s%N) - $1) / 1000000 )); }
 
@@ -142,15 +192,24 @@ present() { grep -qF -- "$1" "$2" 2>/dev/null || die "main incomplet : « $1 » 
 
 echo "── 1. Garde-fous ($CIBLE, rien ne change pendant cette etape) ──"
 TESTE_SHA="$(git rev-parse --verify --quiet "$TESTE^{commit}")" || die "commit teste inconnu : $TESTE"
-if [ "$CIBLE" = prod ]; then
-  git fetch -q origin
-  [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] || die "le dossier n'est pas sur origin/main : la prod se deploie depuis main"
-  git merge-base --is-ancestor "$TESTE_SHA" HEAD || die "le commit teste n'est pas un ancetre de main"
-  hors_scripts="$(git diff --name-only "$TESTE_SHA" HEAD | grep -v '^scripts/' || true)"
-  [ -z "$hors_scripts" ] || die "main a change depuis le commit teste ailleurs que dans scripts/ : $hors_scripts"
-else
-  [ "$(git rev-parse HEAD)" = "$TESTE_SHA" ] || die "PILE_DEPOT n'est pas au commit teste"
-fi
+HEAD_DEBUT="$(git rev-parse HEAD)"
+# Rejoue a l'etape 1 et juste avant le build : main = origin/main, le commit
+# teste en est un ancetre et main ne l'a depasse que dans scripts/, et HEAD
+# n'a pas bouge depuis le debut.
+gardes_main() {
+  [ "$(git rev-parse HEAD)" = "$HEAD_DEBUT" ] || die "HEAD a bouge depuis l'etape 1 ($(git rev-parse --short HEAD) au lieu de ${HEAD_DEBUT:0:7})"
+  if [ "$CIBLE" = prod ]; then
+    git fetch -q origin
+    [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] || die "le dossier n'est pas sur origin/main (main a bouge ?) : la prod se deploie depuis main"
+    git merge-base --is-ancestor "$TESTE_SHA" HEAD || die "le commit teste n'est pas un ancetre de main"
+    local hors_scripts
+    hors_scripts="$(git diff --name-only "$TESTE_SHA" HEAD | grep -v '^scripts/' || true)"
+    [ -z "$hors_scripts" ] || die "main a change depuis le commit teste ailleurs que dans scripts/ : $hors_scripts"
+  else
+    [ "$HEAD_DEBUT" = "$TESTE_SHA" ] || die "PILE_DEPOT n'est pas au commit teste"
+  fi
+}
+gardes_main
 [ -z "$(git status --short backend/ frontend/ tools/ infra/ scripts/ docker-compose.yml | grep -v '^??' || true)" ] \
   || die "modifications non commitees dans backend/, frontend/, tools/, infra/, scripts/ ou docker-compose.yml"
 [ -z "$(git status --short --untracked-files=all backend/src backend/migrations backend/package.json backend/package-lock.json)" ] \
@@ -188,6 +247,7 @@ echo "  rattrapage ISRC : $RATTRAPAGE_SRC (dans l'image : /app/$RATTRAPAGE_DIST)
 if [ "$CIBLE" = prod ]; then
   ! systemctl is-active --quiet blindify-dev-backend \
     || die "le backend de dev tourne : l'arreter AVANT le git pull (voir l'en-tete). S'il est deja reparti sur ce main, la 005 est peut-etre deja en base : c'est sans danger pour l'ancien backend, mais la sauvegarde ne sera pas d'avant la 005"
+  ETAT_DEV="arrete expres (avant le pull)"
   docker inspect -f '{{.State.Running}}' blindify-backend 2>/dev/null | grep -qx true || die "le conteneur blindify-backend ne tourne pas"
   curl -sf -m 15 "$SANTE" >/dev/null || die "la prod ne repond pas AVANT le deploiement : comprendre d'abord"
 else
@@ -210,13 +270,16 @@ else
   die "des parties ont commence depuis l'attente : relancer scripts/attendre-parties.sh puis ce script (rien n'a change)"
 fi
 
+ETAPE="3. sauvegardes"
 echo "── 3. Sauvegardes (verifiees avant tout changement) ──"
-DUMP="$SAUVE/avant-importeur-$HORO.sql.gz"
-if ! ( umask 077; set -o pipefail; dump_cible | gzip > "$DUMP" ) \
-  || ! gzip -t "$DUMP" || ! zcat "$DUMP" | tail -n 5 | grep -q 'PostgreSQL database dump complete' \
-  || [ "$(stat -c %a "$DUMP")" != 600 ] || [ ! -s "$DUMP" ]; then
-  rm -f "$DUMP"; die "sauvegarde de la base invalide"
+DUMP_FICHIER="$SAUVE/avant-importeur-$HORO.sql.gz"
+if ! ( umask 077; set -o pipefail; dump_cible | gzip > "$DUMP_FICHIER" ) \
+  || ! gzip -t "$DUMP_FICHIER" || ! zcat "$DUMP_FICHIER" | tail -n 5 | grep -q 'PostgreSQL database dump complete' \
+  || [ "$(stat -c %a "$DUMP_FICHIER")" != 600 ] || [ ! -s "$DUMP_FICHIER" ]; then
+  rm -f "$DUMP_FICHIER"; die "sauvegarde de la base invalide (rien n'a change)"
 fi
+# Verifiee : c'est elle qui autorise finir() a relancer le backend de dev.
+DUMP="$DUMP_FICHIER"
 RETOUR_FICHIER="$SAUVE/retour-importeur-$HORO.sh"
 # Remettre un backend : la meme fonction sert au retour automatique (etape 5)
 # et au fichier de retour, qui la recopie telle quelle (declare -f).
@@ -297,8 +360,8 @@ RETOUR="bash $RETOUR_FICHIER"
 echo "  base    : $DUMP ($(du -h "$DUMP" | cut -f1), mode 600)"
 echo "  retour  : $RETOUR"
 echo "  journal : $JOURNAL"
-trap 'echo "  RETOUR ARRIERE : $RETOUR"' ERR
 
+ETAPE="4. migration 005"
 echo "── 4. Migration 005 ($(heure)) ──"
 # Sans -1 : la reprise fait un COMMIT par lot. Une transaction annulee par le
 # lock_timeout (3 s) ou un interblocage n'a rien ecrit : on rejoue le fichier,
@@ -319,7 +382,8 @@ appliquer_005() {
   return 1
 }
 t0=$(date +%s%N)
-appliquer_005 || die "la 005 a echoue : l'ancien backend tourne toujours, rien d'autre n'a change. Lire l'erreur ci-dessus"
+appliquer_005 || die "la 005 a echoue (lire l'erreur ci-dessus) : ancien backend toujours en place, la base garde ce qui est deja passe (rejouable)"
+ETAT_005=appliquee
 echo "  005 appliquee en $(ms_depuis "$t0") ms ($(heure))"
 [ "$(sql "SELECT to_regclass('public.user_audio_sources') IS NOT NULL")" = t ] || die "table user_audio_sources absente apres la 005"
 [ "$(sql "SELECT count(*) FROM pg_trigger WHERE tgrelid = 'public.audio_sources'::regclass AND tgname IN ('audio_sources_lien_proprietaire', 'audio_sources_lien_retire')")" = 2 ] \
@@ -345,19 +409,21 @@ read -r n_orph liens lies_apres joueurs_sans_lien cartes_etrangeres <<< "$(sql "
 [ "$cartes_etrangeres" = 0 ] || die "$cartes_etrangeres lien(s) pointent vers la carte d'un autre joueur"
 echo "  [ok] $liens liens pour $lies_apres morceaux lies ($lies_avant avant la 005), 0 orphelin, cartes coherentes (rien a annuler : l'ancien backend tourne avec)"
 
+ETAPE="5. backend"
 echo "── 5. Backend ($(heure)) ──"
+# Ancien backend toujours en place jusqu'au redemarrage : un arret ici ne
+# demande aucun retour (la 005 est sans effet sur lui).
+gardes_main
 if [ "$CIBLE" = prod ]; then
-  docker compose build backend || die "build du backend en echec : rien n'est redemarre (la 005 reste, sans effet sur l'ancien backend)"
-  git fetch -q origin
-  [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] \
-    || die "main a bouge pendant le build : rien n'est redemarre (la 005 reste, sans effet sur l'ancien backend). Mettre /opt/blindify a jour, refaire la campagne et relancer"
+  docker compose build backend || die "build du backend en echec : ancien backend toujours en place"
+  gardes_main
 fi
 # Le build prend des minutes : une partie a pu commencer entre-temps.
 for i in $(seq 1 40); do
   n="$(en_cours)"
   [ "$n" = 0 ] && break
   [ "${FORCE:-0}" = 1 ] && { echo "  FORCE=1 : $n partie(s) en cours seront terminees"; break; }
-  [ "$i" = 40 ] && die "$n partie(s) en cours apres 20 min : rien n'est redemarre (la 005 reste, sans effet sur l'ancien backend). Relancer plus tard"
+  [ "$i" = 40 ] && die "$n partie(s) en cours apres 20 min : ancien backend toujours en place. Relancer plus tard"
   echo "  $n partie(s) en cours, on attend 30 s"; sleep 30
 done
 retour_backend_auto() {
@@ -367,6 +433,8 @@ retour_backend_auto() {
   exit 1
 }
 debut=$(date +%s)
+DEBUT_ISO="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+ETAT_BACKEND="nouveau (redemarrage en cours)"
 if [ "$CIBLE" = prod ]; then
   docker compose up -d --no-deps backend || retour_backend_auto "docker compose up a echoue"
 else
@@ -382,6 +450,7 @@ until curl -sf -m 2 "$SANTE" >/dev/null; do
   [ $(( $(date +%s) - debut )) -gt 120 ] && retour_backend_auto "API toujours hors ligne apres 120 s"
 done
 echo "  API de nouveau en ligne apres $(( $(date +%s) - debut )) s"
+ETAT_BACKEND="nouveau (lot en place)"
 if [ "$CIBLE" = prod ]; then
   for i in $(seq 1 30); do
     etat="$(docker inspect -f '{{.State.Health.Status}}' blindify-backend 2>/dev/null || echo inconnu)"
@@ -392,6 +461,7 @@ if [ "$CIBLE" = prod ]; then
   done
 fi
 
+ETAPE="6. verifications du backend"
 echo "── 6. Verifications du backend ($(heure)) ──"
 sleep 3
 ko=0
@@ -420,8 +490,9 @@ solo="$(curl -s -m 90 -X POST "$BASE_URL/api/quick-play" -H 'Content-Type: appli
   -d '{"url":"https://www.deezer.com/fr/playlist/1109890291","count":10}' || true)"
 titres_solo="$(echo "$solo" | jq -r 'if .success == true then [.data.tracks[]? | select(.audio_url != null)] | length else 0 end' 2>/dev/null || echo 0)"
 verifie "solo par lien : une playlist Deezer publique donne $titres_solo titres jouables (5 au moins)" "[ \"${titres_solo:-0}\" -ge 5 ]"
-[ "$ko" = 0 ] || die "UNE VERIFICATION DU BACKEND A ECHOUE : voir ci-dessus"
+[ "$ko" = 0 ] || die "UNE VERIFICATION DU BACKEND A ECHOUE (voir ci-dessus) : backend du lot en place, front et rattrapage pas faits"
 
+ETAPE="7. rattrapage ISRC"
 echo "── 7. Rattrapage des ISRC ($(heure)) ──"
 # Independant du reste : un echec ici ne remet PAS le backend d'avant. Le
 # script est reprenable (il ne prend que les morceaux encore sans ISRC).
@@ -461,6 +532,7 @@ if [ "$CIBLE" = pile ]; then
   exit 0
 fi
 
+ETAPE="8. front"
 echo "── 8. Front (voie rapide, $(heure)) ──"
 # Texte de l'accueil : go-prod-front.sh le cherche dans la page d'accueil, ou
 # le message de #67 n'est pas (il est dans le code de l'ecran de jeu). On lui
@@ -488,8 +560,8 @@ verifie "#67 message « X manches au lieu de Y » dans le build" "[ -n \"$chunk6
 verifie "#67 blindz.app sert ce fichier" "curl -sf -m 30 \"https://blindz.app/${chunk67#frontend/out/}\" | grep -qF 'pas assez de titres jouables'"
 [ "$ko" = 0 ] || { echo "  !! UNE VERIFICATION DU FRONT A ECHOUE (backend en place et sain)"; echo "  front d'avant : rsync -a --delete $FRONT_SAUVE/ /opt/blindify/frontend/out/"; exit 1; }
 
+ETAPE="9. explorateur et backend de dev"
 echo "── 9. Explorateur de base et backend de dev ($(heure)) ──"
-trap 'echo "  EXPLORATEUR/DEV SEULEMENT : le jeu est en place ; systemctl restart blindz-db-browser ; systemctl start blindify-dev-backend"' ERR
 # L'explorateur lit game_rounds.owner_user_id depuis #54 : on le relance
 # maintenant que la colonne existe (jusqu'ici il tournait sur l'ancien code).
 systemctl restart blindz-db-browser
@@ -503,7 +575,6 @@ systemctl start blindify-dev-backend
 for i in $(seq 1 60); do curl -sf -m 2 http://127.0.0.1:3097/api/health >/dev/null && break; sleep 2; done
 verifie "backend de dev reparti (meme commit : il tourne depuis /opt/blindify)" "curl -sf -m 5 http://127.0.0.1:3097/api/health >/dev/null"
 [ "$ko" = 0 ] || { echo "  !! UNE VERIFICATION DE L'EXPLORATEUR OU DU DEV A ECHOUE (la prod du jeu est en place)"; exit 1; }
-trap - ERR
 
 echo
 echo "DEPLOIEMENT DU LOT IMPORTEUR TERMINE ($(git rev-parse --short HEAD), $(heure))"
