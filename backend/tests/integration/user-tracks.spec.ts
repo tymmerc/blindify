@@ -65,6 +65,7 @@ import { gamesController } from "../../src/controllers/gamesController";
 import { authController } from "../../src/controllers/authController";
 import { audioSourcesController } from "../../src/controllers/audioSourcesController";
 import { fetchAudioSources } from "../../src/services/trackResolution";
+import * as realtimeGame from "../../src/services/realtimeGame";
 import { clearGame } from "../../src/services/realtimeGame";
 import { clearAdvanceTimer, clearRevealTimer } from "../../src/services/realtimeOrchestrator";
 
@@ -220,10 +221,26 @@ async function newRoom(players: number[], questionCount = 10): Promise<string> {
 
 type StartedTrack = { audioSourceId: string; track_id: string; metadata: { owner_user_id?: number | null; owner_user_ids?: number[] } };
 
+/**
+ * Lance la salle et rend ses manches telles que le serveur les a tirees. La
+ * reponse HTTP les caviarde depuis #55 (anti-triche) : on les prend au
+ * demarrage de la partie en memoire, « qui a mis quoi » compris.
+ */
 async function startRoom(code: string, hostId: number): Promise<Reply & { tracks: StartedTrack[] }> {
-  const reply = await call(roomsController.startGame, hostId, { params: { code }, body: { source: "library" } });
-  startedRooms.push(code);
-  return { ...reply, tracks: field<StartedTrack[] | undefined>(reply, "tracks") ?? [] };
+  const boot = jest.spyOn(realtimeGame, "bootstrapGameState");
+  try {
+    const reply = await call(roomsController.startGame, hostId, { params: { code }, body: { source: "library" } });
+    startedRooms.push(code);
+    const booted = boot.mock.calls.find(([params]) => params.roomCode === code)?.[0];
+    const tracks = (booted?.tracks ?? []).map(t => ({
+      audioSourceId: String(t.audioSourceId),
+      track_id: t.trackId,
+      metadata: t.metadata as StartedTrack["metadata"],
+    }));
+    return { ...reply, tracks };
+  } finally {
+    boot.mockRestore();
+  }
 }
 
 function stopGame(code: string): void {
