@@ -31,6 +31,8 @@ export interface ParsedTitle {
 
 const DURATION_TOLERANCE_MS = 8_000;
 const DURATION_TOLERANCE_RATIO = 0.05;
+// Artiste impossible a comparer (autre ecriture) : la duree doit coller.
+const STRICT_DURATION_MS = 3_000;
 
 // Mentions sans effet sur l'enregistrement (apres normalisation).
 const NEUTRAL_QUALIFIERS: RegExp[] = [
@@ -52,9 +54,9 @@ const DASH_SUFFIX = /\s[-–]\s(.*)$/;
 function normalize(text: string): string {
   return text
     .normalize("NFKD") // accents a part, lettres pleine chasse ramenees en ASCII
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/\p{M}/gu, "") // accents, dakuten...
     .toLowerCase()
-    .replace(/[^a-z0-9぀-ヿ一-鿿]+/g, " ")
+    .replace(/[^\p{L}\p{N}]+/gu, " ") // toutes les ecritures : latin, kana, kanji, hangul, cyrillique...
     .trim();
 }
 
@@ -111,26 +113,51 @@ function artistsOf(artist?: string): string[] {
     .filter(Boolean);
 }
 
+/** Ecriture latine ou non : "Yuki Hayashi" et "林 ゆうき" ne se comparent pas lettre a lettre. */
+function isLatin(text: string): boolean {
+  return /\p{Script=Latin}/u.test(text);
+}
+
+type ArtistVerdict = "same" | "different" | "incomparable";
+
+/**
+ * L'artiste du candidat face a celui de la source. Deezer ecrit souvent un
+ * artiste japonais en kanji quand Spotify le romanise : on ne peut alors pas
+ * comparer, et c'est la duree (a 3 s pres) qui tranche.
+ */
+function artistVerdict(wantRaw: string | undefined, wantArtists: string[], gotRaw: string | undefined): ArtistVerdict {
+  if (!wantRaw?.trim()) return "same"; // artiste inconnu : seul le titre compte, comme avant
+  const got = normalize(gotRaw ?? "");
+  const comparable = wantArtists.filter(a => got && isLatin(a) === isLatin(got));
+  if (comparable.length === 0) return "incomparable";
+  return comparable.some(a => got.includes(a) || a.includes(got)) ? "same" : "different";
+}
+
+const byGap = (a: number | null, b: number | null) => {
+  const ga = a ?? Infinity;
+  const gb = b ?? Infinity;
+  return ga === gb ? 0 : ga - gb;
+};
+
 /**
  * Le bon enregistrement parmi les resultats d'une recherche, ou null. Parmi
- * les candidats surs : le bon artiste (obligatoire si on le connait), avec un
- * extrait de preference, puis la duree la plus proche.
+ * les candidats surs (meme version, et bon artiste ; artiste ecrit dans une
+ * autre ecriture : duree a 3 s pres) : avec un extrait de preference, puis
+ * l'artiste reconnu, puis la duree la plus proche (inconnue en dernier).
  */
 export function pickMatch<T extends MatchCandidate>(items: T[], want: MatchQuery): T | null {
   const wantArtists = artistsOf(want.artist);
-  const sameArtist = (i: T) => {
-    const got = normalize(i.artist?.name ?? "");
-    return wantArtists.length === 0 || wantArtists.some(a => got.includes(a) || a.includes(got));
-  };
   const safe = items
-    .filter(i => i.id && isSameVersion(i, want) && sameArtist(i))
-    .map(i => ({ i, gap: durationGap(i, want.durationMs) }));
+    .filter(i => i.id && isSameVersion(i, want))
+    .map(i => ({ i, gap: durationGap(i, want.durationMs), artist: artistVerdict(want.artist, wantArtists, i.artist?.name) }))
+    .filter(c => c.artist === "same" || (c.artist === "incomparable" && c.gap !== null && c.gap <= STRICT_DURATION_MS));
   const ranked = [...safe].sort((a, b) =>
-    Number(Boolean(b.i.preview)) - Number(Boolean(a.i.preview)) || (a.gap ?? 0) - (b.gap ?? 0)
+    Number(Boolean(b.i.preview)) - Number(Boolean(a.i.preview))
+    || Number(b.artist === "same") - Number(a.artist === "same")
+    || byGap(a.gap, b.gap)
   );
   return ranked[0]?.i ?? null;
 }
-
 /**
  * Texte de la recherche libre Deezer : titre sans ses mentions de version
  * ("- Remastered 2011", "(Radio Edit)"), qui brouillent la recherche ;

@@ -117,6 +117,48 @@ describe("pickMatch, version par version", () => {
   });
 });
 
+// Deezer ecrit souvent l'artiste dans son ecriture d'origine (kanji, kana,
+// cyrillique) quand Spotify le romanise : "Yuki Hayashi" / "\u6797\u3000\u3086\u3046\u304D".
+describe("pickMatch, artistes dans une autre ecriture", () => {
+  const KANJI = "\u6797\u3000\u3086\u3046\u304D"; // Hayashi Yuki
+  const UTADA = "\u5B87\u591A\u7530\u30D2\u30AB\u30EB"; // Utada Hikaru
+
+  it("accepte le bon titre a 3 s pres quand l'artiste n'est pas comparable", () => {
+    const got = pickMatch([item(3758443092, "You Say Run", 228, KANJI)], { title: "You Say Run", artist: "Yuki Hayashi", durationMs: 228746 });
+    expect(got?.id).toBe(3758443092);
+    expect(pickMatch([item(7, "First Love", 257, UTADA)], { title: "First Love", artist: "Hikaru Utada", durationMs: 257000 })?.id).toBe(7);
+  });
+
+  it("refuse si la duree s'ecarte de plus de 3 s, ou si elle est inconnue", () => {
+    expect(pickMatch([item(1, "You Say Run", 233, KANJI)], { title: "You Say Run", artist: "Yuki Hayashi", durationMs: 228746 })).toBeNull();
+    expect(pickMatch([item(1, "You Say Run", 228, KANJI)], { title: "You Say Run", artist: "Yuki Hayashi" })).toBeNull();
+  });
+
+  it("Earth-2021 reste refuse, meme avec l'artiste en kanji", () => {
+    const kanjiSearch = YOU_SAY_RUN_SEARCH.map(i => ({ ...i, artist: { name: KANJI } }));
+    expect(pickMatch(kanjiSearch, { title: "You Say Run", artist: "Yuki Hayashi", durationMs: 228746 })).toBeNull();
+  });
+
+  it("un artiste cyrillique n'accepte plus n'importe quel artiste", () => {
+    const cover = item(1, "\u0413\u0440\u0443\u043F\u043F\u0430 \u043A\u0440\u043E\u0432\u0438", 200, "Cover Band");
+    expect(pickMatch([cover], { title: "\u0413\u0440\u0443\u043F\u043F\u0430 \u043A\u0440\u043E\u0432\u0438", artist: "\u041A\u0438\u043D\u043E", durationMs: 285000 })).toBeNull();
+  });
+
+  it("meme ecriture : l'artiste doit correspondre, comme avant", () => {
+    expect(pickMatch([item(1, "Song", 200, "Someone Else")], { title: "Song", artist: "A Band", durationMs: 200000 })).toBeNull();
+  });
+
+  it("titres en hangul ou en cyrillique : jamais une base vide", () => {
+    expect(parseTitle("\uBD04\uB0A0").base).not.toBe("");
+    expect(parseTitle("\u0413\u0440\u0443\u043F\u043F\u0430 \u043A\u0440\u043E\u0432\u0438").base).toBe("\u0433\u0440\u0443\u043F\u043F\u0430 \u043A\u0440\u043E\u0432\u0438");
+  });
+
+  it("une duree inconnue passe apres une duree proche", () => {
+    const items = [item(1, "Song", 0, "A"), item(2, "Song", 201, "A")];
+    expect(pickMatch(items, { title: "Song", artist: "A", durationMs: 200000 })?.id).toBe(2);
+  });
+});
+
 describe("isIsrc", () => {
   it("reconnait un ISRC et refuse le reste", () => {
     expect(isIsrc("JPZ921607277")).toBe(true);
