@@ -1,6 +1,7 @@
 import axios from "axios";
 import { DEEZER_API } from "../config/deezer";
 import { logger } from "../utils/logger";
+import { pickMatch, isIsrc, searchQueryFor } from "./previewMatch";
 
 const DEEZER_SEARCH_URL = `${DEEZER_API}/search`;
 const DEEZER_TRACK_URL = `${DEEZER_API}/track`;
@@ -11,6 +12,9 @@ const RATE_LIMIT_MAX = 50;
 
 const CACHE_TTL_MS = 60 * 60 * 1_000; // 1 hour
 
+// Assez de resultats pour que la bonne version y soit, en un seul appel.
+const SEARCH_LIMIT = 10;
+
 export interface DeezerTrack {
   id: number;
   title: string;
@@ -18,6 +22,16 @@ export interface DeezerTrack {
   preview: string | null;
   albumCover: string | null;
   duration: number;
+}
+
+/** Ce qu'on sait du morceau a jouer. L'ISRC (Spotify) et l'identifiant Deezer
+ *  designent un enregistrement exact ; le titre ne sert qu'en dernier recours. */
+export interface PreviewQuery {
+  title: string;
+  artist?: string;
+  durationMs?: number | null;
+  isrc?: string | null;
+  deezerId?: string | null;
 }
 
 interface DeezerSearchItem {
@@ -29,6 +43,11 @@ interface DeezerSearchItem {
   duration?: number;
 }
 
+interface DeezerTrackResponse extends DeezerSearchItem {
+  readable?: boolean;
+  error?: { type?: string; message?: string; code?: number };
+}
+
 interface DeezerSearchResponse {
   data?: DeezerSearchItem[];
   error?: { type?: string; message?: string; code?: number };
@@ -36,42 +55,15 @@ interface DeezerSearchResponse {
 
 type CacheEntry = { track: DeezerTrack | null; ts: number };
 
-/** Minuscules, sans accents, sans "(...)" ni "[...]" ni " - Remastered ...". */
-function normalize(text: string): string {
-  return text
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/\([^)]*\)|\[[^\]]*\]/g, " ")
-    .replace(/\s-\s.*$/, " ")
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-}
-
-/**
- * Le bon morceau parmi les resultats : meme titre (a la normalisation pres), et
- * de preference le bon artiste et un extrait. Aucun resultat au bon titre :
- * null. Jouer un autre morceau que celui affiche fausserait la manche.
- */
-function pickMatch(items: DeezerSearchItem[], title: string, artist?: string): DeezerSearchItem | null {
-  const wantTitle = normalize(title);
-  if (!wantTitle) return null;
-  // "The Weeknd, Rosalia" ou "A feat. B" : chaque artiste compte.
-  const wantArtists = (artist ?? "")
-    .split(/,|&|\bfeat\.?|\bft\.?|\bx\b/i)
-    .map(normalize)
-    .filter(Boolean);
-  const sameTitle = items.filter(i => i.id && i.title && normalize(i.title) === wantTitle);
-  const sameArtist = (i: DeezerSearchItem) => {
-    const got = normalize(i.artist?.name ?? "");
-    return wantArtists.length === 0 || wantArtists.some(a => got.includes(a) || a.includes(got));
+function toDeezerTrack(item: DeezerSearchItem & { id: number }): DeezerTrack {
+  return {
+    id: item.id,
+    title: item.title ?? "",
+    artist: item.artist?.name ?? "",
+    preview: item.preview || null,
+    albumCover: item.album?.cover_big ?? item.album?.cover_medium ?? null,
+    duration: item.duration ?? 0,
   };
-  return (
-    sameTitle.find(i => sameArtist(i) && i.preview) ??
-    sameTitle.find(i => sameArtist(i)) ??
-    (wantArtists.length === 0 ? sameTitle.find(i => i.preview) ?? sameTitle[0] : undefined) ??
-    null
-  );
 }
 
 export class DeezerPreviewService {
@@ -107,15 +99,53 @@ export class DeezerPreviewService {
   }
 
   /**
+   * L'extrait du bon enregistrement : par identifiant Deezer, puis par ISRC,
+   * puis par recherche de titre (qui refuse toute autre version). null si rien
+   * de sur : le morceau sera saute plutot que joue dans une autre version.
+   */
+  async resolvePreview(query: PreviewQuery): Promise<DeezerTrack | null> {
+    const deezerId = query.deezerId && /^\d{1,15}$/.test(query.deezerId) ? query.deezerId : null;
+    if (deezerId) {
+      const byId = await this.fetchExact(`id:${deezerId}`, `${DEEZER_TRACK_URL}/${deezerId}`);
+      if (byId?.preview) return byId;
+    }
+    if (isIsrc(query.isrc)) {
+      const isrc = query.isrc.toUpperCase();
+      const byIsrc = await this.fetchExact(`isrc:${isrc}`, `${DEEZER_TRACK_URL}/isrc:${isrc}`);
+      if (byIsrc?.preview) return byIsrc;
+    }
+    return this.searchTrack(query.title, query.artist, query.durationMs);
+  }
+
+  /** Un morceau precis (/track/<id> ou /track/isrc:<ISRC>), ou null. */
+  private async fetchExact(key: string, url: string): Promise<DeezerTrack | null> {
+    const cached = this.getCached(key);
+    if (cached !== undefined) return cached;
+
+    await this.throttle();
+    try {
+      const { data } = await axios.get<DeezerTrackResponse>(url, { timeout: 8_000 });
+      // Erreur 800 "no data" : Deezer ne connait pas ce morceau, on retient le non.
+      const track = !data?.error && data?.id && data.readable !== false ? toDeezerTrack({ ...data, id: data.id }) : null;
+      this.cache.set(key, { track, ts: Date.now() });
+      return track;
+    } catch (err) {
+      // Panne passagere : pas de cache, la recherche prend le relais.
+      logger.error("deezer_track_lookup_failed", { key, error: err });
+      return null;
+    }
+  }
+
+  /**
    * Search Deezer for a track by title and optional artist.
    * Returns the best match or null.
    */
-  async searchTrack(title: string, artist?: string): Promise<DeezerTrack | null> {
+  async searchTrack(title: string, artist?: string, durationMs?: number | null): Promise<DeezerTrack | null> {
     const trimmedTitle = title?.trim();
     if (!trimmedTitle) return null;
     const trimmedArtist = artist?.trim() || undefined;
 
-    const key = this.cacheKey(trimmedTitle, trimmedArtist);
+    const key = `${this.cacheKey(trimmedTitle, trimmedArtist)}||${durationMs ? Math.round(durationMs / 1000) : ""}`;
     const cached = this.getCached(key);
     if (cached !== undefined) return cached;
 
@@ -125,14 +155,11 @@ export class DeezerPreviewService {
     // renvoie 0 resultat depuis le 02/10/2026 (filtre artist casse chez Deezer) :
     // plus aucun extrait, le solo par lien ne demarrait plus. Le bon morceau est
     // ensuite choisi par pickMatch, jamais "le premier venu".
-    // Sans les mentions de version ("- Remastered 2011", "(Radio Edit)") qui
-    // brouillent la recherche libre de Deezer ; pickMatch les ignore aussi.
-    const searchTitle = trimmedTitle.replace(/\([^)]*\)|\[[^\]]*\]/g, " ").replace(/\s-\s.*$/, "").replace(/\s+/g, " ").trim() || trimmedTitle;
-    const q = trimmedArtist ? `${searchTitle} ${trimmedArtist}` : searchTitle;
+    const q = searchQueryFor(trimmedTitle, trimmedArtist);
 
     try {
       const { data } = await axios.get<DeezerSearchResponse>(DEEZER_SEARCH_URL, {
-        params: { q, limit: 5 },
+        params: { q, limit: SEARCH_LIMIT },
         timeout: 8_000,
       });
 
@@ -141,22 +168,8 @@ export class DeezerPreviewService {
         return null;
       }
 
-      const match = pickMatch(data?.data ?? [], trimmedTitle, trimmedArtist);
-
-      if (!match?.id || !match.title) {
-        this.cache.set(key, { track: null, ts: Date.now() });
-        return null;
-      }
-
-      const track: DeezerTrack = {
-        id: match.id,
-        title: match.title,
-        artist: match.artist?.name ?? "",
-        preview: match.preview || null,
-        albumCover: match.album?.cover_big ?? match.album?.cover_medium ?? null,
-        duration: match.duration ?? 0,
-      };
-
+      const match = pickMatch(data?.data ?? [], { title: trimmedTitle, artist: trimmedArtist, durationMs });
+      const track = match?.id && match.title ? toDeezerTrack({ ...match, id: match.id }) : null;
       this.cache.set(key, { track, ts: Date.now() });
       return track;
     } catch (err) {

@@ -3,6 +3,7 @@ import { makeSpotify } from "../../config/spotify";
 import type { AudioSourceRow } from "../../types/audio";
 import type { MusicProvider, UserConnection } from "../../types/user";
 import { hydratePreviewUrl } from "../trackResolution";
+import { isIsrc } from "../previewMatch";
 
 type SpotifyLibraryTrack = {
   id?: string;
@@ -15,6 +16,7 @@ type SpotifyLibraryTrack = {
   };
   duration_ms?: number;
   popularity?: number;
+  external_ids?: { isrc?: string };
 };
 
 type SpotifySavedTrack = {
@@ -94,6 +96,7 @@ export async function syncSpotifyLibrary(
       release_date: track.album?.release_date ?? null,
       popularity: track.popularity ?? null,
       provider: "spotify" as MusicProvider,
+      isrc: isIsrc(track.external_ids?.isrc) ? track.external_ids.isrc : null,
     };
 
     const { rows } = await pool.query<AudioSourceRow>(

@@ -8,6 +8,8 @@ import { parseProfileUrl, fetchPublicPlaylists, fetchPlaylistTracks, type Import
 import { upsertLink, claimLegacyTracks } from "./linksController";
 import axios from "axios";
 import { deezerPreviewService } from "../services/deezerPreviewService";
+import { previewQueryFor } from "../services/trackResolution";
+import type { AudioSourceRow } from "../types/audio";
 
 /** How many tracks to pre-resolve Deezer previews for after import (fire-and-forget). */
 const PRE_RESOLVE_BATCH = 50;
@@ -33,7 +35,10 @@ async function upsertTrack(
          WHEN audio_sources.user_id IS NULL OR audio_sources.user_id = EXCLUDED.user_id
            THEN COALESCE(EXCLUDED.link_id, audio_sources.link_id)
          ELSE audio_sources.link_id
-       END`,
+       END,
+       -- L'ISRC appris a un nouvel import : le prochain extrait sera le bon
+       -- enregistrement (les extraits stockes expirent et sont re-resolus).
+       metadata = COALESCE(audio_sources.metadata, '{}'::jsonb) || jsonb_strip_nulls(jsonb_build_object('isrc', EXCLUDED.metadata->>'isrc'))`,
     [
       userId,
       track.provider,
@@ -46,6 +51,7 @@ async function upsertTrack(
         import_source: track.provider,
         playlist_id: playlistId,
         album: track.album,
+        isrc: track.isrc ?? null,
       }),
       linkId ?? null,
     ]
@@ -60,8 +66,8 @@ async function upsertTrack(
 function preResolveInBackground(userId: number): void {
   (async () => {
     try {
-      const { rows } = await pool.query<{ id: string; title: string; artist: string }>(
-        `SELECT id, title, artist FROM audio_sources
+      const { rows } = await pool.query<Pick<AudioSourceRow, "id" | "provider" | "external_id" | "title" | "artist" | "duration_ms" | "metadata">>(
+        `SELECT id, provider, external_id, title, artist, duration_ms, metadata FROM audio_sources
          WHERE user_id = $1 AND audio_url IS NULL
          ORDER BY RANDOM()
          LIMIT $2`,
@@ -71,7 +77,7 @@ function preResolveInBackground(userId: number): void {
       let resolved = 0;
       for (const row of rows) {
         try {
-          const result = await deezerPreviewService.searchTrack(row.title, row.artist);
+          const result = await deezerPreviewService.resolvePreview(previewQueryFor(row));
           if (result?.preview) {
             await pool.query("UPDATE audio_sources SET audio_url = $1 WHERE id = $2", [result.preview, row.id]);
             resolved++;

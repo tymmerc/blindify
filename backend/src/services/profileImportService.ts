@@ -3,6 +3,7 @@ import { DEEZER_API } from "../config/deezer";
 import { Buffer } from "node:buffer";
 import { logger } from "../utils/logger";
 import { isDeezerId, isSpotifyId } from "../utils/providerIds";
+import { isIsrc } from "./previewMatch";
 
 // ---------------------------------------------------------------------------
 // URL Parsing
@@ -96,6 +97,8 @@ export interface ImportedTrack {
   externalId: string;
   provider: "spotify" | "deezer";
   durationMs: number | null;
+  /** Identifiant de l'enregistrement (Spotify) : retrouve l'extrait exact sur Deezer. */
+  isrc?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -294,7 +297,7 @@ async function fetchSpotifyPlaylistTracks(playlistId: string, maxTracks = 500): 
   const token = await getSpotifyClientToken();
   const tracks: ImportedTrack[] = [];
   const pageSize = Math.min(maxTracks, 100);
-  let cursor: string | null = `https://api.spotify.com/v1/playlists/${encodeURIComponent(playlistId)}/tracks?limit=${pageSize}&fields=items(track(id,name,artists,album,duration_ms)),next`;
+  let cursor: string | null = `https://api.spotify.com/v1/playlists/${encodeURIComponent(playlistId)}/tracks?limit=${pageSize}&fields=items(track(id,name,artists,album,duration_ms,external_ids(isrc))),next`;
 
   while (cursor && tracks.length < maxTracks) {
     const { data } = await axios.get(cursor, {
@@ -313,6 +316,7 @@ async function fetchSpotifyPlaylistTracks(playlistId: string, maxTracks = 500): 
         externalId: t.id,
         provider: "spotify",
         durationMs: t.duration_ms ?? null,
+        isrc: isIsrc(t.external_ids?.isrc) ? t.external_ids.isrc : null,
       });
     }
     cursor = data?.next ?? null;

@@ -12,6 +12,7 @@ import { bootstrapGameState, getGameState, gameStateSnapshot, revealedRoundCeili
 import { startRoundAndBroadcast } from "../services/realtimeOrchestrator";
 import { GameMode, type RoundTrack } from "../types/game";
 import { initStreamerGame } from "../services/streamerOrchestrator";
+import { isIsrc } from "../services/previewMatch";
 import { activeLinkIds } from "./linksController";
 import { isSpotifyId } from "../utils/providerIds";
 import {
@@ -103,6 +104,7 @@ async function syncPlaylistTracks(userId: number, playlistId: string, accessToke
           artists?: { name?: string }[];
           album?: { images?: { url?: string }[]; name?: string; release_date?: string };
           duration_ms?: number;
+          external_ids?: { isrc?: string };
         } | null;
       }>;
       next?: string | null;
@@ -118,6 +120,7 @@ async function syncPlaylistTracks(userId: number, playlistId: string, accessToke
         release_date: track.album?.release_date ?? null,
         playlist_id: playlistId,
         provider: "spotify" as MusicProvider,
+        isrc: isIsrc(track.external_ids?.isrc) ? track.external_ids.isrc : null,
       };
       await pool.query<AudioSourceRow>(
         `INSERT INTO audio_sources (provider, external_id, user_id, title, artist, album_cover, duration_ms, metadata)
@@ -150,6 +153,7 @@ async function syncTopTracks(
     artists?: { name?: string }[];
     album?: { images?: { url?: string }[]; name?: string; release_date?: string };
     duration_ms?: number;
+    external_ids?: { isrc?: string };
   }> = data?.items ?? [];
 
   for (const track of items) {
@@ -161,6 +165,7 @@ async function syncTopTracks(
       release_date: track.album?.release_date ?? null,
       time_range: timeRange,
       provider: "spotify" as MusicProvider,
+      isrc: isIsrc(track.external_ids?.isrc) ? track.external_ids.isrc : null,
     };
     await pool.query<AudioSourceRow>(
       `INSERT INTO audio_sources (provider, external_id, user_id, title, artist, album_cover, duration_ms, metadata)

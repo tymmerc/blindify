@@ -1,7 +1,8 @@
 import { pool } from "../config/db";
 import type { AudioSourceRow } from "../types/audio";
 import type { MusicProvider } from "../types/user";
-import { deezerPreviewService } from "./deezerPreviewService";
+import { deezerPreviewService, type PreviewQuery } from "./deezerPreviewService";
+import { isIsrc } from "./previewMatch";
 import { logger } from "../utils/logger";
 
 // ---------------------------------------------------------------------------
@@ -24,16 +25,34 @@ export function isExpiredPreview(url: string | null | undefined): boolean {
   return exp * 1000 <= Date.now() + 60_000; // expiree, ou moins de 60s restantes
 }
 
+/**
+ * Ce qu'on sait d'un morceau stocke pour retrouver SON extrait : l'identifiant
+ * Deezer (morceau Deezer), l'ISRC (morceau Spotify importe depuis le 07/10/2026),
+ * sinon titre + artiste + duree.
+ */
+export function previewQueryFor(
+  source: Pick<AudioSourceRow, "provider" | "external_id" | "title" | "artist" | "duration_ms" | "metadata">
+): PreviewQuery {
+  const isrc = source.metadata?.isrc;
+  return {
+    title: source.title?.trim() ?? "",
+    artist: source.artist?.trim() || undefined,
+    durationMs: source.duration_ms ?? null,
+    isrc: isIsrc(isrc) ? isrc : null,
+    deezerId: source.provider === "deezer" && /^\d+$/.test(source.external_id ?? "") ? source.external_id : null,
+  };
+}
+
 export async function hydratePreviewUrl(source: AudioSourceRow): Promise<string | null> {
   const cached = source.audio_url;
   // URL en cache encore valide -> on la garde.
   if (cached && !isExpiredPreview(cached)) return cached;
 
-  const title = source.title?.trim();
-  const artist = source.artist?.trim() || undefined;
+  const query = previewQueryFor(source);
+  const { title } = query;
   if (title) {
     try {
-      const deezerTrack = await deezerPreviewService.searchTrack(title, artist);
+      const deezerTrack = await deezerPreviewService.resolvePreview(query);
       if (deezerTrack?.preview) {
         await pool.query("UPDATE audio_sources SET audio_url=$1 WHERE id=$2", [
           deezerTrack.preview,
