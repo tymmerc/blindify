@@ -231,6 +231,7 @@
         <button data-p="7">7 j</button><button data-p="30" aria-pressed="true">30 j</button><button data-p="90">90 j</button><button data-p="0">tout</button>
       </span>
       <label class="bascule"><input type="checkbox" id="inclure-tests"> inclure mes parties de test</label>
+      <label class="bascule" title="parties de juin à août sans hôte ni joueur enregistré : on ne sait pas qui a joué"><input type="checkbox" id="inclure-orphelines"> inclure les parties orphelines</label>
       <span id="filtre-jour"></span>
       <span class="fen" id="fen"></span>
     </div>
@@ -341,7 +342,7 @@ async function chargerSante() {
 }
 
 /* ========================= données et période ========================= */
-let D = null, periode = 30, inclureTests = false, jourFiltre = null;
+let D = null, periode = 30, inclureTests = false, inclureOrphelines = false, jourFiltre = null;
 
 const modePill = (m) => ({ solo:"s", friends:"b", event:"v", streamer:"a", challenge:"a" }[m] || "");
 const etatPill = (e) => ({ finished:"fin", abandoned:"abd", in_progress:"enc", playing:"enc" }[e] || "");
@@ -475,7 +476,8 @@ function brancherSerie() {
 /* =============================== rendu =============================== */
 function rendre() {
   if (!D) return;
-  const toutes = D.sessions.filter(s => inclureTests || !s.test);
+  // orpheline absent des anciens data.json : la partie reste comptee.
+  const toutes = D.sessions.filter(s => (inclureTests || !s.test) && (inclureOrphelines || !s.orpheline));
   const f = fenetre(periode), fp = fenetre(periode, 1);
   const cur = toutes.filter(s => dans(s, f)), prev = periode ? toutes.filter(s => dans(s, fp)) : [];
   const a = agg(cur), b = periode ? agg(prev) : null;
@@ -557,7 +559,7 @@ function rendre() {
       <div class="panel tight"><div class="scroll"><table class="min"><thead><tr><th>Quand</th><th>Mode</th><th>Hôte</th><th>Joueurs</th><th>Manches</th><th>Réponses</th><th>État</th></tr></thead><tbody>
         ${listeSessions.slice(0, 60).map(s => `<tr class="cliquable" data-id="${s.id}">
           <td class="n" style="color:var(--txt-2)">${esc(s.debut.replace("T", " ").slice(0, 16))}</td>
-          <td><span class="pill ${modePill(s.mode)}">${esc(s.mode)}</span>${s.test ? ' <span class="pill test">test</span>' : ""}</td>
+          <td><span class="pill ${modePill(s.mode)}">${esc(s.mode)}</span>${s.test ? ' <span class="pill test">test</span>' : ""}${s.orpheline ? ' <span class="pill test">orpheline</span>' : ""}</td>
           <td>${esc(s.hote || "invité")}</td><td class="n">${s.joueurs || "·"}</td><td class="n">${s.repondues}/${s.manches}</td>
           <td class="n">${s.reponses ? `${s.bonnes}/${s.reponses}` : "·"}</td>
           <td><span class="pill ${etatPill(s.etat)}">${esc(etatMot(s.etat))}</span></td></tr>`).join("") || '<tr><td colspan="7" class="vide">Aucune partie.</td></tr>'}
@@ -628,6 +630,7 @@ document.querySelectorAll("#periode button").forEach(btn => btn.onclick = () => 
   rendre();
 });
 $("inclure-tests").onchange = (e) => { inclureTests = e.target.checked; rendre(); };
+$("inclure-orphelines").onchange = (e) => { inclureOrphelines = e.target.checked; rendre(); };
 
 async function chargerDonnees() {
   try {

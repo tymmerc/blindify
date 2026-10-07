@@ -76,6 +76,21 @@ jobs:
       # Les types canoniques de shared/ doivent exister dans les deux copies.
       - run: bash tools/check-shared-types.sh
 
+  test-sonde:
+    name: test-sonde
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+      # Sonde de prod (tools/sonde-prod) : logique des alertes et verifications,
+      # sans reseau ni dependance (node:test et fetch sont fournis par Node).
+      - run: node --test tools/sonde-prod/*.test.mjs
+
   test-front:
     name: test-front (node ${{ matrix.node }})
     runs-on: ubuntu-latest
@@ -146,6 +161,19 @@ jobs:
         env:
           PG_CONTAINER: ${{ job.services.postgres.id }}
         run: docker exec -i "$PG_CONTAINER" psql -U blindz -d blindz_test -v ON_ERROR_STOP=1 -q < backend/db/schema.sql
+      # Statistiques du tableau de bord prive (tools/stats.sql) : comptes et
+      # parties de test ecartes. Avant Jest, sur la base encore vide (ids fixes),
+      # et dans une transaction annulee : Jest la retrouve vide. Une fois suffit.
+      - name: Tester les statistiques du tableau de bord
+        if: matrix.node == 22
+        env:
+          PG_CONTAINER: ${{ job.services.postgres.id }}
+        run: bash tools/stats.test.sh
+      # Filtre du rapport de visites (infra/visites/anonymiser.py) : adresses
+      # tronquees avant GoAccess, VPS retire. python3 seulement, pas de base.
+      - name: Tester l'anonymisation du rapport de visites
+        if: matrix.node == 22
+        run: bash infra/visites/anonymiser.test.sh
       - run: npm test -- --coverage
         working-directory: backend
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
