@@ -4,13 +4,14 @@
 // sans un mot. Tymeo avait 50 titres, kaaris aucun. Ce script rejoue :
 //   1. 50 titres dont 30 jouables chez l'hote, l'invite sans musique, 20
 //      demandees (par l'API) : 20 manches, toutes jouables ;
-//   2. 50 titres dont 12 jouables, 20 demandees, l'hote sur un iPhone : 12
-//      manches, et l'ecran de jeu dit « 12 manches au lieu de 20 ».
+//   2. 50 titres dont 12 jouables, 20 demandees, l'hote sur iPhone 13 (WebKit)
+//      puis sur un ecran de 360 px (Chromium) : 12 manches, l'ecran de jeu dit
+//      « 12 manches au lieu de 20 », puis l'efface a la 2e manche sans bouger.
 // Un titre est « jouable » si le faux Deezer le connait (son catalogue de 48) ;
 // les autres sont des titres qu'il ne trouve pas, comme un morceau sans extrait.
 //
 //   campagne-ref.sh <branche> --script /chemin/manches-e2e.mjs /dossier/des/preuves
-import { chromium, devices } from "@playwright/test"
+import { chromium, devices, webkit } from "@playwright/test"
 import fs from "node:fs"
 import path from "node:path"
 import { Bot, api } from "./bot.mjs"
@@ -51,7 +52,79 @@ function seedLibrary(userId, total, playable, from = 0) {
     VALUES ${values.join(",")}`)
 }
 
-const browser = await chromium.launch({ args: ["--autoplay-policy=no-user-gesture-required"] })
+/** Partie de 12 manches sur 20 demandees, hote sur `screen` : message, puis 2e manche. */
+async function shortGameOn({ tag, engine, opts, from }) {
+  say(`\n== 2. 50 titres dont 12 jouables, 20 demandees, hote sur ${tag} ==`)
+  const browser = await engine.launch(engine === chromium ? { args: ["--autoplay-policy=no-user-gesture-required"] } : {})
+  try {
+    const phone = await newPage(browser, opts, tag, problems)
+    const p = phone.page
+    await p.goto(`${APP}/jouer/`, { waitUntil: "networkidle", timeout: 90000 })
+    await p.locator("input").first().fill("Hote")
+    await p.getByRole("button", { name: /continuer/i }).click()
+    for (let i = 0; i < 40 && !p.__uid; i++) await sleep(250)
+    if (!p.__uid) throw new Error("pas d'identifiant d'invite pour l'hote")
+    seedLibrary(p.__uid, 50, 12, from)
+    await p.getByRole("button", { name: /continuer/i }).click()
+    await p.getByText("Créer une partie").click()
+    await p.waitForURL(/\/modes/, { timeout: 40000 })
+    await p.getByText("À distance").first().click()
+    await p.getByText(/CODE|copie le code|invite/i).first().waitFor({ timeout: 40000 }).catch(() => {})
+    await sleep(2500)
+    const code = (p.url().match(/code=([A-Z0-9]{6})/) || [])[1]
+    if (!code) throw new Error("pas de code de salle cote hote")
+    // Manches courtes qui s'enchainent seules : on veut voir la 2e.
+    psql(`UPDATE multiplayer_rooms SET question_count = 20, round_duration_ms = 5000, auto_advance = true WHERE room_code = ${q(code)}`)
+    const ami = await new Bot({ name: "Ami", plan: () => ({ action: "muet" }), random: Math.random }).enter()
+    const joined = await ami.join(code)
+    if (!joined.ok) bad(`l'ami ne peut pas entrer (${joined.status})`)
+    await sleep(3500)
+
+    const startResp = p.waitForResponse(r => r.url().includes(`/api/rooms/${code}/start`), { timeout: 30000 }).catch(() => null)
+    await p.getByRole("button", { name: /lancer/i }).first().click()
+    const started = await startResp
+    const body = started ? await started.json().catch(() => null) : null
+    const s2 = body?.data?.session
+    say(`  salle ${code} : HTTP ${started?.status()}, ${s2?.totalRounds} manches sur ${s2?.requestedRounds} demandees (${s2?.shortReason})`)
+    s2?.totalRounds === 12 ? ok("12 manches : tous les titres jouables y sont") : bad(`${s2?.totalRounds} manches au lieu de 12`)
+    s2?.requestedRounds === 20 ? ok("la reponse dit que 20 etaient demandees") : bad(`requestedRounds = ${s2?.requestedRounds}`)
+    s2?.shortReason === "library" ? ok("raison : les playlists") : bad(`shortReason = ${s2?.shortReason}`)
+    const caviarde = (body?.data?.tracks ?? []).every(t => t.title === null && t.metadata?.owner_user_id == null)
+    caviarde ? ok("reponse du lancement caviardee") : bad("la reponse du lancement donne des titres")
+
+    const notice = p.locator(".theater-short")
+    const seen = await p.getByText("12 manches au lieu de 20 : pas assez de titres jouables dans vos playlists")
+      .waitFor({ state: "visible", timeout: 15000 }).then(() => true).catch(() => false)
+    await sleep(4000) // les animations du debut de manche
+    await shot(p, `${tag}-manche-1`)
+    seen ? ok("le message s'affiche pendant la 1re manche") : bad("message introuvable a l'ecran")
+    const width = p.viewportSize()?.width ?? 0
+    const box = seen ? await notice.boundingBox() : null
+    box && box.x >= 0 && box.x + box.width <= width + 1
+      ? ok(`message dans l'ecran (x ${Math.round(box.x)} a ${Math.round(box.x + box.width)} sur ${width})`)
+      : bad(`message hors de l'ecran : ${JSON.stringify(box)}`)
+    const scrollW = await p.evaluate(() => document.documentElement.scrollWidth)
+    scrollW <= width + 1 ? ok(`pas de defilement horizontal (${scrollW} px)`) : bad(`la page deborde : ${scrollW} px pour ${width}`)
+    const arena1 = await p.locator(".theater-arena").first().boundingBox()
+
+    // 2e manche : le message s'efface, la platine reste a sa place.
+    const round2 = await p.getByText(/02\s*\/\s*12/).first().waitFor({ timeout: 40000 }).then(() => true).catch(() => false)
+    await sleep(2500)
+    await shot(p, `${tag}-manche-2`)
+    if (!round2) bad("la 2e manche n'est pas arrivee")
+    const opacity = await notice.evaluate(el => getComputedStyle(el).opacity).catch(() => null)
+    opacity === "0" ? ok("2e manche : message efface") : bad(`2e manche : opacite du message ${opacity}`)
+    const arena2 = await p.locator(".theater-arena").first().boundingBox()
+    arena1 && arena2 && Math.abs(arena1.y - arena2.y) <= 1
+      ? ok(`la platine ne bouge pas (y ${Math.round(arena1.y)} puis ${Math.round(arena2.y)})`)
+      : bad(`la platine a saute : ${JSON.stringify(arena1)} puis ${JSON.stringify(arena2)}`)
+    await phone.ctx.close()
+    ami.socket?.close()
+  } finally {
+    await browser.close()
+  }
+}
+
 try {
   /* ---------- 1. Le cas de 3Y9YRK : 30 jouables sur 50 ---------- */
   say("== 1. 20 manches demandees, 50 titres dont 30 jouables, l'invite sans musique ==")
@@ -74,54 +147,16 @@ try {
   for (const b of [tymeo, kaaris]) b.socket?.close()
 
   /* ---------- 2. Pas assez de titres jouables : l'ecran le dit ---------- */
-  say("\n== 2. 50 titres dont 12 jouables, 20 demandees, l'hote sur iPhone ==")
-  const phone = await newPage(browser, { ...devices["iPhone 13"] }, "hote", problems)
-  const p = phone.page
-  await p.goto(`${APP}/jouer/`, { waitUntil: "networkidle", timeout: 90000 })
-  await p.locator("input").first().fill("Hote")
-  await p.getByRole("button", { name: /continuer/i }).click()
-  for (let i = 0; i < 40 && !p.__uid; i++) await sleep(250)
-  if (!p.__uid) throw new Error("pas d'identifiant d'invite pour l'hote")
-  seedLibrary(p.__uid, 50, 12, 30)
-  await p.getByRole("button", { name: /continuer/i }).click()
-  await p.getByText("Créer une partie").click()
-  await p.waitForURL(/\/modes/, { timeout: 40000 })
-  await p.getByText("À distance").first().click()
-  await p.getByText(/CODE|copie le code|invite/i).first().waitFor({ timeout: 40000 }).catch(() => {})
-  await sleep(2500)
-  const code = (p.url().match(/code=([A-Z0-9]{6})/) || [])[1]
-  if (!code) throw new Error("pas de code de salle cote hote")
-  psql(`UPDATE multiplayer_rooms SET question_count = 20, round_duration_ms = 15000 WHERE room_code = ${q(code)}`)
-  const ami = await new Bot({ name: "Ami", plan: () => ({ action: "muet" }), random: Math.random }).enter()
-  const joined = await ami.join(code)
-  if (!joined.ok) bad(`l'ami ne peut pas entrer (${joined.status})`)
-  await sleep(3500)
-  await shot(p, "1-lobby")
-
-  const startResp = p.waitForResponse(r => r.url().includes(`/api/rooms/${code}/start`), { timeout: 30000 }).catch(() => null)
-  await p.getByRole("button", { name: /lancer/i }).first().click()
-  const started = await startResp
-  const body = started ? await started.json().catch(() => null) : null
-  const s2 = body?.data?.session
-  say(`  salle ${code} : HTTP ${started?.status()}, ${s2?.totalRounds} manches sur ${s2?.requestedRounds} demandees`)
-  s2?.totalRounds === 12 ? ok("12 manches : tous les titres jouables y sont") : bad(`${s2?.totalRounds} manches au lieu de 12`)
-  s2?.requestedRounds === 20 ? ok("la reponse dit que 20 etaient demandees") : bad(`requestedRounds = ${s2?.requestedRounds}`)
-  const notice = p.getByText("12 manches au lieu de 20 : pas assez de titres jouables dans vos playlists")
-  const seen = await notice.waitFor({ state: "visible", timeout: 15000 }).then(() => true).catch(() => false)
-  await sleep(4000) // les animations du debut de manche
-  await shot(p, "2-manche-1")
-  seen ? ok("l'ecran de jeu affiche le message pendant la 1re manche") : bad("message introuvable a l'ecran")
-  const box = seen ? await notice.boundingBox() : null
-  const width = p.viewportSize()?.width ?? 0
-  box && box.x >= 0 && box.x + box.width <= width + 1
-    ? ok(`message dans l'ecran (x ${Math.round(box.x)} a ${Math.round(box.x + box.width)} sur ${width})`)
-    : bad(`message hors de l'ecran : ${JSON.stringify(box)}`)
-  await phone.ctx.close()
-  ami.socket?.close()
+  // Sur iPhone 13 (WebKit, le moteur de Safari) et sur un petit Android de
+  // 360 px (Chromium). Le message s'efface a la 2e manche sans faire sauter
+  // l'ecran : la platine ne doit pas bouger.
+  const screens = [
+    { tag: "iphone13-webkit", engine: webkit, opts: { ...devices["iPhone 13"] }, from: 30 },
+    { tag: "android360-chromium", engine: chromium, opts: { viewport: { width: 360, height: 740 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true }, from: 6 },
+  ]
+  for (const screen of screens) await shortGameOn(screen)
 } catch (e) {
   bad(`arret : ${e.message}`)
-} finally {
-  await browser.close()
 }
 
 say(`\n=== ${problems.length ? `${problems.length} PROBLEME(S)` : "AUCUN PROBLEME"} ===`)
