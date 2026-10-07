@@ -7,10 +7,22 @@
 // Rend { label, code, ok, problems, stats } ; ne jette jamais : une salle qui
 // plante est un verdict, pas une exception qui arreterait la campagne.
 import { Bot, api, rng } from "./bot.mjs"
-import { seedUser, sessionFacts } from "./testdb.mjs"
+import { seedUser, sessionFacts, oracle } from "./testdb.mjs"
 
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 const EXPECTED = { juste: "correct", proche: "close", faux: "wrong" }
+
+/** Manches dont le titre (unique au catalogue) apparait dans une reponse de /start. */
+function startLeaks(code, res) {
+  const raw = JSON.stringify(res.data ?? "")
+  const total = Number(res.data?.session?.totalRounds) || 0
+  const out = []
+  for (let r = 1; r <= total; r++) {
+    const truth = oracle(code, r)
+    if (truth?.title && raw.includes(truth.title)) out.push(r)
+  }
+  return out
+}
 
 export async function runRoom({ label, mode, hostPlays = false, players, rounds = 5, seconds = 10, seed = 1, late = null, tracksEach = 8 }) {
   const problems = []
@@ -48,6 +60,17 @@ export async function runRoom({ label, mode, hostPlays = false, players, rounds 
     const start = await api(`/api/rooms/${code}/start`, { method: "POST", token: host.token, body: { source: "library" } })
     if (start.status >= 400) throw new Error(`lancement refuse (${start.status} ${JSON.stringify(start.error)})`)
     stats.lancee_en_ms = Date.now() - t0
+    // Anti-triche cote REST : la reponse HTTP du lancement arrive chez l'hote,
+    // qui joue souvent lui aussi. Elle ne doit porter aucun titre de la partie,
+    // pas plus que celle d'une relance en pleine partie (double clic, 2e onglet).
+    const startLeak = startLeaks(code, start)
+    if (startLeak.length) bad(`la reponse HTTP du lancement donne a l'hote les titres des manches ${startLeak.join(", ")}`)
+    const again = await api(`/api/rooms/${code}/start`, { method: "POST", token: host.token, body: { source: "library" } })
+    if (again.status >= 400) bad(`relance pendant la partie refusee (${again.status} ${JSON.stringify(again.error)})`)
+    else {
+      const againLeak = startLeaks(code, again)
+      if (againLeak.length) bad(`une relance pendant la partie donne a l'hote les titres des manches ${againLeak.join(", ")}`)
+    }
 
     // Retardataire : il tente d'entrer en pleine partie (refus attendu), puis
     // re-essaie a la fin comme l'ecran d'attente du client.

@@ -1,0 +1,68 @@
+# Sonde de prod de Blindz : un vrai solo par lien sur https://blindz.app, et un
+# e-mail a Tym si ca casse. Lancee par blindz-sonde-prod.timer. Le code
+# (tools/sonde-prod du depot) est copie dans /opt/monitoring/sonde-prod par
+# tools/sonde-prod/installer.sh : la sonde ne depend pas de la branche du
+# dossier /opt/blindify, qui sert le site de dev et change souvent.
+#
+#   systemctl start blindz-sonde-prod.service      un passage tout de suite
+#   journalctl -u blindz-sonde-prod -n 30          ce qu'elle a vu
+#   tail /var/log/blindz-sonde-prod/sonde.log      une ligne par passage
+[Unit]
+Description=Blindz : sonde de prod (solo par lien sur blindz.app, e-mail si panne)
+Documentation=https://github.com/tymmerc/blindify/tree/main/tools/sonde-prod
+Wants=network-online.target
+After=network-online.target
+# Sonde en echec (code 1 ou 2, delai depasse, node introuvable) : l'e-mail ne
+# part peut-etre plus, on previent par l'autre canal (ntfy).
+OnFailure=blindz-sonde-prod-echec.service
+
+[Service]
+Type=oneshot
+ExecStart=/root/.nvm/versions/node/v22.21.1/bin/node /opt/monitoring/sonde-prod/sonde.mjs
+# 10 = la prod est en panne, pas la sonde : l'e-mail est parti, l'unite ne
+# passe pas en echec. 2 (sonde cassee, config d'envoi incomplete, e-mail du qui
+# n'a pas pu partir) et 1 (erreur fatale de Node : module absent, erreur de
+# syntaxe) la mettent en echec (systemctl --failed), donc OnFailure=.
+SuccessExitStatus=10
+# /var/lib/blindz-sonde-prod (etat) et /var/log/blindz-sonde-prod (journal).
+StateDirectory=blindz-sonde-prod
+StateDirectoryMode=0700
+LogsDirectory=blindz-sonde-prod
+LogsDirectoryMode=0700
+# Au pire, chaque verification ratee deux fois avec 60 s de pause : API 1 min 30,
+# page 2 min, deux liens de 5 min (lancement 90 s et deux extraits de 15 s),
+# Deezer en direct 15 s, l'e-mail essaye trois fois 1 min 20. Environ 15 min :
+# on laisse 20 min.
+TimeoutStartSec=20min
+
+# Garde-fous memoire (gel du VPS le 30/09) : une petite tache, un petit plafond.
+MemoryMax=256M
+MemorySwapMax=0
+CPUQuota=50%
+Nice=10
+IOSchedulingClass=idle
+
+# Lecture seule partout, sauf ses deux dossiers. Elle lit la cle Resend et le
+# destinataire (memes fichiers que blindz-uptime), et node dans /root/.nvm.
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+PrivateDevices=yes
+UMask=0077
+# root sans aucun privilege : il lit encore ses propres fichiers (la cle et le
+# destinataire appartiennent a root) mais ne passe plus outre les droits des autres.
+CapabilityBoundingSet=
+NoNewPrivileges=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+LockPersonality=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK

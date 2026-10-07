@@ -9,7 +9,12 @@ RETENTION_DAYS=30
 DATE=$(date +%Y%m%d_%H%M%S)
 BACKUP_FILE="${BACKUP_DIR}/${DB_NAME}_${DATE}.sql.gz"
 
+# Les dumps contiennent toute la base (donnees des joueurs, empreintes de mots
+# de passe) : lisibles par root seulement. Avant le 05/10 ils etaient en 644
+# dans un dossier ouvert, alors que le serveur a d'autres comptes locaux.
+umask 077
 mkdir -p "$BACKUP_DIR"
+chmod 700 "$BACKUP_DIR"
 
 echo "[$(date)] Starting backup of ${DB_NAME}..."
 
