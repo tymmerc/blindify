@@ -4,6 +4,7 @@ import type { MusicProvider } from "../types/user";
 import { deezerPreviewService } from "./deezerPreviewService";
 import { logger } from "../utils/logger";
 import { mapLimit } from "../utils/concurrency";
+import { LookupGuard } from "./lookupGuard";
 
 // ---------------------------------------------------------------------------
 // Preview hydration — resolves audio URLs via Deezer search
@@ -138,8 +139,8 @@ export type CollectOptions = {
   excludeKeys?: string[];
   /** Nombre de titres tires en base (defaut : 4 x desiredCount, 200 au plus). */
   drawLimit?: number;
-  /** Recherches Deezer permises (titres sans extrait ou extrait expire). Defaut : pas de limite. */
-  maxLookups?: number;
+  /** Bornes des recherches Deezer du lancement (budget, echeance, disjoncteur). Defaut : un garde neuf sans budget. */
+  guard?: LookupGuard;
 };
 
 /** Ce qu'un tirage a donne : les titres jouables, ceux sans extrait, et le travail fait. */
@@ -162,22 +163,63 @@ const needsLookup = (source: AudioSourceRow): boolean =>
 /** Recherches d'extrait en meme temps au plus (Deezer : 50 requetes par 5 s). */
 export const HYDRATE_CONCURRENCY = 6;
 
+const TIMED_OUT: unique symbol = Symbol("timed_out");
+const FAILED: unique symbol = Symbol("failed");
+
+/** La recherche, ou TIMED_OUT passe `ms`, ou FAILED si elle leve une erreur. */
+async function lookupWithin(source: AudioSourceRow, ms: number): Promise<string | null | typeof TIMED_OUT | typeof FAILED> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<typeof TIMED_OUT>(resolve => {
+    timer = setTimeout(() => resolve(TIMED_OUT), ms);
+  });
+  try {
+    // Abandonnee, la recherche finit en arriere-plan : son resultat (ecrit en
+    // base par hydratePreviewUrl) servira au prochain lancement.
+    const lookup: Promise<string | null | typeof FAILED> = hydratePreviewUrl(source).catch((): typeof FAILED => FAILED);
+    return await Promise.race([lookup, late]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
- * Hydrate les extraits : un extrait en cache encore frais ne coute rien, les
- * autres passent par Deezer, `maxLookups` au plus et HYDRATE_CONCURRENCY a la
- * fois. Ceux au-dela de la limite ne sont pas essayes (absents de `tried`).
+ * Hydrate les extraits, HYDRATE_CONCURRENCY a la fois. Un extrait en cache
+ * encore frais ne coute rien et passe en premier ; les autres passent par
+ * Deezer, dans les bornes du garde (budget, echeance, disjoncteur), avec un
+ * delai par recherche. Arrete de chercher des que `stopAt` titres jouables
+ * sont trouves. `tried` : les titres dont on connait le sort (audio_url
+ * renseignee, ou null si pas d'extrait ou pas de reponse a temps) ; les autres
+ * n'ont pas ete essayes.
  */
 export async function hydrateWithinBudget(
   candidates: AudioSourceRow[],
-  maxLookups: number
+  guard: LookupGuard,
+  stopAt: number = Number.POSITIVE_INFINITY
 ): Promise<{ tried: AudioSourceRow[]; lookups: number }> {
-  const stale = candidates.filter(needsLookup);
-  const allowed = new Set(stale.slice(0, Math.max(0, maxLookups)));
-  const tried = candidates.filter(source => !needsLookup(source) || allowed.has(source));
-  await mapLimit(tried, HYDRATE_CONCURRENCY, async (source) => {
-    source.audio_url = await hydratePreviewUrl(source);
+  const ordered = [...candidates.filter(source => !needsLookup(source)), ...candidates.filter(needsLookup)];
+  const tried: AudioSourceRow[] = [];
+  const found = new Set<string>();
+  const before = guard.lookups;
+  await mapLimit(ordered, HYDRATE_CONCURRENCY, async (source) => {
+    if (found.size >= stopAt) return;
+    if (!needsLookup(source)) {
+      tried.push(source);
+      found.add(sourceKey(source));
+      return;
+    }
+    if (!guard.take()) return;
+    const result = await lookupWithin(source, guard.timeoutMs());
+    if (result === TIMED_OUT || result === FAILED) {
+      guard.failed();
+      source.audio_url = null;
+    } else {
+      guard.succeeded();
+      source.audio_url = result;
+      if (result) found.add(sourceKey(source));
+    }
+    tried.push(source);
   });
-  return { tried, lookups: allowed.size };
+  return { tried, lookups: guard.lookups - before };
 }
 
 export async function collectPlayableBatch(
@@ -200,9 +242,11 @@ export async function collectPlayableBatch(
 
   // Hydrate / rafraichit les previews via Deezer (re-fetch si manquante OU
   // expiree), dans la limite permise. Ceux au-dela ne sont ni joues ni ecartes.
+  // On s'arrete des que le compte est atteint.
   const { tried: toHydrate, lookups } = await hydrateWithinBudget(
     candidates,
-    opts.maxLookups ?? Number.POSITIVE_INFINITY
+    opts.guard ?? new LookupGuard(Number.POSITIVE_INFINITY),
+    desiredCount
   );
 
   const playable = shuffle(toHydrate.filter((source) => Boolean(source.audio_url)));

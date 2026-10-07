@@ -22,7 +22,8 @@ import {
   type CollectOptions,
   type ProviderFilter,
 } from "../services/trackResolution";
-import { LOOKUPS_PER_ROUND, topUpPlayable } from "../services/roundTopUp";
+import { topUpPlayable } from "../services/roundTopUp";
+import { LOOKUPS_PER_ROUND, LookupGuard } from "../services/lookupGuard";
 
 // crypto.randomInt et pas Math.random : un code de salle permet de rejoindre
 // une partie, et Math.random devient previsible quand on observe ses tirages.
@@ -182,6 +183,42 @@ async function syncTopTracks(
       ["spotify", track.id, userId, track.name, artist, cover, track.duration_ms ?? null, metadata]
     );
     await linkTrackToUser(userId, rows[0].id, null);
+  }
+}
+
+/** Un autre lancement a pris la salle pendant le tirage. */
+class StartConflictError extends Error {}
+
+// Verrou du lancement, par salle : un double clic, deux onglets ou deux
+// requetes en meme temps ne tirent pas deux parties. Verrou consultatif de
+// session Postgres sur une connexion dediee : il tombe tout seul si le
+// processus meurt, et la salle reste « waiting » (relancable) si le lancement
+// echoue. 5100 : espace de cles des lancements (5005 est la migration 005).
+const START_LOCK_SPACE = 5100;
+
+async function withStartLock(roomCode: string, run: () => Promise<void>): Promise<boolean> {
+  const client = await pool.connect();
+  let broken = false;
+  try {
+    const { rows } = await client.query<{ locked: boolean }>(
+      `SELECT pg_try_advisory_lock($1, hashtext($2)) AS locked`,
+      [START_LOCK_SPACE, roomCode]
+    );
+    if (!rows[0]?.locked) return false;
+    try {
+      await run();
+    } finally {
+      await client
+        .query(`SELECT pg_advisory_unlock($1, hashtext($2))`, [START_LOCK_SPACE, roomCode])
+        .catch(err => {
+          // Verrou non rendu : on jette la connexion plutot que de la remettre au pool.
+          broken = true;
+          logger.error("start_lock_release_failed", { roomCode, error: err });
+        });
+    }
+    return true;
+  } finally {
+    client.release(broken);
   }
 }
 
@@ -692,6 +729,13 @@ export const roomsController = {
       fail(res, "room_code_missing", "Code de salle requis", 400);
       return;
     }
+    const ran = await withStartLock(code, () => roomsController.startGameLocked(req, res));
+    if (!ran) fail(res, "room_locked", "La partie est en train de se lancer.", 409);
+  },
+
+  /** Le lancement lui-meme, sous le verrou de la salle (voir withStartLock). */
+  async startGameLocked(req: Request, res: Response): Promise<void> {
+    const code = typeof req.params?.code === "string" ? req.params.code.toUpperCase() : "";
 
     const sourceParam = typeof req.body?.source === "string" ? req.body.source : "library";
     const preferredProvider = req.body?.provider as MusicProvider | undefined;
@@ -981,20 +1025,39 @@ export const roomsController = {
       return ids === null || ids === undefined ? {} : { linkIds: ids };
     };
     // Un titre sans extrait n'est cherche qu'une fois par lancement, et tout le
-    // lancement a un plafond de recherches Deezer (LOOKUPS_PER_ROUND par manche,
-    // ou par joueur s'ils sont plus nombreux que les manches) : une grosse
-    // bibliotheque injouable ne declenche pas des centaines d'appels.
+    // lancement est borne (lookupGuard.ts) : LOOKUPS_PER_ROUND recherches par
+    // manche (ou par joueur s'ils sont plus nombreux), une echeance et un
+    // disjoncteur si Deezer ne repond plus.
     const rejectedKeys = new Set<string>();
-    let lookupsLeft = Math.max(room.question_count, musicContributorIds.length) * LOOKUPS_PER_ROUND;
+    const guard = new LookupGuard(Math.max(room.question_count, musicContributorIds.length) * LOOKUPS_PER_ROUND);
     const collect = async (pid: number, desired: number, opts: CollectOptions): Promise<AudioSourceRow[]> => {
       const batch = await collectPlayableBatch(pid, desired, {
         ...opts,
         excludeKeys: [...(opts.excludeKeys ?? []), ...rejectedKeys],
-        maxLookups: lookupsLeft,
+        guard,
       });
-      lookupsLeft -= batch.lookups;
       batch.rejectedKeys.forEach(key => rejectedKeys.add(key));
       return batch.playable;
+    };
+    // Ce que chaque joueur a choisi de jouer : sa bibliotheque, ses titres
+    // likes, une playlist ou un top. Tous les complements le respectent, comme
+    // le premier tirage. Un choix qui demande Spotify sans connexion ne peut
+    // pas s'appliquer : le premier tirage saute ce joueur, les complements
+    // prennent sa bibliotheque (comme avant).
+    const choiceOf = (pid: number) => {
+      const pref = prefMap.get(pid);
+      const choice = normalizeSource(pref?.source ?? sourceParam);
+      const likedOnly = choice === "liked";
+      const playlist = choice === "playlist" ? pref?.playlist ?? playlistId ?? undefined : undefined;
+      const timeRange = choice === "top_week" ? "short_term" : choice === "top_month" ? "medium_term" : choice === "top_all" ? "long_term" : undefined;
+      const userConn = connectionMap.get(pid);
+      const needsSpotify = likedOnly || choice === "playlist" || Boolean(timeRange);
+      const applicable = !needsSpotify || (userConn?.provider === "spotify" && Boolean(userConn.access_token));
+      return { likedOnly, playlistId: playlist, timeRange, applicable };
+    };
+    const rulesFor = (pid: number): Pick<CollectOptions, "likedOnly" | "playlistId" | "timeRange"> => {
+      const c = choiceOf(pid);
+      return c.applicable ? { likedOnly: c.likedOnly, playlistId: c.playlistId, timeRange: c.timeRange } : {};
     };
     const contribution = new Map<number, number>();
     // Un morceau peut etre a plusieurs joueurs : chacun ne tire que ce qui
@@ -1003,16 +1066,10 @@ export const roomsController = {
     // se faisait prendre ses morceaux et n'avait pas sa part du tourniquet.
     const quotaOrder = await bySmallestLibrary(musicContributorIds);
     for (const pid of quotaOrder) {
-      const pref = prefMap.get(pid);
-      const choice = normalizeSource(pref?.source ?? sourceParam);
-      const likedChoice = choice === "liked";
-      const playlistChoice = choice === "playlist" ? pref?.playlist ?? playlistId ?? undefined : undefined;
-      const timeChoice = choice === "top_week" ? "short_term" : choice === "top_month" ? "medium_term" : choice === "top_all" ? "long_term" : undefined;
+      const { likedOnly: likedChoice, playlistId: playlistChoice, timeRange: timeChoice, applicable } = choiceOf(pid);
 
       // Si la source nécessite Spotify mais que le joueur n'a pas de connexion, on saute
-      const userConn = connectionMap.get(pid);
-      const needsSpotify = likedChoice || choice === "playlist" || Boolean(timeChoice);
-      if (needsSpotify && !(userConn?.provider === "spotify" && userConn.access_token)) {
+      if (!applicable) {
         continue;
       }
 
@@ -1056,7 +1113,7 @@ export const roomsController = {
       for (const pid of musicContributorIds) {
         if (collected.length >= room.question_count) break;
         const fill = await collect(pid, room.question_count - collected.length, {
-          likedOnly: false,
+          ...rulesFor(pid),
           provider: poolProvider,
           excludeKeys: [...seen],
           ...linkOpts(pid),
@@ -1073,7 +1130,7 @@ export const roomsController = {
       for (const pid of musicContributorIds) {
         if (sources.length >= room.question_count) break;
         const fallback = await collect(pid, room.question_count - sources.length, {
-          likedOnly: false,
+          ...rulesFor(pid),
           provider: "any",
           excludeKeys: [...existingKeys],
           ...linkOpts(pid),
@@ -1096,7 +1153,7 @@ export const roomsController = {
       // collect (et pas fetchAudioSources brut) : il rafraichit les
       // extraits et jette ceux sans audio. Sinon on pouvait injecter ici un titre
       // muet et la table restait 10 secondes dans le silence.
-      const personalPool = await collect(pid, 3, { provider: poolProvider, excludeKeys: [...existingKeys], ...linkOpts(pid) });
+      const personalPool = await collect(pid, 3, { ...rulesFor(pid), provider: poolProvider, excludeKeys: [...existingKeys], ...linkOpts(pid) });
       for (const candidate of personalPool) {
         const key = candidate.external_id ?? String(candidate.id);
         if (existingKeys.has(key)) continue;
@@ -1118,8 +1175,7 @@ export const roomsController = {
     // hydratePreviewUrl renvoie l'URL cache si fraiche, re-fetch si manquante/expiree, null si injouable.
     // Meme plafond de recherches que le tirage, 6 a la fois : un titre qu'on ne
     // peut plus verifier est ecarte comme un titre sans extrait.
-    const finalCheck = await hydrateWithinBudget(sources, lookupsLeft);
-    lookupsLeft -= finalCheck.lookups;
+    const finalCheck = await hydrateWithinBudget(sources, guard);
     const checked = new Set(finalCheck.tried.filter(s => Boolean(s.audio_url)));
     for (const source of sources) {
       if (!checked.has(source)) rejectedKeys.add(source.external_id ?? String(source.id));
@@ -1128,35 +1184,45 @@ export const roomsController = {
     sources = sources.filter(s => checked.has(s));
 
     // Il manque des manches (titres sans extrait) : on retire dans les memes
-    // bibliotheques, memes regles (cartes cochees, titres deja pris ou sans
-    // extrait exclus), borne a TOP_UP_MAX_PASSES passes de question_count titres.
+    // bibliotheques, memes regles (choix du joueur, cartes cochees, titres deja
+    // pris ou sans extrait exclus), borne a TOP_UP_MAX_PASSES passes de
+    // 3 x le manque, sous le meme garde de recherches.
     if (sources.length < room.question_count) {
       const topUp = await topUpPlayable({
         current: sources,
         target: room.question_count,
         contributorIds: musicContributorIds,
         rejectedKeys,
-        draw: (pid, drawLimit, excludeKeys) =>
-          collectPlayableBatch(pid, drawLimit, {
+        draw: (pid, drawLimit, excludeKeys, wanted) =>
+          collectPlayableBatch(pid, wanted, {
+            ...rulesFor(pid),
             provider: "any",
             excludeKeys,
             drawLimit,
-            maxLookups: lookupsLeft,
+            guard,
             ...linkOpts(pid),
-          }).then(batch => {
-            lookupsLeft -= batch.lookups;
-            return batch;
           }),
       });
       sources = topUp.sources;
     }
 
+    // Moins de manches que demande : la raison, sans rien dire des titres.
+    // "lookup" : des titres n'ont pas pu etre verifies (Deezer lent ou muet,
+    // ou nos bornes) ; "library" : les playlists n'en avaient pas assez.
+    const shortReason: "library" | "lookup" | null =
+      sources.length >= room.question_count ? null : guard.limited ? "lookup" : "library";
+
     // Dernier filet : si rien du tout, on s'arrête avec un message explicite
     if (sources.length === 0) {
-      fail(res, "insufficient_tracks", "Pas assez de titres pour lancer la partie", 400, {
-        needed: room.question_count,
-        available: 0,
-      });
+      fail(
+        res,
+        "insufficient_tracks",
+        shortReason === "lookup"
+          ? "Deezer n'a pas répondu à temps. Réessaie dans un instant."
+          : "Pas assez de titres pour lancer la partie",
+        400,
+        { needed: room.question_count, available: 0, reason: shortReason }
+      );
       return;
     }
 
@@ -1237,12 +1303,15 @@ export const roomsController = {
       );
       session = sessionRows[0];
 
-      await client.query(
+      // Seule une salle encore en attente part : un autre lancement passe
+      // entre-temps (autre serveur, verrou perdu) ne cree pas une 2e partie.
+      const { rowCount: claimed } = await client.query(
         `UPDATE multiplayer_rooms
          SET status='in_progress', session_id=$2, started_at=NOW()
-         WHERE id=$1`,
+         WHERE id=$1 AND status='waiting'`,
         [room.id, session.id]
       );
+      if (!claimed) throw new StartConflictError();
 
       for (const pid of participantIds) {
         await client.query(
@@ -1290,6 +1359,10 @@ export const roomsController = {
     await client.query("COMMIT");
     } catch (txErr) {
       await client.query("ROLLBACK");
+      if (txErr instanceof StartConflictError) {
+        fail(res, "room_locked", "La partie a déjà démarré", 409);
+        return;
+      }
       throw txErr;
     } finally {
       client.release();
@@ -1360,6 +1433,7 @@ export const roomsController = {
         rounds: streamerRounds,
         subMode,
         requestedRounds: room.question_count,
+        shortReason,
       });
       ok(res, {
         session: {
@@ -1369,6 +1443,7 @@ export const roomsController = {
           provider: session.source_provider,
           totalRounds: session.total_rounds,
           requestedRounds: room.question_count,
+          shortReason,
           startedAt: session.started_at,
           roomCode: room.room_code,
         },
@@ -1386,6 +1461,7 @@ export const roomsController = {
       mode: session.mode as GameMode,
       tracks: roundTracks,
       requestedRounds: room.question_count,
+      shortReason,
       participants: participantIds.map(id => ({
         userId: id,
         username: usernameMap.get(id) ?? null,
@@ -1414,6 +1490,7 @@ export const roomsController = {
         provider: session.source_provider,
         totalRounds: session.total_rounds,
         requestedRounds: room.question_count,
+        shortReason,
         startedAt: session.started_at,
         roomCode: room.room_code,
       },

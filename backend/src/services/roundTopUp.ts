@@ -8,20 +8,20 @@ import { sourceKey, type PlayableBatch } from "./trackResolution";
  * extrait. Avant, la partie partait avec ce qui restait (16 manches sur 20 le
  * 07/10, salle 3Y9YRK) alors que les bibliotheques des joueurs avaient encore
  * des titres jouables. Ici on retire dans les memes bibliotheques, borne : au
- * plus TOP_UP_MAX_PASSES passes, chacune tire au plus `target` titres en base.
+ * plus TOP_UP_MAX_PASSES passes, chacune tire au plus DRAW_MARGIN fois le
+ * nombre de titres qui manquent. Les recherches Deezer restent sous le garde
+ * du lancement (lookupGuard.ts).
  */
 export const TOP_UP_MAX_PASSES = 2;
 
-/**
- * Recherches d'extrait permises pour tout un lancement (tirage, verification
- * finale et complement compris), par manche demandee, ou par joueur s'ils sont
- * plus nombreux que les manches. 20 manches : 120 au pire ; 30 (le maximum du
- * lobby) : 180.
- */
-export const LOOKUPS_PER_ROUND = 6;
+/** Titres tires en base par passe, par titre manquant. */
+export const DRAW_MARGIN = 3;
 
-/** Un tirage dans la bibliotheque d'un joueur : `drawLimit` lignes au plus, hors `excludeKeys`. */
-export type DrawFromPlayer = (userId: number, drawLimit: number, excludeKeys: string[]) => Promise<PlayableBatch>;
+/**
+ * Un tirage dans la bibliotheque d'un joueur : `drawLimit` lignes au plus, hors
+ * `excludeKeys` ; `wanted` titres jouables suffisent (on cesse de chercher).
+ */
+export type DrawFromPlayer = (userId: number, drawLimit: number, excludeKeys: string[], wanted: number) => Promise<PlayableBatch>;
 
 export type TopUpResult = {
   sources: AudioSourceRow[];
@@ -41,9 +41,10 @@ function sharesOf(sources: readonly AudioSourceRow[], contributorIds: readonly n
 }
 
 /**
- * Retire des titres jouables jusqu'a `target`, ou jusqu'a epuisement des
- * bibliotheques. Les joueurs qui ont le moins de titres dans la partie tirent
- * en premier, pour garder le tourniquet equitable. Ne modifie pas `current`.
+ * Retire des titres jouables jusqu'a `target` (jamais plus), ou jusqu'a
+ * epuisement des bibliotheques. Les joueurs qui ont le moins de titres dans la
+ * partie tirent en premier, pour garder le tourniquet equitable. Ne modifie
+ * pas `current`.
  */
 export async function topUpPlayable(params: {
   current: readonly AudioSourceRow[];
@@ -61,7 +62,7 @@ export async function topUpPlayable(params: {
     passes += 1;
     const shares = sharesOf(sources, params.contributorIds);
     const order = [...params.contributorIds].sort((a, b) => (shares.get(a) ?? 0) - (shares.get(b) ?? 0));
-    let budget = params.target;
+    let budget = DRAW_MARGIN * (params.target - sources.length);
     let drawnThisPass = 0;
 
     for (let i = 0; i < order.length && budget > 0 && sources.length < params.target; i++) {
@@ -69,12 +70,14 @@ export async function topUpPlayable(params: {
       // Part du budget de la passe ; un joueur a sec laisse sa part aux suivants.
       const share = Math.ceil(budget / (order.length - i));
       const taken = new Set(sources.map(sourceKey));
-      const batch = await params.draw(pid, share, [...taken, ...rejected]);
+      const wanted = params.target - sources.length;
+      const batch = await params.draw(pid, share, [...taken, ...rejected], wanted);
       budget -= batch.drawn;
       drawnThisPass += batch.drawn;
       for (const key of batch.rejectedKeys) rejected.add(key);
       const fresh = batch.playable
         .filter(src => !taken.has(sourceKey(src)))
+        .slice(0, wanted)
         .map(src => ({ ...src, user_id: pid }));
       sources = [...sources, ...fresh];
     }

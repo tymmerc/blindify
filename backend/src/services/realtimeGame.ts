@@ -58,6 +58,8 @@ export type GameState = {
    * bibliotheques n'avaient pas assez de titres jouables : l'ecran le dit.
    */
   requestedRounds?: number;
+  /** Pourquoi moins de manches : "library" (playlists trop courtes) ou "lookup" (recherches d'extraits limitees). */
+  shortReason?: "library" | "lookup" | null;
   currentTrack: RoundTrack | null;
   timing: {
     startAt: number | null;
@@ -107,6 +109,8 @@ export function bootstrapGameState(params: {
   tracks: RoundTrack[];
   /** Manches demandees (question_count) ; par defaut, le nombre de pistes. */
   requestedRounds?: number;
+  /** Pourquoi moins de manches : "library" (playlists trop courtes) ou "lookup" (recherches d'extraits limitees). */
+  shortReason?: "library" | "lookup" | null;
   participants: Array<{ userId: number; username: string | null; avatar?: string | null }>;
   mode?: string;
   config?: { roundDurationMs?: number; autoAdvance?: boolean };
@@ -142,6 +146,7 @@ export function bootstrapGameState(params: {
     currentRound: 0,
     totalRounds: params.tracks.length,
     requestedRounds: params.requestedRounds ?? params.tracks.length,
+    shortReason: params.shortReason ?? null,
     currentTrack: null,
     timing: {
       startAt: null,
