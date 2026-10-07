@@ -56,11 +56,17 @@ code=$?; tail -3 "$DOSSIER/garde-commit.log"
 [ $code -ne 0 ] && [ "$(PG -c "SELECT to_regclass('public.user_audio_sources') IS NULL")" = t ] \
   && note "[ok] mauvais commit : sortie $code, base intacte" || note "!! mauvais commit : sortie $code"
 PG -c "INSERT INTO multiplayer_rooms (room_code, status, started_at) VALUES ('ESSAI1', 'in_progress', now())"
-ATTENTE_MAX_S=5 GO_PROD_CIBLE=pile PILE_DEPOT="$DEPOT" PILE_SAUVEGARDES="$DOSSIER/garde" bash "$SCRIPT" "$NOUVEAU" > "$DOSSIER/garde-partie.log" 2>&1
-code=$?; tail -3 "$DOSSIER/garde-partie.log"
-[ $code -ne 0 ] && grep -q 'SANS RIEN TOUCHER' "$DOSSIER/garde-partie.log" && [ "$(PG -c "SELECT to_regclass('public.user_audio_sources') IS NULL")" = t ] \
+GO_PROD_CIBLE=pile ATTENTE_MAX_S=5 bash "$DEPOT/scripts/attendre-parties.sh" > "$DOSSIER/attendre-parties.log" 2>&1
+code=$?; cat "$DOSSIER/attendre-parties.log"
+[ $code = 1 ] && grep -q ESSAI1 "$DOSSIER/attendre-parties.log" \
+  && note "[ok] attendre-parties : sortie 1 apres le delai, salle ESSAI1 listee" || note "!! attendre-parties : sortie $code"
+GO_PROD_CIBLE=pile PILE_DEPOT="$DEPOT" PILE_SAUVEGARDES="$DOSSIER/garde" bash "$SCRIPT" "$NOUVEAU" > "$DOSSIER/garde-partie.log" 2>&1
+code=$?; tail -12 "$DOSSIER/garde-partie.log"
+[ $code -ne 0 ] && grep -q 'des parties ont commence' "$DOSSIER/garde-partie.log" && [ "$(PG -c "SELECT to_regclass('public.user_audio_sources') IS NULL")" = t ] \
   && note "[ok] partie en cours : sortie $code sans rien toucher" || note "!! partie en cours : sortie $code"
 PG -c "DELETE FROM multiplayer_rooms WHERE room_code = 'ESSAI1'"
+GO_PROD_CIBLE=pile bash "$DEPOT/scripts/attendre-parties.sh" > "$DOSSIER/attendre-parties-libre.log" 2>&1 \
+  && note "[ok] attendre-parties : sortie 0 des que c'est libre" || note "!! attendre-parties ne voit pas la base libre"
 
 etape "3. le script, mode pile"
 SONDE_PAS_MS=20 "$NODE" "$MES/sonde-verrous.mjs" "$DOSSIER/sonde-verrous.txt" > "$DOSSIER/sonde-verrous.log" 2>&1 &
@@ -71,7 +77,7 @@ GO_PROD_CIBLE=pile PILE_DEPOT="$DEPOT" PILE_SAUVEGARDES="$DOSSIER/passage" bash 
 code=${PIPESTATUS[0]}
 kill "$SONDE_PID"; wait "$SONDE_PID"; SONDE_PID=
 note "script : sortie $code en $(( $(date +%s) - t0 )) s (3 attendu : le rattrapage echoue faute d'Internet, signale sans retour arriere)"
-grep -E '005 appliquee|API de nouveau|\[ok\]|!!' "$DOSSIER/passage.log" | sed 's/^/    /'
+grep -E '005 appliquee|API de nouveau|\[ok\]|!!|\?\?' "$DOSSIER/passage.log" | sed 's/^/    /'
 note "sonde : $(head -5 "$DOSSIER/sonde-verrous.txt" | tail -4 | tr '\n' ';')"
 note "fenetre de la 005 : $(grep -h '005 appliquee' "$DOSSIER/passage.log")"
 [ "$(cut -c1-40 "$ROOT/.test-stack/run/backend.commit")" = "$NOUVEAU" ] && note "[ok] la pile tourne sur le lot" || note "!! la pile ne tourne pas sur le lot"

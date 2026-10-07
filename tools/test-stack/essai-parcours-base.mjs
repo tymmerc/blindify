@@ -55,6 +55,13 @@ try {
   depart.status === 200
     ? ok(`salle ${salle} lancee depuis les bibliotheques (HTTP 200, ${depart.data?.tracks?.length ?? "?"} manches)`)
     : ko(`salle ${salle} : lancement en HTTP ${depart.status} ${depart.error?.code ?? ""}`)
+  const pistes = depart.data?.tracks ?? []
+  const visibles = pistes.filter(t => t?.title != null || t?.metadata?.owner_user_id != null).length
+  if (depart.status === 200) {
+    pistes.length > 0 && visibles === 0
+      ? ok("reponse du lancement caviardee (ni titre ni proprietaire)")
+      : ko(`reponse du lancement : ${visibles} manche(s) sur ${pistes.length} montrent un titre ou un proprietaire`)
+  }
   for (const b of [dora, eli]) b.socket?.close()
 
   const retrait = await api(`/api/links/${carteDora}`, { method: "DELETE", token: dora.token })
