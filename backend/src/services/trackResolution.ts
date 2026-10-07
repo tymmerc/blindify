@@ -3,6 +3,7 @@ import type { AudioSourceRow } from "../types/audio";
 import type { MusicProvider } from "../types/user";
 import { deezerPreviewService } from "./deezerPreviewService";
 import { logger } from "../utils/logger";
+import { mapLimit } from "../utils/concurrency";
 
 // ---------------------------------------------------------------------------
 // Preview hydration — resolves audio URLs via Deezer search
@@ -158,6 +159,27 @@ export const sourceKey = (source: Pick<AudioSourceRow, "external_id" | "id">): s
 const needsLookup = (source: AudioSourceRow): boolean =>
   !source.audio_url || isExpiredPreview(source.audio_url);
 
+/** Recherches d'extrait en meme temps au plus (Deezer : 50 requetes par 5 s). */
+export const HYDRATE_CONCURRENCY = 6;
+
+/**
+ * Hydrate les extraits : un extrait en cache encore frais ne coute rien, les
+ * autres passent par Deezer, `maxLookups` au plus et HYDRATE_CONCURRENCY a la
+ * fois. Ceux au-dela de la limite ne sont pas essayes (absents de `tried`).
+ */
+export async function hydrateWithinBudget(
+  candidates: AudioSourceRow[],
+  maxLookups: number
+): Promise<{ tried: AudioSourceRow[]; lookups: number }> {
+  const stale = candidates.filter(needsLookup);
+  const allowed = new Set(stale.slice(0, Math.max(0, maxLookups)));
+  const tried = candidates.filter(source => !needsLookup(source) || allowed.has(source));
+  await mapLimit(tried, HYDRATE_CONCURRENCY, async (source) => {
+    source.audio_url = await hydratePreviewUrl(source);
+  });
+  return { tried, lookups: allowed.size };
+}
+
 export async function collectPlayableBatch(
   userId: number,
   desiredCount: number,
@@ -176,18 +198,11 @@ export async function collectPlayableBatch(
     excludeKeys: opts.excludeKeys,
   });
 
-  // Un extrait en cache encore frais ne coute rien ; les autres passent par
-  // Deezer, dans la limite permise. Ceux au-dela ne sont ni joues ni ecartes.
-  const maxLookups = opts.maxLookups ?? Number.POSITIVE_INFINITY;
-  const stale = candidates.filter(needsLookup);
-  const tried = new Set(stale.slice(0, Math.max(0, maxLookups)));
-  const toHydrate = candidates.filter(source => !needsLookup(source) || tried.has(source));
-
-  // Hydrate / rafraichit les previews via Deezer (re-fetch si manquante OU expiree).
-  await Promise.all(
-    toHydrate.map(async (source) => {
-      source.audio_url = await hydratePreviewUrl(source);
-    })
+  // Hydrate / rafraichit les previews via Deezer (re-fetch si manquante OU
+  // expiree), dans la limite permise. Ceux au-dela ne sont ni joues ni ecartes.
+  const { tried: toHydrate, lookups } = await hydrateWithinBudget(
+    candidates,
+    opts.maxLookups ?? Number.POSITIVE_INFINITY
   );
 
   const playable = shuffle(toHydrate.filter((source) => Boolean(source.audio_url)));
@@ -202,7 +217,7 @@ export async function collectPlayableBatch(
     unique.set(key, source);
     if (unique.size >= desiredCount) break;
   }
-  return { playable: Array.from(unique.values()), rejectedKeys, drawn: candidates.length, lookups: tried.size };
+  return { playable: Array.from(unique.values()), rejectedKeys, drawn: candidates.length, lookups };
 }
 
 export async function collectPlayableSources(

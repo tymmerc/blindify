@@ -16,7 +16,7 @@ import { activeLinkIds } from "./linksController";
 import { bySmallestLibrary, linkTrackToUser, ownersAmong, PLAYS_TONIGHT } from "../services/userTracks";
 import { isSpotifyId } from "../utils/providerIds";
 import {
-  hydratePreviewUrl,
+  hydrateWithinBudget,
   collectPlayableBatch,
   shuffle,
   type CollectOptions,
@@ -1106,16 +1106,16 @@ export const roomsController = {
     // Hydrate/rafraichit les previews via Deezer. On passe TOUS les titres (pas seulement ceux
     // sans URL) : une URL Deezer en cache peut etre EXPIREE (signature `exp=`) -> 403 -> pas de son.
     // hydratePreviewUrl renvoie l'URL cache si fraiche, re-fetch si manquante/expiree, null si injouable.
-    await Promise.all(
-      sources.map(async source => {
-        source.audio_url = await hydratePreviewUrl(source);
-      })
-    );
+    // Meme plafond de recherches que le tirage, 6 a la fois : un titre qu'on ne
+    // peut plus verifier est ecarte comme un titre sans extrait.
+    const finalCheck = await hydrateWithinBudget(sources, lookupsLeft);
+    lookupsLeft -= finalCheck.lookups;
+    const checked = new Set(finalCheck.tried.filter(s => Boolean(s.audio_url)));
     for (const source of sources) {
-      if (!source.audio_url) rejectedKeys.add(source.external_id ?? String(source.id));
+      if (!checked.has(source)) rejectedKeys.add(source.external_id ?? String(source.id));
     }
     // Keep only tracks with a playable audio URL
-    sources = sources.filter(s => Boolean(s.audio_url));
+    sources = sources.filter(s => checked.has(s));
 
     // Il manque des manches (titres sans extrait) : on retire dans les memes
     // bibliotheques, memes regles (cartes cochees, titres deja pris ou sans

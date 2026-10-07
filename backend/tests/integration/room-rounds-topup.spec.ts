@@ -12,7 +12,8 @@
  * - une bibliotheque clairsemee est completee jusqu'au bout ;
  * - deux joueurs : le tourniquet reste equitable, le plus fourni complete ;
  * - une grosse bibliotheque injouable : chaque titre est cherche au plus une
- *   fois chez Deezer et le lancement reste sous LOOKUPS_PER_ROUND par manche ;
+ *   fois chez Deezer, le lancement reste sous LOOKUPS_PER_ROUND par manche et
+ *   jamais plus de HYDRATE_CONCURRENCY recherches partent en meme temps ;
  * - solo : un extrait en cache expire est re-cherche, jamais servi.
  *
  * Deezer n'est jamais appele : les extraits sont simules (un titre qui
@@ -29,10 +30,17 @@ jest.mock("../../src/utils/session", () => ({
 jest.mock("../../src/services/deezerPreviewService", () => {
   // Une recherche par titre : compte les appels, trouve un extrait si le titre
   // contient « jouable ». Branche aussi sur resolvePreview (recherche par ISRC).
-  const lookup = jest.fn(async (title: string) =>
-    title.includes("jouable") ? { preview: `https://extraits.test/${encodeURIComponent(title)}.mp3` } : null,
-  );
+  // Elle dure quelques ms : on mesure combien partent en meme temps.
+  const inFlight = { now: 0, peak: 0 };
+  const lookup = jest.fn(async (title: string) => {
+    inFlight.now += 1;
+    inFlight.peak = Math.max(inFlight.peak, inFlight.now);
+    await new Promise(resolve => setTimeout(resolve, 3));
+    inFlight.now -= 1;
+    return title.includes("jouable") ? { preview: `https://extraits.test/${encodeURIComponent(title)}.mp3` } : null;
+  });
   return {
+    inFlight,
     deezerPreviewService: {
       searchTrack: lookup,
       resolvePreview: (query: { title: string }) => lookup(query.title),
@@ -56,10 +64,12 @@ import { gamesController } from "../../src/controllers/gamesController";
 import { clearGame } from "../../src/services/realtimeGame";
 import { clearAdvanceTimer, clearRevealTimer } from "../../src/services/realtimeOrchestrator";
 import { LOOKUPS_PER_ROUND } from "../../src/services/roundTopUp";
-import { deezerPreviewService } from "../../src/services/deezerPreviewService";
+import { HYDRATE_CONCURRENCY } from "../../src/services/trackResolution";
+import * as deezerModule from "../../src/services/deezerPreviewService";
 
 // La recherche simulee (searchTrack et resolvePreview passent par elle).
-const lookup = deezerPreviewService.searchTrack as unknown as jest.Mock;
+const lookup = deezerModule.deezerPreviewService.searchTrack as unknown as jest.Mock;
+const inFlight = (deezerModule as unknown as { inFlight: { now: number; peak: number } }).inFlight;
 
 resolveTestDatabaseUrl(process.env.TEST_DATABASE_URL);
 
@@ -175,6 +185,7 @@ function countByOwner(tracks: Started["tracks"]): Map<number, number> {
 /** Recherches Deezer faites pendant `run`, titre par titre. */
 async function lookupsDuring(run: () => Promise<void>): Promise<Map<string, number>> {
   lookup.mockClear();
+  inFlight.peak = 0;
   await run();
   const counts = new Map<string, number>();
   for (const [title] of lookup.mock.calls as Array<[string]>) counts.set(title, (counts.get(title) ?? 0) + 1);
@@ -305,6 +316,9 @@ describe("lancement d'une salle : autant de manches que demande", () => {
     expect(Math.max(0, ...lookups.values())).toBeLessThanOrEqual(1);
     const total = [...lookups.values()].reduce((a, b) => a + b, 0);
     expect(total).toBeLessThanOrEqual(20 * LOOKUPS_PER_ROUND);
+    // Jamais de rafale chez Deezer : 6 recherches en meme temps au plus.
+    expect(inFlight.peak).toBeGreaterThan(1);
+    expect(inFlight.peak).toBeLessThanOrEqual(HYDRATE_CONCURRENCY);
   });
 });
 

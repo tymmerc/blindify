@@ -12,7 +12,12 @@ import { sourceKey, type PlayableBatch } from "./trackResolution";
  */
 export const TOP_UP_MAX_PASSES = 2;
 
-/** Recherches Deezer permises pour tout un lancement, par manche demandee. */
+/**
+ * Recherches d'extrait permises pour tout un lancement (tirage, verification
+ * finale et complement compris), par manche demandee, ou par joueur s'ils sont
+ * plus nombreux que les manches. 20 manches : 120 au pire ; 30 (le maximum du
+ * lobby) : 180.
+ */
 export const LOOKUPS_PER_ROUND = 6;
 
 /** Un tirage dans la bibliotheque d'un joueur : `drawLimit` lignes au plus, hors `excludeKeys`. */
