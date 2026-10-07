@@ -40,7 +40,8 @@
 # autres taches lourdes ne restent plus bloquees jusqu'a 3 h.
 #
 # SHA_TESTE : le commit de main sur lequel la campagne de la pile est verte.
-# main peut l'avoir depasse SEULEMENT par des fichiers de scripts/.
+# main peut avoir un autre SHA (commits de fusion), mais son ARBRE doit etre le
+# meme, a scripts/ et aux outils d'essai de cette PR pres.
 #
 # Ordre : 1 garde-fous (rien ne change), 2 controle rapide qu'aucune partie
 # ne tourne (sinon on sort sans rien toucher ; FORCE=1 pour passer outre),
@@ -193,6 +194,14 @@ present() { grep -qF -- "$1" "$2" 2>/dev/null || die "main incomplet : « $1 » 
 echo "── 1. Garde-fous ($CIBLE, rien ne change pendant cette etape) ──"
 TESTE_SHA="$(git rev-parse --verify --quiet "$TESTE^{commit}")" || die "commit teste inconnu : $TESTE"
 HEAD_DEBUT="$(git rev-parse HEAD)"
+# Ce qui peut differer entre le commit teste et main sans rien changer a ce
+# qui part en prod : scripts/, et les outils d'essai de cette PR (#68), qui
+# peut etre fusionnee apres la campagne.
+PERMIS_HORS_LOT='^scripts/|^tools/test-stack/essai-|^tools/test-stack/sonde-verrous\.mjs$|^tools/game-start-check\.mjs$'
+# Fichiers qui different entre deux arbres, hors de ce qui est permis. Seul
+# l'arbre compte : main sera fait de commits de fusion (#54, #67, #64), son SHA
+# differera du commit teste.
+arbre_hors_permis() { git diff --name-only "$1" "$2" | grep -Ev "$PERMIS_HORS_LOT" || true; }
 # Rejoue a l'etape 1 et juste avant le build : main = origin/main, le commit
 # teste en est un ancetre et main ne l'a depasse que dans scripts/, et HEAD
 # n'a pas bouge depuis le debut.
@@ -201,10 +210,9 @@ gardes_main() {
   if [ "$CIBLE" = prod ]; then
     git fetch -q origin
     [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] || die "le dossier n'est pas sur origin/main (main a bouge ?) : la prod se deploie depuis main"
-    git merge-base --is-ancestor "$TESTE_SHA" HEAD || die "le commit teste n'est pas un ancetre de main"
-    local hors_scripts
-    hors_scripts="$(git diff --name-only "$TESTE_SHA" HEAD | grep -v '^scripts/' || true)"
-    [ -z "$hors_scripts" ] || die "main a change depuis le commit teste ailleurs que dans scripts/ : $hors_scripts"
+    local ecart
+    ecart="$(arbre_hors_permis "$TESTE_SHA" HEAD)"
+    [ -z "$ecart" ] || die "l'arbre de main differe du commit teste (hors scripts/ et outils d'essai) : $(echo "$ecart" | tr '\n' ' ')"
   else
     [ "$HEAD_DEBUT" = "$TESTE_SHA" ] || die "PILE_DEPOT n'est pas au commit teste"
   fi
@@ -247,6 +255,10 @@ present 'argv.includes("--ecrire")' "$RATTRAPAGE_SRC"
 CABLAGE=(
   "services/trackResolution|resolvePreviewOutcome"
   "services/trackResolution|hydrateWithinBudget"
+  "services/trackResolution|hydratePreviewOutcome"
+  "controllers/roomsController|hydrateWithinBudget"
+  "controllers/roomsController|METADATA_KEEPING_ISRC"
+  "services/providers/spotifySync|METADATA_KEEPING_ISRC"
   "controllers/roomsController|topUpPlayable"
   "controllers/roomsController|user_audio_sources"
   "controllers/roomsController|correct_artist, owner_user_id)"
@@ -260,9 +272,10 @@ for pr in 54 67 64; do
   tete="$(gh pr view "$pr" --repo tymmerc/blindify --json headRefOid -q .headRefOid 2>/dev/null || true)"
   [ -n "$tete" ] || die "tete de la PR #$pr illisible (gh) : rien n'a change"
   git cat-file -e "$tete^{commit}" 2>/dev/null || git fetch -q origin "$tete" 2>/dev/null || true
-  git merge-base --is-ancestor "$tete" "$TESTE_SHA" 2>/dev/null || die "la tete de #$pr (${tete:0:7}) n'est pas dans le commit teste : rien n'a change"
+  { git merge-base --is-ancestor "$tete" "$TESTE_SHA" 2>/dev/null || git merge-base --is-ancestor "$tete" HEAD 2>/dev/null; } \
+    || die "la tete de #$pr (${tete:0:7}) n'est ni dans le commit teste ni dans main : rien n'a change"
 done
-echo "  tetes de #54, #67 et #64 presentes dans le commit teste"
+echo "  tetes de #54, #67 et #64 presentes (commit teste ou main, meme arbre)"
 RATTRAPAGE_DIST="$(echo "$RATTRAPAGE_SRC" | sed -e 's#^backend/src/#dist/#' -e 's#\.ts$#.js#')"
 NODE22=/root/.nvm/versions/node/v22.21.1/bin/node
 echo "  rattrapage ISRC : $RATTRAPAGE_SRC (dans l'image : /app/$RATTRAPAGE_DIST)"
