@@ -17,25 +17,30 @@
 #   + tout ce qui est deja sur main a ce moment-la (le backend est reconstruit
 #     depuis main).
 #
-# A lancer dans cet ordre (l'arret du backend de dev AVANT le git pull compte :
-# il tourne en ts-node-dev depuis /opt/blindify et repart tout seul quand ses
-# fichiers changent ; sur le nouveau code, il appliquerait la 005 a la base de
-# prod au moment du pull, avant la sauvegarde, vu le 05/10 a 23:50) :
+# A lancer dans cet ordre :
 #
-#   systemctl stop blindify-dev-backend
-#   git -C /opt/blindify pull --ff-only
-#   HEAVY_WAIT=14400 heavy bash /opt/blindify/scripts/go-prod-2026-10-08-importeur.sh SHA_TESTE_SUR_LA_PILE
+#   1. attendre qu'aucune partie ne tourne, SANS heavy (3 h au plus) :
+#      git -C /opt/blindify fetch -q origin && git -C /opt/blindify show origin/main:scripts/attendre-parties.sh | bash
+#   2. systemctl stop blindify-dev-backend
+#   3. git -C /opt/blindify pull --ff-only
+#   4. HEAVY_WAIT=14400 heavy bash /opt/blindify/scripts/go-prod-2026-10-08-importeur.sh SHA_TESTE_SUR_LA_PILE
+#
+# L'arret du backend de dev AVANT le git pull compte : il tourne en
+# ts-node-dev depuis /opt/blindify et repart tout seul quand ses fichiers
+# changent ; sur le nouveau code, il appliquerait la 005 a la base de prod au
+# moment du pull, avant la sauvegarde (vu le 05/10 a 23:50, au pull du lot jeu).
+# L'attente est sortie de heavy : la campagne de nuit (03:40 UTC) et les
+# autres taches lourdes ne restent plus bloquees jusqu'a 3 h.
 #
 # SHA_TESTE : le commit de main sur lequel la campagne de la pile est verte.
 # main peut l'avoir depasse SEULEMENT par des fichiers de scripts/.
 #
-# Ordre : 1 garde-fous (rien ne change), 2 attente qu'aucune partie ne tourne
-# (3 h au plus, sinon on sort sans rien toucher ; FORCE=1 pour passer outre),
+# Ordre : 1 garde-fous (rien ne change), 2 controle rapide qu'aucune partie
+# ne tourne (sinon on sort sans rien toucher ; FORCE=1 pour passer outre),
 # 3 sauvegardes verifiees et fichier de retour, 4 migration 005, 5 backend
 # (retour automatique s'il ne demarre pas), 6 verifications, 7 rattrapage
 # ISRC, 8 front par la voie rapide, 9 explorateur de base et backend de dev.
-# L'attente de l'etape 2 garde le verrou de heavy : aucune autre tache lourde
-# pendant ce temps. Le backend de dev reste arrete jusqu'a l'etape 9.
+# Le backend de dev reste arrete jusqu'a l'etape 9.
 #
 # Duree estimee, une fois les parties finies : moins d'une minute de
 # sauvegardes et de migration, 3 a 5 min de build du backend, quelques
@@ -194,20 +199,16 @@ DEJA_005="$(sql "SELECT to_regclass('public.user_audio_sources') IS NOT NULL")"
 echo "  commit deploye : $(git rev-parse --short HEAD) (campagne verte sur ${TESTE_SHA:0:7})"
 echo "  base : $(sql "SELECT count(*) || ' morceaux, ' || count(user_id) || ' lies a ' || count(DISTINCT user_id) || ' joueurs' FROM audio_sources")"
 
-echo "── 2. Attente : aucune partie en cours ($(heure)) ──"
-debut_attente=$(date +%s)
-while :; do
-  n="$(en_cours)"
-  [ "$n" = 0 ] && { echo "  aucune partie en cours"; break; }
-  [ "${FORCE:-0}" = 1 ] && { echo "  FORCE=1 : $n partie(s) en cours seront terminees"; break; }
-  attendu=$(( $(date +%s) - debut_attente ))
-  if [ "$attendu" -ge "$ATTENTE_MAX_S" ]; then
-    echo "  !! $n partie(s) toujours en cours apres $(( attendu / 60 )) min : on sort SANS RIEN TOUCHER. Relancer plus tard."
-    exit 1
-  fi
-  [ $(( attendu % 600 )) -lt 60 ] && { echo "  $(heure) : $n partie(s) en cours, on attend (UTC)"; salles_en_cours; }
-  sleep 60
-done
+echo "── 2. Aucune partie en cours ? ($(heure)) ──"
+# L'attente longue se fait AVANT, sans heavy (scripts/attendre-parties.sh) :
+# ici, un seul coup d'oeil.
+if bash scripts/attendre-parties.sh --une-fois; then
+  echo "  aucune partie en cours"
+elif [ "${FORCE:-0}" = 1 ]; then
+  echo "  FORCE=1 : ces parties seront perdues (scores, XP, historique) au redemarrage du backend"
+else
+  die "des parties ont commence depuis l'attente : relancer scripts/attendre-parties.sh puis ce script (rien n'a change)"
+fi
 
 echo "── 3. Sauvegardes (verifiees avant tout changement) ──"
 DUMP="$SAUVE/avant-importeur-$HORO.sql.gz"
