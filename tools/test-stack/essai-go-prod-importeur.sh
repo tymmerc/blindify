@@ -16,6 +16,7 @@
 # 5. retour arriere (fichier ecrit par le script) : l'ancien backend sur la
 #    base migree, memes parcours, campagne de bots
 # 6. retour avec --defaire-005 : l'ancien backend sans la 005, memes parcours
+# 7. second passage du script avec une longue transaction en face de la 005
 # La pile est demontee a la fin et sa copie de travail remise sur son commit.
 set -uo pipefail
 AVANT="${1:?commit AVANT}"; NOUVEAU="${2:?commit NOUVEAU}"; DEPOT="${3:?DEPOT}"; DOSSIER="${4:?DOSSIER}"
@@ -43,7 +44,7 @@ trap fin EXIT
 trap 'exit 130' INT TERM HUP
 
 etape "1. pile neuve sur ${AVANT:0:7}, volume de la prod"
-cd "$HERE"
+cd "$HERE" || exit 1
 ./stack.sh down >/dev/null 2>&1
 STACK_REF="$AVANT" timeout 25m ./stack.sh front || { echo "ECHEC build du front de test"; exit 1; }
 timeout 5m ./stack.sh up || { echo "ECHEC demarrage de la pile"; exit 1; }
@@ -62,7 +63,7 @@ code=$?; tail -3 "$DOSSIER/garde-partie.log"
 PG -c "DELETE FROM multiplayer_rooms WHERE room_code = 'ESSAI1'"
 
 etape "3. le script, mode pile"
-"$NODE" "$MES/sonde-verrous.mjs" "$DOSSIER/sonde-verrous.txt" > "$DOSSIER/sonde-verrous.log" 2>&1 &
+SONDE_PAS_MS=20 "$NODE" "$MES/sonde-verrous.mjs" "$DOSSIER/sonde-verrous.txt" > "$DOSSIER/sonde-verrous.log" 2>&1 &
 SONDE_PID=$!
 sleep 2
 t0=$(date +%s)
@@ -72,10 +73,11 @@ kill "$SONDE_PID"; wait "$SONDE_PID"; SONDE_PID=
 note "script : sortie $code en $(( $(date +%s) - t0 )) s (3 attendu : le rattrapage echoue faute d'Internet, signale sans retour arriere)"
 grep -E '005 appliquee|API de nouveau|\[ok\]|!!' "$DOSSIER/passage.log" | sed 's/^/    /'
 note "sonde : $(head -5 "$DOSSIER/sonde-verrous.txt" | tail -4 | tr '\n' ';')"
+note "fenetre de la 005 : $(grep -h '005 appliquee' "$DOSSIER/passage.log")"
 [ "$(cut -c1-40 "$ROOT/.test-stack/run/backend.commit")" = "$NOUVEAU" ] && note "[ok] la pile tourne sur le lot" || note "!! la pile ne tourne pas sur le lot"
 
 etape "4. nouveau backend"
-(cd "$MES" && "$NODE" essai-parcours-base.mjs "nouveau backend") > "$DOSSIER/parcours-nouveau.log" 2>&1
+(cd "$MES" && timeout 5m "$NODE" essai-parcours-base.mjs "nouveau backend") > "$DOSSIER/parcours-nouveau.log" 2>&1
 note "parcours, nouveau backend : sortie $? ($(tail -1 "$DOSSIER/parcours-nouveau.log"))"
 (cd "$HERE" && timeout 10m "$NODE" campaign.mjs --no-browser --seed 8) > "$DOSSIER/campagne-nouveau.log" 2>&1
 note "campagne de bots, nouveau backend : sortie $?"
@@ -86,7 +88,7 @@ t0=$(date +%s)
 bash "$RETOUR_FICHIER" > "$DOSSIER/retour.log" 2>&1
 code=$?
 note "retour : sortie $code en $(( $(date +%s) - t0 )) s, pile sur $(cut -c1-7 "$ROOT/.test-stack/run/backend.commit") (attendu ${AVANT:0:7})"
-(cd "$MES" && "$NODE" essai-parcours-base.mjs "ancien backend, base avec la 005") > "$DOSSIER/parcours-ancien-005.log" 2>&1
+(cd "$MES" && timeout 5m "$NODE" essai-parcours-base.mjs "ancien backend, base avec la 005") > "$DOSSIER/parcours-ancien-005.log" 2>&1
 note "parcours, ancien backend avec la 005 : sortie $? ($(tail -1 "$DOSSIER/parcours-ancien-005.log"))"
 (cd "$HERE" && timeout 10m "$NODE" campaign.mjs --no-browser --seed 8) > "$DOSSIER/campagne-ancien-005.log" 2>&1
 note "campagne de bots, ancien backend avec la 005 : sortie $?"
@@ -96,8 +98,29 @@ etape "6. retour avec --defaire-005"
 bash "$RETOUR_FICHIER" --defaire-005 > "$DOSSIER/retour-defaire-005.log" 2>&1
 code=$?
 note "retour --defaire-005 : sortie $code, table $(PG -c "SELECT COALESCE(to_regclass('public.user_audio_sources')::text, 'absente')"), declencheurs $(PG -c "SELECT count(*) FROM pg_trigger WHERE tgrelid = 'public.audio_sources'::regclass AND NOT tgisinternal")"
-(cd "$MES" && "$NODE" essai-parcours-base.mjs "ancien backend, 005 defaite") > "$DOSSIER/parcours-ancien-sans-005.log" 2>&1
+(cd "$MES" && timeout 5m "$NODE" essai-parcours-base.mjs "ancien backend, 005 defaite") > "$DOSSIER/parcours-ancien-sans-005.log" 2>&1
 note "parcours, ancien backend sans la 005 : sortie $? ($(tail -1 "$DOSSIER/parcours-ancien-sans-005.log"))"
+
+etape "7. second passage, une longue transaction tient audio_sources pendant la 005"
+# Pire cas : une requete garde audio_sources 8 s. La transaction du schema
+# abandonne au bout de 3 s (lock_timeout) sans rien ecrire, le script rejoue
+# la 005. Le second passage teste aussi la relance apres un retour arriere.
+SONDE_PAS_MS=20 "$NODE" "$MES/sonde-verrous.mjs" "$DOSSIER/sonde-verrous-2.txt" > "$DOSSIER/sonde-verrous-2.log" 2>&1 &
+SONDE_PID=$!
+PG > "$DOSSIER/bloqueur.log" 2>&1 <<'SQL' &
+BEGIN;
+LOCK TABLE audio_sources IN ROW EXCLUSIVE MODE;
+SELECT pg_sleep(8);
+COMMIT;
+SQL
+sleep 1
+GO_PROD_CIBLE=pile PILE_DEPOT="$DEPOT" PILE_SAUVEGARDES="$DOSSIER/passage2" bash "$SCRIPT" "$NOUVEAU" > "$DOSSIER/passage2.log" 2>&1
+code=$?
+kill "$SONDE_PID"; wait "$SONDE_PID"; SONDE_PID=
+wait
+note "second passage : sortie $code ; $(grep -c 'verrou non obtenu' "$DOSSIER/passage2.log") essai(s) rejoue(s) apres lock_timeout ; $(grep -h '005 appliquee' "$DOSSIER/passage2.log")"
+note "sonde 2 : $(head -5 "$DOSSIER/sonde-verrous-2.txt" | tail -4 | tr '\n' ';')"
+grep -E '\[ok\]|!!' "$DOSSIER/passage2.log" | sed 's/^/    /'
 
 echo; echo "=================== BILAN ==================="
 printf '%s\n' "${bilan[@]}" | tee "$DOSSIER/bilan.txt"

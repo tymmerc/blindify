@@ -1,9 +1,10 @@
 // Sonde des verrous pendant une mise en prod essayee sur la pile (jamais la
 // prod) : mesure ce qu'un joueur subirait pendant la migration.
 //
-//   node sonde-verrous.mjs FICHIER_RESUME
+//   SONDE_PAS_MS=20 node sonde-verrous.mjs FICHIER_RESUME
 //
-// Toutes les 200 ms, en parallele, chacune sur sa connexion (lock_timeout 5 s) :
+// Toutes les SONDE_PAS_MS millisecondes (200 par defaut), en parallele,
+// chacune sur sa connexion (lock_timeout 5 s) :
 //   - un morceau importe (INSERT audio_sources avec un premier importeur : le
 //     declencheur de la 005 s'en saisit des qu'il existe) ;
 //   - une mise a jour de joueur (users) ;
@@ -20,6 +21,7 @@ const OUT = process.argv[2]
 if (!OUT) { console.error("usage : node sonde-verrous.mjs FICHIER_RESUME"); process.exit(2) }
 if (!URL.includes(":5436/blindify_test")) throw new Error("la sonde ne vise que la base de la pile")
 
+const PAS_MS = Number(process.env.SONDE_PAS_MS) || 200
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 const connect = async () => { const c = new Client({ connectionString: URL }); await c.connect(); await c.query("SET lock_timeout = '5s'"); return c }
 const [cIns, cUsr, cRnd, cLec] = await Promise.all([1, 2, 3, 4].map(connect))
@@ -57,10 +59,10 @@ const mesure = async (nom, n) => {
 const debut = new Date().toISOString()
 for (let n = 1; !stop; n++) {
   await Promise.all(Object.keys(ops).map(nom => mesure(nom, n)))
-  await sleep(200)
+  await sleep(PAS_MS)
 }
 const resume = [
-  `sonde des verrous, ${debut} -> ${new Date().toISOString()}, une passe toutes les 200 ms`,
+  `sonde des verrous, ${debut} -> ${new Date().toISOString()}, une passe toutes les ${PAS_MS} ms`,
   ...Object.entries(stats).map(([k, s]) => `${k.padEnd(8)} ${s.n} operations, pire ${s.max} ms, ${s.plus100} au-dela de 100 ms, ${s.plus1000} au-dela de 1 s, ${s.erreurs.length} erreur(s)`),
   ...Object.values(stats).flatMap(s => s.erreurs.map(e => `  erreur ${e}`)),
   "operations lentes (plus de 100 ms) :",

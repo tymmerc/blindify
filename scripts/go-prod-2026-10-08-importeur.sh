@@ -84,7 +84,6 @@ else
   SAUVE="${PILE_SAUVEGARDES:?mode pile : PILE_SAUVEGARDES (dossier des sauvegardes de l essai)}"
   PILE_RUN=/opt/blindify/.test-stack
   PILE_WT="$PILE_RUN/front"
-  PILE_STACK=/opt/blindify/tools/test-stack/stack.sh
   PILE_NODE=/root/.nvm/versions/node/v22.21.1/bin/node
   SANTE=http://127.0.0.1:3098/api/health
   BASE_URL=http://127.0.0.1:3098
@@ -136,8 +135,8 @@ fi
   || die "fichiers non suivis ou modifies dans le backend (ils partiraient dans l'image)"
 # Le lot, et rien que le lot cote base : 003 et 004 sont deja en prod.
 M005=backend/migrations/005_user_audio_sources.sql
-for f in $(ls backend/migrations); do
-  case "$f" in 003_challenges.sql|004_game_feedback.sql|005_user_audio_sources.sql) ;;
+for f in backend/migrations/*; do
+  case "${f#backend/migrations/}" in 003_challenges.sql|004_game_feedback.sql|005_user_audio_sources.sql) ;;
     *) die "migration hors lot dans backend/migrations : $f" ;; esac
 done
 [ -f "$M005" ] || die "$M005 absente : #54 n'est pas dans ce main"
@@ -413,7 +412,7 @@ rattrapage() { # [--ecrire]
     # qui exerce le chemin d'echec. Config de la pile, jamais affichee.
     ( cd "$PILE_WT/backend" && set -a && . "$PILE_RUN/run/backend.env" && set +a \
       && timeout 900 "$PILE_NODE" -r /opt/blindify/tools/test-stack/no-egress.cjs node_modules/ts-node/dist/bin.js --transpile-only \
-        "$(echo "$RATTRAPAGE_SRC" | sed 's#^backend/##')" "$@" )
+        "${RATTRAPAGE_SRC#backend/}" "$@" )
   fi
 }
 echo "  morceaux Spotify sans ISRC avant : $(sans_isrc)"
