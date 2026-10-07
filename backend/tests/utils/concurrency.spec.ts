@@ -32,6 +32,18 @@ describe("mapLimit", () => {
     expect(await mapLimit([1, 2], 0, async x => x * 2)).toEqual([2, 4]);
   });
 
+  it("a la premiere erreur, les autres ne prennent plus de nouvel element", async () => {
+    let started = 0;
+    await expect(mapLimit(Array.from({ length: 20 }, (_, i) => i), 2, async x => {
+      started += 1;
+      await tick(2);
+      if (x === 1) throw new Error("boum");
+      return x;
+    })).rejects.toThrow("boum");
+    await tick(30);
+    expect(started).toBeLessThanOrEqual(3);
+  });
+
   it("une erreur remonte", async () => {
     await expect(mapLimit([1, 2, 3], 2, async x => {
       if (x === 2) throw new Error("boum");

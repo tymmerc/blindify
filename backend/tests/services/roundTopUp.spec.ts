@@ -74,19 +74,31 @@ describe("topUpPlayable", () => {
 
     const result = await topUpPlayable({ current: [], target: 10, contributorIds: [2, 1], rejectedKeys: new Set(), draw });
 
-    expect(calls.map(c => [c.userId, c.drawLimit])).toEqual([[2, 5], [1, 10]]);
+    // Il manque 10 titres : 30 tires au plus dans la passe, partages entre les deux.
+    expect(calls.map(c => [c.userId, c.drawLimit])).toEqual([[2, 15], [1, 30]]);
     expect(result.sources).toHaveLength(10);
     expect(result.sources.every(s => s.user_id === 1)).toBe(true);
   });
 
-  it("borne : au plus deux passes, chacune tire au plus `target` titres", async () => {
+  it("borne : au plus deux passes, chacune tire au plus 3 fois le manque", async () => {
     const { draw, calls } = fakeLibraries({ 1: [1, 500] });
+    const current = Array.from({ length: 16 }, (_, i) => row(1, 2000 + i, true));
 
-    const result = await topUpPlayable({ current: [], target: 20, contributorIds: [1], rejectedKeys: new Set(), draw });
+    const result = await topUpPlayable({ current, target: 20, contributorIds: [1], rejectedKeys: new Set(), draw });
 
     expect(result.passes).toBe(TOP_UP_MAX_PASSES);
-    expect(result.drawn).toBeLessThanOrEqual(TOP_UP_MAX_PASSES * 20);
-    expect(calls.reduce((n, c) => n + c.drawLimit, 0)).toBeLessThanOrEqual(TOP_UP_MAX_PASSES * 20);
+    // Il manque 4 titres : 12 tires au plus a la 1re passe, 3 x 3 a la 2e.
+    expect(calls.map(c => c.drawLimit)).toEqual([12, 9]);
+    expect(result.drawn).toBeLessThanOrEqual(21);
+  });
+
+  it("ne depasse jamais la cible, meme si un tirage rapporte plus que le manque", async () => {
+    const { draw } = fakeLibraries({ 1: [100, 0] });
+    const current = Array.from({ length: 7 }, (_, i) => row(1, 3000 + i, true));
+
+    const result = await topUpPlayable({ current, target: 10, contributorIds: [1], rejectedKeys: new Set(), draw });
+
+    expect(result.sources).toHaveLength(10);
   });
 
   it("ne retire jamais un titre deja ecarte ni deja pris", async () => {
