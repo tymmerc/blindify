@@ -45,15 +45,18 @@
 # Ordre : 1 garde-fous (rien ne change), 2 controle rapide qu'aucune partie
 # ne tourne (sinon on sort sans rien toucher ; FORCE=1 pour passer outre),
 # 3 sauvegardes verifiees et fichier de retour, 4 migration 005, 5 backend
-# (retour automatique s'il ne demarre pas), 6 verifications, 7 rattrapage
-# ISRC, 8 front par la voie rapide, 9 explorateur de base et backend de dev.
-# Le backend de dev reste arrete jusqu'a l'etape 9.
+# (retour automatique s'il ne demarre pas), 6 verifications (une vraie partie
+# lancee : retour automatique si le lancement echoue), 7 front par la voie
+# rapide, 8 explorateur de base et backend de dev, 9 rattrapage ISRC (en
+# dernier, independant : un echec ne remet pas le backend d'avant).
+# Le backend de dev reste arrete jusqu'a l'etape 8.
 #
 # Duree estimee, une fois les parties finies : moins d'une minute de
 # sauvegardes et de migration, 3 a 5 min de build du backend, quelques
-# secondes de coupure du jeu au redemarrage (3 s le 06/10), 5 a 6 min de
-# rattrapage (essai puis ecriture, 123 lots de 50 a 1 s d'intervalle), 3 a
-# 5 min de build du front. Redemarrer le backend TERMINE les parties en cours
+# secondes de coupure du jeu au redemarrage (3 s le 06/10), 1 a 2 min de
+# verifications (une vraie partie, la sonde a blanc), 3 a 5 min de build du
+# front, puis 3 a 4 min de rattrapage (essai sur 3 lots, un lot ecrit et
+# controle, puis les quelque 120 lots restants a 1 s d'intervalle). Redemarrer le backend TERMINE les parties en cours
 # (leur etat ne vit qu'en memoire). Lancer juste apres un passage de la
 # surveillance (blindz-uptime, toutes les 5 min) pour eviter une fausse alerte.
 #
@@ -183,9 +186,6 @@ sql() { psql_cible -c "$1"; }
 # Parties vivantes : le filtre garde les salles zombies (24 h et plus) hors du
 # compte, mais couvre une longue soiree ou un streamer (30 manches de 60 s).
 en_cours() { sql "SELECT count(*) FROM multiplayer_rooms WHERE status = 'in_progress' AND COALESCE(started_at, created_at) > now() - interval '3 hours'"; }
-# Pour decider d'un FORCE=1 : une salle abandonnee reste in_progress, sa
-# derniere manche dit si quelqu'un joue encore.
-salles_en_cours() { sql "SELECT '    ' || r.room_code || ' lancee a ' || to_char(COALESCE(r.started_at, r.created_at), 'HH24:MI') || ', derniere manche a ' || COALESCE(to_char(max(GREATEST(gr.created_at, gr.reveal_at, gr.completed_at)), 'HH24:MI'), 'aucune') FROM multiplayer_rooms r LEFT JOIN game_rounds gr ON gr.session_id = r.session_id WHERE r.status = 'in_progress' AND COALESCE(r.started_at, r.created_at) > now() - interval '3 hours' GROUP BY r.room_code, r.started_at, r.created_at"; }
 # Morceaux qui ont un premier importeur mais pas son lien : doit rester a 0.
 orphelins() { sql "SELECT count(*) FROM audio_sources a WHERE a.user_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM user_audio_sources ua WHERE ua.user_id = a.user_id AND ua.audio_source_id = a.id)"; }
 present() { grep -qF -- "$1" "$2" 2>/dev/null || die "main incomplet : « $1 » absent de $2"; }
@@ -239,10 +239,32 @@ RATTRAPAGE_SRC="$(git ls-files | grep -iE '(^|/)rattrapage[-_]?isrc\.(ts|mjs|js)
 [ "$(echo "$RATTRAPAGE_SRC" | wc -l)" = 1 ] || die "plusieurs rattrapages ISRC trouves : $(echo "$RATTRAPAGE_SRC" | tr '\n' ' ')"
 case "$RATTRAPAGE_SRC" in
   backend/src/*.ts) ;;
-  *) die "rattrapage ISRC trouve hors de backend/src ($RATTRAPAGE_SRC) : il ne serait pas dans l'image, adapter l'etape 7" ;;
+  *) die "rattrapage ISRC trouve hors de backend/src ($RATTRAPAGE_SRC) : il ne serait pas dans l'image, adapter l'etape 9" ;;
 esac
-present '--ecrire' "$RATTRAPAGE_SRC"
+present 'argv.includes("--ecrire")' "$RATTRAPAGE_SRC"
+# Le cablage du lot (source ici, dist a l'etape 6) : pas seulement des fichiers
+# presents, les appels qui les branchent.
+CABLAGE=(
+  "services/trackResolution|resolvePreviewOutcome"
+  "services/trackResolution|hydrateWithinBudget"
+  "controllers/roomsController|topUpPlayable"
+  "controllers/roomsController|user_audio_sources"
+  "controllers/roomsController|correct_artist, owner_user_id)"
+  "controllers/quickPlayController|resolvePreview"
+  "services/deezerPreviewService|withSlot"
+)
+for c in "${CABLAGE[@]}"; do present "${c#*|}" "backend/src/${c%%|*}.ts"; done
+# Les tetes des trois PR doivent etre dans le commit teste (quel que soit
+# l'ordre de leurs fusions).
+for pr in 54 67 64; do
+  tete="$(gh pr view "$pr" --repo tymmerc/blindify --json headRefOid -q .headRefOid 2>/dev/null || true)"
+  [ -n "$tete" ] || die "tete de la PR #$pr illisible (gh) : rien n'a change"
+  git cat-file -e "$tete^{commit}" 2>/dev/null || git fetch -q origin "$tete" 2>/dev/null || true
+  git merge-base --is-ancestor "$tete" "$TESTE_SHA" 2>/dev/null || die "la tete de #$pr (${tete:0:7}) n'est pas dans le commit teste : rien n'a change"
+done
+echo "  tetes de #54, #67 et #64 presentes dans le commit teste"
 RATTRAPAGE_DIST="$(echo "$RATTRAPAGE_SRC" | sed -e 's#^backend/src/#dist/#' -e 's#\.ts$#.js#')"
+NODE22=/root/.nvm/versions/node/v22.21.1/bin/node
 echo "  rattrapage ISRC : $RATTRAPAGE_SRC (dans l'image : /app/$RATTRAPAGE_DIST)"
 if [ "$CIBLE" = prod ]; then
   ! systemctl is-active --quiet blindify-dev-backend \
@@ -469,11 +491,10 @@ if [ "$CIBLE" = prod ]; then
 fi
 # Le build prend des minutes : une partie a pu commencer entre-temps.
 for i in $(seq 1 40); do
-  n="$(en_cours)"
-  [ "$n" = 0 ] && break
-  [ "${FORCE:-0}" = 1 ] && { echo "  FORCE=1 : $n partie(s) en cours seront terminees"; break; }
-  [ "$i" = 40 ] && die "$n partie(s) en cours apres 20 min : ancien backend toujours en place. Relancer plus tard"
-  echo "  $n partie(s) en cours, on attend 30 s"; sleep 30
+  bash scripts/attendre-parties.sh --une-fois && break
+  if [ "${FORCE:-0}" = 1 ]; then echo "  FORCE=1 : ces parties seront perdues (scores, XP, historique) au redemarrage"; break; fi
+  [ "$i" = 40 ] && die "parties en cours apres 20 min : ancien backend toujours en place. Relancer plus tard"
+  echo "  on attend 30 s"; sleep 30
 done
 retour_backend_auto() {
   echo "  !! $1 : retour automatique au backend d'avant"
@@ -520,128 +541,233 @@ echo "── 6. Verifications du backend ($(heure)) ──"
 sleep 3
 ko=0
 verifie() { if eval "$2"; then echo "  [ok] $1"; else echo "  !! $1"; ko=1; fi; }
+avertit() { if eval "$2"; then echo "  [ok] $1"; else echo "  ?? $1"; AVERTISSEMENTS=$((AVERTISSEMENTS + 1)); fi; }
+AVERTISSEMENTS=0
 # Marqueurs choisis absents de la prod d'avant : des fichiers et des noms
 # nouveaux du lot (tsc garde les noms et les chaines).
 if [ "$CIBLE" = prod ]; then
   dans_code() { docker exec blindify-backend grep -qF -- "$2" "/app/dist/$1.js"; }
   fichier_code() { docker exec blindify-backend test -f "/app/$1"; }
+  echecs_demarrage() { docker logs --since "$DEBUT_ISO" blindify-backend 2>&1 | grep -c _boot_failed || true; }
 else
   dans_code() { grep -qF -- "$2" "$PILE_WT/backend/src/$1.ts"; }
   fichier_code() { test -f "$PILE_WT/backend/$(echo "$1" | sed -e 's#^dist/#src/#' -e 's#\.js$#.ts#')"; }
+  echecs_demarrage() { grep -c _boot_failed "$PILE_RUN/logs/backend.log" || true; }
 fi
 code_socket() { curl -s -o /dev/null -w '%{http_code}' -m 15 "$BASE_URL/socket.io/?EIO=4&transport=polling" -H "Origin: $1"; }
 verifie "API en ligne" "curl -sf -m 15 $SANTE >/dev/null"
+# Les schemas du demarrage sont dans des .catch : un serveur en ligne ne
+# prouve pas que la 005 a ete rejouee sans erreur.
+verifie "aucun *_boot_failed dans le journal du nouveau backend" "[ \"\$(echecs_demarrage)\" = 0 ]"
 verifie "#54 migration 005 rejouee au demarrage" "dans_code index ensureUserTracksSchema && dans_code services/userTracks user_audio_sources"
 verifie "#54 le fichier de la 005 est dans l'image" "fichier_code migrations/005_user_audio_sources.sql"
 verifie "#67 complement de manches" "dans_code services/roundTopUp topUpPlayable && dans_code controllers/roomsController requestedRounds"
 verifie "#64 recherche stricte et ISRC" "dans_code services/previewMatch parseTitle && dans_code services/deezerPreviewService 'isrc:'"
 verifie "#64 rattrapage ISRC dans l'image" "fichier_code $RATTRAPAGE_DIST"
+for c in "${CABLAGE[@]}"; do
+  verifie "cablage : ${c#*|} dans ${c%%|*}" "dans_code '${c%%|*}' '${c#*|}'"
+done
 verifie "toujours 0 orphelin apres le demarrage du nouveau backend" "[ \"\$(orphelins)\" = 0 ]"
 verifie "socket depuis $ORIGINE accepte (200)" "[ \"\$(code_socket $ORIGINE)\" = 200 ]"
 verifie "socket depuis une origine etrangere refuse (403)" "[ \"\$(code_socket https://evil.example)\" = 403 ]"
-# Le solo par lien, comme la sonde : aucun compte, rien n'est ecrit en base.
-solo="$(curl -s -m 90 -X POST "$BASE_URL/api/quick-play" -H 'Content-Type: application/json' -H "Origin: $ORIGINE" \
-  -d '{"url":"https://www.deezer.com/fr/playlist/1109890291","count":10}' || true)"
-titres_solo="$(echo "$solo" | jq -r 'if .success == true then [.data.tracks[]? | select(.audio_url != null)] | length else 0 end' 2>/dev/null || echo 0)"
-verifie "solo par lien : une playlist Deezer publique donne $titres_solo titres jouables (5 au moins)" "[ \"${titres_solo:-0}\" -ge 5 ]"
+# Le limiteur de Deezer, sans reseau : axios.get remplace par un compteur,
+# 30 resolutions en meme temps, jamais plus de 6 appels en vol.
+LIMITEUR='const axios = require("axios")
+const { DeezerPreviewService } = require(process.env.MODULE)
+let enVol = 0, max = 0, appels = 0
+axios.get = async () => { appels++; enVol++; max = Math.max(max, enVol); await new Promise(r => setTimeout(r, 40)); enVol--
+  return { data: { id: 1, title: "t", readable: true, duration: 200, preview: "https://cdnt-preview.dzcdn.net/essai.mp3" } } }
+const s = new DeezerPreviewService()
+Promise.all(Array.from({ length: 30 }, (_, i) => s.resolvePreviewOutcome({ title: "t" + i, deezerId: String(1000 + i) })))
+  .then(r => { const t = r.filter(o => o.status === "found").length; console.log(`${appels} appels, ${max} en vol au plus, ${t} trouves`); process.exit(max <= 6 && appels >= 30 && t === 30 ? 0 : 1) })
+  .catch(e => { console.log("erreur " + e.message); process.exit(1) })'
+if [ "$CIBLE" = prod ]; then
+  limiteur() { echo "$LIMITEUR" | docker exec -i -e MODULE=/app/dist/services/deezerPreviewService blindify-backend node -; }
+else
+  limiteur() { echo "$LIMITEUR" | ( cd "$PILE_WT/backend" && MODULE="$PILE_WT/backend/src/services/deezerPreviewService" "$PILE_NODE" -r ts-node/register/transpile-only - ); }
+fi
+resultat_limiteur="$(limiteur 2>&1)" && code_limiteur=0 || code_limiteur=$?
+verifie "#64 limiteur Deezer : $(echo "$resultat_limiteur" | tail -1)" "[ $code_limiteur = 0 ]"
 [ "$ko" = 0 ] || die "UNE VERIFICATION DU BACKEND A ECHOUE (voir ci-dessus) : backend du lot en place, front et rattrapage pas faits"
 
-ETAPE="7. rattrapage ISRC"
-echo "── 7. Rattrapage des ISRC ($(heure)) ──"
-# Independant du reste : un echec ici ne remet PAS le backend d'avant. Le
-# script est reprenable (il ne prend que les morceaux encore sans ISRC).
-RATTRAPAGE_OK=1
+# Une vraie partie : salle, lancement, manche 1 recue, menage. Un echec du
+# lancement lui-meme remet le backend d'avant ; un echec AVANT la salle
+# (invite, Deezer pour ensemencer) ne prouve rien contre le lot : on s'arrete
+# sans retour.
+if [ "$CIBLE" = prod ]; then
+  partie() { ( cd tools && "$NODE22" game-start-check.mjs prod ); }
+  SALLE_CREEE='[ok] salon cree'
+else
+  partie() { ( cd tools/test-stack && timeout 300 "$PILE_NODE" essai-parcours-base.mjs "verification du script" ); }
+  SALLE_CREEE='importe la playlist'
+fi
+for essai in 1 2; do
+  sortie_partie="$(partie 2>&1)" && { echo "$sortie_partie" | sed 's/^/    /'; echo "  [ok] une partie se lance et la manche 1 arrive (lancement caviarde)"; break; }
+  echo "$sortie_partie" | sed 's/^/    /'
+  if ! echo "$sortie_partie" | grep -F "$SALLE_CREEE" >/dev/null; then
+    die "verification de partie impossible avant la salle (invite ou Deezer ?) : backend du lot en place, rien ne prouve qu'il est en cause. Relancer tools/game-start-check.mjs prod a la main"
+  fi
+  [ "$essai" = 2 ] && retour_backend_auto "le lancement d'une partie echoue deux fois"
+  echo "  echec du lancement, nouvel essai dans 30 s"; sleep 30
+done
+
+# Le solo par lien, comme la sonde : aucun compte, rien n'est ecrit en base.
+# Il depend de Deezer : la partie ci-dessus etant verte, un echec ici n'est pas
+# une raison de remettre le backend d'avant.
+solo() {
+  curl -s -m 90 -X POST "$BASE_URL/api/quick-play" -H 'Content-Type: application/json' -H "Origin: $ORIGINE" \
+    -d '{"url":"https://www.deezer.com/fr/playlist/1109890291","count":10}' || true
+}
+titres() { jq -r 'if .success == true then [.data.tracks[]? | select(.audio_url != null)] | length else 0 end' 2>/dev/null || echo 0; }
+reponse_solo="$(solo)"; titres_solo="$(echo "$reponse_solo" | titres)"
+if [ "${titres_solo:-0}" -lt 5 ]; then
+  echo "  solo par lien : ${titres_solo:-0} titres, nouvel essai dans 45 s"; sleep 45
+  reponse_solo="$(solo)"; titres_solo="$(echo "$reponse_solo" | titres)"
+fi
+if [ "${titres_solo:-0}" -ge 5 ]; then
+  echo "  [ok] solo par lien : une playlist Deezer publique donne $titres_solo titres jouables"
+else
+  AVERTISSEMENTS=$((AVERTISSEMENTS + 1))
+  echo "  ?? solo par lien : ${titres_solo:-0} titres, code $(echo "$reponse_solo" | jq -r '.error.code // "inconnu"' 2>/dev/null || echo illisible)"
+  echo "     Deezer en direct depuis le VPS : $(curl -s -m 15 https://api.deezer.com/playlist/1109890291 | jq -c '{id, erreur: .error}' 2>/dev/null || echo injoignable)"
+  echo "     probablement Deezer, pas le lot (la partie ci-dessus est verte) : a surveiller, pas de retour"
+fi
+if [ "$CIBLE" = prod ]; then
+  # Un seul vrai appel : l'ISRC de You Say Run (OST de My Hero Academia).
+  ISRC_REEL='require(process.env.MODULE).deezerPreviewService.resolvePreviewOutcome({ title: "", isrc: "JPZ921607277" })
+  .then(o => { const ok = o.status === "found" && !!o.track.preview; console.log(`${o.status}${ok ? ", avec extrait" : ""}`); process.exit(ok ? 0 : 1) })
+  .catch(e => { console.log("erreur " + e.message); process.exit(1) })'
+  isrc_reel() { echo "$ISRC_REEL" | docker exec -i -e MODULE=/app/dist/services/deezerPreviewService blindify-backend node -; }
+  resultat_isrc="$(isrc_reel 2>&1)" && code_isrc=0 || code_isrc=$?
+  avertit "#64 un vrai /track/isrc: (titre vide) : $(echo "$resultat_isrc" | tail -1)" "[ $code_isrc = 0 ]"
+  # La sonde de la prod, a blanc (ni e-mail ni etat ecrit) : 0 attendu.
+  avertit "sonde de la prod a blanc (--dry-run)" "$NODE22 /opt/monitoring/sonde-prod/sonde.mjs --dry-run >/dev/null 2>&1"
+  echo "  prochain passage de la sonde : $(systemctl list-timers blindz-sonde-prod.timer --no-pager 2>/dev/null | awk 'NR==2 {print $1, $2, $3, $4}')"
+fi
+
+if [ "$CIBLE" = prod ]; then
+  ETAPE="7. front"
+  echo "── 7. Front (voie rapide, $(heure)) ──"
+  # Texte de l'accueil : go-prod-front.sh le cherche dans la page d'accueil, ou
+  # le message de #67 n'est pas (il est dans le code de l'ecran de jeu). On lui
+  # passe un texte present et on prouve le message de #67 dans les chunks servis.
+  echo "  parties en cours juste avant le front : $(en_cours) (le front est reconstruit en place : quelques secondes de 404 sur les pages)"
+  # Notre propre copie du site, et sa commande de retour dans le fichier de
+  # retour, AVANT le build (go-prod-front.sh garde aussi la sienne).
+  FRONT_SAUVE="$SAUVE/front-out-avant-importeur-$HORO"
+  cp -a frontend/out "$FRONT_SAUVE" && [ -f "$FRONT_SAUVE/index.html" ] \
+    || die "copie du front impossible : backend du lot en place, front pas touche"
+  RETOUR_FRONT="rsync -a --delete $FRONT_SAUVE/ /opt/blindify/frontend/out/"
+  echo "# Front d'avant, si besoin (pas necessaire pour l'ancien backend) : $RETOUR_FRONT" >> "$RETOUR_FICHIER"
+  echo "  site actuel copie : $FRONT_SAUVE"
+  ETAT_FRONT="en reconstruction"
+  if ! ( umask 022; bash scripts/go-prod-front.sh "titre-fin" ); then
+    if [ ! -f frontend/out/index.html ]; then
+      rsync -a --delete "$FRONT_SAUVE"/ frontend/out/ && ETAT_FRONT="ancien (remis depuis $FRONT_SAUVE : le build avait vide out/)"
+    fi
+    die "FRONT ECHOUE : backend du lot en place et sain (ne pas le remettre pour ca), front a traiter. Relancer : heavy bash /opt/blindify/scripts/go-prod-front.sh titre-fin"
+  fi
+  ETAT_FRONT="nouveau (a verifier)"
+  build_id="$(find frontend/out/_next/static -mindepth 1 -maxdepth 1 -type d ! -name chunks ! -name css ! -name media -printf '%f\n' | head -1)"
+  [ -n "$build_id" ] || die "build id introuvable dans frontend/out : backend du lot en place, front a verifier"
+  chunk67="$(grep -rlF 'pas assez de titres jouables dans vos playlists' frontend/out/_next/static/chunks | head -1 || true)"
+  ko=0
+  # grep sans -q apres un curl : sous pipefail, -q ferme le tube tot et curl
+  # finit en erreur (EPIPE) sur une grosse page, faux rouge.
+  verifie "la prod sert le build qui vient d'etre construit ($build_id)" "curl -s -m 30 https://blindz.app/ | grep -F -e \"$build_id\" >/dev/null"
+  verifie "#67 message « X manches au lieu de Y » dans le build" "[ -n \"$chunk67\" ]"
+  verifie "#67 blindz.app sert ce fichier" "curl -sf -m 30 \"https://blindz.app/${chunk67#frontend/out/}\" | grep -F 'pas assez de titres jouables' >/dev/null"
+  [ "$ko" = 0 ] || die "UNE VERIFICATION DU FRONT A ECHOUE : backend du lot en place et sain, front a traiter"
+  ETAT_FRONT="nouveau"
+
+  ETAPE="8. explorateur et backend de dev"
+  echo "── 8. Explorateur de base et backend de dev ($(heure)) ──"
+  # L'explorateur lit game_rounds.owner_user_id depuis #54 : on le relance
+  # maintenant que la colonne existe (jusqu'ici il tournait sur l'ancien code).
+  systemctl restart blindz-db-browser
+  derniere="$(sql "SELECT COALESCE(max(session_id), 0) FROM game_rounds")"
+  for i in $(seq 1 15); do curl -sf -m 3 "http://127.0.0.1:3101/session/$derniere" >/dev/null && break; sleep 2; done
+  ko=0
+  verifie "explorateur de base actif" "systemctl is-active --quiet blindz-db-browser"
+  verifie "explorateur : detail de la derniere partie ($derniere) lisible" "curl -sf -m 10 http://127.0.0.1:3101/session/$derniere | grep -F '\"manches\"' >/dev/null"
+  echo "  parties en cours avant le demarrage du backend de dev : $(en_cours)"
+  systemctl start blindify-dev-backend
+  ETAT_DEV="relance"
+  for i in $(seq 1 60); do curl -sf -m 2 http://127.0.0.1:3097/api/health >/dev/null && break; sleep 2; done
+  verifie "backend de dev reparti (meme commit : il tourne depuis /opt/blindify)" "curl -sf -m 5 http://127.0.0.1:3097/api/health >/dev/null"
+  [ "$ko" = 0 ] || die "UNE VERIFICATION DE L'EXPLORATEUR OU DU DEV A ECHOUE : backend et front du lot en place"
+else
+  echo "── 7 et 8. Front, explorateur et backend de dev : pas sur la pile ──"
+fi
+
+ETAPE="9. rattrapage ISRC"
+echo "── 9. Rattrapage des ISRC ($(heure)) ──"
+# Independant du reste et en dernier : un echec ici ne remet PAS le backend
+# d'avant. Reprenable (il ne prend que les morceaux encore sans ISRC).
+RATTRAPAGE_OK=0
 sans_isrc() { sql "SELECT count(*) FROM audio_sources WHERE provider = 'spotify' AND metadata->>'isrc' IS NULL"; }
-rattrapage() { # [--ecrire]
+rattrapage() { # [--lots N] [--ecrire] ; garde la derniere ligne « fin : » dans FIN_RATTRAPAGE
+  local sortie code
   if [ "$CIBLE" = prod ]; then
-    docker exec blindify-backend timeout 900 node "$RATTRAPAGE_DIST" "$@"
+    sortie="$(docker exec blindify-backend timeout 900 node "$RATTRAPAGE_DIST" "$@" 2>&1)" && code=0 || code=$?
   else
     # La pile n'a pas Internet (no-egress) : l'appel a Spotify y echoue, ce
     # qui exerce le chemin d'echec. Config de la pile, jamais affichee.
-    ( cd "$PILE_WT/backend" && set -a && . "$PILE_RUN/run/backend.env" && set +a \
+    sortie="$( ( cd "$PILE_WT/backend" && set -a && . "$PILE_RUN/run/backend.env" && set +a \
       && timeout 900 "$PILE_NODE" -r /opt/blindify/tools/test-stack/no-egress.cjs node_modules/ts-node/dist/bin.js --transpile-only \
-        "${RATTRAPAGE_SRC#backend/}" "$@" )
+        "${RATTRAPAGE_SRC#backend/}" "$@" ) 2>&1)" && code=0 || code=$?
   fi
+  echo "$sortie" | sed 's/^/    /'
+  FIN_RATTRAPAGE="$(echo "$sortie" | grep '^fin : ' | tail -1 || true)"
+  return "$code"
 }
-echo "  morceaux Spotify sans ISRC avant : $(sans_isrc)"
-echo "  essai (rien n'est ecrit) :"
-if rattrapage 2>&1 | sed 's/^/    /'; [ "${PIPESTATUS[0]}" = 0 ]; then
-  echo "  ecriture :"
-  if rattrapage --ecrire 2>&1 | sed 's/^/    /'; [ "${PIPESTATUS[0]}" = 0 ]; then
-    echo "  [ok] rattrapage termine ; morceaux Spotify sans ISRC apres : $(sans_isrc)"
-  else
-    RATTRAPAGE_OK=0
-    echo "  !! rattrapage en ecriture en echec ou incomplet (voir ci-dessus) ; deja ecrit : garde. Sans ISRC : $(sans_isrc)"
-  fi
+# « fin : T traites, I ISRC trouves, S sans ISRC, E erreurs, W ecrits (arret : ...) »
+champ() { echo "$FIN_RATTRAPAGE" | sed -nE "s/.* ([0-9]+) $1.*/\1/p"; }
+avant_isrc="$(sans_isrc)"
+echo "  morceaux Spotify sans ISRC avant : $avant_isrc"
+echo "  essai sur 3 lots (rien n'est ecrit) :"
+if ! rattrapage --lots 3; then
+  echo "  !! essai du rattrapage en echec : rien n'est ecrit"
+elif [ -z "$FIN_RATTRAPAGE" ] || [ "$(champ erreurs)" != 0 ] || echo "$FIN_RATTRAPAGE" | grep -F '(arret' >/dev/null \
+  || [ "$(champ traites)" -eq 0 ] || [ $(( $(champ 'ISRC trouves') * 100 )) -lt $(( $(champ traites) * 80 )) ]; then
+  echo "  !! essai pas assez propre (erreurs, arret anticipe ou moins de 80 % d'ISRC trouves) : rien n'est ecrit"
 else
-  RATTRAPAGE_OK=0
-  echo "  !! essai du rattrapage en echec : rien n'est ecrit, on ne lance pas l'ecriture"
+  echo "  premier lot en ecriture :"
+  if ! rattrapage --lots 1 --ecrire; then
+    echo "  !! premier lot en echec (ce qui est ecrit reste, rien d'autre)"
+  else
+    ecrits1="$(champ ecrits)"; apres1="$(sans_isrc)"
+    if [ $(( avant_isrc - apres1 )) -ne "${ecrits1:-0}" ]; then
+      echo "  !! premier lot : $ecrits1 ecrits mais $(( avant_isrc - apres1 )) morceaux en moins sans ISRC : on s'arrete la"
+    else
+      echo "  [ok] premier lot : $ecrits1 ISRC ecrits, compte coherent ; le reste :"
+      if rattrapage --ecrire; then
+        ecrits2="$(champ ecrits)"; apres2="$(sans_isrc)"
+        if [ $(( apres1 - apres2 )) -eq "${ecrits2:-0}" ]; then
+          RATTRAPAGE_OK=1
+          echo "  [ok] rattrapage termine : $(( ecrits1 + ecrits2 )) ISRC ecrits, $apres2 morceaux Spotify encore sans ISRC"
+        else
+          echo "  !! $ecrits2 ecrits mais $(( apres1 - apres2 )) morceaux en moins sans ISRC : a regarder"
+        fi
+      else
+        echo "  !! rattrapage en ecriture en echec ou incomplet (deja ecrit : garde). Sans ISRC : $(sans_isrc)"
+      fi
+    fi
+  fi
 fi
-[ "$RATTRAPAGE_OK" = 1 ] || echo "  (le backend du lot reste en place ; relancer plus tard : docker exec blindify-backend node $RATTRAPAGE_DIST puis --ecrire)"
+[ "$RATTRAPAGE_OK" = 1 ] || echo "  (le lot reste en place ; relancer plus tard : docker exec blindify-backend node $RATTRAPAGE_DIST --lots 3, puis --ecrire)"
+ETAPE="10. resume"
 
+echo
 if [ "$CIBLE" = pile ]; then
-  echo "── 8 et 9. Front, explorateur et backend de dev : pas sur la pile ──"
-  echo "ESSAI SUR LA PILE TERMINE ($(git rev-parse --short HEAD)). Rattrapage : $([ "$RATTRAPAGE_OK" = 1 ] && echo ok || echo ECHEC). Retour : $RETOUR"
+  echo "ESSAI SUR LA PILE TERMINE ($(git rev-parse --short HEAD)). Avertissements : $AVERTISSEMENTS. Rattrapage : $([ "$RATTRAPAGE_OK" = 1 ] && echo ok || echo ECHEC). Retour : $RETOUR"
   [ "$RATTRAPAGE_OK" = 1 ] || exit 3
   exit 0
 fi
-
-ETAPE="8. front"
-echo "── 8. Front (voie rapide, $(heure)) ──"
-# Texte de l'accueil : go-prod-front.sh le cherche dans la page d'accueil, ou
-# le message de #67 n'est pas (il est dans le code de l'ecran de jeu). On lui
-# passe un texte present et on prouve le message de #67 dans les chunks servis.
-echo "  parties en cours juste avant le front : $(en_cours) (le front est reconstruit en place : quelques secondes de 404 sur les pages)"
-# Notre propre copie du site, et sa commande de retour dans le fichier de
-# retour, AVANT le build (go-prod-front.sh garde aussi la sienne).
-FRONT_SAUVE="$SAUVE/front-out-avant-importeur-$HORO"
-cp -a frontend/out "$FRONT_SAUVE" && [ -f "$FRONT_SAUVE/index.html" ] \
-  || die "copie du front impossible : backend du lot en place, front pas touche"
-RETOUR_FRONT="rsync -a --delete $FRONT_SAUVE/ /opt/blindify/frontend/out/"
-echo "# Front d'avant, si besoin (pas necessaire pour l'ancien backend) : $RETOUR_FRONT" >> "$RETOUR_FICHIER"
-echo "  site actuel copie : $FRONT_SAUVE"
-ETAT_FRONT="en reconstruction"
-if ! ( umask 022; bash scripts/go-prod-front.sh "titre-fin" ); then
-  if [ ! -f frontend/out/index.html ]; then
-    rsync -a --delete "$FRONT_SAUVE"/ frontend/out/ && ETAT_FRONT="ancien (remis depuis $FRONT_SAUVE : le build avait vide out/)"
-  fi
-  die "FRONT ECHOUE : backend du lot en place et sain (ne pas le remettre pour ca), front a traiter. Relancer : heavy bash /opt/blindify/scripts/go-prod-front.sh titre-fin"
-fi
-ETAT_FRONT="nouveau (a verifier)"
-build_id="$(find frontend/out/_next/static -mindepth 1 -maxdepth 1 -type d ! -name chunks ! -name css ! -name media -printf '%f\n' | head -1)"
-[ -n "$build_id" ] || die "build id introuvable dans frontend/out"
-chunk67="$(grep -rlF 'pas assez de titres jouables dans vos playlists' frontend/out/_next/static/chunks | head -1 || true)"
-ko=0
-verifie "la prod sert le build qui vient d'etre construit ($build_id)" "curl -s -m 30 https://blindz.app/ | grep -qF -e \"$build_id\""
-verifie "#67 message « X manches au lieu de Y » dans le build" "[ -n \"$chunk67\" ]"
-verifie "#67 blindz.app sert ce fichier" "curl -sf -m 30 \"https://blindz.app/${chunk67#frontend/out/}\" | grep -qF 'pas assez de titres jouables'"
-if [ "$ko" != 0 ]; then
-  ETAT_FRONT="en reconstruction"
-  die "UNE VERIFICATION DU FRONT A ECHOUE : backend du lot en place et sain, front a traiter"
-fi
-ETAT_FRONT="nouveau"
-
-ETAPE="9. explorateur et backend de dev"
-echo "── 9. Explorateur de base et backend de dev ($(heure)) ──"
-# L'explorateur lit game_rounds.owner_user_id depuis #54 : on le relance
-# maintenant que la colonne existe (jusqu'ici il tournait sur l'ancien code).
-systemctl restart blindz-db-browser
-derniere="$(sql "SELECT COALESCE(max(session_id), 0) FROM game_rounds")"
-for i in $(seq 1 15); do curl -sf -m 3 "http://127.0.0.1:3101/session/$derniere" >/dev/null && break; sleep 2; done
-ko=0
-verifie "explorateur de base actif" "systemctl is-active --quiet blindz-db-browser"
-verifie "explorateur : detail de la derniere partie ($derniere) lisible" "curl -sf -m 10 http://127.0.0.1:3101/session/$derniere | grep -qF '\"manches\"'"
-echo "  parties en cours avant le demarrage du backend de dev : $(en_cours)"
-systemctl start blindify-dev-backend
-ETAT_DEV="relance"
-for i in $(seq 1 60); do curl -sf -m 2 http://127.0.0.1:3097/api/health >/dev/null && break; sleep 2; done
-verifie "backend de dev reparti (meme commit : il tourne depuis /opt/blindify)" "curl -sf -m 5 http://127.0.0.1:3097/api/health >/dev/null"
-[ "$ko" = 0 ] || die "UNE VERIFICATION DE L'EXPLORATEUR OU DU DEV A ECHOUE : backend et front du lot en place"
-
-echo
 echo "DEPLOIEMENT DU LOT IMPORTEUR TERMINE ($(git rev-parse --short HEAD), $(heure))"
 echo "  fait    : 005 en base ($(sql "SELECT count(*) FROM user_audio_sources") liens), backend #54 #67 #64, front #67, explorateur, backend de dev"
-echo "  ISRC    : $([ "$RATTRAPAGE_OK" = 1 ] && echo "rattrapage fait, $(sans_isrc) morceaux Spotify encore sans ISRC" || echo "RATTRAPAGE EN ECHEC, a relancer (voir etape 7)")"
+echo "  avertissements (Deezer, sonde) : $AVERTISSEMENTS"
+echo "  ISRC    : $([ "$RATTRAPAGE_OK" = 1 ] && echo "rattrapage fait, $(sans_isrc) morceaux Spotify encore sans ISRC" || echo "RATTRAPAGE PAS FAIT OU INCOMPLET, a relancer (voir etape 9)")"
 echo "  retour  : $RETOUR   (--defaire-005 pour retirer aussi la 005)"
 echo "  journal : $JOURNAL"
 echo "A faire ensuite :"
@@ -650,4 +776,5 @@ echo "  - effacer les copies de config une fois tout valide : $SAUVE/env-*-avant
 echo "  - parcours complets sur blindz.app, un a la fois :"
 echo "      cd /opt/blindify/tools && heavy node soiree.mjs prod"
 echo "      cd /opt/blindify/tools && heavy node party-4-joueurs.mjs prod"
+echo "      cd /opt/blindify/tools && heavy node anticheat-e2e.mjs prod"
 [ "$RATTRAPAGE_OK" = 1 ] || exit 3
