@@ -142,6 +142,8 @@ export type MultiplayerGameState = {
   phase: "LOBBY" | "GUESSING" | "REVEAL" | "FINISHED"
   currentRound: number
   totalRounds: number
+  /** Manches demandees par l'hote ; plus que totalRounds s'il manquait des titres jouables. */
+  requestedRounds?: number
   currentTrack: {
     round: number
     trackId: string
@@ -233,6 +235,8 @@ export interface GameState {
   phase: GamePhase
   currentRound: number
   totalRounds: number
+  /** Manches demandees par l'hote ; plus que totalRounds s'il manquait des titres jouables. */
+  requestedRounds?: number
   currentTrack: RoundTrack | null
   players: Record<number, PlayerState>
   paused?: boolean
@@ -275,6 +279,7 @@ export type StreamerState = {
   phase: StreamerPhase
   currentRound: number
   totalRounds: number
+  requestedRounds?: number
   currentTrack: StreamerRound | null
   timing: { startAt: number | null; endAt: number | null }
   chatScore: number
