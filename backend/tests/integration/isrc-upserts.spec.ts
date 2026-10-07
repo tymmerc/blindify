@@ -23,6 +23,7 @@ import { syncSpotifyLibrary } from "../../src/services/providers/spotifySync";
 import { makeSpotify } from "../../src/config/spotify";
 import type { ImportedTrack } from "../../src/services/profileImportService";
 import type { UserConnection } from "../../src/types/user";
+import { METADATA_KEEPING_ISRC } from "../../src/services/isrcMetadata";
 
 resolveTestDatabaseUrl(process.env.TEST_DATABASE_URL);
 
@@ -89,5 +90,31 @@ describe("compte Spotify connecte : syncSpotifyLibrary", () => {
     api.getMySavedTracks.mockResolvedValueOnce(saved({ isrc: "JPZ921600001" }));
     await syncSpotifyLibrary(users[0].id, connection, 1);
     expect((await metadataOf()).isrc).toBe("JPZ921600001");
+  });
+});
+
+// L'expression partagee par les 5 upserts du compte Spotify connecte.
+describe("METADATA_KEEPING_ISRC", () => {
+  const upsert = (metadata: Record<string, unknown>) => pool.query(
+    `INSERT INTO audio_sources (provider, external_id, title, artist, metadata)
+     VALUES ('spotify', $1, 'Titre', 'Artiste', $2::jsonb)
+     ON CONFLICT (provider, external_id) DO UPDATE SET ${METADATA_KEEPING_ISRC}`,
+    [EXT, JSON.stringify(metadata)]
+  );
+
+  it("remplace metadata mais garde l'ISRC connu, et prend un nouvel ISRC", async () => {
+    await upsert({ album: "A", isrc: "JPZ921607277" });
+    await upsert({ album: "B", isrc: null });
+    expect(await metadataOf()).toEqual({ album: "B", isrc: "JPZ921607277" });
+    await upsert({ album: "C" });
+    expect(await metadataOf()).toEqual({ album: "C", isrc: "JPZ921607277" });
+    await upsert({ album: "D", isrc: "JPZ921600001" });
+    expect(await metadataOf()).toEqual({ album: "D", isrc: "JPZ921600001" });
+  });
+
+  it("sans ISRC d'aucun cote : rien d'invente", async () => {
+    await upsert({ album: "A" });
+    await upsert({ album: "B" });
+    expect(await metadataOf()).toEqual({ album: "B" });
   });
 });

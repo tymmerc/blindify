@@ -4,6 +4,7 @@ import type { AudioSourceRow } from "../../types/audio";
 import type { MusicProvider, UserConnection } from "../../types/user";
 import { hydratePreviewUrl } from "../trackResolution";
 import { isIsrc } from "../previewMatch";
+import { METADATA_KEEPING_ISRC } from "../isrcMetadata";
 
 type SpotifyLibraryTrack = {
   id?: string;
@@ -108,7 +109,7 @@ export async function syncSpotifyLibrary(
          artist=EXCLUDED.artist,
          album_cover=EXCLUDED.album_cover,
          duration_ms=EXCLUDED.duration_ms,
-         metadata=EXCLUDED.metadata || jsonb_strip_nulls(jsonb_build_object('isrc', COALESCE(EXCLUDED.metadata->>'isrc', audio_sources.metadata->>'isrc'))),
+         ${METADATA_KEEPING_ISRC},
          user_id=COALESCE(audio_sources.user_id, EXCLUDED.user_id)
        RETURNING id, provider, external_id, title, artist, album_cover, audio_url, duration_ms, metadata`,
       [
