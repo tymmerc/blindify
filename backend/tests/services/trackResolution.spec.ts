@@ -3,7 +3,7 @@
 // transmis, sinon on retombe sur une recherche de titre.
 jest.mock("../../src/config/db", () => ({ pool: { query: jest.fn() } }));
 jest.mock("../../src/services/deezerPreviewService", () => ({
-  deezerPreviewService: { resolvePreview: jest.fn() },
+  deezerPreviewService: { resolvePreviewOutcome: jest.fn() },
 }));
 jest.mock("../../src/utils/logger", () => ({
   logger: { error: jest.fn(), warn: jest.fn(), info: jest.fn(), debug: jest.fn() },
@@ -15,7 +15,8 @@ import { hydratePreviewUrl, previewQueryFor, collectPlayableSources } from "../.
 import type { AudioSourceRow } from "../../src/types/audio";
 
 const query = pool.query as jest.Mock;
-const resolvePreview = deezerPreviewService.resolvePreview as jest.Mock;
+const resolvePreview = deezerPreviewService.resolvePreviewOutcome as jest.Mock;
+const found = (preview: string) => ({ status: "found", track: { id: 1, preview } });
 
 const source = (over: Partial<AudioSourceRow>): AudioSourceRow => ({
   id: "s1", provider: "spotify", external_id: "0hHc2igYYlSUyZdByauJmB", title: "You Say Run", artist: "Yuki Hayashi",
@@ -47,7 +48,7 @@ describe("previewQueryFor", () => {
 
 describe("hydratePreviewUrl", () => {
   it("re-resout un extrait expire avec l'ISRC et le stocke", async () => {
-    resolvePreview.mockResolvedValue({ id: 3758443092, preview: "https://cdn.example/bon.mp3" });
+    resolvePreview.mockResolvedValue(found("https://cdn.example/bon.mp3"));
     const url = await hydratePreviewUrl(source({ audio_url: "https://cdn.example/earth.mp3?hdnea=exp=1700000000~acl" }));
     expect(resolvePreview).toHaveBeenCalledWith(expect.objectContaining({ isrc: "JPZ921607277", durationMs: 228746 }));
     expect(url).toBe("https://cdn.example/bon.mp3");
@@ -55,10 +56,23 @@ describe("hydratePreviewUrl", () => {
   });
 
   it("aucune version sure : l'extrait expire est efface, le morceau sera saute", async () => {
-    resolvePreview.mockResolvedValue(null);
+    resolvePreview.mockResolvedValue({ status: "none" });
     const url = await hydratePreviewUrl(source({ audio_url: "https://cdn.example/earth.mp3?hdnea=exp=1700000000~acl" }));
     expect(url).toBeNull();
     expect(query).toHaveBeenCalledWith("UPDATE audio_sources SET audio_url=NULL WHERE id=$1", ["s1"]);
+  });
+
+  it("Deezer en erreur : rien n'est ecrit en base (l'extrait n'est pas efface)", async () => {
+    resolvePreview.mockResolvedValue({ status: "error" });
+    const url = await hydratePreviewUrl(source({ audio_url: "https://cdn.example/earth.mp3?hdnea=exp=1700000000~acl" }));
+    expect(url).toBeNull();
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it("exception pendant la resolution : rien n'est ecrit non plus", async () => {
+    resolvePreview.mockRejectedValue(new Error("boom"));
+    expect(await hydratePreviewUrl(source({ audio_url: "https://cdn.example/earth.mp3?hdnea=exp=1700000000~acl" }))).toBeNull();
+    expect(query).not.toHaveBeenCalled();
   });
 
   it("garde un extrait encore valide sans appeler Deezer", async () => {
@@ -79,7 +93,7 @@ describe("collectPlayableSources", () => {
       peak = Math.max(peak, inFlight);
       await new Promise(r => setTimeout(r, 5));
       inFlight--;
-      return { id: 1, preview: "https://cdn.example/ok.mp3" };
+      return found("https://cdn.example/ok.mp3");
     });
     const got = await collectPlayableSources(1, 5, {});
     expect(resolvePreview).toHaveBeenCalledTimes(20);

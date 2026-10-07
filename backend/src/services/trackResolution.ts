@@ -44,20 +44,24 @@ export async function hydratePreviewUrl(source: AudioSourceRow): Promise<string 
   const { title } = query;
   if (title) {
     try {
-      const deezerTrack = await deezerPreviewService.resolvePreview(query);
-      if (deezerTrack?.preview) {
-        await pool.query("UPDATE audio_sources SET audio_url=$1 WHERE id=$2", [
-          deezerTrack.preview,
-          source.id,
-        ]);
-        return deezerTrack.preview;
+      const outcome = await deezerPreviewService.resolvePreviewOutcome(query);
+      if (outcome.status === "error") {
+        // Deezer en erreur (quota, panne) : on ne conclut rien, la base reste
+        // telle quelle. Le morceau n'est pas jouable cette fois-ci.
+        return null;
+      }
+      const preview = outcome.status === "found" ? outcome.track.preview : null;
+      if (preview) {
+        await pool.query("UPDATE audio_sources SET audio_url=$1 WHERE id=$2", [preview, source.id]);
+        return preview;
       }
     } catch (err) {
       logger.error("deezer_hydrate_failed", { id: source.id, title, error: err });
+      return null; // erreur : ne rien ecrire
     }
   }
 
-  // Pas de preview fraiche trouvee : une URL en cache EXPIREE est inutilisable -> on l'annule.
+  // Introuvable chez Deezer : une URL en cache EXPIREE est inutilisable -> on l'annule.
   if (cached && isExpiredPreview(cached)) {
     await pool.query("UPDATE audio_sources SET audio_url=NULL WHERE id=$1", [source.id]).catch(() => {});
     return null;
