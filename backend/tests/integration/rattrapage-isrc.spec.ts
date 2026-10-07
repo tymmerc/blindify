@@ -28,7 +28,7 @@ jest.mock("../../src/utils/logger", () => ({
 import axios from "axios";
 import { resolveTestDatabaseUrl } from "../testDatabase";
 import { pool } from "../../src/config/db";
-import { rattrapageIsrc, strictIsrc } from "../../src/scripts/rattrapageIsrc";
+import { rattrapageIsrc, strictIsrc, parseArgs } from "../../src/scripts/rattrapageIsrc";
 
 resolveTestDatabaseUrl(process.env.TEST_DATABASE_URL);
 
@@ -156,7 +156,7 @@ describe("rattrapageIsrc", () => {
     await seedVariety();
     get.mockReset().mockRejectedValue({ isAxiosError: true, message: "Too Many Requests", response: { status: 429, headers: { "retry-after": "3600" } } });
     const totals = await run(true);
-    expect(totals.arretAnticipe).toMatch(/3600 s/);
+    expect(totals.arretAnticipe).toMatch(/relancer plus tard/);
     expect(totals).toMatchObject({ ecrits: 0, erreurs: 5 });
     expect(await metadataOf(id(1))).not.toHaveProperty("isrc");
   });
@@ -169,6 +169,66 @@ describe("rattrapageIsrc", () => {
     expect(totals).toMatchObject({ erreurs: 5, ecrits: 0 });
     expect(lines.join("\n")).not.toContain("jeton");
   }, 15_000);
+});
+
+// Attentes simulees : on compte le temps demande sans l'attendre pour de vrai.
+function fakeSleep() {
+  const waits: number[] = [];
+  return { waits, sleep: async (ms: number) => { waits.push(ms); } };
+}
+const tooMany = (retryAfter: string) => ({ isAxiosError: true, message: "Too Many Requests", response: { status: 429, headers: { "retry-after": retryAfter } } });
+
+describe("rattrapageIsrc, garde-fous", () => {
+  it("429 sans fin : arret propre apres 5 reponses 429, en moins de 2 s", async () => {
+    await seedVariety();
+    get.mockReset().mockRejectedValue(tooMany("1"));
+    const clock = fakeSleep();
+    const started = Date.now();
+    const totals = await run(true, { sleep: clock.sleep });
+    expect(Date.now() - started).toBeLessThan(2_000);
+    expect(get).toHaveBeenCalledTimes(5);
+    expect(totals.arretAnticipe).toMatch(/relancer plus tard/);
+    expect(totals.ecrits).toBe(0);
+  });
+
+  it("Retry-After negatif ou nul : au moins 1 s d'attente, jamais de boucle serree", async () => {
+    await seedVariety();
+    get.mockReset().mockRejectedValueOnce(tooMany("-3")).mockRejectedValueOnce(tooMany("0"));
+    fakeSpotify();
+    const clock = fakeSleep();
+    const totals = await run(true, { sleep: clock.sleep });
+    expect(clock.waits.slice(0, 2)).toEqual([1_000, 1_000]);
+    expect(totals.ecrits).toBe(3);
+  });
+
+  it("5 lots en erreur d'affilee : arret", async () => {
+    for (let i = 1; i <= 300; i++) await insert(id(i), {});
+    get.mockReset().mockRejectedValue({ isAxiosError: true, message: "Request failed with status code 503", response: { status: 503 } });
+    const clock = fakeSleep();
+    const totals = await run(true, { sleep: clock.sleep });
+    expect(totals).toMatchObject({ traites: 250, erreurs: 250, ecrits: 0 });
+    expect(totals.arretAnticipe).toMatch(/5 lots en erreur/);
+  });
+
+  it("un morceau renvoye sous un autre id n'est jamais ecrit", async () => {
+    await seedVariety();
+    get.mockReset().mockImplementation(async (_url: string, config: { params: { ids: string } }) => ({
+      data: { tracks: config.params.ids.split(",").map((x, i) => ({ id: i === 0 ? "AutreIdSpotify00000000" : x, external_ids: { isrc: catalogue[x] ?? undefined } })) },
+    }));
+    const totals = await run(true);
+    expect(await metadataOf(id(1))).not.toHaveProperty("isrc"); // id(1) est le premier du lot
+    expect(totals.ecrits).toBe(2);
+  });
+
+  it("--lots 1 : une seule requete pour un premier essai", async () => {
+    expect(parseArgs(["--lots", "1"])).toEqual({ write: false, maxBatches: 1 });
+    expect(parseArgs(["--ecrire"])).toEqual({ write: true, maxBatches: undefined });
+    expect(() => parseArgs(["--lots", "0"])).toThrow();
+    for (let i = 1; i <= 120; i++) await insert(id(i), {});
+    fakeSpotify();
+    await run(false, { maxBatches: 1 });
+    expect(get).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("strictIsrc", () => {

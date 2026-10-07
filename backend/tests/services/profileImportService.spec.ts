@@ -46,3 +46,14 @@ describe("fetchPlaylistTracks (Spotify)", () => {
     expect(tracks[0].isrc).toBeNull();
   });
 });
+
+describe("jeton client Spotify", () => {
+  it("la demande de jeton a un delai maximal (10 s)", async () => {
+    jest.resetModules();
+    const fresh = jest.requireActual("../../src/services/profileImportService") as typeof import("../../src/services/profileImportService");
+    const freshAxios = (jest.requireMock("axios") as { default: { post: jest.Mock } }).default;
+    freshAxios.post.mockResolvedValue({ data: { access_token: "jeton", expires_in: 3600 } });
+    await fresh.getSpotifyClientToken();
+    expect(freshAxios.post.mock.calls[0][2]).toMatchObject({ timeout: 10_000 });
+  });
+});

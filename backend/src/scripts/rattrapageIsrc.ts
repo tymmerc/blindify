@@ -11,7 +11,7 @@
  *
  *   node dist/scripts/rattrapageIsrc.js            essai : rien n'est ecrit
  *   node dist/scripts/rattrapageIsrc.js --ecrire   ecrit les ISRC trouves
- *   options : --lots N (s'arreter apres N lots)
+ *   options : --lots N (s'arreter apres N lots ; --lots 1 = une seule requete Spotify)
  *
  * Reprenable : seuls les morceaux encore sans ISRC sont selectionnes.
  * N'affiche jamais le jeton ni les en-tetes des requetes.
@@ -24,6 +24,8 @@ export const BATCH_SIZE = 50;
 const PAUSE_MS = 1_000;
 const MAX_RETRY_AFTER_S = 120; // au-dela, on arrete : relancer plus tard
 const MAX_ATTEMPTS = 3;
+const MAX_TOO_MANY = 5; // reponses 429 sur un lot avant d'abandonner
+const MAX_FAILED_BATCHES = 5; // lots en erreur d'affilee avant d'abandonner
 const ISRC_STRICT = /^[A-Z]{2}[A-Z0-9]{3}\d{7}$/;
 const SPOTIFY_TRACKS_URL = "https://api.spotify.com/v1/tracks";
 
@@ -32,6 +34,8 @@ export interface RattrapageOptions {
   maxBatches?: number;
   pauseMs?: number;
   log?: (line: string) => void;
+  /** Attente injectable (tests). */
+  sleep?: (ms: number) => Promise<void>;
 }
 
 export interface RattrapageTotals {
@@ -45,7 +49,7 @@ export interface RattrapageTotals {
 
 type Row = { external_id: string };
 
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
 
 /** ISRC normalise, ou null s'il ne passe pas la validation stricte. */
 export function strictIsrc(value: unknown): string | null {
@@ -71,8 +75,16 @@ async function nextBatch(pool: Pool, after: string): Promise<Row[]> {
 
 class StopError extends Error {}
 
+/** Attente demandee par un 429, bornee a [1, MAX_RETRY_AFTER_S] ; null si trop longue. */
+function retryAfterSeconds(err: unknown): number | null {
+  const raw = Number(axios.isAxiosError(err) ? err.response?.headers?.["retry-after"] : NaN);
+  const seconds = Number.isFinite(raw) ? Math.max(1, Math.ceil(raw)) : 5;
+  return seconds > MAX_RETRY_AFTER_S ? null : seconds;
+}
+
 /** ISRC par id Spotify pour un lot (meme ordre que les ids demandes). */
-async function fetchIsrcs(ids: string[]): Promise<Map<string, string | null>> {
+async function fetchIsrcs(ids: string[], sleepFn: (ms: number) => Promise<void>): Promise<Map<string, string | null>> {
+  let tooMany = 0;
   for (let attempt = 1; ; attempt++) {
     try {
       const token = await getSpotifyClientToken();
@@ -81,13 +93,17 @@ async function fetchIsrcs(ids: string[]): Promise<Map<string, string | null>> {
         { headers: { Authorization: `Bearer ${token}` }, params: { ids: ids.join(",") }, timeout: 15_000 }
       );
       const tracks = data?.tracks ?? [];
-      return new Map(ids.map((id, i) => [id, strictIsrc(tracks[i]?.external_ids?.isrc)]));
+      // Un morceau renvoye sous un autre id (decalage, relinking) : on n'ecrit rien pour lui.
+      return new Map(ids.map((id, i) => [id, tracks[i]?.id === id ? strictIsrc(tracks[i]?.external_ids?.isrc) : null]));
     } catch (err) {
       const status = axios.isAxiosError(err) ? err.response?.status : undefined;
       if (status === 429) {
-        const retryAfter = Number(axios.isAxiosError(err) ? err.response?.headers?.["retry-after"] : NaN) || 5;
-        if (retryAfter > MAX_RETRY_AFTER_S) throw new StopError(`Spotify demande d'attendre ${retryAfter} s : relancer plus tard`);
-        await sleep(retryAfter * 1000);
+        tooMany++;
+        const wait = retryAfterSeconds(err);
+        if (wait === null || tooMany >= MAX_TOO_MANY) {
+          throw new StopError(`Spotify limite les appels (${tooMany} reponses 429) : relancer plus tard`);
+        }
+        await sleepFn(wait * 1000);
         continue;
       }
       if (attempt >= MAX_ATTEMPTS) {
@@ -95,7 +111,7 @@ async function fetchIsrcs(ids: string[]): Promise<Map<string, string | null>> {
         // eslint-disable-next-line preserve-caught-error
         throw new Error(`Spotify ${status ?? "injoignable"} : ${(err as Error).message}`);
       }
-      await sleep(1_000 * attempt);
+      await sleepFn(1_000 * attempt);
     }
   }
 }
@@ -129,6 +145,8 @@ async function writeBatch(pool: Pool, found: Array<[string, string]>): Promise<n
 export async function rattrapageIsrc(pool: Pool, opts: RattrapageOptions): Promise<RattrapageTotals> {
   const log = opts.log ?? (line => console.log(line));
   const pauseMs = opts.pauseMs ?? PAUSE_MS;
+  const sleepFn = opts.sleep ?? sleep;
+  let failedInARow = 0;
   const totals: RattrapageTotals = { traites: 0, isrcTrouves: 0, sansIsrc: 0, erreurs: 0, ecrits: 0, arretAnticipe: null };
   // Identifiants absents ou refuses : on s'arrete avant le premier lot.
   await getSpotifyClientToken();
@@ -137,11 +155,11 @@ export async function rattrapageIsrc(pool: Pool, opts: RattrapageOptions): Promi
     const rows = await nextBatch(pool, after);
     if (rows.length === 0) break;
     after = rows[rows.length - 1].external_id;
-    if (lot > 1) await sleep(pauseMs);
+    if (lot > 1) await sleepFn(pauseMs);
     const ids = rows.map(r => r.external_id);
     totals.traites += ids.length;
     try {
-      const isrcs = await fetchIsrcs(ids);
+      const isrcs = await fetchIsrcs(ids, sleepFn);
       const found = ids.flatMap(id => {
         const isrc = isrcs.get(id);
         return isrc ? [[id, isrc] as [string, string]] : [];
@@ -150,6 +168,7 @@ export async function rattrapageIsrc(pool: Pool, opts: RattrapageOptions): Promi
       totals.sansIsrc += ids.length - found.length;
       const written = opts.write && found.length > 0 ? await writeBatch(pool, found) : 0;
       totals.ecrits += written;
+      failedInARow = 0;
       log(`lot ${lot} : ${ids.length} morceaux, ${found.length} ISRC${opts.write ? `, ${written} ecrits` : ""}`);
     } catch (err) {
       totals.erreurs += ids.length;
@@ -159,12 +178,17 @@ export async function rattrapageIsrc(pool: Pool, opts: RattrapageOptions): Promi
         break;
       }
       log(`lot ${lot} : erreur, ${(err as Error).message}`);
+      if (++failedInARow >= MAX_FAILED_BATCHES) {
+        totals.arretAnticipe = `${MAX_FAILED_BATCHES} lots en erreur d'affilee : relancer plus tard`;
+        log(`arret : ${totals.arretAnticipe}`);
+        break;
+      }
     }
   }
   return totals;
 }
 
-function parseArgs(argv: string[]): RattrapageOptions {
+export function parseArgs(argv: string[]): RattrapageOptions {
   const write = argv.includes("--ecrire");
   const i = argv.indexOf("--lots");
   const maxBatches = i >= 0 ? Number(argv[i + 1]) : undefined;

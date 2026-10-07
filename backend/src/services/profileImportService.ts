@@ -122,7 +122,7 @@ export async function getSpotifyClientToken(): Promise<string> {
   const { data } = await axios.post<{ access_token?: string; expires_in?: number }>(
     "https://accounts.spotify.com/api/token",
     body.toString(),
-    { headers: { Authorization: `Basic ${credentials}`, "Content-Type": "application/x-www-form-urlencoded" } }
+    { headers: { Authorization: `Basic ${credentials}`, "Content-Type": "application/x-www-form-urlencoded" }, timeout: 10_000 }
   );
 
   if (!data.access_token) throw new Error("Spotify returned empty access token");
