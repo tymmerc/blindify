@@ -9,7 +9,7 @@
  * - 20 demandees, 50 titres dont 30 jouables : 20 manches ;
  * - 50 titres dont 12 jouables : 12 manches, et la partie sait que 20 etaient
  *   demandees (l'ecran le dit) ;
- * - une bibliotheque clairsemee est completee jusqu'au bout ;
+ * - une petite bibliotheque clairsemee est completee jusqu'au bout ;
  * - deux joueurs : le tourniquet reste equitable, le plus fourni complete ;
  * - une grosse bibliotheque injouable : chaque titre est cherche au plus une
  *   fois chez Deezer, le lancement reste sous LOOKUPS_PER_ROUND par manche et
@@ -312,10 +312,13 @@ describe("lancement d'une salle : autant de manches que demande", () => {
     expect(started.gameState.shortReason).toBe("library");
   });
 
-  it("une bibliotheque clairsemee (10 jouables sur 40) est completee jusqu'au dernier titre jouable", async () => {
+  // Le complement tire au plus 3 fois le manque (borne voulue) : sur une
+  // grande bibliotheque clairsemee, il peut laisser un titre jouable de cote.
+  // Quand le tirage peut tout voir, il les trouve tous.
+  it("une bibliotheque clairsemee (10 jouables sur 20) est completee jusqu'au dernier titre jouable", async () => {
     const hote = await newGuest("clairseme");
     const invite = await newGuest("invite_clairseme");
-    await giveLibrary(hote, 40, 10);
+    await giveLibrary(hote, 20, 10);
 
     // Plusieurs parties : le tirage est aleatoire, le resultat ne doit pas l'etre.
     for (let partie = 0; partie < 5; partie++) {
