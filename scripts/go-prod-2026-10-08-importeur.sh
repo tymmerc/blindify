@@ -37,30 +37,42 @@
 # L'attente de l'etape 2 garde le verrou de heavy : aucune autre tache lourde
 # pendant ce temps. Le backend de dev reste arrete jusqu'a l'etape 9.
 #
-# Duree estimee, une fois les parties finies : 1 min de sauvegardes et de
-# migration (la 005 a pris moins de 2 s sur la pile avec le volume de la prod :
-# 8 776 morceaux dont 1 456 lies), 3 a 5 min de build du backend, environ 30 s
-# de coupure du jeu au redemarrage, 5 a 8 min de rattrapage (essai puis
-# ecriture, 1 s entre deux lots de 50), 3 a 5 min de build du front.
-# Redemarrer le backend TERMINE les parties en cours (leur etat ne vit qu'en
-# memoire).
+# Duree estimee, une fois les parties finies : moins d'une minute de
+# sauvegardes et de migration, 3 a 5 min de build du backend, quelques
+# secondes de coupure du jeu au redemarrage (3 s le 06/10), 5 a 6 min de
+# rattrapage (essai puis ecriture, 123 lots de 50 a 1 s d'intervalle), 3 a
+# 5 min de build du front. Redemarrer le backend TERMINE les parties en cours
+# (leur etat ne vit qu'en memoire). Lancer juste apres un passage de la
+# surveillance (blindz-uptime, toutes les 5 min) pour eviter une fausse alerte.
+#
+# La 005, mesuree sur la pile isolee le 07/10 avec le volume de la prod
+# (8 776 morceaux dont 1 456 lies, 2 658 manches), une sonde ecrivant toutes
+# les 20 ms (import de morceau, mise a jour de joueur, ecriture de manche,
+# lecture) : 0,35 s en tout, pire operation 21 ms, aucune ecriture bloquee.
+# Rejouee apres un retour --defaire-005 avec 40 000 morceaux a relier : 5,9 s,
+# pire ecriture 133 ms. Si une requete tient une des tables plus de 3 s, la
+# transaction du schema abandonne sans rien ecrire (lock_timeout) et le script
+# rejoue le fichier (3 essais) ; les ecritures attendent au plus ces 3 s.
 #
 # La 005 et l'ANCIEN backend : il continue de marcher avec elle. Verifie sur
 # la pile isolee le 07/10 (tools/test-stack/essai-go-prod-importeur.sh) :
-# l'ancien backend (main d'avant le lot) sur une base migree joue ses parties
-# (campagne de bots verte), importe, lance une salle, retire une carte, et
-# les declencheurs de la 005 gardent user_audio_sources coherent avec ses
-# ecritures. L'ancien code ne lit que audio_sources.user_id, que le nouveau
-# ecrit toujours. Le retour arriere ne defait donc PAS la 005 par defaut.
+# l'ancien backend (main d'avant le lot) sur la base migree importe, lance une
+# salle depuis les bibliotheques, retire une carte, lance un solo, et sa
+# campagne de bots est verte ; les declencheurs de la 005 gardent
+# user_audio_sources coherent avec ses ecritures (0 orphelin). L'ancien code
+# ne lit que audio_sources.user_id, que le nouveau ecrit toujours. Le retour
+# arriere ne defait donc PAS la 005 par defaut.
 # Pour la defaire quand meme (avant de redeployer autrement, par exemple) :
 # `bash <fichier de retour> --defaire-005`, qui retire les deux declencheurs,
 # leurs fonctions et la table, et arrete le backend de dev (qui la rejouerait
 # en redemarrant). La colonne game_rounds.owner_user_id reste, l'ancien code
 # l'ignore. Les liens des seconds importeurs sont alors perdus, comme avant
-# le correctif. Teste aussi sur la pile.
+# le correctif. Teste aussi sur la pile (l'ancien backend repart et joue).
 #
 # Retour arriere : le fichier /opt/backups/retour-importeur-<horodatage>.sh
 # ecrit a l'etape 3 (et affiche). Journal : /opt/backups/go-prod-importeur-<horodatage>.log
+# Sortie : 0 tout est fait, 1 arret (le message dit ce qui est en place),
+# 3 le lot est en place mais le rattrapage ISRC a echoue (a relancer seul).
 #
 # Essai sur la pile isolee (jamais la prod) : GO_PROD_CIBLE=pile, voir
 # tools/test-stack/essai-go-prod-importeur.sh. En mode pile, la base est celle
@@ -114,6 +126,9 @@ sql() { psql_cible -c "$1"; }
 # Parties vivantes : le filtre garde les salles zombies (24 h et plus) hors du
 # compte, mais couvre une longue soiree ou un streamer (30 manches de 60 s).
 en_cours() { sql "SELECT count(*) FROM multiplayer_rooms WHERE status = 'in_progress' AND COALESCE(started_at, created_at) > now() - interval '3 hours'"; }
+# Pour decider d'un FORCE=1 : une salle abandonnee reste in_progress, sa
+# derniere manche dit si quelqu'un joue encore.
+salles_en_cours() { sql "SELECT '    ' || r.room_code || ' lancee a ' || to_char(COALESCE(r.started_at, r.created_at), 'HH24:MI') || ', derniere manche a ' || COALESCE(to_char(max(GREATEST(gr.created_at, gr.reveal_at, gr.completed_at)), 'HH24:MI'), 'aucune') FROM multiplayer_rooms r LEFT JOIN game_rounds gr ON gr.session_id = r.session_id WHERE r.status = 'in_progress' AND COALESCE(r.started_at, r.created_at) > now() - interval '3 hours' GROUP BY r.room_code, r.started_at, r.created_at"; }
 # Morceaux qui ont un premier importeur mais pas son lien : doit rester a 0.
 orphelins() { sql "SELECT count(*) FROM audio_sources a WHERE a.user_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM user_audio_sources ua WHERE ua.user_id = a.user_id AND ua.audio_source_id = a.id)"; }
 present() { grep -qF -- "$1" "$2" 2>/dev/null || die "main incomplet : « $1 » absent de $2"; }
@@ -188,7 +203,7 @@ while :; do
     echo "  !! $n partie(s) toujours en cours apres $(( attendu / 60 )) min : on sort SANS RIEN TOUCHER. Relancer plus tard."
     exit 1
   fi
-  [ $(( attendu % 600 )) -lt 60 ] && echo "  $(heure) : $n partie(s) en cours, on attend"
+  [ $(( attendu % 600 )) -lt 60 ] && { echo "  $(heure) : $n partie(s) en cours, on attend (UTC)"; salles_en_cours; }
   sleep 60
 done
 
@@ -315,16 +330,17 @@ fi
 n_orph="$(orphelins)"
 [ "$n_orph" = 0 ] || die "$n_orph morceau(x) lie(s) a un premier importeur sans son lien dans user_audio_sources"
 liens="$(sql "SELECT count(*) FROM user_audio_sources")"
-[ "$liens" -ge "$lies_avant" ] || die "user_audio_sources a $liens liens pour $lies_avant morceaux lies"
+lies_apres="$(sql "SELECT count(*) FROM audio_sources WHERE user_id IS NOT NULL")"
+[ "$liens" -ge "$lies_apres" ] || die "user_audio_sources a $liens liens pour $lies_apres morceaux lies"
 [ "$(sql "SELECT count(DISTINCT user_id) FROM user_audio_sources")" -ge "$(sql "SELECT count(DISTINCT user_id) FROM audio_sources WHERE user_id IS NOT NULL")" ] \
   || die "des joueurs ont des morceaux sans aucun lien"
 [ "$(sql "SELECT count(*) FROM user_audio_sources ua JOIN imported_links il ON il.id = ua.link_id WHERE il.user_id <> ua.user_id")" = 0 ] \
   || die "des liens pointent vers la carte d'un autre joueur"
-echo "  [ok] $liens liens pour $lies_avant morceaux lies, 0 orphelin, cartes coherentes (rien a annuler : l'ancien backend tourne avec)"
+echo "  [ok] $liens liens pour $lies_apres morceaux lies ($lies_avant avant la 005), 0 orphelin, cartes coherentes (rien a annuler : l'ancien backend tourne avec)"
 
 echo "── 5. Backend ($(heure)) ──"
 if [ "$CIBLE" = prod ]; then
-  docker compose build backend
+  docker compose build backend || die "build du backend en echec : rien n'est redemarre (la 005 reste, sans effet sur l'ancien backend)"
   git fetch -q origin
   [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] \
     || die "main a bouge pendant le build : rien n'est redemarre (la 005 reste, sans effet sur l'ancien backend). Mettre /opt/blindify a jour, refaire la campagne et relancer"

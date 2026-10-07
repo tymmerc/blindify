@@ -105,6 +105,9 @@ etape "7. second passage, une longue transaction tient audio_sources pendant la 
 # Pire cas : une requete garde audio_sources 8 s. La transaction du schema
 # abandonne au bout de 3 s (lock_timeout) sans rien ecrire, le script rejoue
 # la 005. Le second passage teste aussi la relance apres un retour arriere.
+# Les salles des parcours restent in_progress (les robots partent sans finir) :
+# sans ca, le script attendrait leurs 3 h.
+PG -c "UPDATE multiplayer_rooms SET status = 'finished' WHERE status = 'in_progress'"
 SONDE_PAS_MS=20 "$NODE" "$MES/sonde-verrous.mjs" "$DOSSIER/sonde-verrous-2.txt" > "$DOSSIER/sonde-verrous-2.log" 2>&1 &
 SONDE_PID=$!
 PG > "$DOSSIER/bloqueur.log" 2>&1 <<'SQL' &
