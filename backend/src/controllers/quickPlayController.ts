@@ -114,18 +114,16 @@ export const quickPlayController = {
       for (const track of candidates) {
         if (playable.length >= count) break;
 
-        let previewUrl: string | null = null;
-
-        // For Deezer tracks, try the track preview directly
-        if (track.provider === "deezer") {
-          const deezerTrack = await deezerPreviewService.searchTrack(track.title, track.artist);
-          previewUrl = deezerTrack?.preview ?? null;
-        } else {
-          // For Spotify tracks, search on Deezer for a preview
-          const deezerTrack = await deezerPreviewService.searchTrack(track.title, track.artist);
-          previewUrl = deezerTrack?.preview ?? null;
-        }
-
+        // Le bon enregistrement : morceau Deezer par son identifiant, morceau
+        // Spotify par son ISRC, sinon recherche qui refuse les autres versions.
+        const deezerTrack = await deezerPreviewService.resolvePreview({
+          title: track.title,
+          artist: track.artist,
+          durationMs: track.durationMs,
+          isrc: track.isrc,
+          deezerId: track.provider === "deezer" ? track.externalId : null,
+        });
+        const previewUrl = deezerTrack?.preview ?? null;
         if (!previewUrl) continue;
 
         playable.push({

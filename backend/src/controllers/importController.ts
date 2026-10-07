@@ -5,35 +5,51 @@ import { getSessionContext } from "../utils/session";
 import { ok, fail } from "../utils/response";
 import { logger } from "../utils/logger";
 import { parseProfileUrl, fetchPublicPlaylists, fetchPlaylistTracks, type ImportedTrack } from "../services/profileImportService";
-import { upsertLink, claimLegacyTracks } from "./linksController";
+import { upsertLink, claimLegacyTracks, ownLinkId } from "./linksController";
 import axios from "axios";
 import { deezerPreviewService } from "../services/deezerPreviewService";
+import { previewQueryFor } from "../services/trackResolution";
+import type { AudioSourceRow } from "../types/audio";
+import { LINK_UPSERT } from "../services/userTracks";
 
 /** How many tracks to pre-resolve Deezer previews for after import (fire-and-forget). */
 const PRE_RESOLVE_BATCH = 50;
 
-/** Store track metadata in audio_sources (no Deezer call). */
-async function upsertTrack(
+/**
+ * Range le morceau dans audio_sources (sans appel Deezer) et le relie a CE
+ * joueur, meme si quelqu'un l'avait deja : chacun garde ses morceaux. Une
+ * seule commande : le morceau et le lien arrivent ensemble ou pas du tout.
+ * Exportee pour les tests.
+ */
+export async function upsertTrack(
   userId: number,
   track: ImportedTrack,
   playlistId: string,
-  linkId?: number | null,
+  linkId: number | null,
 ): Promise<void> {
   await pool.query(
-    `INSERT INTO audio_sources (user_id, provider, external_id, title, artist, album_cover, audio_url, duration_ms, metadata, link_id)
-     VALUES ($1, $2, $3, $4, $5, $6, NULL, $7, $8, $9)
-     ON CONFLICT (provider, external_id)
-     DO UPDATE SET
-       album_cover = COALESCE(EXCLUDED.album_cover, audio_sources.album_cover),
-       -- Le PREMIER importeur garde le titre : avant, chaque import re-assignait
-       -- la ligne (partagee par toute la plateforme) au dernier venu, et la
-       -- bibliotheque du premier tombait a zero (vol croise, vu en vrai).
-       user_id = COALESCE(audio_sources.user_id, EXCLUDED.user_id),
-       link_id = CASE
-         WHEN audio_sources.user_id IS NULL OR audio_sources.user_id = EXCLUDED.user_id
-           THEN COALESCE(EXCLUDED.link_id, audio_sources.link_id)
-         ELSE audio_sources.link_id
-       END`,
+    `WITH morceau AS (
+       INSERT INTO audio_sources (user_id, provider, external_id, title, artist, album_cover, audio_url, duration_ms, metadata, link_id)
+       VALUES ($1, $2, $3, $4, $5, $6, NULL, $7, $8, $9)
+       ON CONFLICT (provider, external_id)
+       DO UPDATE SET
+         album_cover = COALESCE(EXCLUDED.album_cover, audio_sources.album_cover),
+         -- Colonnes historiques (premier importeur), gardees pour un retour
+         -- arriere. Le jeu lit user_audio_sources, ecrite juste en dessous.
+         user_id = COALESCE(audio_sources.user_id, EXCLUDED.user_id),
+         link_id = CASE
+           WHEN audio_sources.user_id IS NULL OR audio_sources.user_id = EXCLUDED.user_id
+             THEN COALESCE(EXCLUDED.link_id, audio_sources.link_id)
+           ELSE audio_sources.link_id
+         END,
+         -- L'ISRC appris a un nouvel import : le prochain extrait sera le bon
+         -- enregistrement (les extraits stockes expirent et sont re-resolus).
+         metadata = COALESCE(audio_sources.metadata, '{}'::jsonb) || jsonb_strip_nulls(jsonb_build_object('isrc', EXCLUDED.metadata->>'isrc'))
+       RETURNING id
+     )
+     INSERT INTO user_audio_sources (user_id, audio_source_id, link_id)
+     SELECT $1::int, id, $9::int FROM morceau
+     ${LINK_UPSERT}`,
     [
       userId,
       track.provider,
@@ -46,10 +62,16 @@ async function upsertTrack(
         import_source: track.provider,
         playlist_id: playlistId,
         album: track.album,
+        isrc: track.isrc ?? null,
       }),
-      linkId ?? null,
+      linkId,
     ]
   );
+}
+
+/** Combien de morceaux importes arrivent avec leur ISRC (suivi du correctif des extraits). */
+function logImportIsrc(provider: string, tracks: ImportedTrack[]): void {
+  logger.info("import_isrc", { provider, total: tracks.length, withIsrc: tracks.filter(t => t.isrc).length });
 }
 
 /**
@@ -60,9 +82,11 @@ async function upsertTrack(
 function preResolveInBackground(userId: number): void {
   (async () => {
     try {
-      const { rows } = await pool.query<{ id: string; title: string; artist: string }>(
-        `SELECT id, title, artist FROM audio_sources
-         WHERE user_id = $1 AND audio_url IS NULL
+      const { rows } = await pool.query<Pick<AudioSourceRow, "id" | "provider" | "external_id" | "title" | "artist" | "duration_ms" | "metadata">>(
+        `SELECT a.id, a.provider, a.external_id, a.title, a.artist, a.duration_ms, a.metadata
+         FROM user_audio_sources ua
+         JOIN audio_sources a ON a.id = ua.audio_source_id
+         WHERE ua.user_id = $1 AND a.audio_url IS NULL
          ORDER BY RANDOM()
          LIMIT $2`,
         [userId, PRE_RESOLVE_BATCH]
@@ -71,7 +95,7 @@ function preResolveInBackground(userId: number): void {
       let resolved = 0;
       for (const row of rows) {
         try {
-          const result = await deezerPreviewService.searchTrack(row.title, row.artist);
+          const result = await deezerPreviewService.resolvePreview(previewQueryFor(row));
           if (result?.preview) {
             await pool.query("UPDATE audio_sources SET audio_url = $1 WHERE id = $2", [result.preview, row.id]);
             resolved++;
@@ -185,16 +209,18 @@ export const importController = {
         return;
       }
 
+      const ownLink = await ownLinkId(context.user.id, linkId);
       let synced = 0;
       for (const track of tracks) {
         try {
-          await upsertTrack(context.user.id, track, playlistId, linkId ?? null);
+          await upsertTrack(context.user.id, track, playlistId, ownLink);
           synced++;
         } catch (err) {
           logger.error("import_track_failed", { title: track.title, error: err });
         }
       }
 
+      logImportIsrc(provider, tracks);
       ok(res, { synced, failed: tracks.length - synced, total: tracks.length });
 
       // Pre-resolve a batch of Deezer previews in background
@@ -229,9 +255,11 @@ export const importController = {
       : 10;
 
     try {
+      const ownLink = await ownLinkId(context.user.id, linkId);
       const seen = new Set<string>();
       let synced = 0;
       let total = 0;
+      let withIsrc = 0;
 
       for (const playlistId of playlistIds) {
         const tracks = await fetchPlaylistTracks(provider, playlistId, perPlaylistLimit);
@@ -240,9 +268,10 @@ export const importController = {
           if (seen.has(key)) continue;
           seen.add(key);
           total++;
+          if (track.isrc) withIsrc++;
 
           try {
-            await upsertTrack(context.user.id, track, playlistId, linkId ?? null);
+            await upsertTrack(context.user.id, track, playlistId, ownLink);
             synced++;
           } catch (err) {
             logger.error("import_track_failed", { title: track.title, error: err });
@@ -255,6 +284,7 @@ export const importController = {
         return;
       }
 
+      logger.info("import_isrc", { provider, total, withIsrc });
       ok(res, { synced, failed: total - synced, total });
 
       // Pre-resolve a batch of Deezer previews in background

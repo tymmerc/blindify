@@ -6,7 +6,10 @@ import { ok, fail } from "../utils/response";
 import { logger } from "../utils/logger";
 import type { AudioSourceRow } from "../types/audio";
 import axios from "axios";
-import { hydratePreviewUrl } from "../services/trackResolution";
+import { hydratePreviewUrl, isExpiredPreview } from "../services/trackResolution";
+import { isIsrc } from "../services/previewMatch";
+import { METADATA_KEEPING_ISRC } from "../services/isrcMetadata";
+import { linkTrackToUser, UNOWNED } from "../services/userTracks";
 import { isSpotifyId } from "../utils/providerIds";
 
 async function importItunesTopTracks(limit: number): Promise<AudioSourceRow[]> {
@@ -109,6 +112,12 @@ async function fetchGlobalRandomSources(count: number): Promise<AudioSourceRow[]
   return rows;
 }
 
+// La bibliotheque d'un joueur : ses liens joueur-morceau (un morceau peut etre
+// a plusieurs joueurs).
+const OWNED_BY = (userParam: string): string =>
+  `EXISTS (SELECT 1 FROM user_audio_sources ua WHERE ua.audio_source_id = s.id AND ua.user_id = ${userParam})`;
+const SOURCE_COLUMNS = `s.id, s.provider, s.external_id, s.title, s.artist, s.album_cover, s.audio_url, s.duration_ms, s.metadata`;
+
 async function fetchAudioSources(
   userId: number,
   provider: MusicProvider,
@@ -135,11 +144,11 @@ async function fetchAudioSources(
 
   if (opts.playlistId) {
     extraParams.push(opts.playlistId);
-    extraConds.push(`metadata->>'playlist_id' = $${baseOffset + extraParams.length}`);
+    extraConds.push(`s.metadata->>'playlist_id' = $${baseOffset + extraParams.length}`);
   }
   if (opts.timeRange) {
     extraParams.push(opts.timeRange);
-    extraConds.push(`metadata->>'time_range' = $${baseOffset + extraParams.length}`);
+    extraConds.push(`s.metadata->>'time_range' = $${baseOffset + extraParams.length}`);
   }
   if (opts.excludeIds?.length) {
     extraParams.push(opts.excludeIds);
@@ -160,7 +169,7 @@ async function fetchAudioSources(
       `SELECT s.id, s.provider, s.external_id, s.title, s.artist, s.album_cover, s.audio_url, s.duration_ms, s.metadata
        FROM audio_sources s
        INNER JOIN likes l ON l.audio_source_id = s.id
-       WHERE l.user_id = $1 AND (s.provider = $2 OR s.user_id = $1) ${extraClause ? extraClause + " AND " : " AND "}${usedFilter}
+       WHERE l.user_id = $1 AND (s.provider = $2 OR ${OWNED_BY("$1")}) ${extraClause ? extraClause + " AND " : " AND "}${usedFilter}
        ORDER BY RANDOM()
        LIMIT $${limitIndex}`,
       params
@@ -168,13 +177,25 @@ async function fetchAudioSources(
     return rows;
   }
 
-  // General library/playlist/top query
+  // Sa bibliotheque, plus le fonds commun du service (morceaux que personne
+  // n'a importes). Deux branches plutot qu'un OR : avec le OR, Postgres
+  // parcourait toute la table et testait chaque morceau. Sur 150 000 morceaux
+  // (jeu de la relecture de #54) : 284 ms avec le OR, 92 ms ainsi, 42 ms
+  // avant la migration 005.
   const params = [provider, userId, ...extraParams, count];
   const limitIndex = params.length;
+  const filters = `${extraClause} AND ${usedFilter}`;
   const { rows } = await pool.query<AudioSourceRow>(
-    `SELECT s.id, s.provider, s.external_id, s.title, s.artist, s.album_cover, s.audio_url, s.duration_ms, s.metadata
-     FROM audio_sources s
-     WHERE (s.user_id=$2 OR (s.provider=$1 AND s.user_id IS NULL)) ${extraClause ? extraClause + " AND " : " AND "}${usedFilter}
+    `SELECT * FROM (
+       SELECT ${SOURCE_COLUMNS}
+       FROM user_audio_sources ua
+       JOIN audio_sources s ON s.id = ua.audio_source_id
+       WHERE ua.user_id = $2 ${filters}
+       UNION ALL
+       SELECT ${SOURCE_COLUMNS}
+       FROM audio_sources s
+       WHERE s.provider = $1 AND ${UNOWNED("s")} ${filters}
+     ) AS pioche
      ORDER BY RANDOM()
      LIMIT $${limitIndex}`,
     params
@@ -305,11 +326,13 @@ async function collectPlayableSources(
     excludeExternalIds: opts.excludeExternalIds,
   });
 
-  // Split: already-playable vs needs-hydration
+  // Split: already-playable vs needs-hydration. Un extrait Deezer expire
+  // (signature `exp=` depassee) n'est PAS jouable : il repasse par Deezer, sinon
+  // la manche partait muette au lieu d'etre remplacee.
   const ready: AudioSourceRow[] = [];
   const needsHydration: AudioSourceRow[] = [];
   for (const source of candidates) {
-    if (source.audio_url) ready.push(source);
+    if (source.audio_url && !isExpiredPreview(source.audio_url)) ready.push(source);
     else needsHydration.push(source);
   }
 
@@ -354,6 +377,7 @@ async function syncPlaylistTracks(userId: number, playlistId: string, accessToke
           artists?: { name?: string }[];
           album?: { images?: { url?: string }[]; name?: string; release_date?: string };
           duration_ms?: number;
+          external_ids?: { isrc?: string };
         } | null;
       }>;
       next?: string | null;
@@ -369,8 +393,9 @@ async function syncPlaylistTracks(userId: number, playlistId: string, accessToke
         release_date: track.album?.release_date ?? null,
         playlist_id: playlistId,
         provider: "spotify" as MusicProvider,
+        isrc: isIsrc(track.external_ids?.isrc) ? track.external_ids.isrc : null,
       };
-      await pool.query<AudioSourceRow>(
+      const { rows } = await pool.query<{ id: string }>(
         `INSERT INTO audio_sources (provider, external_id, user_id, title, artist, album_cover, duration_ms, metadata)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
          ON CONFLICT (provider, external_id)
@@ -379,10 +404,12 @@ async function syncPlaylistTracks(userId: number, playlistId: string, accessToke
            artist=EXCLUDED.artist,
            album_cover=EXCLUDED.album_cover,
            duration_ms=EXCLUDED.duration_ms,
-           metadata=EXCLUDED.metadata,
-           user_id=COALESCE(audio_sources.user_id, EXCLUDED.user_id)`,
+           ${METADATA_KEEPING_ISRC},
+           user_id=COALESCE(audio_sources.user_id, EXCLUDED.user_id)
+         RETURNING id`,
         ["spotify", track.id, userId, track.name, artist, cover, track.duration_ms ?? null, metadata]
       );
+      await linkTrackToUser(userId, rows[0].id, null);
     }
     nextUrl = data.next ?? null;
   }
@@ -401,6 +428,7 @@ async function syncTopTracks(
     artists?: { name?: string }[];
     album?: { images?: { url?: string }[]; name?: string; release_date?: string };
     duration_ms?: number;
+    external_ids?: { isrc?: string };
   }> = data?.items ?? [];
 
   for (const track of items) {
@@ -412,8 +440,9 @@ async function syncTopTracks(
       release_date: track.album?.release_date ?? null,
       time_range: timeRange,
       provider: "spotify" as MusicProvider,
+      isrc: isIsrc(track.external_ids?.isrc) ? track.external_ids.isrc : null,
     };
-    await pool.query<AudioSourceRow>(
+    const { rows } = await pool.query<{ id: string }>(
       `INSERT INTO audio_sources (provider, external_id, user_id, title, artist, album_cover, duration_ms, metadata)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
        ON CONFLICT (provider, external_id)
@@ -422,10 +451,12 @@ async function syncTopTracks(
          artist=EXCLUDED.artist,
          album_cover=EXCLUDED.album_cover,
          duration_ms=EXCLUDED.duration_ms,
-         metadata=EXCLUDED.metadata,
-         user_id=COALESCE(audio_sources.user_id, EXCLUDED.user_id)`,
+         ${METADATA_KEEPING_ISRC},
+         user_id=COALESCE(audio_sources.user_id, EXCLUDED.user_id)
+       RETURNING id`,
       ["spotify", track.id, userId, track.name, artist, cover, track.duration_ms ?? null, metadata]
     );
+    await linkTrackToUser(userId, rows[0].id, null);
   }
 }
 

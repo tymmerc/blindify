@@ -5,6 +5,7 @@ import { Check, Mic, Play, Trophy, Volume2, VolumeX } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { audioManager, DEFAULT_AUDIO_VOLUME } from "@/lib/audioManager"
 import type { StreamerState } from "@/lib/types"
+import { shortGameNotice } from "@/lib/roundCount"
 
 const PLAYBACK_VOLUME = DEFAULT_AUDIO_VOLUME
 
@@ -30,6 +31,8 @@ export function StreamerGameClient({
   accent = "#22d3ee",
 }: Props) {
   const isHost = Boolean(state && state.hostUserId === userId)
+  // Partie plus courte que demandee : dit pendant la 1re manche, puis efface sans liberer sa place.
+  const shortNotice = shortGameNotice(state)
   const [guess, setGuess] = useState("")
   const [locked, setLocked] = useState(false)
   const [muted, setMuted] = useState(audioManager.getState().muted)
@@ -236,6 +239,16 @@ export function StreamerGameClient({
             </div>
           </div>
         </header>
+
+        {shortNotice && (
+          <p
+            className={`px-5 pt-3 text-center text-xs text-[var(--muted)] transition-opacity duration-500 ${shortNotice.visible ? "" : "opacity-0"}`}
+            role={shortNotice.visible ? "status" : undefined}
+            aria-hidden={!shortNotice.visible}
+          >
+            {shortNotice.text}
+          </p>
+        )}
 
         {/* Main content */}
         <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-5 px-5 pb-8 pt-5">

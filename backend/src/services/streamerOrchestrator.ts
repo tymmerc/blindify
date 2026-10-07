@@ -15,6 +15,8 @@ export function initStreamerGame(io: IOServer, params: {
   hostUserId: number;
   rounds: StreamerRound[];
   subMode: StreamerSubMode;
+  requestedRounds?: number;
+  shortReason?: "library" | "lookup" | null;
 }) {
   const state = bootstrapStreamerGame(params);
   io.to(params.roomCode).emit("state:sync", state);

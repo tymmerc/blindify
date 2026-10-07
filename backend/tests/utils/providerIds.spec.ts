@@ -3,7 +3,14 @@ import type { Request, Response } from "express";
 
 // Base, session et reseau sont simules : aucun test de ce fichier ne sort de la
 // machine ni ne touche une base.
-jest.mock("../../src/config/db", () => ({ pool: { query: jest.fn() } }));
+// connect : la connexion dediee du verrou de lancement (roomsController), qui
+// l'obtient toujours ici.
+jest.mock("../../src/config/db", () => ({
+  pool: {
+    query: jest.fn(),
+    connect: jest.fn(async () => ({ query: async () => ({ rows: [{ locked: true }] }), release: () => {} })),
+  },
+}));
 jest.mock("../../src/utils/session", () => ({ getSessionContext: jest.fn() }));
 jest.mock("../../src/services/trackResolution", () => ({
   hydratePreviewUrl: jest.fn(),

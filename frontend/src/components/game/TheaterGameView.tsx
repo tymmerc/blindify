@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type RefObjec
 import { motion, AnimatePresence } from "framer-motion"
 import { Pause, Play, Trophy, Volume2, VolumeX, X } from "lucide-react"
 import type { MultiplayerGameState, UserSummary } from "@/lib/types"
+import { shortGameNotice } from "@/lib/roundCount"
 
 type ChatMessage = {
   userId: number
@@ -109,6 +110,7 @@ export function TheaterGameView(props: Props) {
   const currentRound = state?.currentRound ?? 0
   const totalRounds = state?.totalRounds ?? 10
   const isFinished = state?.phase === "FINISHED"
+  const shortNotice = shortGameNotice(state)
 
   // Picker "qui a ajoute ?" : 3 candidats max (le bon + 2 leurres) fournis par le
   // serveur via ownerChoices ; fallback sur tous les joueurs si absent (< 3 joueurs).
@@ -166,6 +168,15 @@ export function TheaterGameView(props: Props) {
                 />
               ))}
             </div>
+            {shortNotice && (
+              <p
+                className={`theater-short ${shortNotice.visible ? "" : "is-gone"}`}
+                role={shortNotice.visible ? "status" : undefined}
+                aria-hidden={!shortNotice.visible}
+              >
+                {shortNotice.text}
+              </p>
+            )}
           </div>
 
           {/* Sur telephone, Pause et Quitter passent en icones carrees comme le
@@ -756,6 +767,13 @@ const theaterStyles = `
   }
   @keyframes urgent-pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
   .theater-rdots{display:flex; gap:7px}
+  .theater-short{
+    max-width:280px; margin:0; text-align:center;
+    font-size:12px; line-height:1.35; color:var(--muted);
+    transition:opacity .4s ease;
+  }
+  /* Apres la 1re manche : efface, mais sa place reste (la grille ne saute pas). */
+  .theater-short.is-gone{opacity:0}
   .theater-rdot{
     width:18px; height:3px; background:rgba(46,32,20,.15); border-radius:1px;
   }

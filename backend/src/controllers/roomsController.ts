@@ -12,14 +12,20 @@ import { bootstrapGameState, getGameState, gameStateSnapshot, revealedRoundCeili
 import { startRoundAndBroadcast } from "../services/realtimeOrchestrator";
 import { GameMode, type RoundTrack } from "../types/game";
 import { initStreamerGame } from "../services/streamerOrchestrator";
+import { isIsrc } from "../services/previewMatch";
+import { METADATA_KEEPING_ISRC } from "../services/isrcMetadata";
 import { activeLinkIds } from "./linksController";
+import { bySmallestLibrary, linkTrackToUser, ownersAmong, PLAYS_TONIGHT } from "../services/userTracks";
 import { isSpotifyId } from "../utils/providerIds";
 import {
-  hydratePreviewUrl,
-  collectPlayableSources,
+  hydrateWithinBudget,
+  collectPlayableBatch,
   shuffle,
+  type CollectOptions,
   type ProviderFilter,
 } from "../services/trackResolution";
+import { topUpPlayable } from "../services/roundTopUp";
+import { LOOKUPS_PER_ROUND, LookupGuard } from "../services/lookupGuard";
 
 // crypto.randomInt et pas Math.random : un code de salle permet de rejoindre
 // une partie, et Math.random devient previsible quand on observe ses tirages.
@@ -103,6 +109,7 @@ async function syncPlaylistTracks(userId: number, playlistId: string, accessToke
           artists?: { name?: string }[];
           album?: { images?: { url?: string }[]; name?: string; release_date?: string };
           duration_ms?: number;
+          external_ids?: { isrc?: string };
         } | null;
       }>;
       next?: string | null;
@@ -118,8 +125,9 @@ async function syncPlaylistTracks(userId: number, playlistId: string, accessToke
         release_date: track.album?.release_date ?? null,
         playlist_id: playlistId,
         provider: "spotify" as MusicProvider,
+        isrc: isIsrc(track.external_ids?.isrc) ? track.external_ids.isrc : null,
       };
-      await pool.query<AudioSourceRow>(
+      const { rows } = await pool.query<{ id: string }>(
         `INSERT INTO audio_sources (provider, external_id, user_id, title, artist, album_cover, duration_ms, metadata)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
          ON CONFLICT (provider, external_id)
@@ -128,10 +136,12 @@ async function syncPlaylistTracks(userId: number, playlistId: string, accessToke
            artist=EXCLUDED.artist,
            album_cover=EXCLUDED.album_cover,
            duration_ms=EXCLUDED.duration_ms,
-           metadata=EXCLUDED.metadata,
-           user_id=COALESCE(audio_sources.user_id, EXCLUDED.user_id)`,
+           ${METADATA_KEEPING_ISRC},
+           user_id=COALESCE(audio_sources.user_id, EXCLUDED.user_id)
+         RETURNING id`,
         ["spotify", track.id, userId, track.name, artist, cover, track.duration_ms ?? null, metadata]
       );
+      await linkTrackToUser(userId, rows[0].id, null);
     }
     nextUrl = data.next ?? null;
   }
@@ -150,6 +160,7 @@ async function syncTopTracks(
     artists?: { name?: string }[];
     album?: { images?: { url?: string }[]; name?: string; release_date?: string };
     duration_ms?: number;
+    external_ids?: { isrc?: string };
   }> = data?.items ?? [];
 
   for (const track of items) {
@@ -161,8 +172,9 @@ async function syncTopTracks(
       release_date: track.album?.release_date ?? null,
       time_range: timeRange,
       provider: "spotify" as MusicProvider,
+      isrc: isIsrc(track.external_ids?.isrc) ? track.external_ids.isrc : null,
     };
-    await pool.query<AudioSourceRow>(
+    const { rows } = await pool.query<{ id: string }>(
       `INSERT INTO audio_sources (provider, external_id, user_id, title, artist, album_cover, duration_ms, metadata)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
        ON CONFLICT (provider, external_id)
@@ -171,10 +183,48 @@ async function syncTopTracks(
          artist=EXCLUDED.artist,
          album_cover=EXCLUDED.album_cover,
          duration_ms=EXCLUDED.duration_ms,
-         metadata=EXCLUDED.metadata,
-         user_id=COALESCE(audio_sources.user_id, EXCLUDED.user_id)`,
+         ${METADATA_KEEPING_ISRC},
+         user_id=COALESCE(audio_sources.user_id, EXCLUDED.user_id)
+       RETURNING id`,
       ["spotify", track.id, userId, track.name, artist, cover, track.duration_ms ?? null, metadata]
     );
+    await linkTrackToUser(userId, rows[0].id, null);
+  }
+}
+
+/** Un autre lancement a pris la salle pendant le tirage. */
+class StartConflictError extends Error {}
+
+// Verrou du lancement, par salle : un double clic, deux onglets ou deux
+// requetes en meme temps ne tirent pas deux parties. Verrou consultatif de
+// session Postgres sur une connexion dediee : il tombe tout seul si le
+// processus meurt, et la salle reste « waiting » (relancable) si le lancement
+// echoue. 5100 : espace de cles des lancements (5005 est la migration 005).
+const START_LOCK_SPACE = 5100;
+
+async function withStartLock(roomCode: string, run: () => Promise<void>): Promise<boolean> {
+  const client = await pool.connect();
+  let broken = false;
+  try {
+    const { rows } = await client.query<{ locked: boolean }>(
+      `SELECT pg_try_advisory_lock($1, hashtext($2)) AS locked`,
+      [START_LOCK_SPACE, roomCode]
+    );
+    if (!rows[0]?.locked) return false;
+    try {
+      await run();
+    } finally {
+      await client
+        .query(`SELECT pg_advisory_unlock($1, hashtext($2))`, [START_LOCK_SPACE, roomCode])
+        .catch(err => {
+          // Verrou non rendu : on jette la connexion plutot que de la remettre au pool.
+          broken = true;
+          logger.error("start_lock_release_failed", { roomCode, error: err });
+        });
+    }
+    return true;
+  } finally {
+    client.release(broken);
   }
 }
 
@@ -354,12 +404,8 @@ export const roomsController = {
     try {
       participantRows = (await pool.query(
         `SELECT rp.user_id, COALESCE(rp.nickname, u.username) AS username,
-                (SELECT count(*) FROM audio_sources a
-                  WHERE a.user_id = rp.user_id
-                    AND (
-                      NOT EXISTS (SELECT 1 FROM imported_links il WHERE il.user_id = rp.user_id)
-                      OR EXISTS (SELECT 1 FROM imported_links il2 WHERE il2.id = a.link_id AND il2.active)
-                    ))::int AS track_count
+                (SELECT count(*) FROM user_audio_sources ua
+                  WHERE ua.user_id = rp.user_id AND ${PLAYS_TONIGHT("ua", "rp.user_id")})::int AS track_count
          FROM room_participants rp
          JOIN users u ON u.id = rp.user_id
          WHERE rp.room_id=$1
@@ -493,11 +539,11 @@ export const roomsController = {
               s.album_cover,
               s.audio_url,
               s.metadata,
-              s.user_id AS owner_user_id,
+              COALESCE(gr.owner_user_id, s.user_id) AS owner_user_id,
               u.username AS owner_username
        FROM game_rounds gr
        LEFT JOIN audio_sources s ON s.id = gr.audio_source_id
-       LEFT JOIN users u ON u.id = s.user_id
+       LEFT JOIN users u ON u.id = COALESCE(gr.owner_user_id, s.user_id)
        WHERE gr.session_id=$1
        ORDER BY gr.round_index ASC`,
       [session.id]
@@ -689,6 +735,13 @@ export const roomsController = {
       fail(res, "room_code_missing", "Code de salle requis", 400);
       return;
     }
+    const ran = await withStartLock(code, () => roomsController.startGameLocked(req, res));
+    if (!ran) fail(res, "room_locked", "La partie est en train de se lancer.", 409);
+  },
+
+  /** Le lancement lui-meme, sous le verrou de la salle (voir withStartLock). */
+  async startGameLocked(req: Request, res: Response): Promise<void> {
+    const code = typeof req.params?.code === "string" ? req.params.code.toUpperCase() : "";
 
     const sourceParam = typeof req.body?.source === "string" ? req.body.source : "library";
     const preferredProvider = req.body?.provider as MusicProvider | undefined;
@@ -778,11 +831,11 @@ export const roomsController = {
                 s.album_cover,
                 s.audio_url,
                 s.metadata,
-                s.user_id AS owner_user_id,
+                COALESCE(gr.owner_user_id, s.user_id) AS owner_user_id,
                 u.username AS owner_username
          FROM game_rounds gr
          LEFT JOIN audio_sources s ON s.id = gr.audio_source_id
-         LEFT JOIN users u ON u.id = s.user_id
+         LEFT JOIN users u ON u.id = COALESCE(gr.owner_user_id, s.user_id)
          WHERE gr.session_id=$1
          ORDER BY gr.round_index ASC`,
         [session.id]
@@ -879,7 +932,7 @@ export const roomsController = {
 
     // Regle : au moins 1 playlist importee (par un joueur OU l'hote presentateur).
     const { rows: musicRows } = await pool.query<{ n: string }>(
-      `SELECT COUNT(DISTINCT user_id) AS n FROM audio_sources WHERE user_id = ANY($1::int[])`,
+      `SELECT COUNT(DISTINCT user_id) AS n FROM user_audio_sources WHERE user_id = ANY($1::int[])`,
       [musicContributorIds]
     );
     const playersWithMusic = Number(musicRows[0]?.n ?? 0);
@@ -977,47 +1030,81 @@ export const roomsController = {
       const ids = linkFilter.get(pid);
       return ids === null || ids === undefined ? {} : { linkIds: ids };
     };
-    const contribution = new Map<number, number>();
-    for (const pid of musicContributorIds) {
+    // Un titre sans extrait n'est cherche qu'une fois par lancement, et tout le
+    // lancement est borne (lookupGuard.ts) : LOOKUPS_PER_ROUND recherches par
+    // manche (ou par joueur s'ils sont plus nombreux), une echeance et un
+    // disjoncteur si Deezer ne repond plus.
+    const rejectedKeys = new Set<string>();
+    const guard = new LookupGuard(Math.max(room.question_count, musicContributorIds.length) * LOOKUPS_PER_ROUND);
+    const collect = async (pid: number, desired: number, opts: CollectOptions): Promise<AudioSourceRow[]> => {
+      const batch = await collectPlayableBatch(pid, desired, {
+        ...opts,
+        excludeKeys: [...(opts.excludeKeys ?? []), ...rejectedKeys],
+        guard,
+      });
+      batch.rejectedKeys.forEach(key => rejectedKeys.add(key));
+      return batch.playable;
+    };
+    // Ce que chaque joueur a choisi de jouer : sa bibliotheque, ses titres
+    // likes, une playlist ou un top. Tous les complements le respectent, comme
+    // le premier tirage. Un choix qui demande Spotify sans connexion ne peut
+    // pas s'appliquer : le premier tirage saute ce joueur, les complements
+    // prennent sa bibliotheque (comme avant).
+    const choiceOf = (pid: number) => {
       const pref = prefMap.get(pid);
       const choice = normalizeSource(pref?.source ?? sourceParam);
-      const likedChoice = choice === "liked";
-      const playlistChoice = choice === "playlist" ? pref?.playlist ?? playlistId ?? undefined : undefined;
-      const timeChoice = choice === "top_week" ? "short_term" : choice === "top_month" ? "medium_term" : choice === "top_all" ? "long_term" : undefined;
+      const likedOnly = choice === "liked";
+      const playlist = choice === "playlist" ? pref?.playlist ?? playlistId ?? undefined : undefined;
+      const timeRange = choice === "top_week" ? "short_term" : choice === "top_month" ? "medium_term" : choice === "top_all" ? "long_term" : undefined;
+      const userConn = connectionMap.get(pid);
+      const needsSpotify = likedOnly || choice === "playlist" || Boolean(timeRange);
+      const applicable = !needsSpotify || (userConn?.provider === "spotify" && Boolean(userConn.access_token));
+      return { likedOnly, playlistId: playlist, timeRange, applicable };
+    };
+    const rulesFor = (pid: number): Pick<CollectOptions, "likedOnly" | "playlistId" | "timeRange"> => {
+      const c = choiceOf(pid);
+      return c.applicable ? { likedOnly: c.likedOnly, playlistId: c.playlistId, timeRange: c.timeRange } : {};
+    };
+    const contribution = new Map<number, number>();
+    // Un morceau peut etre a plusieurs joueurs : chacun ne tire que ce qui
+    // n'est pas deja pris (excludeKeys), et les plus petites bibliotheques
+    // passent d'abord. Sans ca, un ami dont la playlist est deja chez l'hote
+    // se faisait prendre ses morceaux et n'avait pas sa part du tourniquet.
+    const quotaOrder = await bySmallestLibrary(musicContributorIds);
+    for (const pid of quotaOrder) {
+      const { likedOnly: likedChoice, playlistId: playlistChoice, timeRange: timeChoice, applicable } = choiceOf(pid);
 
       // Si la source nécessite Spotify mais que le joueur n'a pas de connexion, on saute
-      const userConn = connectionMap.get(pid);
-      const needsSpotify = likedChoice || choice === "playlist" || Boolean(timeChoice);
-      if (needsSpotify && !(userConn?.provider === "spotify" && userConn.access_token)) {
+      if (!applicable) {
         continue;
       }
 
       // 1) D'abord les titres que CE joueur possede vraiment -> attribution "qui a ajoute" fiable.
-      // On passe par collectPlayableSources pour HYDRATER les previews Deezer : les titres
+      // On passe par collect pour HYDRATER les previews Deezer : les titres
       // importes ont audio_url NULL au depart et seraient sinon jetes par le filtre playable.
-      const owned = await collectPlayableSources(pid, perUserCount, {
+      const owned = await collect(pid, perUserCount, {
         likedOnly: likedChoice,
         playlistId: playlistChoice,
         timeRange: timeChoice,
         provider: poolProvider,
-        ownedOnly: true,
+        excludeKeys: [...seen],
         ...linkOpts(pid),
       });
       for (const s of owned) s.user_id = pid; // revendique la contribution pour cette partie
       pushUnique(owned);
 
       // 2) Complement, toujours dans la bibliotheque de CE joueur. On passe par
-      // collectPlayableSources pour hydrater les extraits et ecarter les titres
+      // collect (collectPlayableBatch) pour hydrater les extraits et ecarter les titres
       // sans audio (fetchAudioSources brut en laissait passer : manche muette).
       const need = perUserCount - owned.length;
       let extra = 0;
       if (need > 0) {
-        const slice = await collectPlayableSources(pid, need, {
+        const slice = await collect(pid, need, {
           provider: poolProvider,
-          ownedOnly: true,
           likedOnly: likedChoice,
           playlistId: playlistChoice,
           timeRange: timeChoice,
+          excludeKeys: [...seen],
           ...linkOpts(pid),
         });
         extra = slice.length;
@@ -1031,10 +1118,10 @@ export const roomsController = {
     if (collected.length < room.question_count) {
       for (const pid of musicContributorIds) {
         if (collected.length >= room.question_count) break;
-        const fill = await collectPlayableSources(pid, room.question_count - collected.length, {
-          likedOnly: false,
+        const fill = await collect(pid, room.question_count - collected.length, {
+          ...rulesFor(pid),
           provider: poolProvider,
-          ownedOnly: true,
+          excludeKeys: [...seen],
           ...linkOpts(pid),
         });
         pushUnique(fill);
@@ -1048,10 +1135,10 @@ export const roomsController = {
       const existingKeys = new Set(sources.map(src => src.external_id ?? String(src.id)));
       for (const pid of musicContributorIds) {
         if (sources.length >= room.question_count) break;
-        const fallback = await collectPlayableSources(pid, room.question_count - sources.length, {
-          likedOnly: false,
+        const fallback = await collect(pid, room.question_count - sources.length, {
+          ...rulesFor(pid),
           provider: "any",
-          ownedOnly: true,
+          excludeKeys: [...existingKeys],
           ...linkOpts(pid),
         });
         for (const candidate of fallback) {
@@ -1069,10 +1156,10 @@ export const roomsController = {
       const hasOne = sources.some(src => src.user_id === pid);
       if (hasOne) continue;
       const existingKeys = new Set(sources.map(src => src.external_id ?? String(src.id)));
-      // collectPlayableSources (et pas fetchAudioSources brut) : il rafraichit les
+      // collect (et pas fetchAudioSources brut) : il rafraichit les
       // extraits et jette ceux sans audio. Sinon on pouvait injecter ici un titre
       // muet et la table restait 10 secondes dans le silence.
-      const personalPool = await collectPlayableSources(pid, 3, { provider: poolProvider, ownedOnly: true, ...linkOpts(pid) });
+      const personalPool = await collect(pid, 3, { ...rulesFor(pid), provider: poolProvider, excludeKeys: [...existingKeys], ...linkOpts(pid) });
       for (const candidate of personalPool) {
         const key = candidate.external_id ?? String(candidate.id);
         if (existingKeys.has(key)) continue;
@@ -1087,31 +1174,66 @@ export const roomsController = {
 
     // Plus de repli sur le fonds commun : la promesse produit, c'est "VOS musiques".
     // S'il manque des titres, la partie aura simplement moins de manches
-    // (effectiveRounds s'ajuste plus bas sur sources.length).
+    // (effectiveRounds s'ajuste plus bas sur sources.length) et l'ecran de jeu le dit.
+
+    // Hydrate/rafraichit les previews via Deezer. On passe TOUS les titres (pas seulement ceux
+    // sans URL) : une URL Deezer en cache peut etre EXPIREE (signature `exp=`) -> 403 -> pas de son.
+    // hydratePreviewUrl renvoie l'URL cache si fraiche, re-fetch si manquante/expiree, null si injouable.
+    // Meme plafond de recherches que le tirage, 6 a la fois : un titre qu'on ne
+    // peut plus verifier est ecarte comme un titre sans extrait.
+    const finalCheck = await hydrateWithinBudget(sources, guard);
+    const checked = new Set(finalCheck.tried.filter(s => Boolean(s.audio_url)));
+    for (const source of sources) {
+      if (!checked.has(source)) rejectedKeys.add(source.external_id ?? String(source.id));
+    }
+    // Keep only tracks with a playable audio URL
+    sources = sources.filter(s => checked.has(s));
+
+    // Il manque des manches (titres sans extrait) : on retire dans les memes
+    // bibliotheques, memes regles (choix du joueur, cartes cochees, titres deja
+    // pris ou sans extrait exclus), borne a TOP_UP_MAX_PASSES passes de
+    // 3 x le manque, sous le meme garde de recherches.
+    if (sources.length < room.question_count) {
+      const topUp = await topUpPlayable({
+        current: sources,
+        target: room.question_count,
+        contributorIds: musicContributorIds,
+        rejectedKeys,
+        draw: (pid, drawLimit, excludeKeys, wanted) =>
+          collectPlayableBatch(pid, wanted, {
+            ...rulesFor(pid),
+            provider: "any",
+            excludeKeys,
+            drawLimit,
+            guard,
+            ...linkOpts(pid),
+          }),
+      });
+      sources = topUp.sources;
+    }
+
+    // Moins de manches que demande : la raison, sans rien dire des titres.
+    // "lookup" : des titres n'ont pas pu etre verifies (Deezer lent ou muet,
+    // ou nos bornes) ; "library" : les playlists n'en avaient pas assez.
+    const shortReason: "library" | "lookup" | null =
+      sources.length >= room.question_count ? null : guard.limited ? "lookup" : "library";
 
     // Dernier filet : si rien du tout, on s'arrête avec un message explicite
     if (sources.length === 0) {
-      fail(res, "insufficient_tracks", "Pas assez de titres pour lancer la partie", 400, {
-        needed: room.question_count,
-        available: 0,
-      });
+      fail(
+        res,
+        "insufficient_tracks",
+        shortReason === "lookup"
+          ? "Deezer n'a pas répondu à temps. Réessaie dans un instant."
+          : "Pas assez de titres pour lancer la partie",
+        400,
+        { needed: room.question_count, available: 0, reason: shortReason }
+      );
       return;
     }
 
     // Mélange final pour intercaler les sources entre joueurs (et accepter un nombre réduit si besoin)
     sources = shuffle(sources);
-
-    // Hydrate/rafraichit les previews via Deezer. On passe TOUS les titres (pas seulement ceux
-    // sans URL) : une URL Deezer en cache peut etre EXPIREE (signature `exp=`) -> 403 -> pas de son.
-    // hydratePreviewUrl renvoie l'URL cache si fraiche, re-fetch si manquante/expiree, null si injouable.
-    await Promise.all(
-      sources.map(async source => {
-        source.audio_url = await hydratePreviewUrl(source);
-      })
-    );
-
-    // Keep only tracks with a playable audio URL
-    sources = sources.filter(s => Boolean(s.audio_url));
 
     const cappedCount = Math.max(1, Math.min(sources.length, room.question_count));
     // Equite entre joueurs : la coupe en fin de liste amputait au hasard la part
@@ -1159,6 +1281,15 @@ export const roomsController = {
       avatarMap.set(u.id, u.avatar);
     });
 
+    // « Qui a mis quoi » : un morceau partage revient aussi aux autres joueurs
+    // de la salle qui l'ont importe (roundOwners.ts).
+    const coOwners = await ownersAmong(sources.map(src => src.id), musicContributorIds);
+    const ownersOf = (src: AudioSourceRow): number[] => {
+      const primary = src.user_id ?? null;
+      const all = new Set([...(primary ? [primary] : []), ...(coOwners.get(src.id) ?? [])]);
+      return Array.from(all).sort((a, b) => a - b);
+    };
+
     // Wrap game creation in a transaction to ensure atomicity
     const client = await pool.connect();
     let session: any;
@@ -1178,12 +1309,15 @@ export const roomsController = {
       );
       session = sessionRows[0];
 
-      await client.query(
+      // Seule une salle encore en attente part : un autre lancement passe
+      // entre-temps (autre serveur, verrou perdu) ne cree pas une 2e partie.
+      const { rowCount: claimed } = await client.query(
         `UPDATE multiplayer_rooms
          SET status='in_progress', session_id=$2, started_at=NOW()
-         WHERE id=$1`,
+         WHERE id=$1 AND status='waiting'`,
         [room.id, session.id]
       );
+      if (!claimed) throw new StartConflictError();
 
       for (const pid of participantIds) {
         await client.query(
@@ -1213,21 +1347,28 @@ export const roomsController = {
         owner_avatar: (source as { user_id?: number | null }).user_id
           ? avatarMap.get((source as { user_id?: number | null }).user_id ?? 0) ?? null
           : null,
+        owner_user_ids: ownersOf(source),
       },
     }));
 
     for (const track of normalizedTracks) {
+      // owner_user_id : qui a apporte le morceau dans CETTE partie, pour le
+      // recapitulatif (audio_sources.user_id n'est que le premier importeur).
       await client.query(
-        `INSERT INTO game_rounds (session_id, round_index, audio_source_id, correct_title, correct_artist)
-         VALUES ($1,$2,$3,$4,$5)
+        `INSERT INTO game_rounds (session_id, round_index, audio_source_id, correct_title, correct_artist, owner_user_id)
+         VALUES ($1,$2,$3,$4,$5,$6)
         ON CONFLICT (session_id, round_index) DO NOTHING`,
-        [session.id, track.round, track.audioSourceId, track.title, track.artist]
+        [session.id, track.round, track.audioSourceId, track.title, track.artist, track.metadata.owner_user_id ?? null]
       );
     }
 
     await client.query("COMMIT");
     } catch (txErr) {
       await client.query("ROLLBACK");
+      if (txErr instanceof StartConflictError) {
+        fail(res, "room_locked", "La partie a déjà démarré", 409);
+        return;
+      }
       throw txErr;
     } finally {
       client.release();
@@ -1297,6 +1438,8 @@ export const roomsController = {
         hostUserId: room.host_user_id,
         rounds: streamerRounds,
         subMode,
+        requestedRounds: room.question_count,
+        shortReason,
       });
       ok(res, {
         session: {
@@ -1305,6 +1448,8 @@ export const roomsController = {
           difficulty: session.difficulty,
           provider: session.source_provider,
           totalRounds: session.total_rounds,
+          requestedRounds: room.question_count,
+          shortReason,
           startedAt: session.started_at,
           roomCode: room.room_code,
         },
@@ -1321,6 +1466,8 @@ export const roomsController = {
       singleContributor,
       mode: session.mode as GameMode,
       tracks: roundTracks,
+      requestedRounds: room.question_count,
+      shortReason,
       participants: participantIds.map(id => ({
         userId: id,
         username: usernameMap.get(id) ?? null,
@@ -1348,6 +1495,8 @@ export const roomsController = {
         difficulty: session.difficulty,
         provider: session.source_provider,
         totalRounds: session.total_rounds,
+        requestedRounds: room.question_count,
+        shortReason,
         startedAt: session.started_at,
         roomCode: room.room_code,
       },
