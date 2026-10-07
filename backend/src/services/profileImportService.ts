@@ -107,7 +107,7 @@ export interface ImportedTrack {
 
 let spotifyTokenCache: { token: string; expiresAt: number } | null = null;
 
-async function getSpotifyClientToken(): Promise<string> {
+export async function getSpotifyClientToken(): Promise<string> {
   if (spotifyTokenCache && Date.now() < spotifyTokenCache.expiresAt - 5_000) {
     return spotifyTokenCache.token;
   }
