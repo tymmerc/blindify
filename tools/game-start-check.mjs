@@ -67,6 +67,15 @@ sock.on("game:round:start", p => { manche = p })
 const start = await api(`/api/rooms/${code}/start`, { method: "POST", token, body: { source: "library", subMode: "solo" } })
 if (start.status >= 400) { bad(`lancement refuse (${start.status} ${JSON.stringify(start.error)})`); }
 else okk("partie lancee (API acceptee)")
+// Anti-triche (#55) : la reponse du lancement ne donne a l'hote ni titre ni
+// proprietaire des manches a venir.
+const pistes = start.data?.tracks ?? []
+const visibles = pistes.filter(t => t?.title != null || t?.metadata?.owner_user_id != null).length
+if (start.status < 400) {
+  pistes.length > 0 && visibles === 0
+    ? okk(`reponse du lancement caviardee (${pistes.length} manche(s), ni titre ni proprietaire)`)
+    : bad(`reponse du lancement : ${visibles} manche(s) sur ${pistes.length} montrent un titre ou un proprietaire`)
+}
 
 for (let i = 0; i < 20 && !manche; i++) await sleep(500)
 manche ? okk(`manche 1 recue par websocket (phase ${manche.phase ?? "?"})`) : bad("aucune manche recue en 10 s")
