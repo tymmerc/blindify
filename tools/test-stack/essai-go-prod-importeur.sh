@@ -17,6 +17,8 @@
 #    base migree, memes parcours, campagne de bots
 # 6. retour avec --defaire-005 : l'ancien backend sans la 005, memes parcours
 # 7. second passage du script avec une longue transaction en face de la 005
+# 8. (si PANNE_SHA et PANNE_DEPOT) un backend qui ne demarre pas : retour automatique
+# 9. arret par signal pendant les verifications : la fin dit l'etape et l'etat
 # La pile est demontee a la fin et sa copie de travail remise sur son commit.
 set -uo pipefail
 AVANT="${1:?commit AVANT}"; NOUVEAU="${2:?commit NOUVEAU}"; DEPOT="${3:?DEPOT}"; DOSSIER="${4:?DOSSIER}"
@@ -130,6 +132,34 @@ wait
 note "second passage : sortie $code ; $(grep -c 'verrou non obtenu' "$DOSSIER/passage2.log") essai(s) rejoue(s) apres lock_timeout ; $(grep -h '005 appliquee' "$DOSSIER/passage2.log")"
 note "sonde 2 : $(head -5 "$DOSSIER/sonde-verrous-2.txt" | tail -4 | tr '\n' ';')"
 grep -E '\[ok\]|!!' "$DOSSIER/passage2.log" | sed 's/^/    /'
+
+fermer_salles() { PG -c "UPDATE multiplayer_rooms SET status = 'finished' WHERE status = 'in_progress'" >/dev/null; }
+
+if [ -n "${PANNE_SHA:-}" ]; then
+  etape "8. retour automatique : un backend qui ne demarre pas (${PANNE_SHA:0:7})"
+  fermer_salles
+  avant8="$(cut -c1-40 "$ROOT/.test-stack/run/backend.commit")"
+  GO_PROD_CIBLE=pile PILE_DEPOT="${PANNE_DEPOT:?PANNE_DEPOT}" PILE_SAUVEGARDES="$DOSSIER/panne" bash "$PANNE_DEPOT/scripts/go-prod-2026-10-08-importeur.sh" "$PANNE_SHA" > "$DOSSIER/panne.log" 2>&1
+  code=$?
+  sed -n '/── 5/,$p' "$DOSSIER/panne.log" | grep -v '^\[stack\]' | head -30
+  apres8="$(cut -c1-40 "$ROOT/.test-stack/run/backend.commit")"
+  [ $code = 1 ] && grep -q "backend d'avant remis" "$DOSSIER/panne.log" && [ "$apres8" = "$avant8" ] && curl -sf -m 5 http://127.0.0.1:3098/api/health >/dev/null \
+    && note "[ok] retour automatique : sortie 1, backend d'avant (${avant8:0:7}) remis et en ligne" || note "!! retour automatique : sortie $code, pile sur ${apres8:0:7}"
+fi
+
+etape "9. arret par signal pendant les verifications (TERM)"
+# Un script lance en tache de fond ignore SIGINT (bash) : TERM passe par le
+# meme trap (exit 130) et la meme fin.
+fermer_salles
+GO_PROD_CIBLE=pile PILE_DEPOT="$DEPOT" PILE_SAUVEGARDES="$DOSSIER/signal" bash "$SCRIPT" "$NOUVEAU" > "$DOSSIER/signal.log" 2>&1 &
+pid_script=$!
+timeout 300 bash -c "until grep -q '── 6. Verifications' '$DOSSIER/signal.log'; do sleep 1; done"
+kill -TERM "$pid_script"
+wait "$pid_script"; code=$?
+sed -n '/== ARRET/,$p' "$DOSSIER/signal.log"
+journal_signal="$(ls -t "$DOSSIER"/signal/go-prod-importeur-*.log | head -1)"
+[ $code = 130 ] && grep -q "ARRET a l'etape « 6. verifications du backend »" "$journal_signal" && grep -q "backend        : nouveau" "$journal_signal" \
+  && note "[ok] arret par signal : sortie 130, la fin dit l'etape 6, backend nouveau, et le journal l'a garde" || note "!! arret par signal : sortie $code"
 
 echo; echo "=================== BILAN ==================="
 printf '%s\n' "${bilan[@]}" | tee "$DOSSIER/bilan.txt"
