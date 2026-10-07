@@ -52,7 +52,9 @@
 # Rejouee apres un retour --defaire-005 avec 40 000 morceaux a relier : 5,9 s,
 # pire ecriture 133 ms. Si une requete tient une des tables plus de 3 s, la
 # transaction du schema abandonne sans rien ecrire (lock_timeout) et le script
-# rejoue le fichier (3 essais) ; les ecritures attendent au plus ces 3 s.
+# rejoue le fichier (3 essais, 10 s d'ecart) : imports et mises a jour de
+# joueur attendent au plus ces 3 s (2,99 s mesurees sur la pile, avec une
+# transaction qui tenait audio_sources 8 s), les lectures ne sont pas bloquees.
 #
 # La 005 et l'ANCIEN backend : il continue de marcher avec elle. Verifie sur
 # la pile isolee le 07/10 (tools/test-stack/essai-go-prod-importeur.sh) :
@@ -327,15 +329,19 @@ echo "  005 appliquee en $(ms_depuis "$t0") ms ($(heure))"
 if [ "$(sql "SELECT count(*) FROM pg_roles WHERE rolname = 'blindz_ro'")" = 1 ]; then
   [ "$(sql "SELECT has_table_privilege('blindz_ro', 'public.user_audio_sources', 'SELECT')")" = t ] || die "l'explorateur (blindz_ro) ne lit pas user_audio_sources"
 fi
-n_orph="$(orphelins)"
+# Un seul instantane pour tous les comptes : les imports continuent pendant
+# ce temps (deux requetes separees peuvent voir un morceau neuf dans l'une et
+# pas dans l'autre, vu sur la pile).
+read -r n_orph liens lies_apres joueurs_sans_lien cartes_etrangeres <<< "$(sql "SELECT
+  (SELECT count(*) FROM audio_sources a WHERE a.user_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM user_audio_sources ua WHERE ua.user_id = a.user_id AND ua.audio_source_id = a.id)),
+  (SELECT count(*) FROM user_audio_sources),
+  (SELECT count(*) FROM audio_sources WHERE user_id IS NOT NULL),
+  (SELECT count(DISTINCT a.user_id) FROM audio_sources a WHERE a.user_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM user_audio_sources ua WHERE ua.user_id = a.user_id)),
+  (SELECT count(*) FROM user_audio_sources ua JOIN imported_links il ON il.id = ua.link_id WHERE il.user_id <> ua.user_id)" | tr '|' ' ')"
 [ "$n_orph" = 0 ] || die "$n_orph morceau(x) lie(s) a un premier importeur sans son lien dans user_audio_sources"
-liens="$(sql "SELECT count(*) FROM user_audio_sources")"
-lies_apres="$(sql "SELECT count(*) FROM audio_sources WHERE user_id IS NOT NULL")"
 [ "$liens" -ge "$lies_apres" ] || die "user_audio_sources a $liens liens pour $lies_apres morceaux lies"
-[ "$(sql "SELECT count(DISTINCT user_id) FROM user_audio_sources")" -ge "$(sql "SELECT count(DISTINCT user_id) FROM audio_sources WHERE user_id IS NOT NULL")" ] \
-  || die "des joueurs ont des morceaux sans aucun lien"
-[ "$(sql "SELECT count(*) FROM user_audio_sources ua JOIN imported_links il ON il.id = ua.link_id WHERE il.user_id <> ua.user_id")" = 0 ] \
-  || die "des liens pointent vers la carte d'un autre joueur"
+[ "$joueurs_sans_lien" = 0 ] || die "$joueurs_sans_lien joueur(s) ont des morceaux sans aucun lien"
+[ "$cartes_etrangeres" = 0 ] || die "$cartes_etrangeres lien(s) pointent vers la carte d'un autre joueur"
 echo "  [ok] $liens liens pour $lies_apres morceaux lies ($lies_avant avant la 005), 0 orphelin, cartes coherentes (rien a annuler : l'ancien backend tourne avec)"
 
 echo "── 5. Backend ($(heure)) ──"
