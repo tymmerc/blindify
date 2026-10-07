@@ -11,7 +11,7 @@ jest.mock("../../src/utils/logger", () => ({
 
 import { pool } from "../../src/config/db";
 import { deezerPreviewService } from "../../src/services/deezerPreviewService";
-import { hydratePreviewUrl, previewQueryFor } from "../../src/services/trackResolution";
+import { hydratePreviewUrl, previewQueryFor, collectPlayableSources } from "../../src/services/trackResolution";
 import type { AudioSourceRow } from "../../src/types/audio";
 
 const query = pool.query as jest.Mock;
@@ -65,5 +65,25 @@ describe("hydratePreviewUrl", () => {
     const valid = `https://cdn.example/x.mp3?hdnea=exp=${Math.floor(Date.now() / 1000) + 600}~acl`;
     expect(await hydratePreviewUrl(source({ audio_url: valid }))).toBe(valid);
     expect(resolvePreview).not.toHaveBeenCalled();
+  });
+});
+
+describe("collectPlayableSources", () => {
+  it("hydrate 6 extraits a la fois au plus (le reste attend son tour)", async () => {
+    const rows = Array.from({ length: 20 }, (_, i) => source({ id: `s${i}`, external_id: `ext${i}`, audio_url: null }));
+    query.mockResolvedValueOnce({ rows }).mockResolvedValue({ rows: [] });
+    let inFlight = 0;
+    let peak = 0;
+    resolvePreview.mockImplementation(async () => {
+      inFlight++;
+      peak = Math.max(peak, inFlight);
+      await new Promise(r => setTimeout(r, 5));
+      inFlight--;
+      return { id: 1, preview: "https://cdn.example/ok.mp3" };
+    });
+    const got = await collectPlayableSources(1, 5, {});
+    expect(resolvePreview).toHaveBeenCalledTimes(20);
+    expect(peak).toBeLessThanOrEqual(6);
+    expect(got).toHaveLength(5);
   });
 });

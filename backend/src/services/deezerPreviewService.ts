@@ -2,6 +2,7 @@ import axios from "axios";
 import { DEEZER_API } from "../config/deezer";
 import { logger } from "../utils/logger";
 import { pickMatch, isIsrc, searchQueryFor } from "./previewMatch";
+import { isExpiredPreview } from "../utils/previewExpiry";
 
 const DEEZER_SEARCH_URL = `${DEEZER_API}/search`;
 const DEEZER_TRACK_URL = `${DEEZER_API}/track`;
@@ -14,6 +15,10 @@ const CACHE_TTL_MS = 60 * 60 * 1_000; // 1 hour
 
 // Assez de resultats pour que la bonne version y soit, en un seul appel.
 const SEARCH_LIMIT = 10;
+
+// Morceau trouve par ISRC : au-dela de 30 % d'ecart de duree avec Spotify, ce
+// n'est pas le meme enregistrement (ISRC mal attribue par un distributeur).
+const ISRC_DURATION_RATIO = 0.3;
 
 export interface DeezerTrack {
   id: number;
@@ -55,6 +60,24 @@ interface DeezerSearchResponse {
 
 type CacheEntry = { track: DeezerTrack | null; ts: number };
 
+/** found : le morceau ; unknown : Deezer ne le connait pas (800) ;
+ *  unavailable : Deezer en erreur (quota, panne), on ne retient rien. */
+type ExactResult =
+  | { kind: "found"; track: DeezerTrack }
+  | { kind: "unknown" }
+  | { kind: "unavailable" };
+
+/** Horloge injectable : les tests du debit tournent sans attendre pour de vrai. */
+export interface Clock {
+  now: () => number;
+  sleep: (ms: number) => Promise<void>;
+}
+
+const realClock: Clock = {
+  now: () => Date.now(),
+  sleep: ms => new Promise(resolve => setTimeout(resolve, ms)),
+};
+
 function toDeezerTrack(item: DeezerSearchItem & { id: number }): DeezerTrack {
   return {
     id: item.id,
@@ -66,22 +89,48 @@ function toDeezerTrack(item: DeezerSearchItem & { id: number }): DeezerTrack {
   };
 }
 
+function closeDuration(track: DeezerTrack, durationMs?: number | null): boolean {
+  if (!durationMs || durationMs <= 0 || !track.duration) return true;
+  return Math.abs(track.duration * 1000 - durationMs) <= durationMs * ISRC_DURATION_RATIO;
+}
+
 export class DeezerPreviewService {
   private cache = new Map<string, CacheEntry>();
+  private inFlight = new Map<string, Promise<unknown>>();
   private requestTimestamps: number[] = [];
+  // File d'attente du debit : chaque appel prend son tour, dans l'ordre.
+  private throttleQueue: Promise<void> = Promise.resolve();
 
-  /** Throttle requests to stay within Deezer rate limits. */
-  private async throttle(): Promise<void> {
-    const now = Date.now();
-    this.requestTimestamps = this.requestTimestamps.filter(
-      ts => now - ts < RATE_LIMIT_WINDOW_MS
-    );
-    if (this.requestTimestamps.length >= RATE_LIMIT_MAX) {
-      const oldest = this.requestTimestamps[0];
-      const waitMs = RATE_LIMIT_WINDOW_MS - (now - oldest) + 50;
-      await new Promise(resolve => setTimeout(resolve, waitMs));
+  constructor(private readonly clock: Clock = realClock) {}
+
+  /**
+   * Au plus RATE_LIMIT_MAX appels par fenetre, meme avec 200 demandes
+   * simultanees : les attentes sont servies une par une (avant, toutes
+   * celles qui attendaient repartaient ensemble au meme instant).
+   */
+  private throttle(): Promise<void> {
+    const turn = this.throttleQueue.then(() => this.takeSlot());
+    this.throttleQueue = turn.catch(() => {});
+    return turn;
+  }
+
+  private async takeSlot(): Promise<void> {
+    for (;;) {
+      const now = this.clock.now();
+      this.requestTimestamps = this.requestTimestamps.filter(ts => now - ts < RATE_LIMIT_WINDOW_MS);
+      if (this.requestTimestamps.length < RATE_LIMIT_MAX) break;
+      await this.clock.sleep(RATE_LIMIT_WINDOW_MS - (now - this.requestTimestamps[0]) + 50);
     }
-    this.requestTimestamps.push(Date.now());
+    this.requestTimestamps.push(this.clock.now());
+  }
+
+  /** Une seule requete par cle a la fois : les demandes identiques attendent la meme. */
+  private dedupe<T>(key: string, run: () => Promise<T>): Promise<T> {
+    const pending = this.inFlight.get(key) as Promise<T> | undefined;
+    if (pending) return pending;
+    const p = run().finally(() => this.inFlight.delete(key));
+    this.inFlight.set(key, p);
+    return p;
   }
 
   private cacheKey(title: string, artist?: string): string {
@@ -91,7 +140,8 @@ export class DeezerPreviewService {
   private getCached(key: string): DeezerTrack | null | undefined {
     const entry = this.cache.get(key);
     if (!entry) return undefined;
-    if (Date.now() - entry.ts > CACHE_TTL_MS) {
+    // Trop vieux, ou extrait expire (les URL Deezer vivent ~15 min) : on oublie.
+    if (Date.now() - entry.ts > CACHE_TTL_MS || isExpiredPreview(entry.track?.preview)) {
       this.cache.delete(key);
       return undefined;
     }
@@ -102,38 +152,47 @@ export class DeezerPreviewService {
    * L'extrait du bon enregistrement : par identifiant Deezer, puis par ISRC,
    * puis par recherche de titre (qui refuse toute autre version). null si rien
    * de sur : le morceau sera saute plutot que joue dans une autre version.
+   * Deezer en erreur (quota, panne) : null tout de suite, sans recherche en
+   * plus, pour ne pas charger davantage un service qui sature.
    */
   async resolvePreview(query: PreviewQuery): Promise<DeezerTrack | null> {
     const deezerId = query.deezerId && /^\d{1,15}$/.test(query.deezerId) ? query.deezerId : null;
     if (deezerId) {
       const byId = await this.fetchExact(`id:${deezerId}`, `${DEEZER_TRACK_URL}/${deezerId}`);
-      if (byId?.preview) return byId;
+      if (byId.kind === "unavailable") return null;
+      if (byId.kind === "found" && byId.track.preview) return byId.track;
     }
     if (isIsrc(query.isrc)) {
       const isrc = query.isrc.toUpperCase();
       const byIsrc = await this.fetchExact(`isrc:${isrc}`, `${DEEZER_TRACK_URL}/isrc:${isrc}`);
-      if (byIsrc?.preview) return byIsrc;
+      if (byIsrc.kind === "unavailable") return null;
+      if (byIsrc.kind === "found" && byIsrc.track.preview && closeDuration(byIsrc.track, query.durationMs)) return byIsrc.track;
     }
     return this.searchTrack(query.title, query.artist, query.durationMs);
   }
 
-  /** Un morceau precis (/track/<id> ou /track/isrc:<ISRC>), ou null. */
-  private async fetchExact(key: string, url: string): Promise<DeezerTrack | null> {
+  /** Un morceau precis (/track/<id> ou /track/isrc:<ISRC>). */
+  private async fetchExact(key: string, url: string): Promise<ExactResult> {
     const cached = this.getCached(key);
-    if (cached !== undefined) return cached;
-
-    await this.throttle();
-    try {
-      const { data } = await axios.get<DeezerTrackResponse>(url, { timeout: 8_000 });
-      // Erreur 800 "no data" : Deezer ne connait pas ce morceau, on retient le non.
-      const track = !data?.error && data?.id && data.readable !== false ? toDeezerTrack({ ...data, id: data.id }) : null;
-      this.cache.set(key, { track, ts: Date.now() });
-      return track;
-    } catch (err) {
-      // Panne passagere : pas de cache, la recherche prend le relais.
-      logger.error("deezer_track_lookup_failed", { key, error: err });
-      return null;
-    }
+    if (cached !== undefined) return cached ? { kind: "found", track: cached } : { kind: "unknown" };
+    return this.dedupe(key, async (): Promise<ExactResult> => {
+      await this.throttle();
+      try {
+        const { data } = await axios.get<DeezerTrackResponse>(url, { timeout: 8_000 });
+        if (data?.error && data.error.code !== 800) {
+          // Quota (code 4) ou autre : rien en cache, on retentera plus tard.
+          logger.error("deezer_track_lookup_error", { key, error: data.error });
+          return { kind: "unavailable" };
+        }
+        // Erreur 800 "no data", ou pas de morceau : Deezer ne le connait pas, on retient le non.
+        const track = !data?.error && data?.id && data.readable !== false ? toDeezerTrack({ ...data, id: data.id }) : null;
+        this.cache.set(key, { track, ts: Date.now() });
+        return track ? { kind: "found", track } : { kind: "unknown" };
+      } catch (err) {
+        logger.error("deezer_track_lookup_failed", { key, error: err });
+        return { kind: "unavailable" };
+      }
+    });
   }
 
   /**
@@ -149,6 +208,10 @@ export class DeezerPreviewService {
     const cached = this.getCached(key);
     if (cached !== undefined) return cached;
 
+    return this.dedupe(key, () => this.runSearch(key, trimmedTitle, trimmedArtist, durationMs));
+  }
+
+  private async runSearch(key: string, trimmedTitle: string, trimmedArtist: string | undefined, durationMs?: number | null): Promise<DeezerTrack | null> {
     await this.throttle();
 
     // Recherche en texte libre. La syntaxe avancee (`track:"..." artist:"..."`)

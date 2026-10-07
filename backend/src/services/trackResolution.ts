@@ -4,6 +4,7 @@ import type { MusicProvider } from "../types/user";
 import { deezerPreviewService, type PreviewQuery } from "./deezerPreviewService";
 import { isIsrc } from "./previewMatch";
 import { logger } from "../utils/logger";
+import { isExpiredPreview } from "../utils/previewExpiry";
 
 // ---------------------------------------------------------------------------
 // Preview hydration — resolves audio URLs via Deezer search
@@ -13,17 +14,8 @@ import { logger } from "../utils/logger";
  * Hydrate a single audio source's preview URL using Deezer.
  * Updates the database if a preview is found. Returns the URL or null.
  */
-// Deezer signe ses previews avec une expiration (`?hdnea=exp=<unixSec>~...`). Passe ce delai,
-// l'URL renvoie 403 (text/html) et le navigateur leve NotSupportedError -> AUCUN son en jeu.
-// Les URLs sont stockees en base et peuvent dater de plusieurs mois -> on doit les detecter.
-export function isExpiredPreview(url: string | null | undefined): boolean {
-  if (!url) return false;
-  const m = url.match(/exp=(\d{8,})/);
-  if (!m) return false;
-  const exp = parseInt(m[1], 10);
-  if (!Number.isFinite(exp)) return false;
-  return exp * 1000 <= Date.now() + 60_000; // expiree, ou moins de 60s restantes
-}
+// isExpiredPreview vit dans utils/previewExpiry (le cache Deezer s'en sert aussi).
+export { isExpiredPreview };
 
 /**
  * Ce qu'on sait d'un morceau stocke pour retrouver SON extrait : l'identifiant
@@ -160,6 +152,20 @@ export function shuffle<T>(arr: T[]): T[] {
   return copy;
 }
 
+const HYDRATE_CONCURRENCY = 6;
+
+/** fn sur chaque element, `limit` a la fois au plus. */
+async function forEachLimit<T>(items: T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const item = items[next++];
+      await fn(item);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+}
+
 export async function collectPlayableSources(
   userIds: number | number[],
   desiredCount: number,
@@ -178,11 +184,10 @@ export async function collectPlayableSources(
   });
 
   // Hydrate / rafraichit les previews via Deezer (re-fetch si manquante OU expiree).
-  await Promise.all(
-    candidates.map(async (source) => {
-      source.audio_url = await hydratePreviewUrl(source);
-    })
-  );
+  // 6 a la fois : 200 candidats lances d'un coup saturaient le debit Deezer.
+  await forEachLimit(candidates, HYDRATE_CONCURRENCY, async (source) => {
+    source.audio_url = await hydratePreviewUrl(source);
+  });
 
   const playable = shuffle(candidates.filter((source) => Boolean(source.audio_url)));
   const unique = new Map<string, AudioSourceRow>();
