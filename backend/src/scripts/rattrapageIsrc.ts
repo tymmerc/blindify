@@ -91,7 +91,8 @@ async function fetchIsrcs(ids: string[]): Promise<Map<string, string | null>> {
         continue;
       }
       if (attempt >= MAX_ATTEMPTS) {
-        // Jamais l'erreur entiere : elle contient la requete, donc le jeton.
+        // Jamais l'erreur entiere, meme en `cause` : elle contient la requete, donc le jeton.
+        // eslint-disable-next-line preserve-caught-error
         throw new Error(`Spotify ${status ?? "injoignable"} : ${(err as Error).message}`);
       }
       await sleep(1_000 * attempt);
