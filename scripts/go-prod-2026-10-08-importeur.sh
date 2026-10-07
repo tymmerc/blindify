@@ -254,6 +254,28 @@ else
   [ -f "$PILE_RUN/run/backend.commit" ] || die "pile : pas de backend lance (stack.sh up)"
   curl -sf -m 5 "$SANTE" >/dev/null || die "pile : le backend de la pile ne repond pas"
 fi
+# Assez de place et de memoire, sinon on attend (10 min au plus) puis on sort.
+attendre_ressource() { # libelle commande_qui_donne_des_Go minimum
+  local i dispo
+  for i in $(seq 1 20); do
+    dispo="$(eval "$2")"
+    [ "${dispo:-0}" -ge "$3" ] && { echo "  [ok] $1 : $dispo Go (minimum $3)"; return 0; }
+    echo "  $1 : ${dispo:-?} Go, il en faut $3 ; on attend 30 s"
+    sleep 30
+  done
+  die "$1 : toujours moins de $3 Go apres 10 min ($ETAT_BACKEND_COURT)"
+}
+ETAT_BACKEND_COURT="rien n'a change"
+attendre_ressource "disque libre sur /" "df --output=avail -BG / | tail -1 | tr -dc 0-9" 4
+# Un passage precedent a deja ecrit un fichier de retour : apres un echec, le
+# vrai retour est celui du PREMIER passage (son image « avant » est celle
+# d'avant le lot ; celle de ce passage peut deja etre le lot).
+precedents="$(ls -t "$SAUVE"/retour-importeur-*.sh 2>/dev/null || true)"
+if [ -n "$precedents" ]; then
+  echo "  !! ATTENTION : fichier(s) de retour d'un passage precedent :"
+  echo "$precedents" | sed 's/^/       /'
+  echo "     Le vrai retour est celui du PREMIER passage ($(echo "$precedents" | tail -1)), pas celui que ce passage va ecrire."
+fi
 DEJA_005="$(sql "SELECT to_regclass('public.user_audio_sources') IS NOT NULL")"
 [ "$DEJA_005" = t ] && echo "  NOTE : user_audio_sources existe deja (005 deja passee, par le backend de dev ?). Elle est rejouable : on continue."
 echo "  commit deploye : $(git rev-parse --short HEAD) (campagne verte sur ${TESTE_SHA:0:7})"
@@ -315,6 +337,7 @@ if [ "$CIBLE" = prod ]; then
   FONCTION_RETOUR="$(declare -f prod_backend_image)"
   REMETTRE_BACKEND="prod_backend_image $IMAGE_AVANT"
   PSQL_RETOUR="docker exec -i blindify-postgres psql -U blindify -d blindify -v ON_ERROR_STOP=1 -1"
+  DUMP_TABLE_RETOUR="docker exec blindify-postgres pg_dump -U blindify -d blindify -t user_audio_sources"
   ARRET_DEV="systemctl stop blindify-dev-backend"
   echo "  image   : $IMAGE_AVANT"
   echo "  config  : $SAUVE/env-prod-avant-importeur-$HORO, $SAUVE/env-dev-backend-avant-importeur-$HORO (mode 600, le lot ne la change pas)"
@@ -323,6 +346,7 @@ else
   FONCTION_RETOUR="$(declare -f pile_backend_commit)"
   REMETTRE_BACKEND="pile_backend_commit $AVANT_COMMIT"
   PSQL_RETOUR="docker exec -i blindz-test-postgres psql -U blindify -d blindify_test -v ON_ERROR_STOP=1 -1"
+  DUMP_TABLE_RETOUR="docker exec blindz-test-postgres pg_dump -U blindify -d blindify_test -t user_audio_sources"
   ARRET_DEV="true # pile : pas de backend de dev"
   echo "  backend d'avant (pile) : commit ${AVANT_COMMIT:0:7}"
 fi
@@ -331,20 +355,33 @@ fi
 # Retour arriere du lot importeur du $HORO ($CIBLE), ecrit par go-prod-2026-10-08-importeur.sh.
 #   bash $RETOUR_FICHIER                 remet le backend d'avant (la 005 reste)
 #   bash $RETOUR_FICHIER --defaire-005   et retire aussi la 005 (voir plus bas)
+# NE PAS l'executer apres un deploiement ulterieur : il remettrait l'image
+# d'avant CE lot par-dessus. Apres plusieurs passages du script, le bon
+# fichier est celui du PREMIER.
 # L'ancien backend marche avec la 005 (verifie sur la pile) : ses declencheurs
 # suivent ses imports et ses retraits de carte. Le front du lot marche avec
 # l'ancien backend (sans requestedRounds, le message de #67 ne s'affiche pas) :
-# il n'est pas remis ici. Ne deplace pas le depot git.
+# il n'est pas remis ici (la commande est plus bas). Ne deplace pas le depot git.
 set -euo pipefail
 $FONCTION_RETOUR
+if [ "\${1:-}" = --defaire-005 ]; then
+  # D'abord le backend de dev : il tourne sur le code de main, lit
+  # user_audio_sources et rejouerait la 005 en redemarrant.
+  $ARRET_DEV
+fi
 $REMETTRE_BACKEND
 if [ "\${1:-}" = --defaire-005 ]; then
-  # Le backend de dev tourne sur le code de main : il lit user_audio_sources
-  # et rejouerait la 005 en redemarrant. On l'arrete.
-  $ARRET_DEV
-  # Les liens des seconds importeurs sont perdus (comme avant le correctif).
-  # game_rounds.owner_user_id et son index restent : l'ancien code les ignore.
-  $PSQL_RETOUR <<'SQL'
+  # Les liens des seconds importeurs sont perdus (comme avant le correctif) :
+  # on les garde d'abord a part. game_rounds.owner_user_id et son index
+  # restent, l'ancien code les ignore.
+  ( umask 077; $DUMP_TABLE_RETOUR | gzip > "$SAUVE/user_audio_sources-avant-defaire-$HORO.sql.gz" )
+  gzip -t "$SAUVE/user_audio_sources-avant-defaire-$HORO.sql.gz"
+  echo "liens gardes : $SAUVE/user_audio_sources-avant-defaire-$HORO.sql.gz"
+  # -1 (une seule transaction) est juste ici : rien que des DROP, tout ou rien.
+  # lock_timeout : si une requete tient audio_sources, on abandonne sans rien
+  # retirer et on recommence (3 essais).
+  for essai in 1 2 3; do
+    if $PSQL_RETOUR <<'SQL'
 SET lock_timeout = '5s';
 DROP TRIGGER IF EXISTS audio_sources_lien_proprietaire ON audio_sources;
 DROP TRIGGER IF EXISTS audio_sources_lien_retire ON audio_sources;
@@ -352,10 +389,20 @@ DROP FUNCTION IF EXISTS audio_sources_lien_proprietaire();
 DROP FUNCTION IF EXISTS audio_sources_lien_retire();
 DROP TABLE IF EXISTS user_audio_sources;
 SQL
-  echo "005 defaite (declencheurs, fonctions, table)"
+    then
+      echo "005 defaite (declencheurs, fonctions, table)"
+      echo "Le backend de dev doit RESTER ARRETE tant que main contient #54 : il rejouerait la 005 en demarrant."
+      exit 0
+    fi
+    echo "essai \$essai : verrou non obtenu, rien n'est retire ; on recommence dans 10 s"
+    sleep 10
+  done
+  echo "!! 005 PAS defaite apres 3 essais (le backend d'avant est remis, lui)"
+  exit 1
 fi
 EOF
 chmod 700 "$RETOUR_FICHIER" )
+bash -n "$RETOUR_FICHIER" || die "fichier de retour illisible par bash : $RETOUR_FICHIER (rien n'a change)"
 RETOUR="bash $RETOUR_FICHIER"
 echo "  base    : $DUMP ($(du -h "$DUMP" | cut -f1), mode 600)"
 echo "  retour  : $RETOUR"
@@ -414,6 +461,8 @@ echo "── 5. Backend ($(heure)) ──"
 # Ancien backend toujours en place jusqu'au redemarrage : un arret ici ne
 # demande aucun retour (la 005 est sans effet sur lui).
 gardes_main
+ETAT_BACKEND_COURT="ancien backend toujours en place, la 005 est en base (sans effet sur lui)"
+attendre_ressource "memoire disponible" "free -g | awk '/^Mem:/ {print \$7}'" 3
 if [ "$CIBLE" = prod ]; then
   docker compose build backend || die "build du backend en echec : ancien backend toujours en place"
   gardes_main
@@ -428,8 +477,13 @@ for i in $(seq 1 40); do
 done
 retour_backend_auto() {
   echo "  !! $1 : retour automatique au backend d'avant"
-  $REMETTRE_BACKEND || true
-  echo "  backend d'avant remis (la 005 reste). Verifier $SANTE. Retour complet : $RETOUR"
+  if $REMETTRE_BACKEND; then
+    ETAT_BACKEND="ancien (retour automatique fait, la 005 reste : sans effet sur lui)"
+    echo "  [ok] backend d'avant remis et en ligne"
+  else
+    ETAT_BACKEND="INCONNU (retour automatique echoue)"
+    echo "  !! RETOUR AUTO ECHOUE, lancer : $RETOUR"
+  fi
   exit 1
 }
 debut=$(date +%s)
@@ -538,19 +592,22 @@ echo "── 8. Front (voie rapide, $(heure)) ──"
 # le message de #67 n'est pas (il est dans le code de l'ecran de jeu). On lui
 # passe un texte present et on prouve le message de #67 dans les chunks servis.
 echo "  parties en cours juste avant le front : $(en_cours) (le front est reconstruit en place : quelques secondes de 404 sur les pages)"
-AVANT_FRONT="$(ls -dt /opt/backups/front-out-avant-* 2>/dev/null | head -1 || true)"
+# Notre propre copie du site, et sa commande de retour dans le fichier de
+# retour, AVANT le build (go-prod-front.sh garde aussi la sienne).
+FRONT_SAUVE="$SAUVE/front-out-avant-importeur-$HORO"
+cp -a frontend/out "$FRONT_SAUVE" && [ -f "$FRONT_SAUVE/index.html" ] \
+  || die "copie du front impossible : backend du lot en place, front pas touche"
+RETOUR_FRONT="rsync -a --delete $FRONT_SAUVE/ /opt/blindify/frontend/out/"
+echo "# Front d'avant, si besoin (pas necessaire pour l'ancien backend) : $RETOUR_FRONT" >> "$RETOUR_FICHIER"
+echo "  site actuel copie : $FRONT_SAUVE"
+ETAT_FRONT="en reconstruction"
 if ! ( umask 022; bash scripts/go-prod-front.sh "titre-fin" ); then
-  NOUVEAU="$(ls -dt /opt/backups/front-out-avant-* 2>/dev/null | head -1 || true)"
-  if [ ! -f frontend/out/index.html ] && [ -n "$NOUVEAU" ] && [ "$NOUVEAU" != "$AVANT_FRONT" ]; then
-    rsync -a --delete "$NOUVEAU"/ frontend/out/ && echo "  front d'avant remis depuis $NOUVEAU (le build avait vide out/)"
+  if [ ! -f frontend/out/index.html ]; then
+    rsync -a --delete "$FRONT_SAUVE"/ frontend/out/ && ETAT_FRONT="ancien (remis depuis $FRONT_SAUVE : le build avait vide out/)"
   fi
-  echo "  !! FRONT ECHOUE. Le backend du lot est DEJA en place et sain : ne pas le remettre pour ca."
-  echo "     Corriger puis relancer : heavy bash /opt/blindify/scripts/go-prod-front.sh titre-fin ; puis l'etape 9 a la main"
-  echo "     (systemctl restart blindz-db-browser ; systemctl start blindify-dev-backend). Retour complet si besoin : $RETOUR"
-  exit 1
+  die "FRONT ECHOUE : backend du lot en place et sain (ne pas le remettre pour ca), front a traiter. Relancer : heavy bash /opt/blindify/scripts/go-prod-front.sh titre-fin"
 fi
-FRONT_SAUVE="$(ls -dt /opt/backups/front-out-avant-* 2>/dev/null | head -1 || true)"
-echo "# Front d'avant, si besoin (pas necessaire pour l'ancien backend) : rsync -a --delete $FRONT_SAUVE/ /opt/blindify/frontend/out/" >> "$RETOUR_FICHIER"
+ETAT_FRONT="nouveau (a verifier)"
 build_id="$(find frontend/out/_next/static -mindepth 1 -maxdepth 1 -type d ! -name chunks ! -name css ! -name media -printf '%f\n' | head -1)"
 [ -n "$build_id" ] || die "build id introuvable dans frontend/out"
 chunk67="$(grep -rlF 'pas assez de titres jouables dans vos playlists' frontend/out/_next/static/chunks | head -1 || true)"
@@ -558,7 +615,11 @@ ko=0
 verifie "la prod sert le build qui vient d'etre construit ($build_id)" "curl -s -m 30 https://blindz.app/ | grep -qF -e \"$build_id\""
 verifie "#67 message « X manches au lieu de Y » dans le build" "[ -n \"$chunk67\" ]"
 verifie "#67 blindz.app sert ce fichier" "curl -sf -m 30 \"https://blindz.app/${chunk67#frontend/out/}\" | grep -qF 'pas assez de titres jouables'"
-[ "$ko" = 0 ] || { echo "  !! UNE VERIFICATION DU FRONT A ECHOUE (backend en place et sain)"; echo "  front d'avant : rsync -a --delete $FRONT_SAUVE/ /opt/blindify/frontend/out/"; exit 1; }
+if [ "$ko" != 0 ]; then
+  ETAT_FRONT="en reconstruction"
+  die "UNE VERIFICATION DU FRONT A ECHOUE : backend du lot en place et sain, front a traiter"
+fi
+ETAT_FRONT="nouveau"
 
 ETAPE="9. explorateur et backend de dev"
 echo "── 9. Explorateur de base et backend de dev ($(heure)) ──"
@@ -572,9 +633,10 @@ verifie "explorateur de base actif" "systemctl is-active --quiet blindz-db-brows
 verifie "explorateur : detail de la derniere partie ($derniere) lisible" "curl -sf -m 10 http://127.0.0.1:3101/session/$derniere | grep -qF '\"manches\"'"
 echo "  parties en cours avant le demarrage du backend de dev : $(en_cours)"
 systemctl start blindify-dev-backend
+ETAT_DEV="relance"
 for i in $(seq 1 60); do curl -sf -m 2 http://127.0.0.1:3097/api/health >/dev/null && break; sleep 2; done
 verifie "backend de dev reparti (meme commit : il tourne depuis /opt/blindify)" "curl -sf -m 5 http://127.0.0.1:3097/api/health >/dev/null"
-[ "$ko" = 0 ] || { echo "  !! UNE VERIFICATION DE L'EXPLORATEUR OU DU DEV A ECHOUE (la prod du jeu est en place)"; exit 1; }
+[ "$ko" = 0 ] || die "UNE VERIFICATION DE L'EXPLORATEUR OU DU DEV A ECHOUE : backend et front du lot en place"
 
 echo
 echo "DEPLOIEMENT DU LOT IMPORTEUR TERMINE ($(git rev-parse --short HEAD), $(heure))"
