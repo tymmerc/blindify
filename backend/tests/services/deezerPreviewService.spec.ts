@@ -103,15 +103,12 @@ describe("DeezerPreviewService.resolvePreview", () => {
     expect(t?.id).toBe(8);
   });
 
-  it("Deezer en erreur (quota, code 4) : ni cache, ni recherche en plus", async () => {
+  it("Deezer en erreur (quota, code 4) : pas de recherche en plus", async () => {
     get.mockResolvedValue({ data: { error: { type: "Exception", message: "Quota limit exceeded", code: 4 } } });
     const svc = new DeezerPreviewService();
     const q = { title: "You Say Run", artist: "Yuki Hayashi", isrc: "JPZ921607277" };
-    expect(await svc.resolvePreview(q)).toBeNull();
+    expect((await svc.resolvePreviewOutcome(q)).status).toBe("error");
     expect(get).toHaveBeenCalledTimes(1); // pas de recherche derriere : on chargerait Deezer davantage
-    expect(await svc.resolvePreview(q)).toBeNull();
-    expect(get).toHaveBeenCalledTimes(2); // pas de "inconnu" en cache : on retentera
-    expect(get.mock.calls[1][0]).toMatch(/\/track\/isrc:/);
   });
 
   it("panne reseau sur l'ISRC : erreur, pas de recherche en plus", async () => {
@@ -190,7 +187,7 @@ describe("DeezerPreviewService : debit et cache", () => {
     };
   }
 
-  it("200 appels simultanes : jamais plus de 50 par fenetre de 5 s", async () => {
+  it("200 appels simultanes : jamais plus de 40 par fenetre de 5 s (marge sous les 50 de Deezer)", async () => {
     const clock = virtualClock();
     const sent: number[] = [];
     get.mockImplementation(async () => { sent.push(clock.now()); return { data: { data: [] } }; });
@@ -198,7 +195,7 @@ describe("DeezerPreviewService : debit et cache", () => {
     await Promise.all(Array.from({ length: 200 }, (_, i) => svc.resolvePreview({ title: `Titre ${i}`, artist: "A" })));
     expect(sent).toHaveLength(200);
     for (const t of sent) {
-      expect(sent.filter(x => x >= t && x < t + 5_000).length).toBeLessThanOrEqual(50);
+      expect(sent.filter(x => x >= t && x < t + 5_000).length).toBeLessThanOrEqual(40);
     }
   });
 
@@ -250,5 +247,81 @@ describe("DeezerPreviewService : debit et cache", () => {
     expect(get).toHaveBeenCalledTimes(45); // 15 recherches + 15 /track/<id> + leurs 15 recherches de repli
     expect(peak).toBeLessThanOrEqual(6);
     expect(peak).toBeGreaterThan(1);
+  });
+
+  it("quota (code 4) : retenu 30 s comme une panne, puis on retente", async () => {
+    const clock = virtualClock();
+    get.mockResolvedValue({ data: { error: { type: "Exception", message: "Quota limit exceeded", code: 4 } } });
+    const svc = new DeezerPreviewService(clock);
+    const q = { title: "You Say Run", artist: "Yuki Hayashi", isrc: "JPZ921607277" };
+    await svc.resolvePreviewOutcome(q);
+    await svc.resolvePreviewOutcome(q);
+    expect(get).toHaveBeenCalledTimes(1);
+    await clock.sleep(31_000);
+    expect((await svc.resolvePreviewOutcome(q)).status).toBe("error");
+    expect(get).toHaveBeenCalledTimes(2);
+  });
+
+  it("corps HTML ou vide : erreur (jamais \"inconnu\"), retenue 30 s", async () => {
+    const clock = virtualClock();
+    const svc = new DeezerPreviewService(clock);
+    get.mockResolvedValueOnce({ data: "<html>Akamai</html>" });
+    expect((await svc.resolvePreviewOutcome({ title: "You Say Run", isrc: "JPZ921607277" })).status).toBe("error");
+    get.mockResolvedValueOnce({ data: "" });
+    expect((await svc.resolvePreviewOutcome({ title: "Song", artist: "A" })).status).toBe("error");
+    get.mockResolvedValueOnce({ data: { total: 0 } }); // objet sans tableau data : pas une vraie reponse de recherche
+    expect((await svc.resolvePreviewOutcome({ title: "Autre", artist: "A" })).status).toBe("error");
+    expect(get).toHaveBeenCalledTimes(3);
+    await svc.resolvePreviewOutcome({ title: "Song", artist: "A" });
+    expect(get).toHaveBeenCalledTimes(3); // retenu 30 s
+    await clock.sleep(31_000);
+    get.mockResolvedValueOnce({ data: { data: [] } });
+    expect((await svc.resolvePreviewOutcome({ title: "Song", artist: "A" })).status).toBe("none");
+  });
+
+  it("file pleine (plus de 200 en attente) : erreur tout de suite, sans cache", async () => {
+    const release: Array<() => void> = [];
+    get.mockImplementation(() => new Promise(resolve => release.push(() => resolve({ data: { data: [] } }))));
+    const svc = new DeezerPreviewService(virtualClock());
+    const accepted = Array.from({ length: 206 }, (_, i) => svc.resolvePreviewOutcome({ title: `Titre ${i}`, artist: "A" }));
+    const refused = await Promise.all([0, 1, 2].map(i => svc.resolvePreviewOutcome({ title: `En trop ${i}`, artist: "A" })));
+    expect(refused.map(o => o.status)).toEqual(["error", "error", "error"]);
+    let done = false;
+    const all = Promise.all(accepted).then(() => { done = true; });
+    while (!done) {
+      release.shift()?.();
+      await new Promise(r => setImmediate(r));
+    }
+    await all;
+    expect(get).toHaveBeenCalledTimes(206);
+    get.mockImplementation(async () => ({ data: { data: [] } }));
+    expect((await svc.resolvePreviewOutcome({ title: "En trop 0", artist: "A" })).status).toBe("none"); // pas en cache
+    expect(get).toHaveBeenCalledTimes(207);
+  });
+
+  it("disjoncteur : un quota (code 4) suspend TOUS les appels Deezer 20 s, recherche comprise", async () => {
+    const clock = virtualClock();
+    const svc = new DeezerPreviewService(clock);
+    get.mockResolvedValueOnce({ data: { error: { type: "Exception", message: "Quota limit exceeded", code: 4 } } });
+    expect((await svc.resolvePreviewOutcome({ title: "Song", artist: "A" })).status).toBe("error");
+    get.mockResolvedValue({ data: { data: [] } });
+    // Autres morceaux, autres chemins : aucun appel pendant 20 s.
+    expect((await svc.resolvePreviewOutcome({ title: "Autre", artist: "B" })).status).toBe("error");
+    expect((await svc.resolvePreviewOutcome({ title: "X", isrc: "JPZ921607277" })).status).toBe("error");
+    expect((await svc.resolvePreviewOutcome({ title: "Y", deezerId: "42" })).status).toBe("error");
+    expect(get).toHaveBeenCalledTimes(1);
+    await clock.sleep(21_000);
+    expect((await svc.resolvePreviewOutcome({ title: "Autre", artist: "B" })).status).toBe("none");
+    expect(get).toHaveBeenCalledTimes(2);
+  });
+
+  it("le quota sur /track/isrc: declenche aussi le disjoncteur", async () => {
+    const clock = virtualClock();
+    const svc = new DeezerPreviewService(clock);
+    get.mockResolvedValueOnce({ data: { error: { code: 4, message: "Quota limit exceeded" } } });
+    await svc.resolvePreviewOutcome({ title: "X", isrc: "JPZ921607277" });
+    get.mockResolvedValue({ data: { data: [] } });
+    expect((await svc.resolvePreviewOutcome({ title: "Song", artist: "A" })).status).toBe("error");
+    expect(get).toHaveBeenCalledTimes(1);
   });
 });

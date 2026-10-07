@@ -7,9 +7,12 @@ import { isExpiredPreview } from "../utils/previewExpiry";
 const DEEZER_SEARCH_URL = `${DEEZER_API}/search`;
 const DEEZER_TRACK_URL = `${DEEZER_API}/track`;
 
-// Deezer rate limit: 50 requests per 5 seconds
+// Deezer limite a 50 appels par 5 s ; on en garde 40 pour avoir de la marge
+// (au-dela, Akamai bloque l'IP du VPS, et ce blocage touche les vrais joueurs).
 const RATE_LIMIT_WINDOW_MS = 5_000;
-const RATE_LIMIT_MAX = 50;
+const RATE_LIMIT_MAX = 40;
+// Disjoncteur : sur un quota (code 4), plus aucun appel Deezer pendant 20 s.
+const QUOTA_PAUSE_MS = 20_000;
 
 const CACHE_TTL_MS = 60 * 60 * 1_000; // 1 hour
 // Panne reseau ou delai depasse : on retient l'echec peu de temps, pour ne pas
@@ -18,6 +21,16 @@ const ERROR_CACHE_TTL_MS = 30_000;
 // Appels HTTP Deezer en vol a la fois, pour tout le process (import, solo
 // par lien, solo, salles passent tous par le meme service).
 const MAX_IN_FLIGHT = 6;
+// Au-dela de 200 demandes en attente d'une place, on refuse tout de suite :
+// mieux vaut sauter un morceau que laisser grossir la file sans fin.
+const MAX_WAITING = 200;
+
+class QueueFullError extends Error {}
+class SuspendedError extends Error {}
+
+/** Vraie reponse JSON de Deezer (un objet), pas une page HTML ni un corps vide. */
+const isJsonObject = (data: unknown): data is object =>
+  typeof data === "object" && data !== null && !Array.isArray(data);
 
 // Assez de resultats pour que la bonne version y soit, en un seul appel.
 const SEARCH_LIMIT = 10;
@@ -114,6 +127,7 @@ export class DeezerPreviewService {
   private throttleQueue: Promise<void> = Promise.resolve();
   private active = 0;
   private slotWaiters: Array<() => void> = [];
+  private suspendedUntil = 0;
 
   constructor(private readonly clock: Clock = realClock) {}
 
@@ -140,8 +154,10 @@ export class DeezerPreviewService {
 
   /** Au plus MAX_IN_FLIGHT requetes en vol ; la place se passe au suivant. */
   private async withSlot<T>(fn: () => Promise<T>): Promise<T> {
-    if (this.active >= MAX_IN_FLIGHT) await new Promise<void>(resolve => this.slotWaiters.push(resolve));
-    else this.active++;
+    if (this.active >= MAX_IN_FLIGHT) {
+      if (this.slotWaiters.length >= MAX_WAITING) throw new QueueFullError("file Deezer pleine");
+      await new Promise<void>(resolve => this.slotWaiters.push(resolve));
+    } else this.active++;
     try {
       return await fn();
     } finally {
@@ -153,11 +169,19 @@ export class DeezerPreviewService {
 
   /** Un GET Deezer : une place parmi les 6, puis son tour dans le debit. */
   private request<T>(url: string, params?: Record<string, unknown>): Promise<T> {
+    this.assertNotSuspended();
     return this.withSlot(async () => {
       await this.throttle();
+      this.assertNotSuspended(); // le disjoncteur a pu sauter pendant l'attente
       const { data } = await axios.get<T>(url, { ...(params ? { params } : {}), timeout: 8_000 });
+      const code = (data as { error?: { code?: number } } | null)?.error?.code;
+      if (code === 4) this.suspendedUntil = this.clock.now() + QUOTA_PAUSE_MS;
       return data;
     });
+  }
+
+  private assertNotSuspended(): void {
+    if (this.clock.now() < this.suspendedUntil) throw new SuspendedError("Deezer en pause (quota)");
   }
 
   /** Une seule requete par cle a la fois : les demandes identiques attendent la meme. */
@@ -226,15 +250,22 @@ export class DeezerPreviewService {
     return this.dedupe(key, async () => {
       try {
         const data = await this.request<DeezerTrackResponse>(url);
-        if (data?.error && data.error.code !== 800) {
-          // Quota (code 4) ou autre : rien en cache, on retentera plus tard.
+        if (!isJsonObject(data)) {
+          // Page HTML (blocage Akamai) ou corps vide : surtout pas "inconnu".
+          logger.error("deezer_track_lookup_error", { key, error: "reponse non JSON" });
+          return this.setCached(key, ERROR, ERROR_CACHE_TTL_MS);
+        }
+        if (data.error && data.error.code !== 800) {
+          // Quota (code 4) ou autre : retenu 30 s, comme une panne, pour ne pas insister.
           logger.error("deezer_track_lookup_error", { key, error: data.error });
-          return ERROR;
+          return this.setCached(key, ERROR, ERROR_CACHE_TTL_MS);
         }
         // Erreur 800 "no data", ou pas de morceau : Deezer ne le connait pas, on retient le non.
-        const found = !data?.error && data?.id && data.readable !== false;
+        const found = !data.error && data.id && data.readable !== false;
         return this.setCached(key, found ? { status: "found", track: toDeezerTrack({ ...data, id: data.id as number }) } : NONE);
       } catch (err) {
+        // File pleine ou disjoncteur : refus immediat, rien en cache.
+        if (err instanceof QueueFullError || err instanceof SuspendedError) return ERROR;
         logger.error("deezer_track_lookup_failed", { key, error: err });
         return this.setCached(key, ERROR, ERROR_CACHE_TTL_MS);
       }
@@ -272,14 +303,17 @@ export class DeezerPreviewService {
     try {
       const data = await this.request<DeezerSearchResponse>(DEEZER_SEARCH_URL, { q, limit: SEARCH_LIMIT });
 
-      if (data?.error) {
-        logger.error("deezer_search_error", { error: data.error });
-        return ERROR;
+      if (!isJsonObject(data) || data.error || !Array.isArray(data.data)) {
+        // Quota, page HTML, corps vide ou sans resultats lisibles : erreur, retenue 30 s.
+        logger.error("deezer_search_error", { error: isJsonObject(data) ? data.error ?? "reponse sans data" : "reponse non JSON" });
+        return this.setCached(key, ERROR, ERROR_CACHE_TTL_MS);
       }
 
-      const match = pickMatch(data?.data ?? [], { title: trimmedTitle, artist: trimmedArtist, durationMs });
+      const match = pickMatch(data.data, { title: trimmedTitle, artist: trimmedArtist, durationMs });
       return this.setCached(key, match?.id && match.title ? { status: "found", track: toDeezerTrack({ ...match, id: match.id }) } : NONE);
     } catch (err) {
+      // File pleine ou disjoncteur : refus immediat, rien en cache.
+      if (err instanceof QueueFullError || err instanceof SuspendedError) return ERROR;
       logger.error("deezer_search_failed", { title: trimmedTitle, artist: trimmedArtist, error: err });
       return this.setCached(key, ERROR, ERROR_CACHE_TTL_MS);
     }
