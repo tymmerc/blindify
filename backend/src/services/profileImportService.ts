@@ -3,6 +3,7 @@ import { DEEZER_API } from "../config/deezer";
 import { Buffer } from "node:buffer";
 import { logger } from "../utils/logger";
 import { isDeezerId, isSpotifyId } from "../utils/providerIds";
+import { isIsrc } from "./previewMatch";
 
 // ---------------------------------------------------------------------------
 // URL Parsing
@@ -96,6 +97,8 @@ export interface ImportedTrack {
   externalId: string;
   provider: "spotify" | "deezer";
   durationMs: number | null;
+  /** Identifiant de l'enregistrement (Spotify) : retrouve l'extrait exact sur Deezer. */
+  isrc?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -104,7 +107,7 @@ export interface ImportedTrack {
 
 let spotifyTokenCache: { token: string; expiresAt: number } | null = null;
 
-async function getSpotifyClientToken(): Promise<string> {
+export async function getSpotifyClientToken(): Promise<string> {
   if (spotifyTokenCache && Date.now() < spotifyTokenCache.expiresAt - 5_000) {
     return spotifyTokenCache.token;
   }
@@ -119,7 +122,7 @@ async function getSpotifyClientToken(): Promise<string> {
   const { data } = await axios.post<{ access_token?: string; expires_in?: number }>(
     "https://accounts.spotify.com/api/token",
     body.toString(),
-    { headers: { Authorization: `Basic ${credentials}`, "Content-Type": "application/x-www-form-urlencoded" } }
+    { headers: { Authorization: `Basic ${credentials}`, "Content-Type": "application/x-www-form-urlencoded" }, timeout: 10_000 }
   );
 
   if (!data.access_token) throw new Error("Spotify returned empty access token");
@@ -294,7 +297,7 @@ async function fetchSpotifyPlaylistTracks(playlistId: string, maxTracks = 500): 
   const token = await getSpotifyClientToken();
   const tracks: ImportedTrack[] = [];
   const pageSize = Math.min(maxTracks, 100);
-  let cursor: string | null = `https://api.spotify.com/v1/playlists/${encodeURIComponent(playlistId)}/tracks?limit=${pageSize}&fields=items(track(id,name,artists,album,duration_ms)),next`;
+  let cursor: string | null = `https://api.spotify.com/v1/playlists/${encodeURIComponent(playlistId)}/tracks?limit=${pageSize}&fields=items(track(id,name,artists,album,duration_ms,external_ids(isrc))),next`;
 
   while (cursor && tracks.length < maxTracks) {
     const { data } = await axios.get(cursor, {
@@ -313,6 +316,7 @@ async function fetchSpotifyPlaylistTracks(playlistId: string, maxTracks = 500): 
         externalId: t.id,
         provider: "spotify",
         durationMs: t.duration_ms ?? null,
+        isrc: isIsrc(t.external_ids?.isrc) ? t.external_ids.isrc : null,
       });
     }
     cursor = data?.next ?? null;

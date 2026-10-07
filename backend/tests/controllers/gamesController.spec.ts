@@ -11,6 +11,8 @@ jest.mock('../../src/utils/session', () => ({
 }));
 jest.mock('../../src/services/trackResolution', () => ({
   hydratePreviewUrl: jest.fn(),
+  // La vraie regle d'expiration (pure) : un extrait expire repasse par Deezer.
+  isExpiredPreview: jest.requireActual<typeof import('../../src/services/trackResolution')>('../../src/services/trackResolution').isExpiredPreview,
 }));
 jest.mock('axios');
 jest.mock('../../src/utils/logger', () => ({

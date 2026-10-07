@@ -9,6 +9,7 @@ import { api } from "@/lib/api"
 import { ApiError } from "@/lib/apiClient"
 import type { CurrentUserPayload } from "@/lib/api"
 import { audioManager } from "@/lib/audioManager"
+import { runExclusive } from "@/lib/runExclusive"
 import { publicPath } from "@/lib/publicPath"
 import { currentReturnTo } from "@/lib/returnTo"
 import type { MultiplayerGameState, MultiplayerParticipant, MultiplayerRoom, SoloTrack, StreamerState, StreamerSubMode } from "@/lib/types"
@@ -240,6 +241,8 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   const serverNow = useServerTime(socketRef.current)
   const autoHostTriggered = useRef(false)
   const autoStartGameRef = useRef(false)
+  // « Revanche » et « Rejouer » : un double clic ne relance pas deux fois.
+  const restartingRef = useRef(false)
   const canHostNow = lobby.status === "idle" || lobby.status === "error"
   const isHost = useMemo(() => (room && userPayload ? room.host_user_id === userPayload.user.id : false), [room, userPayload])
   const activeParticipants = useMemo(
@@ -1737,7 +1740,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
           modeConfig={modeConfig}
           accentColor={accentColor}
           onExit={handleLeaveRoom}
-          onRematch={isHost ? async () => {
+          onRematch={isHost ? () => runExclusive(restartingRef, async () => {
             try {
               const { tracks: newTracks, gameState: newState } = await api.startMultiplayerGame(room.room_code, { source: "library" })
               setTracks(newTracks)
@@ -1745,7 +1748,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
             } catch (err) {
               console.error("rematch_failed", err)
             }
-          } : undefined}
+          }) : undefined}
           chatMessages={chatMessages}
           onSendChat={sendChat}
         />
@@ -1767,7 +1770,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
           hostPlays: (gameState as MultiplayerGameState | null)?.hostPlays === true,
         })}
         onReturn={() => router.replace("/modes")}
-        onReplay={async () => {
+        onReplay={() => runExclusive(restartingRef, async () => {
           if (!room || !isHost) return
           try {
             setView("playing")
@@ -1788,7 +1791,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
             setFlowStarted(false)
             dispatchLobby({ type: "reset" })
           }
-        }}
+        })}
       />
     ) : loadingGame ? (
       loadingGame

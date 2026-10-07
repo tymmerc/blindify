@@ -134,6 +134,35 @@ describe("persistRoundResponses", () => {
 
     expect(insertedRows()).toEqual(expected);
   });
+
+  it("morceau partage : deviner n'importe lequel de ses importeurs presents est juste", async () => {
+    clearGame(ROOM);
+    bootstrapGameState({
+      roomCode: ROOM,
+      hostUserId: 1,
+      tracks: [{ ...tracks[0], metadata: { owner_user_id: 2, owner_user_ids: [2, 3] } }],
+      participants: [
+        { userId: 1, username: "Hote" },
+        { userId: 2, username: "Bea" },
+        { userId: 3, username: "Chloe" },
+      ],
+      sessionId: SESSION_ID,
+    });
+    startNextRound(ROOM, { startAt: Date.now() - 4000 });
+    recordAnswer(ROOM, 1, "", 3, "", "");
+    recordAnswer(ROOM, 2, "", 1, "", "");
+    recordAnswer(ROOM, 3, "", 2, "", "");
+    const revealed = revealRound(ROOM)!;
+    query.mockImplementation(async (sql: string) => (String(sql).includes("FROM game_rounds") ? { rows: [{ id: ROUND1_ROW_ID }] } : { rows: [] }));
+
+    await persistRoundResponses(revealed, SESSION_ID);
+
+    expect(insertedRows().map(r => [r.userId, r.sourceGuess, r.sourceOwner, r.sourceCorrect])).toEqual([
+      [1, 3, 2, true],
+      [2, 1, 2, false],
+      [3, 2, 2, true],
+    ]);
+  });
 });
 
 describe("persistGameResults", () => {

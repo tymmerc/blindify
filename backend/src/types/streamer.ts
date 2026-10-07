@@ -38,6 +38,10 @@ export interface StreamerState {
   phase: StreamerPhase;
   currentRound: number;
   totalRounds: number;
+  /** Manches demandees par l'hote (plus que totalRounds s'il manquait des titres jouables). */
+  requestedRounds?: number;
+  /** Pourquoi moins de manches : "library" (playlists trop courtes) ou "lookup" (recherches d'extraits limitees). */
+  shortReason?: "library" | "lookup" | null;
   currentTrack: StreamerRound | null;
   timing: {
     startAt: number | null;

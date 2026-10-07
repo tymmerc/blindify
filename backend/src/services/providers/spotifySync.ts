@@ -3,6 +3,9 @@ import { makeSpotify } from "../../config/spotify";
 import type { AudioSourceRow } from "../../types/audio";
 import type { MusicProvider, UserConnection } from "../../types/user";
 import { hydratePreviewUrl } from "../trackResolution";
+import { isIsrc } from "../previewMatch";
+import { METADATA_KEEPING_ISRC } from "../isrcMetadata";
+import { linkTrackToUser } from "../userTracks";
 
 type SpotifyLibraryTrack = {
   id?: string;
@@ -15,6 +18,7 @@ type SpotifyLibraryTrack = {
   };
   duration_ms?: number;
   popularity?: number;
+  external_ids?: { isrc?: string };
 };
 
 type SpotifySavedTrack = {
@@ -94,6 +98,7 @@ export async function syncSpotifyLibrary(
       release_date: track.album?.release_date ?? null,
       popularity: track.popularity ?? null,
       provider: "spotify" as MusicProvider,
+      isrc: isIsrc(track.external_ids?.isrc) ? track.external_ids.isrc : null,
     };
 
     const { rows } = await pool.query<AudioSourceRow>(
@@ -105,7 +110,7 @@ export async function syncSpotifyLibrary(
          artist=EXCLUDED.artist,
          album_cover=EXCLUDED.album_cover,
          duration_ms=EXCLUDED.duration_ms,
-         metadata=EXCLUDED.metadata,
+         ${METADATA_KEEPING_ISRC},
          user_id=COALESCE(audio_sources.user_id, EXCLUDED.user_id)
        RETURNING id, provider, external_id, title, artist, album_cover, audio_url, duration_ms, metadata`,
       [
@@ -119,6 +124,7 @@ export async function syncSpotifyLibrary(
         metadata,
       ]
     );
+    await linkTrackToUser(userId, rows[0].id, null);
     inserted.push(rows[0]);
   }
 

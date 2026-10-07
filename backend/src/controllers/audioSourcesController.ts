@@ -7,6 +7,7 @@ import { getSessionContext } from "../utils/session";
 import { ok, fail } from "../utils/response";
 import type { MusicProvider } from "../types/user";
 import type { AudioSourceRow } from "../types/audio";
+import { UNOWNED } from "../services/userTracks";
 
 const DEFAULT_UPLOAD_DIR = path.join(process.cwd(), "storage", "uploads");
 
@@ -16,12 +17,26 @@ async function ensureUploadDir(): Promise<string> {
   return folder;
 }
 
+const SOURCE_COLUMNS = `s.id, s.provider, s.external_id, s.title, s.artist, s.album_cover, s.audio_url, s.duration_ms, s.metadata`;
+
+/**
+ * Les morceaux du joueur (ses liens joueur-morceau : un morceau peut etre a
+ * plusieurs joueurs), et avec un service, le fonds commun de ce service en
+ * plus (morceaux que personne n'a importes).
+ */
 async function listAudioSources(userId: number, provider?: MusicProvider): Promise<AudioSourceRow[]> {
   if (provider) {
     const { rows } = await pool.query<AudioSourceRow>(
       `SELECT id, provider, external_id, title, artist, album_cover, audio_url, duration_ms, metadata
-       FROM audio_sources
-       WHERE provider=$1 AND (user_id=$2 OR user_id IS NULL)
+       FROM (
+         SELECT ${SOURCE_COLUMNS}, s.created_at
+         FROM user_audio_sources ua JOIN audio_sources s ON s.id = ua.audio_source_id
+         WHERE ua.user_id = $2 AND s.provider = $1
+         UNION ALL
+         SELECT ${SOURCE_COLUMNS}, s.created_at
+         FROM audio_sources s
+         WHERE s.provider = $1 AND ${UNOWNED("s")}
+       ) AS sources
        ORDER BY created_at DESC
        LIMIT 200`,
       [provider, userId]
@@ -30,10 +45,10 @@ async function listAudioSources(userId: number, provider?: MusicProvider): Promi
   }
 
   const { rows } = await pool.query<AudioSourceRow>(
-    `SELECT id, provider, external_id, title, artist, album_cover, audio_url, duration_ms, metadata
-     FROM audio_sources
-     WHERE user_id=$1
-     ORDER BY created_at DESC
+    `SELECT ${SOURCE_COLUMNS}
+     FROM user_audio_sources ua JOIN audio_sources s ON s.id = ua.audio_source_id
+     WHERE ua.user_id = $1
+     ORDER BY s.created_at DESC
      LIMIT 200`,
     [userId]
   );

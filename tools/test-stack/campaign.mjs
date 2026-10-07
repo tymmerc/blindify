@@ -13,6 +13,7 @@
 import fs from "node:fs"
 import path from "node:path"
 import { spawnSync } from "node:child_process"
+import { fileURLToPath } from "node:url"
 import { runRoom } from "./room.mjs"
 import { retries } from "./bot.mjs"
 import { botScenarios } from "./scenarios.mjs"
@@ -20,6 +21,9 @@ import { writeReport } from "./report.mjs"
 
 const ROOT = "/opt/blindify"
 const RUN = `${ROOT}/.test-stack`
+// Le dossier de CETTE campagne : celui du depot la nuit, celui d'une branche
+// quand on la lance avec campagne-ref.sh --script (scripts de la branche).
+const HERE = path.dirname(fileURLToPath(import.meta.url))
 const arg = (name, fallback) => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : fallback }
 const seed = Number(arg("--seed", String(Math.floor(Date.now() / 86_400_000) % 10_000)))
 const withBrowser = !process.argv.includes("--no-browser")
@@ -57,7 +61,10 @@ if (withBrowser) {
 
 // --- 2 bis. scripts E2E historiques, portes sur la pile ---
 // Un a la fois, apres le navigateur : chacun ouvre son propre Chromium.
-const SCRIPTS = [{ label: "Correctifs PC (import par l'interface, code colle, platine, depart, buzzer sans musique)", args: ["pcfixes-e2e.mjs", "--pile"] }]
+const SCRIPTS = [
+  { label: "Correctifs PC (import par l'interface, code colle, platine, depart, buzzer sans musique)", args: ["pcfixes-e2e.mjs", "--pile"] },
+  { label: "Meme musique importee par deux joueurs (deux telephones, deux amis)", args: [path.join(HERE, "importeur-e2e.mjs"), `${RUN}/reports/current/importeur`] },
+]
 if (withBrowser) {
   say("\n== scripts E2E sur la pile ==")
   for (const sc of SCRIPTS) {
