@@ -70,7 +70,7 @@ export default function ConfidentialitePage() {
                 reconnaître d'un salon à l'autre et te remettre ta musique. Pas d'e-mail, pas de liste de
                 serveurs ni d'amis. Dans ce cas, il n'y a pas de cookie : la session reste en mémoire de
                 l'Activité. Tu peux retirer l'accès de Blindz à tout moment dans tes paramètres Discord
-                (Applications autorisées), et supprimer ton compte depuis les Réglages.
+                (Applications autorisées), et supprimer ton compte depuis le bouton Réglages de l&apos;Activité.
               </Item>
               <Item>
                 <strong>Ton retour de fin de partie</strong>, seulement si tu en donnes un : ta réponse à
