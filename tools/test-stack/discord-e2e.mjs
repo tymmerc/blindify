@@ -160,7 +160,7 @@ try {
   await host.frame.getByRole("button", { name: "5", exact: true }).click({ timeout: 10000 })
   await host.frame.getByRole("button", { name: "10s", exact: true }).click({ timeout: 10000 })
   await sleep(800)
-  await host.frame.getByRole("button", { name: /lancer le duel/i }).click({ timeout: 15000 })
+  await host.frame.getByRole("button", { name: /lancer la partie/i }).click({ timeout: 15000 })
   ok("l'hôte a lancé la partie")
 
   for (let round = 1; round <= ROUNDS; round++) {
@@ -233,7 +233,8 @@ try {
   }
 }
 
-say(problems.length ? `\n=== ${problems.length} problème(s)` : "\n=== tout est passé")
+// Les erreurs JS relevees par newPage entrent dans problems sans passer par bad() : on les montre.
+if (problems.length) { say(`\n=== ${problems.length} problème(s) :`); problems.forEach(x => say(`  - ${x}`)) } else say("\n=== tout est passé")
 fs.writeFileSync(path.join(OUT, "rapport.md"), [
   `# Activité Discord sur la pile de test (${new Date().toISOString()})`,
   "", "```", ...lines, "```", "",
