@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 import { DiscordSDK } from "@discord/embedded-app-sdk"
 import { Loader2 } from "lucide-react"
 import { api } from "@/lib/api"
@@ -9,7 +9,7 @@ import { API_BASE_URL } from "@/lib/config"
 import { configureSocket } from "@/lib/socket"
 import { audioManager } from "@/lib/audioManager"
 import { GAME_MODES } from "@/lib/gameModes"
-import { readActivityParams } from "@/lib/discord/activityParams"
+import { readActivityParams, type ActivityParams } from "@/lib/discord/activityParams"
 import { BLINDZ_MAPPING_PREFIX, createPreviewSrcMapper, installUrlMappings } from "@/lib/discord/urlMappings"
 import {
   DiscordBootError,
@@ -82,10 +82,14 @@ export function socketSettings(pageOrigin: string, token: string): { origin: str
 }
 
 export function DiscordActivity({ search, createSdk = defaultCreateSdk, apiBaseUrl = API_BASE_URL }: Props) {
-  const params = useMemo(
-    () => readActivityParams(search ?? (typeof window !== "undefined" ? window.location.search : "")),
-    [search],
-  )
+  // La page est pre-rendue a l'export sans adresse : les parametres de Discord
+  // se lisent apres le montage, sinon le HTML du serveur (« hors Discord ») et
+  // le premier rendu du client different (erreur d'hydratation React 418, vue
+  // sur la pile le 10/10/2026). undefined = pas encore lu.
+  const [params, setParams] = useState<ActivityParams | null | undefined>(undefined)
+  useEffect(() => {
+    setParams(readActivityParams(search ?? window.location.search))
+  }, [search])
   const [status, setStatus] = useState<Status>({ kind: "boot", step: "config" })
   // Un seul demarrage, meme si l'effet est rejoue (StrictMode, nouvelle
   // fonction createSdk) : la promesse est gardee, chaque passage s'y abonne.
@@ -127,7 +131,18 @@ export function DiscordActivity({ search, createSdk = defaultCreateSdk, apiBaseU
     }
   }, [params, createSdk, apiBaseUrl])
 
-  if (!params) {
+  if (params === undefined) {
+    return (
+      <Shell title="Blindz dans ton salon">
+        <div className="flex items-center gap-3 text-sm text-[#6b573f]">
+          <Loader2 className="h-5 w-5 shrink-0 animate-spin" style={{ color: ACCENT }} aria-hidden />
+          <p className="m-0">Un instant…</p>
+        </div>
+      </Shell>
+    )
+  }
+
+  if (params === null) {
     return (
       <Shell title="Cette page se lance depuis Discord">
         <p className="m-0 text-sm text-[#6b573f]">

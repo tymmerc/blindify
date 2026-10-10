@@ -78,9 +78,9 @@ beforeEach(() => {
 })
 
 describe("DiscordActivity", () => {
-  it("hors Discord : explique ou se lance l'Activite, sans appeler l'API", () => {
+  it("hors Discord : explique ou se lance l'Activite, sans appeler l'API", async () => {
     renderActivity("")
-    expect(screen.getByText(/se lance depuis Discord/i)).toBeInTheDocument()
+    expect(await screen.findByText(/se lance depuis Discord/i)).toBeInTheDocument()
     expect(mocks.api.discordConfig).not.toHaveBeenCalled()
     expect(mocks.installUrlMappings).not.toHaveBeenCalled()
   })
