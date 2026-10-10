@@ -227,6 +227,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     gameOver?: (payload: { roomCode: string; players: MultiplayerGameState["players"] }) => void
     gameLost?: (payload: { roomCode: string }) => void
     roomError?: (payload: { code?: string; message?: string }) => void
+    hostChange?: (payload: { roomCode: string; hostUserId: number }) => void
   }>({})
   const roomRef = useRef<MultiplayerRoom | null>(null)
   const gameStateRef = useRef<MultiplayerGameState | StreamerState | null>(null)
@@ -369,6 +370,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         }
         if (handlersRef.current.gameLost) socket.off("game:lost", handlersRef.current.gameLost)
         if (handlersRef.current.roomError) socket.off("room:error", handlersRef.current.roomError)
+        if (handlersRef.current.hostChange) socket.off("room:host", handlersRef.current.hostChange)
       }
       disconnectSocket()
     }
@@ -701,6 +703,21 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       }
       if (handlersRef.current.gameLost) socket.off("game:lost", handlersRef.current.gameLost)
       if (handlersRef.current.roomError) socket.off("room:error", handlersRef.current.roomError)
+      if (handlersRef.current.hostChange) socket.off("room:host", handlersRef.current.hostChange)
+
+      // Relais de l'hote (salon Discord) : l'hote est parti, le serveur a nomme
+      // le plus ancien joueur present. La salle suit sans recharger ; le nouvel
+      // hote recoit la regie (vue hosting) et un mot pour le lui dire.
+      const hostChangeHandler = (payload: { roomCode: string; hostUserId: number }) => {
+        if (payload.roomCode !== roomCode || typeof payload.hostUserId !== "number") return
+        setRoom(prev => (prev ? { ...prev, host_user_id: payload.hostUserId } : prev))
+        if (payload.hostUserId !== userRef.current?.user.id) return
+        showNotice("L'hôte est parti : c'est toi qui lances la partie maintenant.")
+        if (viewRef.current === "waiting") {
+          setView("hosting")
+          dispatchLobby({ type: "hosting" })
+        }
+      }
 
       const presenceHandler = (payload: RoomPresenceEvent) => {
         if (payload.roomCode !== roomCode) return
@@ -894,6 +911,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         showNotice(msg, isAnswerReject)
       }
       socket.on("room:error", roomErrorHandler)
+      socket.on("room:host", hostChangeHandler)
 
       handlersRef.current = {
         connect: undefined,
@@ -905,6 +923,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         gameOver: gameOverHandler,
         gameLost: gameLostHandler,
         roomError: roomErrorHandler,
+        hostChange: hostChangeHandler,
       }
 
       const emitJoin = () => {

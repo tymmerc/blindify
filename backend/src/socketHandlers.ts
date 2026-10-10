@@ -16,6 +16,7 @@ import {
   endReconnectGrace,
   startReconnectGrace,
   getGameMode,
+  setHostUser,
 } from "./services/realtimeGame";
 import { markMultiplayerRoomFinished } from "./services/gamePersistence";
 import * as lobbyRps from "./services/lobbyRps";
@@ -51,6 +52,7 @@ import {
 } from "./services/streamerOrchestrator";
 import { publicStreamerState } from "./services/streamerGame";
 import { GameMode } from "./types/game";
+import { relayDiscordHost } from "./services/hostRelay";
 import { logger } from "./utils/logger";
 
 // ---------------------------------------------------------------------------
@@ -146,6 +148,28 @@ export async function requireRoomAccess(roomCode: string, userId: number): Promi
   ]);
   if (!membership.rows.length) return null;
   return { room, isHost: room.host_user_id === userId };
+}
+
+/**
+ * L'hote d'un salon Discord vient de partir (room:leave, ou fin de la grace de
+ * reconnexion du lobby) : le plus ancien joueur encore present devient hote et
+ * toute la salle l'apprend par room:host. Sans effet sur une salle du site ou
+ * en pleine partie (voir services/hostRelay.ts).
+ */
+async function relayHostIfNeeded(io: Server, roomCode: string, leavingUserId: number): Promise<void> {
+  const present = new Set<number>();
+  for (const id of io.sockets.adapter.rooms.get(roomCode) ?? []) {
+    const auth = (io.sockets.sockets.get(id)?.data as { auth?: SessionContext } | undefined)?.auth;
+    if (auth?.user?.id && auth.user.id !== leavingUserId) present.add(auth.user.id);
+  }
+  try {
+    const result = await relayDiscordHost(roomCode, leavingUserId, [...present]);
+    if (!result.relayed) return;
+    setHostUser(roomCode, result.to);
+    io.to(roomCode).emit("room:host", { roomCode, hostUserId: result.to, serverTimestamp: Date.now() });
+  } catch (err) {
+    logger.error("discord_host_relay_failed", { roomCode, error: err });
+  }
 }
 
 export function emitRoomError(socket: Socket, roomCode: string, message: string, code = "forbidden"): void {
@@ -398,6 +422,7 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
         serverTimestamp: Date.now(),
       });
       broadcastState(io, roomCode);
+      if (access.isHost) await relayHostIfNeeded(io, roomCode, currentUser.id);
 
       setPresence(currentUser.id, { online: true, activity: "idle", context: null });
       broadcastFriendPresence(currentUser.id, currentUser.username ?? null).catch(() => {});
@@ -894,6 +919,8 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
               serverTimestamp: Date.now(),
             });
             broadcastState(io, roomCode);
+            // L'hote n'est pas revenu : le salon Discord ne doit pas rester sans hote.
+            if (state?.hostUserId === currentUser.id || !state) void relayHostIfNeeded(io, roomCode, currentUser.id);
           });
         }
         roomPresence.setStatus(roomCode, currentUser.id, "disconnected");

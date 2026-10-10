@@ -26,6 +26,16 @@ jest.mock("../../src/services/discordRooms", () => ({
 jest.mock("../../src/controllers/roomsController", () => ({
   roomsController: { joinRoom: jest.fn() },
 }));
+jest.mock("../../src/services/hostRelay", () => ({
+  relayDiscordHost: jest.fn(),
+}));
+jest.mock("../../src/services/roomPresence", () => ({
+  getMembers: jest.fn(() => []),
+}));
+const mockEmit = jest.fn();
+jest.mock("../../src/socket", () => ({
+  io: { to: jest.fn(() => ({ emit: mockEmit })) },
+}));
 
 import type { Request, Response } from "express";
 import { discordController } from "../../src/controllers/discordController";
@@ -33,6 +43,8 @@ import { DiscordAuthError, exchangeCode, fetchDiscordUser } from "../../src/serv
 import { upsertDiscordUser } from "../../src/services/discordAccounts";
 import { resolveDiscordRoom } from "../../src/services/discordRooms";
 import { roomsController } from "../../src/controllers/roomsController";
+import { relayDiscordHost } from "../../src/services/hostRelay";
+import { getMembers } from "../../src/services/roomPresence";
 import { createSessionToken, getSessionContext } from "../../src/utils/session";
 import { logger } from "../../src/utils/logger";
 
@@ -41,6 +53,8 @@ const mockFetchUser = fetchDiscordUser as jest.Mock;
 const mockUpsert = upsertDiscordUser as jest.Mock;
 const mockResolve = resolveDiscordRoom as jest.Mock;
 const mockJoin = roomsController.joinRoom as jest.Mock;
+const mockRelay = relayDiscordHost as jest.Mock;
+const mockMembers = getMembers as jest.Mock;
 const mockCreateSession = createSessionToken as jest.Mock;
 const mockGetSession = getSessionContext as jest.Mock;
 
@@ -230,6 +244,52 @@ describe("discordController.room (POST /api/discord/room)", () => {
     const [joinReq, joinRes] = mockJoin.mock.calls[0];
     expect(joinReq.params.code).toBe("ABC123");
     expect(joinRes).toBe(res);
+  });
+
+  describe("hote absent a l'arrivee d'un joueur (relais)", () => {
+    const EXISTING = { ...ROOM, host_user_id: 99 };
+
+    it("l'hote de la salle n'a plus de socket vivant : le relais est demande, l'arrivant en secours, et la salle prevenue", async () => {
+      mockResolve.mockResolvedValue({ room: EXISTING, created: false });
+      mockMembers.mockReturnValue([{ userId: 99, username: "Parti", status: "disconnected" }, { userId: 5, username: "Reste", status: "active" }]);
+      mockRelay.mockResolvedValue({ relayed: true, from: 99, to: 5 });
+      const res = mockRes();
+      await discordController.room(mockReq({ body: { instanceId: "i-1" } } as Partial<Request>), res);
+
+      expect(mockRelay).toHaveBeenCalledWith("ABC123", 99, [5], USER.id);
+      expect(mockEmit).toHaveBeenCalledWith("room:host", expect.objectContaining({ roomCode: "ABC123", hostUserId: 5 }));
+      expect(mockJoin).toHaveBeenCalledTimes(1);
+    });
+
+    it("l'hote est la (socket vivant) : aucun relais", async () => {
+      mockResolve.mockResolvedValue({ room: EXISTING, created: false });
+      mockMembers.mockReturnValue([{ userId: 99, username: "Hote", status: "away" }]);
+      const res = mockRes();
+      await discordController.room(mockReq({ body: { instanceId: "i-1" } } as Partial<Request>), res);
+
+      expect(mockRelay).not.toHaveBeenCalled();
+      expect(mockJoin).toHaveBeenCalledTimes(1);
+    });
+
+    it("salle creee a l'instant, ou arrivant deja hote : aucun relais", async () => {
+      mockResolve.mockResolvedValueOnce({ room: { ...ROOM, host_user_id: USER.id }, created: true });
+      await discordController.room(mockReq({ body: { instanceId: "i-1" } } as Partial<Request>), mockRes());
+      mockResolve.mockResolvedValueOnce({ room: { ...ROOM, host_user_id: USER.id }, created: false });
+      mockMembers.mockReturnValue([]);
+      await discordController.room(mockReq({ body: { instanceId: "i-1" } } as Partial<Request>), mockRes());
+
+      expect(mockRelay).not.toHaveBeenCalled();
+    });
+
+    it("un relais qui echoue ne bloque pas l'entree dans la salle", async () => {
+      mockResolve.mockResolvedValue({ room: EXISTING, created: false });
+      mockMembers.mockReturnValue([]);
+      mockRelay.mockRejectedValue(new Error("base"));
+      const res = mockRes();
+      await discordController.room(mockReq({ body: { instanceId: "i-1" } } as Partial<Request>), res);
+
+      expect(mockJoin).toHaveBeenCalledTimes(1);
+    });
   });
 
   it("500 discord_room_failed si la salle ne peut pas etre resolue", async () => {

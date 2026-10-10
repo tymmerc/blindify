@@ -4,10 +4,33 @@ import { DiscordAuthError, exchangeCode, fetchDiscordUser, isValidAuthCode } fro
 import { upsertDiscordUser } from "../services/discordAccounts";
 import { isValidInstanceId, resolveDiscordRoom } from "../services/discordRooms";
 import { roomsController } from "./roomsController";
+import { relayDiscordHost } from "../services/hostRelay";
+import { getMembers } from "../services/roomPresence";
+import { io } from "../socket";
 import { createSessionToken, getSessionContext } from "../utils/session";
 import { fail, ok } from "../utils/response";
 import { logger } from "../utils/logger";
 
+
+/**
+ * A l'arrivee d'un joueur : l'hote de la salle est-il encore la ? Sans socket
+ * vivant (absent de la presence, ou marque deconnecte), le relais passe au plus
+ * ancien present, sinon a l'arrivant. Un echec n'empeche jamais d'entrer.
+ */
+async function relayIfHostAbsent(roomCode: string, hostId: number, arrivingId: number): Promise<void> {
+  const members = getMembers(roomCode);
+  const hostHere = members.some(m => m.userId === hostId && m.status !== "disconnected");
+  if (hostHere) return;
+  const present = members.filter(m => m.status !== "disconnected").map(m => m.userId);
+  try {
+    const result = await relayDiscordHost(roomCode, hostId, present, arrivingId);
+    if (result.relayed) {
+      io.to(roomCode).emit("room:host", { roomCode, hostUserId: result.to, serverTimestamp: Date.now() });
+    }
+  } catch (error) {
+    logger.error("discord_host_relay_failed", { roomCode, error });
+  }
+}
 
 export const discordController = {
   /** Public : l'identifiant de l'appli, pour que le front initialise le SDK sans rebuild. */
@@ -92,6 +115,9 @@ export const discordController = {
       const { room, created } = await resolveDiscordRoom(instanceId, context.user, nickname);
       roomCode = room.room_code;
       logger.info("discord_room", { roomCode, created, userId: context.user.id });
+      if (!created && room.host_user_id !== context.user.id) {
+        await relayIfHostAbsent(roomCode, room.host_user_id, context.user.id);
+      }
     } catch (error) {
       logger.error("discord_room_failed", { error, userId: context.user.id });
       fail(res, "discord_room_failed", "Impossible d'ouvrir la salle de ce salon", 500);

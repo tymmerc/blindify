@@ -251,6 +251,20 @@ export function setHostConnected(roomCode: string, connected: boolean): GameStat
   return ctx.state;
 }
 
+/**
+ * Nouvel hote apres un relais (salon Discord, hors partie en cours) : l'etat en
+ * memoire suit la base, pour que Rejouer et la presence de l'hote designent le
+ * bon joueur. Sans effet en pleine manche (le relais ne s'y fait jamais).
+ */
+export function setHostUser(roomCode: string, userId: number): GameState | undefined {
+  const ctx = games.get(roomCode);
+  if (!ctx) return undefined;
+  if (ctx.state.phase === "GUESSING" || ctx.state.phase === "REVEAL") return ctx.state;
+  ctx.state.hostUserId = userId;
+  ctx.state.hostConnected = true;
+  return ctx.state;
+}
+
 export function markDisconnected(roomCode: string, userId: number): GameState | undefined {
   const ctx = games.get(roomCode);
   if (!ctx) return undefined;
