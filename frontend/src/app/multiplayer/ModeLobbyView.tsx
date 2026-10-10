@@ -1776,7 +1776,10 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
           // Sans etat de partie, l'hote d'un event est traite en presentateur : pas de bloc.
           hostPlays: (gameState as MultiplayerGameState | null)?.hostPlays === true,
         })}
-        onReturn={() => (onLeave ? onLeave() : router.replace("/modes"))}
+        // Dans Discord (onLeave), pas de « Retour modes » : recharger ramenait
+        // sur ce meme podium (la partie est finie, l'etat le dit). On y reste
+        // jusqu'au Rejouer de l'hote, le bouton grise le dit deja.
+        onReturn={onLeave ? undefined : () => router.replace("/modes")}
         onReplay={() => runExclusive(restartingRef, async () => {
           if (!room || !isHost) return
           try {
