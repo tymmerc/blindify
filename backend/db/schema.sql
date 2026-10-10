@@ -33,6 +33,43 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
 COMMENT ON EXTENSION pgcrypto IS 'cryptographic functions';
 
 
+--
+-- Name: audio_sources_lien_proprietaire(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.audio_sources_lien_proprietaire() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  INSERT INTO public.user_audio_sources (user_id, audio_source_id, link_id)
+  VALUES (
+    NEW.user_id,
+    NEW.id,
+    (SELECT il.id FROM public.imported_links il WHERE il.id = NEW.link_id AND il.user_id = NEW.user_id)
+  )
+  ON CONFLICT (user_id, audio_source_id)
+  DO UPDATE SET link_id = COALESCE(EXCLUDED.link_id, public.user_audio_sources.link_id)
+  WHERE public.user_audio_sources.link_id IS DISTINCT FROM COALESCE(EXCLUDED.link_id, public.user_audio_sources.link_id);
+  RETURN NULL;
+END
+$$;
+
+
+--
+-- Name: audio_sources_lien_retire(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.audio_sources_lien_retire() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  DELETE FROM public.user_audio_sources
+  WHERE user_id = OLD.user_id AND audio_source_id = OLD.id;
+  RETURN NULL;
+END
+$$;
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -274,6 +311,52 @@ ALTER SEQUENCE public.friendships_id_seq OWNED BY public.friendships.id;
 
 
 --
+-- Name: game_feedback; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.game_feedback (
+    id integer NOT NULL,
+    kind text NOT NULL,
+    answer text,
+    message text,
+    mode text NOT NULL,
+    session_id integer,
+    game_code text,
+    user_agent text,
+    app_version text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT game_feedback_answer_check CHECK ((answer = ANY (ARRAY['oui'::text, 'pas_trop'::text]))),
+    CONSTRAINT game_feedback_answer_kind CHECK (((kind = 'avis'::text) = (answer IS NOT NULL))),
+    CONSTRAINT game_feedback_app_version_check CHECK ((char_length(app_version) <= 40)),
+    CONSTRAINT game_feedback_game_code_check CHECK ((char_length(game_code) <= 16)),
+    CONSTRAINT game_feedback_kind_check CHECK ((kind = ANY (ARRAY['avis'::text, 'bug'::text]))),
+    CONSTRAINT game_feedback_message_check CHECK ((char_length(message) <= 1000)),
+    CONSTRAINT game_feedback_mode_check CHECK ((mode = ANY (ARRAY['solo'::text, 'defi'::text, 'chrono'::text, 'buzzer'::text, 'friends'::text, 'event'::text]))),
+    CONSTRAINT game_feedback_user_agent_check CHECK ((char_length(user_agent) <= 300))
+);
+
+
+--
+-- Name: game_feedback_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.game_feedback_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: game_feedback_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.game_feedback_id_seq OWNED BY public.game_feedback.id;
+
+
+--
 -- Name: game_participants; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -322,7 +405,8 @@ CREATE TABLE public.game_rounds (
     correct_artist text NOT NULL,
     reveal_at timestamp without time zone,
     completed_at timestamp without time zone,
-    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    owner_user_id integer
 );
 
 
@@ -697,6 +781,18 @@ ALTER SEQUENCE public.used_tracks_id_seq OWNED BY public.used_tracks.id;
 
 
 --
+-- Name: user_audio_sources; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.user_audio_sources (
+    user_id integer NOT NULL,
+    audio_source_id uuid NOT NULL,
+    link_id integer,
+    created_at timestamp without time zone DEFAULT now() NOT NULL
+);
+
+
+--
 -- Name: user_badges; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -871,6 +967,13 @@ ALTER TABLE ONLY public.friends ALTER COLUMN id SET DEFAULT nextval('public.frie
 --
 
 ALTER TABLE ONLY public.friendships ALTER COLUMN id SET DEFAULT nextval('public.friendships_id_seq'::regclass);
+
+
+--
+-- Name: game_feedback id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.game_feedback ALTER COLUMN id SET DEFAULT nextval('public.game_feedback_id_seq'::regclass);
 
 
 --
@@ -1060,6 +1163,14 @@ ALTER TABLE ONLY public.friendships
 
 
 --
+-- Name: game_feedback game_feedback_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.game_feedback
+    ADD CONSTRAINT game_feedback_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: game_participants game_participants_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1220,6 +1331,14 @@ ALTER TABLE ONLY public.used_tracks
 
 
 --
+-- Name: user_audio_sources user_audio_sources_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_audio_sources
+    ADD CONSTRAINT user_audio_sources_pkey PRIMARY KEY (user_id, audio_source_id);
+
+
+--
 -- Name: user_badges user_badges_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1361,6 +1480,20 @@ CREATE INDEX idx_friendships_user_b ON public.friendships USING btree (user_b);
 
 
 --
+-- Name: idx_game_feedback_created; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_game_feedback_created ON public.game_feedback USING btree (created_at DESC);
+
+
+--
+-- Name: idx_game_feedback_session; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_game_feedback_session ON public.game_feedback USING btree (session_id);
+
+
+--
 -- Name: idx_game_participants_user; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1372,6 +1505,13 @@ CREATE INDEX idx_game_participants_user ON public.game_participants USING btree 
 --
 
 CREATE INDEX idx_game_rounds_audio_source ON public.game_rounds USING btree (audio_source_id);
+
+
+--
+-- Name: idx_game_rounds_owner; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_game_rounds_owner ON public.game_rounds USING btree (owner_user_id) WHERE (owner_user_id IS NOT NULL);
 
 
 --
@@ -1480,6 +1620,20 @@ CREATE INDEX idx_used_tracks_used_at ON public.used_tracks USING btree (used_at)
 
 
 --
+-- Name: idx_user_audio_sources_link; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_user_audio_sources_link ON public.user_audio_sources USING btree (link_id);
+
+
+--
+-- Name: idx_user_audio_sources_source; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_user_audio_sources_source ON public.user_audio_sources USING btree (audio_source_id);
+
+
+--
 -- Name: idx_user_sessions_expires; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1498,6 +1652,20 @@ CREATE INDEX idx_user_sessions_user ON public.user_sessions USING btree (user_id
 --
 
 CREATE INDEX idx_users_username_lower ON public.users USING btree (lower((username)::text));
+
+
+--
+-- Name: audio_sources audio_sources_lien_proprietaire; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audio_sources_lien_proprietaire AFTER INSERT OR UPDATE OF user_id, link_id ON public.audio_sources FOR EACH ROW WHEN ((new.user_id IS NOT NULL)) EXECUTE FUNCTION public.audio_sources_lien_proprietaire();
+
+
+--
+-- Name: audio_sources audio_sources_lien_retire; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audio_sources_lien_retire AFTER UPDATE OF user_id ON public.audio_sources FOR EACH ROW WHEN (((old.user_id IS NOT NULL) AND (new.user_id IS NULL))) EXECUTE FUNCTION public.audio_sources_lien_retire();
 
 
 --
@@ -1565,6 +1733,14 @@ ALTER TABLE ONLY public.friendships
 
 
 --
+-- Name: game_feedback game_feedback_session_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.game_feedback
+    ADD CONSTRAINT game_feedback_session_id_fkey FOREIGN KEY (session_id) REFERENCES public.game_sessions(id) ON DELETE SET NULL;
+
+
+--
 -- Name: game_participants game_participants_session_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1586,6 +1762,14 @@ ALTER TABLE ONLY public.game_participants
 
 ALTER TABLE ONLY public.game_rounds
     ADD CONSTRAINT game_rounds_audio_source_id_fkey FOREIGN KEY (audio_source_id) REFERENCES public.audio_sources(id) ON DELETE SET NULL;
+
+
+--
+-- Name: game_rounds game_rounds_owner_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.game_rounds
+    ADD CONSTRAINT game_rounds_owner_user_id_fkey FOREIGN KEY (owner_user_id) REFERENCES public.users(id) ON DELETE SET NULL;
 
 
 --
@@ -1730,6 +1914,30 @@ ALTER TABLE ONLY public.uploads
 
 ALTER TABLE ONLY public.used_tracks
     ADD CONSTRAINT used_tracks_audio_source_id_fkey FOREIGN KEY (audio_source_id) REFERENCES public.audio_sources(id) ON DELETE CASCADE;
+
+
+--
+-- Name: user_audio_sources user_audio_sources_audio_source_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_audio_sources
+    ADD CONSTRAINT user_audio_sources_audio_source_id_fkey FOREIGN KEY (audio_source_id) REFERENCES public.audio_sources(id) ON DELETE CASCADE;
+
+
+--
+-- Name: user_audio_sources user_audio_sources_link_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_audio_sources
+    ADD CONSTRAINT user_audio_sources_link_id_fkey FOREIGN KEY (link_id) REFERENCES public.imported_links(id) ON DELETE SET NULL;
+
+
+--
+-- Name: user_audio_sources user_audio_sources_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_audio_sources
+    ADD CONSTRAINT user_audio_sources_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 
 --
