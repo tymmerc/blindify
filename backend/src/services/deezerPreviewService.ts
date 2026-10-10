@@ -6,6 +6,9 @@ import { isExpiredPreview } from "../utils/previewExpiry";
 
 const DEEZER_SEARCH_URL = `${DEEZER_API}/search`;
 const DEEZER_TRACK_URL = `${DEEZER_API}/track`;
+const DEEZER_CHART_URL = `${DEEZER_API}/chart/0/tracks`;
+// Le classement Deezer (repli des invites) : au plus 50 morceaux, en un appel.
+const CHART_MAX = 50;
 
 // Deezer limite a 50 appels par 5 s ; on en garde 40 pour avoir de la marge
 // (au-dela, Akamai bloque l'IP du VPS, et ce blocage touche les vrais joueurs).
@@ -316,6 +319,30 @@ export class DeezerPreviewService {
       if (err instanceof QueueFullError || err instanceof SuspendedError) return ERROR;
       logger.error("deezer_search_failed", { title: trimmedTitle, artist: trimmedArtist, error: err });
       return this.setCached(key, ERROR, ERROR_CACHE_TTL_MS);
+    }
+  }
+
+  /**
+   * Le classement Deezer du moment, morceaux avec extrait seulement. Repli des
+   * invites sans musique, a la place du top iTunes (Apple reserve ses extraits
+   * a la promotion du store : docs/CONDITIONS-API-MUSIQUE.md). Un seul appel,
+   * par la file et le debit communs ; en cas d'erreur, liste vide.
+   */
+  async fetchChartTracks(limit: number): Promise<DeezerTrack[]> {
+    const capped = Math.max(5, Math.min(limit, CHART_MAX));
+    try {
+      const data = await this.request<DeezerSearchResponse>(DEEZER_CHART_URL, { limit: capped });
+      if (!isJsonObject(data) || data.error || !Array.isArray(data.data)) {
+        logger.error("deezer_chart_error", { error: isJsonObject(data) ? data.error ?? "reponse sans data" : "reponse non JSON" });
+        return [];
+      }
+      return data.data
+        .filter((it): it is DeezerSearchItem & { id: number } => typeof it.id === "number" && !!it.title && !!it.preview)
+        .slice(0, capped)
+        .map(toDeezerTrack);
+    } catch (err) {
+      if (!(err instanceof QueueFullError || err instanceof SuspendedError)) logger.error("deezer_chart_failed", { error: err });
+      return [];
     }
   }
 

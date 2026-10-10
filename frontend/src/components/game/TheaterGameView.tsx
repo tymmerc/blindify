@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { Pause, Play, Trophy, Volume2, VolumeX, X } from "lucide-react"
 import type { MultiplayerGameState, UserSummary } from "@/lib/types"
 import { shortGameNotice } from "@/lib/roundCount"
+import { DeezerCredit, SpotifyTrackLink } from "./SourceCredits"
 
 type ChatMessage = {
   userId: number
@@ -504,6 +505,9 @@ function GuessingStage({
       <div className="theater-status-row">
         <span>{displayAnsweredCount}/{playerCount} réponses reçues</span>
       </div>
+
+      {/* Logo Deezer et usage prive : obligatoires la ou les extraits jouent. */}
+      <DeezerCredit className="mt-2" />
     </motion.div>
   )
 }
@@ -570,8 +574,11 @@ function RevealStage({
               <b>{trackOwnerUsername}</b>
             </p>
           )}
+          {/* Lien retour Spotify (guidelines) : la reponse, donc reveal seulement. */}
+          <SpotifyTrackLink provider={currentTrack?.provider} trackId={currentTrack?.trackId} className="mt-3 self-start" />
         </div>
       </div>
+      <DeezerCredit notice={false} />
 
       {/* Recap central : la reponse de CHACUN + points gagnes, classe par score.
           C'est le moment le plus drole de la manche, il merite le centre. */}

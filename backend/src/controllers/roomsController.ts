@@ -1391,6 +1391,8 @@ export const roomsController = {
       previewUrl: t.audio_url,
       albumCover: t.album_cover,
       metadata: t.metadata ?? {},
+      // Lien vers Spotify au reveal (guidelines Spotify) ; caviarde pendant la manche.
+      provider: t.type ?? null,
     }));
 
     // Anti-triche : cette reponse part chez l'hote, qui joue souvent lui aussi
@@ -1431,6 +1433,7 @@ export const roomsController = {
         albumCover: t.album_cover,
         metadata: t.metadata ?? {},
         trackSource,
+        provider: t.type ?? null,
       };
       });
       const state = initStreamerGame(io, {

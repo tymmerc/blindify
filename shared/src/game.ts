@@ -22,6 +22,8 @@ export interface RoundTrack {
   albumCover?: string | null
   metadata?: Record<string, unknown> | null
   ownerChoices?: number[]
+  /** Source du morceau (spotify, deezer...). Absente pendant la manche : seulement au reveal. */
+  provider?: string | null
 }
 
 export interface PlayerState {

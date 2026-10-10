@@ -61,7 +61,7 @@ jest.mock("../../src/services/deezerPreviewService", () => {
     },
   };
 });
-// Le solo complete parfois avec le top iTunes : jamais d'appel reseau en test.
+// Le solo complete parfois avec le classement Deezer : jamais d'appel reseau en test.
 jest.mock("axios", () => ({ __esModule: true, default: { get: jest.fn(async () => ({ data: {} })) } }));
 
 import http from "http";

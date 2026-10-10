@@ -80,7 +80,7 @@ beforeEach(() => {
   mockGetSessionContext.mockReset();
   mockAxiosGet.mockReset();
   mockQuery.mockResolvedValue({ rows: [], rowCount: 0 });
-  // Fin de pagination Spotify immediate, reponse vide ailleurs (iTunes...).
+  // Fin de pagination Spotify immediate, reponse vide ailleurs.
   mockAxiosGet.mockImplementation(async (url: unknown) =>
     isSpotifyApi(url)
       ? { data: { items: [], next: null } }
