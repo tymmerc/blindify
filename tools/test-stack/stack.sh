@@ -26,7 +26,10 @@ set -euo pipefail
 
 ROOT=/opt/blindify
 RUN="$ROOT/.test-stack"
-HERE="$ROOT/tools/test-stack"
+# Les outils tournent depuis l'endroit ou ils sont : le depot d'habitude, un
+# worktree quand on teste une branche qui change la pile elle-meme (le serveur
+# local, ce script). La copie de travail et la base restent celles de ROOT.
+HERE="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 WT="$RUN/front"            # copie de travail du commit teste (front ET backend)
 NODE=/root/.nvm/versions/node/v22.21.1/bin/node
 PG=blindz-test-postgres
@@ -34,6 +37,11 @@ PGPORT=5436
 BACKEND_PORT=3098
 PROXY_PORT=3180
 HOST=blindz-test.localhost
+# L'Activite Discord est servie par le proxy de Discord, sur une AUTRE origine
+# que l'API (https://<id>.discordsays.com en vrai). Sur la pile, le meme
+# serveur local repond aussi sous ce nom : le SDK reecrit alors les adresses de
+# l'API vers /.proxy/blindz comme en prod, sans se reecrire lui-meme.
+DISCORD_HOST=discord-test.localhost
 mkdir -p "$RUN/logs" "$RUN/run" "$RUN/audio"; touch "$RUN/logs/egress.log"
 
 log() { echo "[stack] $*"; }
@@ -105,6 +113,10 @@ E2E_BYPASS_KEY=$(cat "$ROOT/.e2e-bypass-key")
 NO_EGRESS_LOG=$RUN/logs/egress.log
 NO_EGRESS_ALLOW_PORTS=$PGPORT,$PROXY_PORT,$BACKEND_PORT
 DEEZER_API_BASE=http://127.0.0.1:$PROXY_PORT/deezer-stub
+DISCORD_CLIENT_ID=100000000000000001
+DISCORD_CLIENT_SECRET=secret-de-la-pile-de-test
+DISCORD_API_BASE=http://127.0.0.1:$PROXY_PORT/discord-stub
+ALLOWED_ORIGINS=http://$DISCORD_HOST:$PROXY_PORT
 EOF
   printf 'X-E2E-Key: %s\nContent-Type: application/json\nOrigin: http://%s:%s\n' "$(cat "$ROOT/.e2e-bypass-key")" "$HOST" "$PROXY_PORT" >"$RUN/run/headers"
   umask 022

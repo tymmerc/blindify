@@ -10,7 +10,8 @@
 # tache a la fois sur la machine, et elle est demontee a la fin quoi qu'il arrive.
 set -uo pipefail
 ROOT=/opt/blindify
-HERE="$ROOT/tools/test-stack"
+# Depuis l'endroit du script (depot ou worktree), comme stack.sh.
+HERE="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 NODE=/root/.nvm/versions/node/v22.21.1/bin/node
 
 if [ "${1:-}" != "--dedans" ]; then

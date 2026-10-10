@@ -28,6 +28,9 @@ import { ensureUserTracksSchema } from "./services/userTracks";
 import { DEAD_GUEST_FILTER } from "./services/deadGuests";
 import quickPlayRoutes from "./routes/quickPlay";
 import challengeRoutes from "./routes/challenges";
+import discordRoutes from "./routes/discord";
+import { ensureDiscordSchema } from "./services/discordRooms";
+import { readDiscordCredentials } from "./config/discord";
 import { fail, ok } from "./utils/response";
 import { getSessionContext } from "./utils/session";
 import {
@@ -69,9 +72,15 @@ const cookieDomain = process.env.COOKIE_DOMAIN || (isProd ? "tymmerc.eu" : undef
 // Une liste par deploiement, derivee de FRONTEND_URL (voir utils/origins.ts) :
 // prod = https://blindz.app seul, localhost seulement hors production.
 // ALLOWED_ORIGINS (virgules) reste possible pour un cas exceptionnel.
+// Activite Discord : l'origine https://<id>.discordsays.com ne s'ouvre que si
+// l'Activite est vraiment configuree (identifiant ET secret), pas des que
+// l'identifiant est la.
+const discordConfig = readDiscordCredentials();
+logger.info("discord_activity", discordConfig.ok ? { enabled: true } : { enabled: false, reason: discordConfig.reason });
 const { origins: allowedOrigins, ignored: ignoredOrigins } = buildAllowedOrigins({
   frontendUrl: frontendBase,
   extra: process.env.ALLOWED_ORIGINS,
+  discordClientId: discordConfig.ok ? discordConfig.credentials.clientId : undefined,
   isProd,
 });
 if (ignoredOrigins.length) {
@@ -99,10 +108,13 @@ setInterval(() => {
 }, 30_000);
 
 // Cleanup stale rooms (waiting > 30 min with no activity)
+// Les salles d'un salon Discord restent : les joueurs y sont tant que le salon
+// vit, meme sans nouvelle arrivee (le janitor les efface a 7 jours).
 setInterval(() => {
   pool.query(
     `DELETE FROM multiplayer_rooms
      WHERE status = 'waiting'
+     AND discord_instance_id IS NULL
      AND (SELECT MAX(joined_at) FROM room_participants WHERE room_id = multiplayer_rooms.id)
          < NOW() - INTERVAL '30 minutes'`
   ).then(res => {
@@ -301,6 +313,7 @@ app.use("/api/quick-play", quickPlayRoutes);
 app.use("/api/challenges", challengeRoutes);
 app.use("/api/reports", reportsRoutes);
 app.use("/api/feedback", feedbackRoutes);
+app.use("/api/discord", discordRoutes);
 
 app.use((_req, res) => {
   fail(res, "not_found", "Ressource introuvable", 404);
@@ -332,7 +345,10 @@ async function bootstrap() {
 const userTracksReady = ensureLinksSchema()
   .catch(err => logger.error("links_schema_boot_failed", { error: err }))
   .then(() => ensureUserTracksSchema())
-  .catch(err => logger.error("user_tracks_schema_boot_failed", { error: err }));
+  .catch(err => logger.error("user_tracks_schema_boot_failed", { error: err }))
+  // Salle par salon Discord (migration 006) : meme regle, la prod l'a deja.
+  .then(() => ensureDiscordSchema())
+  .catch(err => logger.error("discord_schema_boot_failed", { error: err }));
 ensureResponseSchema().catch(err => logger.error("response_schema_boot_failed", { error: err }));
 // Retours de fin de partie : la migration 004 cree la table en prod ; le
 // demarrage la cree la ou elle manque encore (pile de test, CI).

@@ -4,12 +4,22 @@
 //   /blindify/socket.io/*  -> backend de test, websocket compris
 //   /test-audio/*.mp3      -> extraits synthetiques locaux (pas de Deezer)
 //   /blindify/*            -> export statique du front de test
+// Et le role du proxy de Discord pour l'Activite :
+//   /.proxy/blindz/*       -> la meme chose que /blindify/* (correspondance
+//                             "/blindz -> blindz.app" du portail developpeur)
+//   /discord-stub/*        -> faux Discord : echange du code OAuth2, utilisateur,
+//                             et qui est dans quel salon (pour le harnais)
+//   /discord-harness.html  -> le harnais : la page qui joue le client Discord
+//                             (RPC du SDK par postMessage) autour de l'iframe
 // Aucune dependance : node:http et node:net seulement.
 import http from "node:http"
 import net from "node:net"
 import fs from "node:fs"
 import path from "node:path"
+import { fileURLToPath } from "node:url"
 import { pipeline } from "node:stream"
+
+const HERE = path.dirname(fileURLToPath(import.meta.url))
 
 // Une requete mal formee ne doit jamais tuer le serveur en pleine campagne :
 // les scenarios suivants echoueraient en "connexion refusee" sans cause lisible.
@@ -129,15 +139,82 @@ function deezerStub(req, res) {
   return json({ error: { type: "DataException", message: "no data", code: 800 } })
 }
 
+/* ─── Faux Discord ──────────────────────────────────────────────────────
+ * Le backend de test y est branche via DISCORD_API_BASE : l'echange du code
+ * OAuth2 et la lecture de l'utilisateur, comme chez Discord mais sans reseau.
+ * Un code vaut un joueur : "test-code-<n>" donne le jeton "test-token-<n>",
+ * qui donne l'utilisateur n (identifiant a 18 chiffres, comme un vrai).
+ * Le harnais s'en sert aussi comme registre : qui est dans quel salon, pour
+ * repondre a getInstanceConnectedParticipants et pousser les mises a jour. */
+const snowflake = n => String(100000000000000000n + BigInt(n))
+const NAMES = new Map()        // uid -> nom d'affichage donne par le harnais
+const INSTANCES = new Map()    // instance -> Map(uid -> participant)
+const stubUser = uid => ({ id: snowflake(uid), username: `joueur${uid}`, global_name: NAMES.get(String(uid)) ?? `Joueur ${uid}`, discriminator: "0", avatar: null, flags: 0, bot: false })
+const participantsOf = iid => [...(INSTANCES.get(iid)?.values() ?? [])]
+
+function readBody(req, max = 64 * 1024) {
+  return new Promise((resolve, reject) => {
+    let body = ""
+    req.on("data", c => { body += c; if (body.length > max) { reject(new Error("corps trop long")); req.destroy() } })
+    req.on("end", () => resolve(body))
+    req.on("error", reject)
+  })
+}
+
+async function discordStub(req, res) {
+  const u = new URL(req.url, "http://x")
+  const p = u.pathname.replace(/^\/discord-stub/, "")
+  if (STUB_LOG) fs.appendFile(STUB_LOG, `${new Date().toISOString()} discord ${req.method} ${p}\n`, () => {})
+  const json = (body, code = 200) => { res.writeHead(code, { "Content-Type": "application/json" }); res.end(JSON.stringify(body)) }
+  let m
+  if (p === "/oauth2/token" && req.method === "POST") {
+    const form = new URLSearchParams(await readBody(req))
+    const code = form.get("code") || ""
+    const uid = (m = /^test-code-(\d+)$/.exec(code)) ? m[1] : null
+    if (!uid || form.get("grant_type") !== "authorization_code" || !form.get("client_secret")) return json({ error: "invalid_grant" }, 400)
+    return json({ access_token: `test-token-${uid}`, token_type: "Bearer", expires_in: 604800, refresh_token: `test-refresh-${uid}`, scope: "identify" })
+  }
+  if (p === "/users/@me") {
+    const uid = (m = /^Bearer test-token-(\d+)$/.exec(req.headers.authorization || "")) ? m[1] : null
+    if (!uid) return json({ message: "401: Unauthorized", code: 0 }, 401)
+    return json(stubUser(uid))
+  }
+  if ((m = p.match(/^\/instances\/([A-Za-z0-9_.:-]{1,64})\/participants$/))) {
+    const iid = m[1]
+    if (req.method === "POST") {
+      let body = {}
+      try { body = JSON.parse(await readBody(req) || "{}") } catch { return json({ error: "json" }, 400) }
+      const uid = String(body.uid ?? "")
+      if (!/^\d{1,6}$/.test(uid)) return json({ error: "uid" }, 400)
+      if (typeof body.name === "string" && body.name.trim()) NAMES.set(uid, body.name.trim().slice(0, 32))
+      if (!INSTANCES.has(iid)) INSTANCES.set(iid, new Map())
+      INSTANCES.get(iid).set(uid, stubUser(uid))
+    }
+    return json({ participants: participantsOf(iid) })
+  }
+  if ((m = p.match(/^\/instances\/([A-Za-z0-9_.:-]{1,64})\/participants\/(\d{1,6})\/leave$/))) {
+    INSTANCES.get(m[1])?.delete(m[2])
+    return json({ participants: participantsOf(m[1]) })
+  }
+  return json({ message: "404: Not Found", code: 0 }, 404)
+}
+
 const server = http.createServer((req, res) => {
   try { route(req, res) } catch (e) { console.error(`[proxy] ${req.url} : ${e?.message}`); plain(res, 500, "erreur du serveur local") }
 })
 
+/** Le proxy de Discord sert la correspondance "/blindz" sous /.proxy/blindz : ici, c'est /blindify. */
+const unproxy = url => url.replace(/^\/\.proxy\/blindz(?=\/|\?|$)/, "/blindify")
+
 function route(req, res) {
-  const url = req.url || "/"
+  req.url = unproxy(req.url || "/")
+  const url = req.url
+  if (url.startsWith("/discord-stub/")) { discordStub(req, res).catch(e => plain(res, 500, `faux Discord : ${e.message}`)); return }
+  if (url.split("?")[0] === "/discord-harness.html") return sendFile(req, res, path.join(HERE, "discord-harness.html"))
   if (url.startsWith("/deezer-stub/")) return deezerStub(req, res)
   if (url.startsWith("/blindify/api/") || url.startsWith("/blindify/socket.io/")) return toBackend(req, res)
-  if (url.startsWith("/test-audio/")) return sendFile(req, res, path.join(AUDIO, path.basename(url.split("?")[0])))
+  // Depuis l'Activite, l'extrait (sur l'hote de l'API) est demande a travers le proxy : /.proxy/blindz/test-audio/...
+  if (url.startsWith("/test-audio/") || url.startsWith("/blindify/test-audio/")) return sendFile(req, res, path.join(AUDIO, path.basename(url.split("?")[0])))
   if (url === "/" || url === "/blindify") { res.writeHead(302, { Location: "/blindify/" }); res.end(); return }
   if (url.startsWith("/blindify/")) {
     const file = frontFile(url.split("?")[0])
@@ -151,7 +228,7 @@ function route(req, res) {
 // deux sockets l'un sur l'autre.
 server.on("upgrade", (req, socket, head) => {
   const up = net.connect(BACKEND.port, BACKEND.host, () => {
-    const lines = [`${req.method} ${req.url.replace(/^\/blindify/, "")} HTTP/1.1`]
+    const lines = [`${req.method} ${unproxy(req.url).replace(/^\/blindify/, "")} HTTP/1.1`]
     for (let i = 0; i < req.rawHeaders.length; i += 2) lines.push(`${req.rawHeaders[i]}: ${req.rawHeaders[i + 1]}`)
     up.write(lines.join("\r\n") + "\r\n\r\n")
     if (head?.length) up.write(head)

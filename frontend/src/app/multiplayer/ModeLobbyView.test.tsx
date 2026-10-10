@@ -55,6 +55,10 @@ function makeSocket() {
       socket.id = id
       handlers.get("connect")?.forEach(fn => fn())
     },
+    /** Un evenement envoye par le serveur. */
+    emitServer(event: string, payload: unknown) {
+      handlers.get(event)?.forEach(fn => fn(payload))
+    },
   }
   return socket
 }
@@ -90,8 +94,8 @@ vi.mock("./hooks/useLobbyRps", () => ({ useLobbyRps: () => ({}) }))
 vi.mock("@/hooks/useServerTime", () => ({ useServerTime: () => Date.now() }))
 // Les vues du salon ne sont pas testees ici : seul compte d'y arriver.
 vi.mock("./EventLobbyView", () => ({
-  EventLobbyView: (props: { room: { room_code: string } | null }) =>
-    props.room ? <p>Tu es dans la partie {props.room.room_code}</p> : <p>Formulaire du code</p>,
+  EventLobbyView: (props: { room: { room_code: string } | null; isHost: boolean }) =>
+    props.room ? <p>Tu es dans la partie {props.room.room_code} ({props.isHost ? "hôte" : "invité"})</p> : <p>Formulaire du code</p>,
 }))
 vi.mock("./FriendsLobbyView", () => ({ FriendsLobbyView: () => null }))
 vi.mock("./StreamerLobbyView", () => ({ StreamerLobbyView: () => null }))
@@ -181,6 +185,38 @@ describe("ModeLobbyView : un invite entre par le lien du QR", () => {
       expect.objectContaining({ roomCode: "ABC123", user: expect.objectContaining({ id: 7 }) })
     )
     expect(mocks.socket!.connect).toHaveBeenCalledTimes(1)
+  })
+
+  // Relais de l'hote (salon Discord, decision de Tym du 10/10/2026) : le serveur
+  // envoie room:host quand l'hote part. Le lobby met la salle a jour et le dit
+  // au nouvel hote, sans recharger ni rejoindre.
+  it("room:host me nomme hote : la vue le sait et me le dit", async () => {
+    mocks.api.joinRoom.mockResolvedValue({ room: ROOM })
+    renderLobby()
+    expect(await screen.findByText(/Tu es dans la partie ABC123 \(invité\)/)).toBeInTheDocument()
+    await act(async () => { mocks.socket!.accept("sock-1") })
+
+    // Comme le vrai serveur : une fois le relais fait, relire la salle donne le nouvel hote.
+    mocks.api.roomDetails.mockResolvedValue({ room: { ...ROOM, host_user_id: 7 }, participants: [{ user_id: 7, username: "Lea" }], selfPreference: null })
+    await act(async () => { mocks.socket!.emitServer("room:host", { roomCode: "ABC123", hostUserId: 7, serverTimestamp: Date.now() }) })
+
+    expect(await screen.findByText(/Tu es dans la partie ABC123 \(hôte\)/)).toBeInTheDocument()
+    expect(screen.getByText(/c'est toi qui lances/i)).toBeInTheDocument()
+  })
+
+  it("room:host pour une autre salle ou un autre joueur : rien ne change pour moi", async () => {
+    mocks.api.joinRoom.mockResolvedValue({ room: ROOM })
+    renderLobby()
+    await screen.findByText(/Tu es dans la partie ABC123 \(invité\)/)
+    await act(async () => { mocks.socket!.accept("sock-1") })
+
+    await act(async () => {
+      mocks.socket!.emitServer("room:host", { roomCode: "AUTRE1", hostUserId: 7, serverTimestamp: Date.now() })
+      mocks.socket!.emitServer("room:host", { roomCode: "ABC123", hostUserId: 3, serverTimestamp: Date.now() })
+    })
+
+    expect(screen.getByText(/Tu es dans la partie ABC123 \(invité\)/)).toBeInTheDocument()
+    expect(screen.queryByText(/c'est toi qui lances/i)).not.toBeInTheDocument()
   })
 
   describe("filet de securite : join sans reponse", () => {

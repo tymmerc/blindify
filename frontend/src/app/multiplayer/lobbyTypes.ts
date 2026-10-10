@@ -6,6 +6,9 @@ import type { RpsMove, RpsScoreEntry, RpsIncoming, RpsActive, RpsResult } from "
 
 export type LobbyViewState = "landing" | "hosting" | "waiting" | "playing" | "results"
 
+/** Ou le lobby s'affiche : le site, ou l'iframe d'une Activite Discord (le salon est la salle, pas de code a partager). */
+export type LobbySurface = "web" | "discord"
+
 export type LobbyRpsState = {
   scoreboard: RpsScoreEntry[]
   incoming: RpsIncoming | null
@@ -29,6 +32,7 @@ export type LobbyRendererProps = {
   mode: GameMode
   modeConfig: GameModeConfig
   view: LobbyViewState
+  surface?: LobbySurface
   intent?: string | null
   lobbyStatus: LobbyStatus
   /** Code d'erreur structure du dernier join (ex: "room_in_progress"). */

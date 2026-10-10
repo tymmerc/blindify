@@ -43,6 +43,15 @@ export const api = {
       return null
     }
   },
+  async discordConfig() {
+    return clientApi.discordConfig()
+  },
+  async discordAuth(code: string) {
+    return clientApi.discordAuth(code)
+  },
+  async discordRoom(instanceId: string, nickname?: string) {
+    return clientApi.discordRoom(instanceId, nickname)
+  },
   async startSoloGame(params: {
     difficulty?: "easy" | "normal" | "hard"
     source?: string

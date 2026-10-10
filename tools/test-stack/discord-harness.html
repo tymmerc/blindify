@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Harnais Discord (pile de test)</title>
+<!--
+  Le harnais joue le client Discord autour de l'iframe de l'Activite, sur la
+  pile de test seulement. Il repond au protocole RPC du SDK (postMessage) :
+  READY a la poignee de main, AUTHORIZE (un code par joueur), AUTHENTICATE,
+  la liste des participants du salon (registre du faux Discord, /discord-stub)
+  et ses mises a jour, SUBSCRIBE. Tout autre commande recoit une erreur propre.
+  Meme origine que la page : le SDK accepte les messages de window.location.origin.
+  Adresse : /discord-harness.html?instance=<salon>&uid=<n>&name=<nom>
+-->
+<style>html,body{margin:0;height:100%;background:#2b2d31}iframe{display:block;border:0;width:100%;height:100%}</style>
+</head>
+<body>
+<iframe id="activity" title="Activite Blindz" allow="autoplay"></iframe>
+<script>
+(() => {
+  const q = new URLSearchParams(location.search)
+  const instance = q.get("instance") || "i-harnais"
+  const uid = q.get("uid") || "1"
+  const name = q.get("name") || `Joueur ${uid}`
+  const me = { id: String(100000000000000000n + BigInt(uid)), username: `joueur${uid}`, global_name: name, discriminator: "0", avatar: null, flags: 0, bot: false }
+  const HANDSHAKE = 0, FRAME = 1, CLOSE = 2
+  const iframe = document.getElementById("activity")
+  const frameId = crypto.randomUUID()
+  const log = []
+  let participants = []
+  window.__harness = { log, me, instance, participants: () => participants }
+
+  const send = payload => iframe.contentWindow.postMessage([FRAME, payload], location.origin)
+  const dispatch = (evt, data) => send({ cmd: "DISPATCH", evt, nonce: null, data })
+  const reply = (cmd, nonce, data) => send({ cmd, nonce, evt: null, data })
+  const refuse = (cmd, nonce, message) => send({ cmd, nonce, evt: "ERROR", data: { code: 4000, message } })
+
+  const register = () => fetch(`/discord-stub/instances/${encodeURIComponent(instance)}/participants`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ uid, name }),
+  })
+  async function refresh() {
+    try {
+      const r = await fetch(`/discord-stub/instances/${encodeURIComponent(instance)}/participants`)
+      const next = (await r.json()).participants
+      if (JSON.stringify(next) !== JSON.stringify(participants)) {
+        participants = next
+        if (iframe.contentWindow) dispatch("ACTIVITY_INSTANCE_PARTICIPANTS_UPDATE", { participants })
+      }
+    } catch (e) { log.push({ t: Date.now(), erreur: String(e) }) }
+  }
+
+  window.addEventListener("message", e => {
+    if (e.source !== iframe.contentWindow) return
+    const [op, data] = Array.isArray(e.data) ? e.data : []
+    if (op === HANDSHAKE) {
+      log.push({ t: Date.now(), op: "HANDSHAKE", client_id: data && data.client_id, sdk: data && data.sdk_version })
+      dispatch("READY", {
+        v: 1,
+        config: { cdn_host: "cdn.discordapp.com", api_endpoint: "//discord.com/api", environment: "harnais" },
+        user: { id: me.id, username: me.username, discriminator: "0" },
+      })
+      return
+    }
+    if (op === CLOSE) { log.push({ t: Date.now(), op: "CLOSE", code: data && data.code, message: data && data.message }); return }
+    if (op !== FRAME || !data) return
+    const { cmd, nonce, args, evt } = data
+    log.push({ t: Date.now(), cmd, evt: evt ?? null })
+    switch (cmd) {
+      case "AUTHORIZE":
+        return reply(cmd, nonce, { code: `test-code-${uid}` })
+      case "AUTHENTICATE":
+        return reply(cmd, nonce, {
+          access_token: `test-token-${uid}`,
+          user: { username: me.username, discriminator: "0", id: me.id, avatar: null, public_flags: 0, global_name: name },
+          scopes: ["identify"],
+          expires: new Date(Date.now() + 7 * 86400000).toISOString(),
+          application: { description: "Blindz, harnais de la pile de test", icon: null, id: "100000000000000001", name: "Blindz" },
+        })
+      case "GET_ACTIVITY_INSTANCE_CONNECTED_PARTICIPANTS":
+        return reply(cmd, nonce, { participants })
+      case "SUBSCRIBE":
+      case "UNSUBSCRIBE":
+        return reply(cmd, nonce, { evt })
+      case "CAPTURE_LOG":
+        return reply(cmd, nonce, null)
+      case "OPEN_EXTERNAL_LINK":
+        log.push({ t: Date.now(), lien: args && args.url })
+        return reply(cmd, nonce, { opened: false })
+      default:
+        return refuse(cmd, nonce, `commande non simulee par le harnais : ${cmd}`)
+    }
+  })
+
+  register().catch(() => {}).then(refresh).finally(() => {
+    iframe.src = `/blindify/discord/?frame_id=${frameId}&instance_id=${encodeURIComponent(instance)}&platform=desktop&channel_id=1&guild_id=1`
+    setInterval(refresh, 1000)
+  })
+  window.addEventListener("pagehide", () => {
+    if (navigator.sendBeacon) navigator.sendBeacon(`/discord-stub/instances/${encodeURIComponent(instance)}/participants/${uid}/leave`)
+  })
+})()
+</script>
+</body>
+</html>
