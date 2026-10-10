@@ -139,3 +139,61 @@ describe("connectIfIdle", () => {
     expect(s.connect).toHaveBeenCalledTimes(2)
   })
 })
+
+// Activite Discord : la page est a l'origine du proxy de Discord, pas a celle
+// de l'API. Le socket doit viser l'origine de l'API (le SDK reecrit ensuite
+// l'adresse vers le proxy) et porter le jeton de session dans le handshake,
+// faute de cookie. Tout le reste (autoConnect: false, transports) ne bouge pas.
+describe("configureSocket", () => {
+  beforeEach(() => {
+    vi.resetModules()
+    mockIo.mockClear()
+    mockIo.mockImplementation(() => createMockSocket())
+  })
+
+  it("sans configuration : origine de la page, chemin habituel, pas d'auth", async () => {
+    const { getSocket } = await import("@/lib/socket")
+    getSocket()
+    const [origin, opts] = mockIo.mock.calls[0] as unknown as [string, Record<string, unknown>]
+    expect(origin).toBe(window.location.origin)
+    expect(opts.autoConnect).toBe(false)
+    expect(opts.auth).toBeUndefined()
+  })
+
+  it("avec configuration : origine, chemin et jeton de la configuration, autoConnect toujours coupe", async () => {
+    const { configureSocket, getSocket } = await import("@/lib/socket")
+    configureSocket({ origin: "https://blindz.app", path: "/socket.io", auth: { token: "sess-42" } })
+    getSocket()
+    const [origin, opts] = mockIo.mock.calls[0] as unknown as [string, Record<string, unknown>]
+    expect(origin).toBe("https://blindz.app")
+    expect(opts.path).toBe("/socket.io")
+    expect(opts.auth).toEqual({ token: "sess-42" })
+    expect(opts.autoConnect).toBe(false)
+    expect(opts.withCredentials).toBe(true)
+  })
+
+  it("la configuration survit a disconnectSocket() : le socket recree la garde", async () => {
+    const { configureSocket, getSocket, disconnectSocket } = await import("@/lib/socket")
+    configureSocket({ origin: "https://blindz.app", path: "/socket.io", auth: { token: "sess-42" } })
+    getSocket()
+    disconnectSocket()
+    getSocket()
+    expect(mockIo).toHaveBeenCalledTimes(2)
+    const [, opts] = mockIo.mock.calls[1] as unknown as [string, Record<string, unknown>]
+    expect(opts.auth).toEqual({ token: "sess-42" })
+  })
+
+  it("configureSocket() ne modifie pas l'objet passe et se remet a zero", async () => {
+    const { configureSocket, getSocket, resetSocketConfig } = await import("@/lib/socket")
+    const given = { origin: "https://blindz.app", auth: { token: "a" } }
+    configureSocket(given)
+    given.auth.token = "b"
+    getSocket()
+    expect((mockIo.mock.calls[0] as unknown as [string, Record<string, unknown>])[1].auth).toEqual({ token: "a" })
+    resetSocketConfig()
+    const { disconnectSocket } = await import("@/lib/socket")
+    disconnectSocket()
+    getSocket()
+    expect((mockIo.mock.calls[1] as unknown as [string, Record<string, unknown>])[1].auth).toBeUndefined()
+  })
+})

@@ -3,21 +3,44 @@ import { API_BASE_URL } from "./config"
 
 let socket: Socket | null = null
 
+/**
+ * Reglages du socket, poses avant sa creation. Activite Discord : la page vit
+ * a l'origine du proxy de Discord, pas a celle de l'API. Le socket vise alors
+ * l'origine de l'API (le SDK reecrit l'adresse vers le proxy) et porte le
+ * jeton de session dans le handshake (`auth`), faute de cookie. Sur le site,
+ * rien n'est pose : origine de la page, chemin habituel, cookie.
+ * La configuration survit a disconnectSocket() : le socket recree la garde.
+ */
+export type SocketConfig = { origin?: string; path?: string; auth?: Record<string, string> }
+
+let config: SocketConfig = {}
+
+export function configureSocket(next: SocketConfig): void {
+  config = { ...next, auth: next.auth ? { ...next.auth } : undefined }
+}
+
+export function resetSocketConfig(): void {
+  config = {}
+}
+
 export function getSocket(): Socket {
   if (!socket) {
     const origin =
-      typeof window !== "undefined"
+      config.origin ??
+      (typeof window !== "undefined"
         ? window.location.origin
-        : API_BASE_URL.replace(/\/blindify$/, "")
+        : API_BASE_URL.replace(/\/blindify$/, ""))
     const path =
-      API_BASE_URL.includes("/blindify") || (typeof window !== "undefined" && window.location.pathname.startsWith("/blindify"))
+      config.path ??
+      (API_BASE_URL.includes("/blindify") || (typeof window !== "undefined" && window.location.pathname.startsWith("/blindify"))
         ? "/blindify/socket.io"
-        : "/socket.io"
+        : "/socket.io")
     socket = io(origin, {
       withCredentials: true,
       path,
       transports: ["polling", "websocket"],
       autoConnect: false,
+      ...(config.auth ? { auth: config.auth } : {}),
     })
     socket.on("connect_error", (err) => {
       console.error(`[socket] connect_error: ${err.message}`)

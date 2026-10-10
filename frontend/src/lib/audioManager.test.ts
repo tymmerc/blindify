@@ -227,3 +227,47 @@ describe("audioManager", () => {
     })
   })
 })
+
+// Activite Discord : les extraits Deezer ne peuvent pas etre charges directement
+// dans l'iframe (proxy de Discord). Un "mapper" reecrit l'adresse au moment de
+// jouer ; le reste du jeu continue de parler avec l'adresse d'origine.
+describe("audioManager.setSrcMapper", () => {
+  it("sans mapper : l'adresse est jouee telle quelle", async () => {
+    const am = await freshAudioManager()
+    const el = await am.play({ src: "https://cdnt-preview.dzcdn.net/x.mp3", owner: "multiplayer" })
+    expect(el?.src).toBe("https://cdnt-preview.dzcdn.net/x.mp3")
+  })
+
+  it("avec mapper : l'element joue l'adresse reecrite", async () => {
+    const am = await freshAudioManager()
+    am.setSrcMapper(src => src.replace("https://cdnt-preview.dzcdn.net", "/.proxy/dzcdn/cdnt-preview"))
+    const el = await am.play({ src: "https://cdnt-preview.dzcdn.net/x.mp3", owner: "multiplayer" })
+    expect(el?.src).toBe("/.proxy/dzcdn/cdnt-preview/x.mp3")
+  })
+
+  it("stopIfSrc accepte l'adresse d'origine : le jeu n'a pas a connaitre la reecriture", async () => {
+    const am = await freshAudioManager()
+    am.setSrcMapper(src => src.replace("https://cdnt-preview.dzcdn.net", "/.proxy/dzcdn/cdnt-preview"))
+    await am.play({ src: "https://cdnt-preview.dzcdn.net/x.mp3", owner: "multiplayer" })
+    am.stopIfSrc("https://cdnt-preview.dzcdn.net/x.mp3", "cleanup", "multiplayer")
+    expect(am.getState().playing).toBe(false)
+    expect(am.getState().lastStopReason).toBe("cleanup")
+  })
+
+  it("stopIfSrc ne coupe pas un autre morceau, meme avec un mapper", async () => {
+    const am = await freshAudioManager()
+    am.setSrcMapper(src => src.replace("https://cdnt-preview.dzcdn.net", "/.proxy/dzcdn/cdnt-preview"))
+    await am.play({ src: "https://cdnt-preview.dzcdn.net/suivant.mp3", owner: "multiplayer" })
+    am.stopIfSrc("https://cdnt-preview.dzcdn.net/precedent.mp3", "cleanup", "multiplayer")
+    expect(mockPause).not.toHaveBeenCalledTimes(2)
+    expect(am.getState().src).toBe("/.proxy/dzcdn/cdnt-preview/suivant.mp3")
+  })
+
+  it("setSrcMapper(null) retire la reecriture", async () => {
+    const am = await freshAudioManager()
+    am.setSrcMapper(() => "/jamais.mp3")
+    am.setSrcMapper(null)
+    const el = await am.play({ src: "https://cdnt-preview.dzcdn.net/x.mp3", owner: "multiplayer" })
+    expect(el?.src).toBe("https://cdnt-preview.dzcdn.net/x.mp3")
+  })
+})
