@@ -186,12 +186,30 @@ try {
   else bad(`après Quitter : ${again} salle(s) pour le salon, ${back} participant(s)`)
   await shot(third.page, "02b-quitter-retour-lobby-webkit")
 
-  // 5. La partie : 5 manches de 10 s, lancee par l'hote.
-  await host.frame.getByRole("button", { name: "5", exact: true }).click({ timeout: 10000 })
-  await host.frame.getByRole("button", { name: "10s", exact: true }).click({ timeout: 10000 })
+  // 4c. Relais : l'hote quitte le lobby, la plus ancienne joueuse presente (Lea) devient hote
+  // et peut lancer, sans que personne relance l'Activite. L'ancien hote revient en invite.
+  await host.frame.getByRole("button", { name: /quitter/i }).first().click({ timeout: 5000 })
+  let newHost = 0
+  for (let i = 0; i < 40 && newHost !== second.userId; i++) {
+    newHost = Number(psql(`SELECT host_user_id FROM multiplayer_rooms WHERE room_code=${q(code)}`))
+    if (newHost !== second.userId) await sleep(250)
+  }
+  if (newHost === second.userId) ok("relais : l'hôte quitte le lobby, Léa (plus ancienne présente) devient hôte en base")
+  else bad(`relais : hôte en base ${newHost}, attendu ${second.userId} (Léa)`)
+  const launch = second.frame.getByRole("button", { name: /lancer la partie/i })
+  if (await launch.waitFor({ timeout: 15000 }).then(() => true).catch(() => false)) ok("relais : Léa voit le bouton « Lancer la partie » sans recharger")
+  else bad("relais : Léa ne voit pas « Lancer la partie »")
+  await shot(second.page, "02c-relais-lea-hote")
+  await waitLobby(host)
+  if (await host.frame.getByRole("button", { name: /lancer la partie/i }).count()) bad("relais : l'ancien hôte, revenu, a encore le bouton de lancement")
+  const launcher = second
+
+  // 5. La partie : 5 manches de 10 s, lancee par la nouvelle hote.
+  await launcher.frame.getByRole("button", { name: "5", exact: true }).click({ timeout: 10000 })
+  await launcher.frame.getByRole("button", { name: "10s", exact: true }).click({ timeout: 10000 })
   await sleep(800)
-  await host.frame.getByRole("button", { name: /lancer la partie/i }).click({ timeout: 15000 })
-  ok("l'hôte a lancé la partie")
+  await launcher.frame.getByRole("button", { name: /lancer la partie/i }).click({ timeout: 15000 })
+  ok("la nouvelle hôte a lancé la partie")
 
   // Les manches avancent toutes seules (10 s, puis la revelation) : on suit la
   // manche affichee chez l'hote et chacun repond a celle-la, une fois.
@@ -253,8 +271,8 @@ try {
   if (await third.frame.getByRole("button", { name: /retour modes/i }).count()) bad("le joueur WebKit voit « Retour modes » sur le podium (pas de menu dans Discord)")
   else if (await third.frame.getByRole("button", { name: /l'hôte peut relancer/i }).isVisible().catch(() => false)) ok("podium du joueur : pas de « Retour modes », « L'hôte peut relancer » affiché")
   else bad("podium du joueur : « L'hôte peut relancer » introuvable")
-  if (await host.frame.getByRole("button", { name: /rejouer/i }).isVisible().catch(() => false)) ok("podium de l'hôte : « Rejouer » disponible")
-  else bad("podium de l'hôte : « Rejouer » introuvable")
+  if (await launcher.frame.getByRole("button", { name: /rejouer/i }).isVisible().catch(() => false)) ok("podium de la nouvelle hôte : « Rejouer » disponible")
+  else bad("podium de la nouvelle hôte : « Rejouer » introuvable")
   await shot(third.page, "06-podium-joueur-webkit")
 } catch (e) {
   bad(`arrêt : ${String(e?.message ?? e).split("\n")[0]}`)
