@@ -1238,7 +1238,9 @@ export function SoloGameClient({
           <div className="text-center font-display text-6xl font-bold text-[#2e2014] mb-2 transition-all">
             {isArmed ? countdown.toString().padStart(2, "0") : timer.toString().padStart(2, "0")}
           </div>
-          <div className="mb-6 text-center text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">secondes restantes</div>
+          <div className="mb-3 text-center text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">secondes restantes</div>
+          {/* Logo Deezer et usage prive : obligatoires la ou les extraits jouent. */}
+          <DeezerCredit className="mb-5" />
 
           <form className="flex flex-col gap-3" onSubmit={handleGuessSubmit}>
             <input
@@ -1411,8 +1413,7 @@ export function SoloGameClient({
           <div className="mt-3 text-center text-sm text-[#8a7558]">
             <button className="italic underline-offset-4 transition hover:text-[#c65133] hover:underline" onClick={handleSkipQuestion}>Passer cette question →</button>
           </div>
-          {/* Logo Deezer et usage prive : obligatoires la ou les extraits jouent. */}
-          <DeezerCredit className="mt-4" />
+
         </div>
       </div>
 

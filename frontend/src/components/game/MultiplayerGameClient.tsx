@@ -1052,6 +1052,7 @@ export function MultiplayerGameClient({
                           )}
                           {/* Lien retour Spotify (guidelines) : la reponse, donc reveal seulement. */}
                           <SpotifyTrackLink provider={currentTrack.provider} trackId={currentTrack.trackId} className="mt-4" />
+                          <DeezerCredit notice={false} className="mt-3" />
                         </motion.div>
                         {/* Mini top 3 */}
                         <motion.div
