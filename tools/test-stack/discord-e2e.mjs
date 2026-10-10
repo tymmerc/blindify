@@ -19,7 +19,10 @@ import path from "node:path"
 import { psql, seedUser, oracle, sessionFacts } from "./testdb.mjs"
 import { LOUD, newPage, sleep } from "./probe.mjs"
 
-const ORIGIN = "http://blindz-test.localhost:3180"
+// L'origine du "proxy de Discord" sur la pile : pas celle de l'API (comme en
+// vrai, https://<id>.discordsays.com n'est pas blindz.app). Le meme serveur
+// local repond sous ce nom ; le backend l'accepte par ALLOWED_ORIGINS (stack.sh).
+const ORIGIN = "http://discord-test.localhost:3180"
 const OUT = process.argv[2] || "/tmp/discord-e2e"
 const ROUNDS = 5
 fs.mkdirSync(OUT, { recursive: true })

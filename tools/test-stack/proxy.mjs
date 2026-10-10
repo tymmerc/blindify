@@ -213,7 +213,8 @@ function route(req, res) {
   if (url.split("?")[0] === "/discord-harness.html") return sendFile(req, res, path.join(HERE, "discord-harness.html"))
   if (url.startsWith("/deezer-stub/")) return deezerStub(req, res)
   if (url.startsWith("/blindify/api/") || url.startsWith("/blindify/socket.io/")) return toBackend(req, res)
-  if (url.startsWith("/test-audio/")) return sendFile(req, res, path.join(AUDIO, path.basename(url.split("?")[0])))
+  // Depuis l'Activite, l'extrait (sur l'hote de l'API) est demande a travers le proxy : /.proxy/blindz/test-audio/...
+  if (url.startsWith("/test-audio/") || url.startsWith("/blindify/test-audio/")) return sendFile(req, res, path.join(AUDIO, path.basename(url.split("?")[0])))
   if (url === "/" || url === "/blindify") { res.writeHead(302, { Location: "/blindify/" }); res.end(); return }
   if (url.startsWith("/blindify/")) {
     const file = frontFile(url.split("?")[0])

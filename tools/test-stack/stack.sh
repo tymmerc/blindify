@@ -37,6 +37,11 @@ PGPORT=5436
 BACKEND_PORT=3098
 PROXY_PORT=3180
 HOST=blindz-test.localhost
+# L'Activite Discord est servie par le proxy de Discord, sur une AUTRE origine
+# que l'API (https://<id>.discordsays.com en vrai). Sur la pile, le meme
+# serveur local repond aussi sous ce nom : le SDK reecrit alors les adresses de
+# l'API vers /.proxy/blindz comme en prod, sans se reecrire lui-meme.
+DISCORD_HOST=discord-test.localhost
 mkdir -p "$RUN/logs" "$RUN/run" "$RUN/audio"; touch "$RUN/logs/egress.log"
 
 log() { echo "[stack] $*"; }
@@ -111,6 +116,7 @@ DEEZER_API_BASE=http://127.0.0.1:$PROXY_PORT/deezer-stub
 DISCORD_CLIENT_ID=100000000000000001
 DISCORD_CLIENT_SECRET=secret-de-la-pile-de-test
 DISCORD_API_BASE=http://127.0.0.1:$PROXY_PORT/discord-stub
+ALLOWED_ORIGINS=http://$DISCORD_HOST:$PROXY_PORT
 EOF
   printf 'X-E2E-Key: %s\nContent-Type: application/json\nOrigin: http://%s:%s\n' "$(cat "$ROOT/.e2e-bypass-key")" "$HOST" "$PROXY_PORT" >"$RUN/run/headers"
   umask 022
