@@ -15,6 +15,9 @@ jest.mock('../../src/services/trackResolution', () => ({
   isExpiredPreview: jest.requireActual<typeof import('../../src/services/trackResolution')>('../../src/services/trackResolution').isExpiredPreview,
 }));
 jest.mock('axios');
+jest.mock('../../src/services/deezerPreviewService', () => ({
+  deezerPreviewService: { fetchChartTracks: jest.fn(async () => []) },
+}));
 jest.mock('../../src/utils/logger', () => ({
   logger: { error: jest.fn(), warn: jest.fn(), info: jest.fn(), debug: jest.fn() },
 }));
@@ -24,6 +27,7 @@ import { pool } from '../../src/config/db';
 import { getSessionContext } from '../../src/utils/session';
 import { hydratePreviewUrl } from '../../src/services/trackResolution';
 import axios from 'axios';
+import { deezerPreviewService } from '../../src/services/deezerPreviewService';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -31,6 +35,7 @@ const mockQuery = pool.query as jest.MockedFunction<typeof pool.query>;
 const mockGetSessionContext = getSessionContext as jest.MockedFunction<typeof getSessionContext>;
 const mockHydratePreviewUrl = hydratePreviewUrl as jest.MockedFunction<typeof hydratePreviewUrl>;
 const mockAxiosGet = (axios as any).get as jest.MockedFunction<any>;
+const mockFetchChart = deezerPreviewService.fetchChartTracks as jest.MockedFunction<any>;
 
 function mockReq(overrides: any = {}): Request {
   return { body: {}, query: {}, params: {}, headers: {}, session: {}, ...overrides } as any;
@@ -157,7 +162,7 @@ function setupStartGameQueries(sources: any[], sessionOverrides: any = {}) {
       return Promise.resolve({ rows: [], rowCount: 0 });
     }
 
-    // INSERT INTO audio_sources (iTunes import)
+    // INSERT INTO audio_sources (classement Deezer des invites)
     if (q.includes('INSERT INTO audio_sources')) {
       return Promise.resolve({ rows: sources.slice(0, 1), rowCount: 1 });
     }
@@ -1177,6 +1182,78 @@ describe('gamesController', () => {
       const res = mockRes();
 
       await expect(gamesController.recordSoloResult(req, res)).rejects.toThrow('DB write error');
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // Repli des invites : classement Deezer, plus jamais le top iTunes (10/10/2026,
+  // docs/CONDITIONS-API-MUSIQUE.md : Apple interdit ses extraits pour un jeu).
+  // ════════════════════════════════════════════════════════════════════════════
+  describe('repli des invites sans musique', () => {
+    const chart = Array.from({ length: 12 }, (_, i) => ({
+      id: 3000 + i,
+      title: `Tube ${i}`,
+      artist: `Artiste ${i}`,
+      preview: `https://cdnt-preview.dzcdn.net/${i}.mp3`,
+      albumCover: null,
+      duration: 180,
+    }));
+
+    function guestSetup() {
+      setupStartGameQueries([]);
+      const base = mockQuery.getMockImplementation()!;
+      mockQuery.mockImplementation(((sql: string, params?: any[]) => {
+        if (typeof sql === 'string' && sql.includes('INSERT INTO audio_sources')) {
+          const [provider, externalId, title, artist, cover, audioUrl, durationMs, metadata] = params ?? [];
+          return Promise.resolve({
+            rows: [{ id: `uuid-${externalId}`, provider, external_id: externalId, title, artist, album_cover: cover, audio_url: audioUrl, duration_ms: durationMs, metadata }],
+            rowCount: 1,
+          });
+        }
+        return base(sql as any, params as any);
+      }) as any);
+      mockGetSessionContext.mockResolvedValue(makeSessionContext({ user: makeUser({ provider: 'guest' }), connection: null }));
+    }
+
+    it("complete avec le classement Deezer, sans aucun appel a iTunes", async () => {
+      guestSetup();
+      mockFetchChart.mockResolvedValue(chart);
+      const res = mockRes();
+
+      await gamesController.startSoloGame(mockReq({ body: { source: 'library', provider: 'guest', count: 10 } }), res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      for (const call of mockAxiosGet.mock.calls) expect(String(call[0])).not.toMatch(/itunes|apple\.com/);
+      expect(mockFetchChart).toHaveBeenCalledTimes(1);
+      const tracks = (res.json as jest.Mock).mock.calls[0][0].data.tracks;
+      expect(tracks).toHaveLength(10);
+      for (const t of tracks) {
+        expect(t.type).toBe('deezer');
+        expect(t.audio_url).toMatch(/dzcdn\.net/);
+      }
+      const inserts = mockQuery.mock.calls.filter(c => String(c[0]).includes('INSERT INTO audio_sources'));
+      expect(inserts.length).toBeGreaterThan(0);
+      for (const c of inserts) {
+        expect((c[1] as any[])[0]).toBe('deezer');
+        expect((c[1] as any[])[7]).toMatchObject({ source: 'deezer_chart' });
+      }
+    });
+
+    it("le fonds commun ne sert jamais un vieux morceau Apple", async () => {
+      guestSetup();
+      mockFetchChart.mockResolvedValue(chart);
+      await gamesController.startSoloGame(mockReq({ body: { source: 'library', provider: 'guest', count: 10 } }), mockRes());
+      const globalPool = mockQuery.mock.calls.find(c => String(c[0]).includes('FROM audio_sources s') && String(c[0]).includes('ORDER BY RANDOM()') && !String(c[0]).includes('user_audio_sources'));
+      expect(String(globalPool?.[0])).toMatch(/provider\s*<>\s*'apple'/);
+    });
+
+    it("classement Deezer indisponible : refus propre, pas de repli ailleurs", async () => {
+      guestSetup();
+      mockFetchChart.mockResolvedValue([]);
+      const res = mockRes();
+      await gamesController.startSoloGame(mockReq({ body: { source: 'library', provider: 'guest', count: 10 } }), res);
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(mockAxiosGet).not.toHaveBeenCalled();
     });
   });
 });

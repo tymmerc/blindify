@@ -120,6 +120,8 @@ function deezerStub(req, res) {
   if ((m = p.match(/^\/user\/(\d+)\/playlists$/))) return json({ data: [{ id: Number(m[1]), title: `Playlist de test ${m[1]}`, nb_tracks: 12, picture_medium: null }], next: null })
   if ((m = p.match(/^\/user\/(\d+)$/))) return json({ id: Number(m[1]), name: `Profil de test ${m[1]}` })
   if ((m = p.match(/^\/track\/(\d+)$/))) { const t = catalogue()[Number(m[1]) - 900000]; return t ? json(item(t)) : json({ error: { code: 800 } }) }
+  // Classement (repli des invites sans musique) : les premiers morceaux du catalogue.
+  if (p === "/chart/0/tracks") { const n = Math.min(Number(u.searchParams.get("limit")) || 10, catalogue().length); return json({ data: catalogue().slice(0, n).map(item), total: n }) }
   if (p === "/search/playlist") return json({ data: [] })
   if (p === "/search") {
     const q = norm(u.searchParams.get("q"))
