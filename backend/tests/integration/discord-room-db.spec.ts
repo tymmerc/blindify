@@ -111,9 +111,9 @@ describe("resolveDiscordRoom", () => {
     expect(a.room.id).not.toBe(b.room.id);
   });
 
-  it("la base refuse elle-meme un identifiant au-dela de 64 caracteres", async () => {
+  it("la base refuse elle-meme un identifiant au-dela de 128 caracteres", async () => {
     const hote = await seedPlayer("hote3");
     // Le controleur refuse avant ; la contrainte est le filet si un autre chemin ecrit.
-    await expect(resolveDiscordRoom("x".repeat(65), hote, null)).rejects.toMatchObject({ code: "23514" });
+    await expect(resolveDiscordRoom("x".repeat(129), hote, null)).rejects.toMatchObject({ code: "23514" });
   });
 });

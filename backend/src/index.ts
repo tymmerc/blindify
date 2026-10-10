@@ -72,15 +72,17 @@ const cookieDomain = process.env.COOKIE_DOMAIN || (isProd ? "tymmerc.eu" : undef
 // Une liste par deploiement, derivee de FRONTEND_URL (voir utils/origins.ts) :
 // prod = https://blindz.app seul, localhost seulement hors production.
 // ALLOWED_ORIGINS (virgules) reste possible pour un cas exceptionnel.
+// Activite Discord : l'origine https://<id>.discordsays.com ne s'ouvre que si
+// l'Activite est vraiment configuree (identifiant ET secret), pas des que
+// l'identifiant est la.
+const discordConfig = readDiscordCredentials();
+logger.info("discord_activity", discordConfig.ok ? { enabled: true } : { enabled: false, reason: discordConfig.reason });
 const { origins: allowedOrigins, ignored: ignoredOrigins } = buildAllowedOrigins({
   frontendUrl: frontendBase,
   extra: process.env.ALLOWED_ORIGINS,
-  // Activite Discord : ouvre https://<id>.discordsays.com, et rien sans la variable.
-  discordClientId: process.env.DISCORD_CLIENT_ID,
+  discordClientId: discordConfig.ok ? discordConfig.credentials.clientId : undefined,
   isProd,
 });
-const discordConfig = readDiscordCredentials();
-logger.info("discord_activity", discordConfig.ok ? { enabled: true } : { enabled: false, reason: discordConfig.reason });
 if (ignoredOrigins.length) {
   logger.warn("allowed_origins_ignored", { ignored: ignoredOrigins });
 }
@@ -106,10 +108,13 @@ setInterval(() => {
 }, 30_000);
 
 // Cleanup stale rooms (waiting > 30 min with no activity)
+// Les salles d'un salon Discord restent : les joueurs y sont tant que le salon
+// vit, meme sans nouvelle arrivee (le janitor les efface a 7 jours).
 setInterval(() => {
   pool.query(
     `DELETE FROM multiplayer_rooms
      WHERE status = 'waiting'
+     AND discord_instance_id IS NULL
      AND (SELECT MAX(joined_at) FROM room_participants WHERE room_id = multiplayer_rooms.id)
          < NOW() - INTERVAL '30 minutes'`
   ).then(res => {

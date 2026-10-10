@@ -44,14 +44,14 @@ const mockJoin = roomsController.joinRoom as jest.Mock;
 const mockCreateSession = createSessionToken as jest.Mock;
 const mockGetSession = getSessionContext as jest.Mock;
 
-type MockRes = Response & { status: jest.Mock; json: jest.Mock };
+type MockRes = Response & { status: jest.Mock; json: jest.Mock; setHeader: jest.Mock };
 
 function mockReq(overrides: Partial<Request> = {}): Request {
   return { body: {}, params: {}, headers: {}, session: {}, ...overrides } as unknown as Request;
 }
 
 function mockRes(): MockRes {
-  const res = { status: jest.fn(), json: jest.fn() };
+  const res = { status: jest.fn(), json: jest.fn(), setHeader: jest.fn() };
   res.status.mockReturnValue(res);
   res.json.mockReturnValue(res);
   return res as unknown as MockRes;
@@ -124,9 +124,11 @@ describe("discordController.auth (POST /api/auth/discord)", () => {
     expect(mockExchange).toHaveBeenCalledWith("le-code", { clientId: "123456789012345678", clientSecret: "s3cret" });
     expect(mockFetchUser).toHaveBeenCalledWith("discord-tok");
     expect(mockUpsert).toHaveBeenCalledWith({ id: "987654321098765432", username: "tym", globalName: "Tym", avatar: null });
-    // Session longue (l'Activite est relancee a chaque salon), mais pas un an comme un invite.
-    expect(mockCreateSession).toHaveBeenCalledWith(12, 7 * 24 * 60 * 60 * 1000);
+    // Session habituelle (24 h glissantes) : l'Activite se reconnecte toute seule a chaque lancement.
+    expect(mockCreateSession).toHaveBeenCalledWith(12);
     expect(res.status).toHaveBeenCalledWith(200);
+    // Deux jetons dans la reponse : jamais en cache.
+    expect(res.setHeader).toHaveBeenCalledWith("Cache-Control", "no-store");
     // Le jeton d'acces Discord repart au client : le SDK en a besoin pour
     // authenticate(). Le secret de l'appli et le jeton de rafraichissement, jamais.
     expect(body(res).data).toEqual({ discordAccessToken: "discord-tok", sessionToken: "sess-1", user: USER });
@@ -143,6 +145,17 @@ describe("discordController.auth (POST /api/auth/discord)", () => {
     expect(body(res).error.code).toBe("discord_code_rejected");
     const journal = JSON.stringify((logger.warn as jest.Mock).mock.calls) + JSON.stringify((logger.error as jest.Mock).mock.calls);
     expect(journal).not.toContain("code-secret-du-joueur");
+  });
+
+  it("secret d'appli faux (invalid_client) : 502 pour le joueur, et une ERREUR dans le journal, pas un simple refus", async () => {
+    mockExchange.mockRejectedValue(new DiscordAuthError("unavailable", "refuse", 401, "invalid_client"));
+
+    const res = mockRes();
+    await discordController.auth(mockReq({ body: { code: "abc" } } as Partial<Request>), res);
+
+    expect(res.status).toHaveBeenCalledWith(502);
+    expect(body(res).error.code).toBe("discord_unavailable");
+    expect(logger.error).toHaveBeenCalledWith("discord_app_misconfigured", expect.objectContaining({ discordError: "invalid_client" }));
   });
 
   it("502 discord_unavailable quand Discord ne repond pas", async () => {

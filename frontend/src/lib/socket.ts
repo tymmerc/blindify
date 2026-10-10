@@ -6,9 +6,9 @@ let socket: Socket | null = null
 /**
  * Reglages du socket, poses avant sa creation. Activite Discord : la page vit
  * a l'origine du proxy de Discord, pas a celle de l'API. Le socket vise alors
- * l'origine de l'API (le SDK reecrit l'adresse vers le proxy) et porte le
- * jeton de session dans le handshake (`auth`), faute de cookie. Sur le site,
- * rien n'est pose : origine de la page, chemin habituel, cookie.
+ * le proxy lui-meme (origine de la page, chemin /.proxy/blindz/socket.io) et
+ * porte le jeton de session dans le handshake (`auth`), faute de cookie. Sur
+ * le site, rien n'est pose : origine de la page, chemin habituel, cookie.
  * La configuration survit a disconnectSocket() : le socket recree la garde.
  */
 export type SocketConfig = { origin?: string; path?: string; auth?: Record<string, string> }

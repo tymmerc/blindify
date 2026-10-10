@@ -24,6 +24,7 @@ describe("readActivityParams", () => {
 
   it("un identifiant d'instance a la forme impossible est refuse (il part au serveur)", () => {
     expect(readActivityParams("?frame_id=f&instance_id=%3Cscript%3E&platform=desktop")).toBeNull()
-    expect(readActivityParams(`?frame_id=f&instance_id=${"a".repeat(65)}&platform=desktop`)).toBeNull()
+    expect(readActivityParams(`?frame_id=f&instance_id=${"a".repeat(129)}&platform=desktop`)).toBeNull()
+    expect(readActivityParams("?frame_id=f&instance_id=i-1234567890123456789-gc-1234567890123456789-1234567890123456789&platform=desktop")?.instanceId).toHaveLength(64)
   })
 })

@@ -19,7 +19,9 @@ import { generateRoomCode } from "../utils/roomCode";
  * la meme promesse cote base.
  */
 
-export const DISCORD_INSTANCE_ID_PATTERN = /^[A-Za-z0-9_.:-]{1,64}$/;
+// Un identifiant d'instance observe fait une soixantaine de caracteres
+// (i-<19 chiffres>-gc-<19>-<19>) : 128 laisse de la marge si Discord l'allonge.
+export const DISCORD_INSTANCE_ID_PATTERN = /^[A-Za-z0-9_.:-]{1,128}$/;
 
 export function isValidInstanceId(value: unknown): value is string {
   return typeof value === "string" && DISCORD_INSTANCE_ID_PATTERN.test(value);

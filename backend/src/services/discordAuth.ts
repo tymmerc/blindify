@@ -28,6 +28,8 @@ export class DiscordAuthError extends Error {
     readonly kind: DiscordAuthErrorKind,
     message: string,
     readonly status?: number,
+    /** Le champ "error" de la reponse de Discord (invalid_grant, invalid_client...), jamais secret. */
+    readonly discordError?: string,
   ) {
     super(message);
     this.name = "DiscordAuthError";
@@ -41,8 +43,9 @@ const DISCORD_ID_PATTERN = /^\d{15,22}$/;
 // Empreinte d'avatar Discord : hexadecimal, parfois prefixe "a_" (anime).
 const AVATAR_HASH_PATTERN = /^[a-z0-9_]{1,64}$/i;
 
-// Code d'autorisation OAuth2 : lettres, chiffres et - . _ ~ (RFC 6749, 2.5 ms
-// de validation vaut mieux qu'une requete forgee chez Discord).
+// Code d'autorisation OAuth2 : lettres, chiffres et - . _ ~ (alphabet de la
+// RFC 6749). Valide ici, avant toute requete chez Discord : un code forge ne
+// doit pas voyager.
 export const DISCORD_AUTH_CODE_PATTERN = /^[A-Za-z0-9._~-]{1,256}$/;
 
 export function isValidAuthCode(value: unknown): value is string {
@@ -72,11 +75,18 @@ async function readJson(res: Response): Promise<Record<string, unknown>> {
   }
 }
 
-function refused(res: Response, what: string): DiscordAuthError {
-  if (res.status === 400 || res.status === 401 || res.status === 403) {
-    return new DiscordAuthError("code_rejected", `Discord a refuse ${what} (${res.status})`, res.status);
+async function refused(res: Response, what: string): Promise<DiscordAuthError> {
+  const data = await readJson(res);
+  const discordError = typeof data.error === "string" ? data.error.slice(0, 40) : undefined;
+  // invalid_client : le secret de l'appli est faux ou a ete regenere. Ce n'est
+  // pas le joueur qui est refuse, c'est notre configuration qui est en panne.
+  if (discordError === "invalid_client") {
+    return new DiscordAuthError("unavailable", `Discord refuse l'appli elle-meme (${res.status})`, res.status, discordError);
   }
-  return new DiscordAuthError("unavailable", `Discord a repondu ${res.status} pour ${what}`, res.status);
+  if (res.status === 400 || res.status === 401 || res.status === 403) {
+    return new DiscordAuthError("code_rejected", `Discord a refuse ${what} (${res.status})`, res.status, discordError);
+  }
+  return new DiscordAuthError("unavailable", `Discord a repondu ${res.status} pour ${what}`, res.status, discordError);
 }
 
 /** Echange le code du SDK contre un jeton d'acces. Flux d'une Activite : pas de redirect_uri. */
@@ -100,7 +110,7 @@ export async function exchangeCode(
     },
     deps,
   );
-  if (!res.ok) throw refused(res, "le code de connexion");
+  if (!res.ok) throw await refused(res, "le code de connexion");
   const data = await readJson(res);
   const accessToken = typeof data.access_token === "string" ? data.access_token : "";
   if (!accessToken) throw new DiscordAuthError("unavailable", "Reponse de Discord sans jeton d'acces", res.status);
@@ -115,7 +125,7 @@ export async function fetchDiscordUser(accessToken: string, deps: Deps = {}): Pr
     { method: "GET", headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } },
     deps,
   );
-  if (!res.ok) throw refused(res, "le jeton d'acces");
+  if (!res.ok) throw await refused(res, "le jeton d'acces");
   const data = await readJson(res);
   const id = typeof data.id === "string" ? data.id : "";
   const username = typeof data.username === "string" ? data.username.trim() : "";

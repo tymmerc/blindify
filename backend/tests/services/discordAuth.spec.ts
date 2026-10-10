@@ -83,6 +83,17 @@ describe("exchangeCode", () => {
       name: "DiscordAuthError",
       kind: "code_rejected",
       status: 400,
+      discordError: "invalid_grant",
+    });
+  });
+
+  it("secret d'appli faux (401 invalid_client) : unavailable, avec le champ error de Discord", async () => {
+    const fetchImpl: FetchMock = jest.fn().mockResolvedValue(jsonResponse(401, { error: "invalid_client" }));
+
+    await expect(exchangeCode("c", CREDS, { fetchImpl })).rejects.toMatchObject({
+      kind: "unavailable",
+      status: 401,
+      discordError: "invalid_client",
     });
   });
 

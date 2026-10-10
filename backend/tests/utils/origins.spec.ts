@@ -187,7 +187,9 @@ describe("buildAllowedOrigins : origine de l'Activite Discord", () => {
     });
 
     expect(origins).toEqual(["https://blindz.app"]);
-    expect(ignored).toEqual(["DISCORD_CLIENT_ID=evil.com"]);
+    // Sans la valeur : si identifiant et secret sont intervertis, le secret ne doit pas partir dans le journal.
+    expect(ignored).toEqual(["DISCORD_CLIENT_ID (format invalide)"]);
+    expect(JSON.stringify(ignored)).not.toContain("evil.com");
   });
 
   it("l'origine Discord passe le filtre CSRF et le handshake socket", () => {

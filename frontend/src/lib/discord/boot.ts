@@ -55,6 +55,8 @@ export type DiscordBootDeps = {
   /** Pose la session pour les requetes suivantes (Authorization: Bearer). */
   setBearer: (token: string | null) => void
   onStep?: (step: DiscordBootStep) => void
+  /** Delai accorde au READY du client Discord (tests). */
+  readyTimeoutMs?: number
 }
 
 export type DiscordBootResult = {
@@ -67,6 +69,18 @@ export type DiscordBootResult = {
 
 // Seul le pseudo : pas d'e-mail, pas de liste de serveurs ni d'amis.
 export const DISCORD_SCOPES = ["identify"] as const
+
+// Le client Discord repond en moins d'une seconde a la poignee de main ; au
+// dela, la page n'est pas dans un vrai client (ou il est plante) : mieux vaut
+// le dire qu'un chargement sans fin.
+export const SDK_READY_TIMEOUT_MS = 15_000
+
+function readyWithin(sdk: ActivitySdk, ms: number): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new DiscordBootError("discord_unavailable", "Discord ne répond pas. Relance l'Activité.")), ms)
+    sdk.ready().then(() => { clearTimeout(timer); resolve() }, err => { clearTimeout(timer); reject(err) })
+  })
+}
 
 const CONFIG_UNREACHABLE = "Impossible de joindre le serveur de Blindz. Vérifie ta connexion et réessaie."
 
@@ -87,7 +101,7 @@ export async function bootDiscordActivity(deps: DiscordBootDeps): Promise<Discor
 
   step("sdk")
   const sdk = deps.createSdk(clientId)
-  await sdk.ready()
+  await readyWithin(sdk, deps.readyTimeoutMs ?? SDK_READY_TIMEOUT_MS)
 
   step("authorize")
   let code: string

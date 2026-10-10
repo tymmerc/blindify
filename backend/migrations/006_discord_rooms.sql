@@ -37,10 +37,11 @@ BEGIN
     ALTER TABLE multiplayer_rooms ADD COLUMN discord_instance_id TEXT;
   END IF;
 
-  -- Meme borne que la validation du backend (DISCORD_INSTANCE_ID_PATTERN).
+  -- Meme borne que la validation du backend (DISCORD_INSTANCE_ID_PATTERN) : un
+  -- identifiant observe fait une soixantaine de caracteres, 128 laisse de la marge.
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'multiplayer_rooms_discord_instance_len') THEN
     ALTER TABLE multiplayer_rooms
-      ADD CONSTRAINT multiplayer_rooms_discord_instance_len CHECK (char_length(discord_instance_id) <= 64);
+      ADD CONSTRAINT multiplayer_rooms_discord_instance_len CHECK (char_length(discord_instance_id) <= 128);
   END IF;
 
   -- Un salon, une salle. Partiel : les salles du site, sans instance, ne

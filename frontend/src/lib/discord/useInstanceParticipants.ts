@@ -38,6 +38,8 @@ export function useInstanceParticipants(sdk: IDiscordSDK | null): VoiceParticipa
       .catch(() => {
         // Sans la liste, le lobby reste complet : cette bande est un plus.
       })
+    // Meme regle pour l'abonnement et son retrait : un refus de Discord ne doit
+    // ni casser le lobby ni remonter comme une erreur de la page.
     sdk.subscribe(Events.ACTIVITY_INSTANCE_PARTICIPANTS_UPDATE, onUpdate).catch(() => {})
 
     return () => {

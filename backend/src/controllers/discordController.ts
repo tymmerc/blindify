@@ -8,10 +8,6 @@ import { createSessionToken, getSessionContext } from "../utils/session";
 import { fail, ok } from "../utils/response";
 import { logger } from "../utils/logger";
 
-// Session d'un joueur Discord : une semaine. L'Activite se relance a chaque
-// salon et se reconnecte toute seule (prompt: none) ; pas besoin d'un an comme
-// pour un invite, dont le cookie est la seule memoire.
-export const DISCORD_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export const discordController = {
   /** Public : l'identifiant de l'appli, pour que le front initialise le SDK sans rebuild. */
@@ -41,13 +37,23 @@ export const discordController = {
       const { accessToken } = await exchangeCode(code, creds.credentials);
       const discordUser = await fetchDiscordUser(accessToken);
       const user = await upsertDiscordUser(discordUser);
-      const session = await createSessionToken(user.id, DISCORD_SESSION_TTL_MS);
+      // Session habituelle (24 h, prolongee a chaque requete) : l'Activite se
+      // reconnecte toute seule a chaque lancement (prompt: none), pas besoin
+      // d'un an comme pour un invite, dont le cookie est la seule memoire.
+      const session = await createSessionToken(user.id);
       logger.info("discord_auth_ok", { userId: user.id });
+      // Deux jetons dans la reponse : jamais en cache (RFC 6749, 5.1).
+      res.setHeader("Cache-Control", "no-store");
       ok(res, { discordAccessToken: accessToken, sessionToken: session.token, user });
     } catch (error) {
       if (error instanceof DiscordAuthError) {
         // Jamais le code dans le journal : il vaut une connexion pendant quelques minutes.
-        logger.warn("discord_auth_refused", { kind: error.kind, status: error.status ?? null });
+        // Un secret d'appli faux (invalid_client) est une panne de configuration, pas un refus du joueur.
+        if (error.discordError === "invalid_client") {
+          logger.error("discord_app_misconfigured", { status: error.status ?? null, discordError: error.discordError });
+        } else {
+          logger.warn("discord_auth_refused", { kind: error.kind, status: error.status ?? null, discordError: error.discordError ?? null });
+        }
         if (error.kind === "code_rejected") {
           fail(res, "discord_code_rejected", "Discord a refusé ce code de connexion. Relance l'Activité.", 401);
           return;

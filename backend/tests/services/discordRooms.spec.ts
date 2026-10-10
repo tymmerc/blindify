@@ -37,15 +37,17 @@ beforeEach(() => {
 });
 
 describe("isValidInstanceId", () => {
-  it("accepte un identifiant d'instance du SDK (lettres, chiffres, - _ . :), 64 caracteres au plus", () => {
+  it("accepte un identifiant d'instance du SDK (lettres, chiffres, - _ . :), 128 caracteres au plus", () => {
     expect(isValidInstanceId("i-4f2a9c1e3b7d")).toBe(true);
     expect(isValidInstanceId("123456789012345678")).toBe(true);
-    expect(isValidInstanceId("a".repeat(64))).toBe(true);
+    // Forme observee : i-<19 chiffres>-gc-<19 chiffres>-<19 chiffres>, soit 64 caracteres.
+    expect(isValidInstanceId("i-1234567890123456789-gc-1234567890123456789-1234567890123456789")).toBe(true);
+    expect(isValidInstanceId("a".repeat(128))).toBe(true);
   });
 
   it("refuse le reste : vide, trop long, espaces, balises, autre type", () => {
     expect(isValidInstanceId("")).toBe(false);
-    expect(isValidInstanceId("a".repeat(65))).toBe(false);
+    expect(isValidInstanceId("a".repeat(129))).toBe(false);
     expect(isValidInstanceId("abc def")).toBe(false);
     expect(isValidInstanceId("<b>")).toBe(false);
     expect(isValidInstanceId(null)).toBe(false);

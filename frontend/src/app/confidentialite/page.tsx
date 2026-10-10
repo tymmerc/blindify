@@ -65,6 +65,14 @@ export default function ConfidentialitePage() {
                 fournis.
               </Item>
               <Item>
+                <strong>Ton identité Discord</strong>, seulement si tu joues depuis l'Activité Discord (Blindz
+                lancé dans un salon vocal) : ton identifiant Discord, ton pseudo et ton avatar, pour te
+                reconnaître d'un salon à l'autre et te remettre ta musique. Pas d'e-mail, pas de liste de
+                serveurs ni d'amis. Dans ce cas, il n'y a pas de cookie : la session reste en mémoire de
+                l'Activité. Tu peux retirer l'accès de Blindz à tout moment dans tes paramètres Discord
+                (Applications autorisées), et supprimer ton compte depuis les Réglages.
+              </Item>
+              <Item>
                 <strong>Ton retour de fin de partie</strong>, seulement si tu en donnes un : ta réponse à
                 « Ça s'est bien passé ? », le texte que tu écris si tu signales un bug, le mode de jeu, le
                 code de la partie, la version du site et la signature technique de ton navigateur (le

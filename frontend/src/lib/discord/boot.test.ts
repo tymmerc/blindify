@@ -107,6 +107,16 @@ describe("bootDiscordActivity", () => {
     expect(setBearer).not.toHaveBeenCalledWith(null)
   })
 
+  it("le client Discord ne repond jamais au READY : discord_unavailable au lieu d'un chargement sans fin", async () => {
+    const api = makeApi()
+    const { sdk } = makeSdk()
+    sdk.ready = () => new Promise(() => {})
+
+    await expect(bootDiscordActivity({ api, createSdk: () => sdk, instanceId: "i-1", setBearer: vi.fn(), readyTimeoutMs: 20 }))
+      .rejects.toMatchObject({ code: "discord_unavailable" })
+    expect(api.discordAuth).not.toHaveBeenCalled()
+  })
+
   it("DiscordBootError garde la cause", () => {
     const cause = new Error("x")
     const err = new DiscordBootError("session_failed", "message", cause)

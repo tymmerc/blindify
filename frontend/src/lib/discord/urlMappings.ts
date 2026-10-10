@@ -32,10 +32,17 @@ export function buildUrlMappings(apiBaseUrl: string): UrlMapping[] {
   ]
 }
 
-/** Branche la reecriture des requetes de la page (fetch, XHR, WebSocket) et rend les correspondances. */
+/**
+ * Branche la reecriture des requetes de la page et rend les correspondances :
+ * fetch, XHR, WebSocket, et les attributs src des elements ajoutes au DOM
+ * (patchSrcAttributes, un MutationObserver) pour les pochettes Deezer des
+ * ecrans de jeu, des <img> externes que rien d'autre ne reecrirait. Le DOM de
+ * Blindz est petit, le cout est negligeable. L'element audio, lui, n'est pas
+ * dans le DOM : voir createPreviewSrcMapper.
+ */
 export function installUrlMappings(apiBaseUrl: string): UrlMapping[] {
   const mappings = buildUrlMappings(apiBaseUrl)
-  patchUrlMappings(mappings, { patchFetch: true, patchWebSocket: true, patchXhr: true, patchSrcAttributes: false })
+  patchUrlMappings(mappings, { patchFetch: true, patchWebSocket: true, patchXhr: true, patchSrcAttributes: true })
   return mappings
 }
 

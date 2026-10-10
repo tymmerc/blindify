@@ -63,7 +63,9 @@ export function buildAllowedOrigins(config: AllowedOriginsConfig): AllowedOrigin
 function discordOrigins(clientId: string | undefined): AllowedOrigins {
   const id = (clientId ?? "").trim();
   if (!id) return { origins: [], ignored: [] };
-  if (!DISCORD_CLIENT_ID_PATTERN.test(id)) return { origins: [], ignored: [`DISCORD_CLIENT_ID=${id}`] };
+  // Jamais la valeur dans le journal : un identifiant et un secret intervertis
+  // dans le .env enverraient le secret dans les logs.
+  if (!DISCORD_CLIENT_ID_PATTERN.test(id)) return { origins: [], ignored: ["DISCORD_CLIENT_ID (format invalide)"] };
   return { origins: [discordActivityOrigin(id)], ignored: [] };
 }
 
