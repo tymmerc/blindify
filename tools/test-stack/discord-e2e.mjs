@@ -173,6 +173,19 @@ try {
   }
   if (!problems.some(x => /proxy|jeton|websocket/.test(x))) ok("API et websocket passent par /.proxy/blindz, le jeton de session reste hors des adresses")
 
+  // 4b. Quitter depuis le lobby : l'Activite se recharge et remet le joueur dans la salle du salon.
+  await third.frame.getByRole("button", { name: /quitter/i }).first().click({ timeout: 5000 })
+  await waitLobby(third)
+  const again = psql(`SELECT count(*) FROM multiplayer_rooms WHERE discord_instance_id=${q(INSTANCE)}`)
+  let back = 0
+  for (let i = 0; i < 40 && back < PLAYERS.length; i++) {
+    back = Number(psql(`SELECT count(*) FROM room_participants rp JOIN multiplayer_rooms m ON m.id=rp.room_id WHERE m.room_code=${q(code)}`))
+    if (back < PLAYERS.length) await sleep(500)
+  }
+  if (again === "1" && back === PLAYERS.length) ok("Quitter recharge l'Activité : le joueur WebKit revient dans la même salle du salon")
+  else bad(`après Quitter : ${again} salle(s) pour le salon, ${back} participant(s)`)
+  await shot(third.page, "02b-quitter-retour-lobby-webkit")
+
   // 5. La partie : 5 manches de 10 s, lancee par l'hote.
   await host.frame.getByRole("button", { name: "5", exact: true }).click({ timeout: 10000 })
   await host.frame.getByRole("button", { name: "10s", exact: true }).click({ timeout: 10000 })
@@ -236,18 +249,13 @@ try {
   else bad(`son chez l'hôte : ${probe?.plays ?? "?"} lecture(s), ${loud} relevés sonores`)
   for (const p of players) if (p.seen.consoleErrors.length) say(`  (console ${p.tag} : ${p.seen.consoleErrors.length} erreur(s), ex. ${p.seen.consoleErrors[0]})`)
 
-  // 9. Quitter depuis le classement : l'Activite se recharge et remet dans la salle du salon.
-  const retour = third.frame.getByRole("button", { name: /retour|quitter/i }).first()
-  if (await retour.isVisible().catch(() => false)) {
-    await retour.click({ timeout: 5000 })
-    await waitLobby(third)
-    const again = psql(`SELECT count(*) FROM multiplayer_rooms WHERE discord_instance_id=${q(INSTANCE)}`)
-    if (again === "1") ok("Quitter recharge l'Activité : le joueur WebKit revient dans la même salle du salon")
-    else bad(`après Quitter, ${again} salle(s) pour le salon`)
-    await shot(third.page, "06-retour-lobby-webkit")
-  } else {
-    say("  (pas de bouton Retour/Quitter visible chez le joueur WebKit : étape sautée)")
-  }
+  // 9. Le podium dans Discord : pas de « Retour modes » (il n'y a pas de menu), l'hote seul relance.
+  if (await third.frame.getByRole("button", { name: /retour modes/i }).count()) bad("le joueur WebKit voit « Retour modes » sur le podium (pas de menu dans Discord)")
+  else if (await third.frame.getByRole("button", { name: /l'hôte peut relancer/i }).isVisible().catch(() => false)) ok("podium du joueur : pas de « Retour modes », « L'hôte peut relancer » affiché")
+  else bad("podium du joueur : « L'hôte peut relancer » introuvable")
+  if (await host.frame.getByRole("button", { name: /rejouer/i }).isVisible().catch(() => false)) ok("podium de l'hôte : « Rejouer » disponible")
+  else bad("podium de l'hôte : « Rejouer » introuvable")
+  await shot(third.page, "06-podium-joueur-webkit")
 } catch (e) {
   bad(`arrêt : ${String(e?.message ?? e).split("\n")[0]}`)
   for (const p of players) await shot(p.page, `erreur-${p.tag}`).catch(() => {})
