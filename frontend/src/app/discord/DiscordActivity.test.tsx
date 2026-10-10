@@ -92,7 +92,10 @@ describe("DiscordActivity", () => {
     expect(mocks.installUrlMappings).toHaveBeenCalledWith("https://blindz.app")
     expect(mocks.setSrcMapper).toHaveBeenCalledWith(expect.any(Function))
     expect(mocks.setApiBearerToken).toHaveBeenCalledWith("sess-1")
-    expect(mocks.configureSocket).toHaveBeenCalledWith({ origin: "https://blindz.app", path: "/socket.io", auth: { token: "sess-1" } })
+    // Le socket vise le proxy lui-meme (origine de la page, chemin de la
+    // correspondance /blindz) : le client socket.io a capture window.WebSocket
+    // avant que le SDK ne le remplace, aucune reecriture ne le rattraperait.
+    expect(mocks.configureSocket).toHaveBeenCalledWith({ origin: window.location.origin, path: "/.proxy/blindz/socket.io", auth: { token: "sess-1" } })
     expect(mocks.api.discordRoom).toHaveBeenCalledWith("i-4f2a", "Tym")
     expect(mocks.lobbyProps).toMatchObject({ mode: "friends", surface: "discord", initialJoinCode: "ABC123", initialNickname: "Tym" })
     expect(typeof mocks.lobbyProps?.onLeave).toBe("function")
@@ -120,5 +123,13 @@ describe("DiscordActivity", () => {
     expect(await screen.findByText(/La salle est pleine/)).toBeInTheDocument()
     expect(screen.getByRole("button", { name: /réessayer/i })).toBeInTheDocument()
     expect(screen.queryByText(/Lobby/)).not.toBeInTheDocument()
+  })
+})
+
+describe("socketSettings", () => {
+  it("origine de la page, chemin du proxy sans le chemin de base de l'API, jeton dans le handshake", async () => {
+    const { socketSettings } = await import("./DiscordActivity")
+    expect(socketSettings("https://123456789012345678.discordsays.com", "sess-1"))
+      .toEqual({ origin: "https://123456789012345678.discordsays.com", path: "/.proxy/blindz/socket.io", auth: { token: "sess-1" } })
   })
 })

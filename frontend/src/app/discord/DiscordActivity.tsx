@@ -10,7 +10,7 @@ import { configureSocket } from "@/lib/socket"
 import { audioManager } from "@/lib/audioManager"
 import { GAME_MODES } from "@/lib/gameModes"
 import { readActivityParams } from "@/lib/discord/activityParams"
-import { createPreviewSrcMapper, installUrlMappings } from "@/lib/discord/urlMappings"
+import { BLINDZ_MAPPING_PREFIX, createPreviewSrcMapper, installUrlMappings } from "@/lib/discord/urlMappings"
 import {
   DiscordBootError,
   bootDiscordActivity,
@@ -69,10 +69,16 @@ const ERROR_TITLE: Record<DiscordBootErrorCode | "unexpected", string> = {
 
 const defaultCreateSdk = (clientId: string): ActivitySdk => new DiscordSDK(clientId)
 
-/** Le socket vise l'API (le SDK reecrit l'adresse vers le proxy) et porte la session dans le handshake. */
-export function socketSettings(apiBaseUrl: string, token: string): { origin: string; path: string; auth: { token: string } } {
-  const url = new URL(apiBaseUrl)
-  return { origin: url.origin, path: `${url.pathname.replace(/\/+$/, "")}/socket.io`, auth: { token } }
+/**
+ * Le socket vise directement le proxy : l'origine de la page et le chemin de
+ * la correspondance /blindz (qui retire le chemin de base de l'API), avec la
+ * session dans le handshake. Pas de reecriture a l'execution pour lui : le
+ * client socket.io capture window.WebSocket au chargement du module, avant
+ * que le SDK ne l'ait remplace (vu sur la pile le 10/10/2026 : websocket parti
+ * hors du proxy, polling seulement).
+ */
+export function socketSettings(pageOrigin: string, token: string): { origin: string; path: string; auth: { token: string } } {
+  return { origin: pageOrigin, path: `${BLINDZ_MAPPING_PREFIX}/socket.io`, auth: { token } }
 }
 
 export function DiscordActivity({ search, createSdk = defaultCreateSdk, apiBaseUrl = API_BASE_URL }: Props) {
@@ -104,7 +110,7 @@ export function DiscordActivity({ search, createSdk = defaultCreateSdk, apiBaseU
     bootRef.current
       .then(result => {
         if (!active) return
-        configureSocket(socketSettings(apiBaseUrl, result.sessionToken))
+        configureSocket(socketSettings(window.location.origin, result.sessionToken))
         setStatus({ kind: "ready", result })
       })
       .catch((err: unknown) => {
