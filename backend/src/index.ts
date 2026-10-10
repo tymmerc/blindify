@@ -28,6 +28,9 @@ import { ensureUserTracksSchema } from "./services/userTracks";
 import { DEAD_GUEST_FILTER } from "./services/deadGuests";
 import quickPlayRoutes from "./routes/quickPlay";
 import challengeRoutes from "./routes/challenges";
+import discordRoutes from "./routes/discord";
+import { ensureDiscordSchema } from "./services/discordRooms";
+import { readDiscordCredentials } from "./config/discord";
 import { fail, ok } from "./utils/response";
 import { getSessionContext } from "./utils/session";
 import {
@@ -72,8 +75,12 @@ const cookieDomain = process.env.COOKIE_DOMAIN || (isProd ? "tymmerc.eu" : undef
 const { origins: allowedOrigins, ignored: ignoredOrigins } = buildAllowedOrigins({
   frontendUrl: frontendBase,
   extra: process.env.ALLOWED_ORIGINS,
+  // Activite Discord : ouvre https://<id>.discordsays.com, et rien sans la variable.
+  discordClientId: process.env.DISCORD_CLIENT_ID,
   isProd,
 });
+const discordConfig = readDiscordCredentials();
+logger.info("discord_activity", discordConfig.ok ? { enabled: true } : { enabled: false, reason: discordConfig.reason });
 if (ignoredOrigins.length) {
   logger.warn("allowed_origins_ignored", { ignored: ignoredOrigins });
 }
@@ -301,6 +308,7 @@ app.use("/api/quick-play", quickPlayRoutes);
 app.use("/api/challenges", challengeRoutes);
 app.use("/api/reports", reportsRoutes);
 app.use("/api/feedback", feedbackRoutes);
+app.use("/api/discord", discordRoutes);
 
 app.use((_req, res) => {
   fail(res, "not_found", "Ressource introuvable", 404);
@@ -332,7 +340,10 @@ async function bootstrap() {
 const userTracksReady = ensureLinksSchema()
   .catch(err => logger.error("links_schema_boot_failed", { error: err }))
   .then(() => ensureUserTracksSchema())
-  .catch(err => logger.error("user_tracks_schema_boot_failed", { error: err }));
+  .catch(err => logger.error("user_tracks_schema_boot_failed", { error: err }))
+  // Salle par salon Discord (migration 006) : meme regle, la prod l'a deja.
+  .then(() => ensureDiscordSchema())
+  .catch(err => logger.error("discord_schema_boot_failed", { error: err }));
 ensureResponseSchema().catch(err => logger.error("response_schema_boot_failed", { error: err }));
 // Retours de fin de partie : la migration 004 cree la table en prod ; le
 // demarrage la cree la ou elle manque encore (pile de test, CI).
