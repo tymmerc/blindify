@@ -32,7 +32,7 @@ import { StreamerLobbyView } from "./StreamerLobbyView"
 import { ResultsView } from "./LobbyViews"
 import { multiplayerFeedbackContext } from "@/lib/feedback"
 import { ENTRY_ROUTE, HEADER_COPY } from "./lobbyCopy"
-import type { LobbyRendererProps, LobbyViewState } from "./lobbyTypes"
+import type { LobbyRendererProps, LobbySurface, LobbyViewState } from "./lobbyTypes"
 import { initialLobbyContext, lobbyReducer } from "./lobbyMachine"
 import { RequestTimeoutError, withTimeoutRetry } from "@/lib/withTimeoutRetry"
 
@@ -91,6 +91,10 @@ type ModeLobbyViewProps = {
   autojoin?: string | null
   initialProfileUrl?: string | null
   initialNickname?: string | null
+  /** Activite Discord : le salon est la salle, pas de code a partager. */
+  surface?: LobbySurface
+  /** Remplace le retour au choix des modes (Quitter, Retour) : dans Discord, il n'y a pas de menu. */
+  onLeave?: () => void
 }
 
 function friendlyError(mode: GameMode, phase: "create" | "join" | "start" | "invite"): string {
@@ -117,7 +121,7 @@ function friendlyError(mode: GameMode, phase: "create" | "join" | "start" | "inv
   return base[mode as keyof typeof base][phase]
 }
 
-export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autojoin, initialProfileUrl, initialNickname }: ModeLobbyViewProps) {
+export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autojoin, initialProfileUrl, initialNickname, surface = "web", onLeave }: ModeLobbyViewProps) {
   const router = useRouter()
   const { accentColor, isGuest, setGuest } = useMode()
   const [userPayload, setUserPayload] = useState<CurrentUserPayload | null>(null)
@@ -1452,8 +1456,10 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     dispatchLobby({ type: "reset" })
     // Retour au CHOIX DES MODES, pas au tout debut du wizard : le nom et la musique
     // sont deja poses, revenir a la saisie du nom etait percu comme "tout recommencer".
-    router.replace("/modes")
-  }, [room, userPayload, router, mode])
+    // Dans Discord, c'est la page de l'Activite qui decide (elle recharge).
+    if (onLeave) onLeave()
+    else router.replace("/modes")
+  }, [room, userPayload, router, mode, onLeave])
 
   useEffect(() => {
     const hasCode = Boolean(initialJoinCode)
@@ -1559,6 +1565,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     mode,
     modeConfig,
     view,
+    surface,
     intent,
     lobbyStatus: lobby.status,
     errorCode,
@@ -1769,7 +1776,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
           // Sans etat de partie, l'hote d'un event est traite en presentateur : pas de bloc.
           hostPlays: (gameState as MultiplayerGameState | null)?.hostPlays === true,
         })}
-        onReturn={() => router.replace("/modes")}
+        onReturn={() => (onLeave ? onLeave() : router.replace("/modes"))}
         onReplay={() => runExclusive(restartingRef, async () => {
           if (!room || !isHost) return
           try {
