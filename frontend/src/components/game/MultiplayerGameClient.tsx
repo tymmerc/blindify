@@ -11,6 +11,7 @@ import { useWakeLock } from "@/lib/useWakeLock"
 import { shortGameNotice } from "@/lib/roundCount"
 import { ConfettiBurst } from "./ConfettiBurst"
 import { TheaterGameView } from "./TheaterGameView"
+import { DeezerCredit, SpotifyTrackLink } from "./SourceCredits"
 
 const VINYL_GROOVES = "repeating-radial-gradient(circle at 50% 50%, #241a10 0 2.5px, #3a2a1a 2.5px 5px)"
 
@@ -1049,6 +1050,8 @@ export function MultiplayerGameClient({
                           {trackOwnerUsername && (
                             <p className="mt-3 text-base text-[var(--muted)]">Proposé par <span className="font-semibold" style={{ color: accent }}>{trackOwnerUsername}</span></p>
                           )}
+                          {/* Lien retour Spotify (guidelines) : la reponse, donc reveal seulement. */}
+                          <SpotifyTrackLink provider={currentTrack.provider} trackId={currentTrack.trackId} className="mt-4" />
                         </motion.div>
                         {/* Mini top 3 */}
                         <motion.div
@@ -1103,6 +1106,8 @@ export function MultiplayerGameClient({
                           </p>
                           <p className="mt-2 text-base text-[var(--muted)]">réponses reçues</p>
                         </div>
+                        {/* Logo Deezer et usage prive : obligatoires la ou les extraits jouent. */}
+                        <DeezerCredit />
                         {/* Player status dots */}
                         <div className="flex flex-wrap justify-center gap-3 max-w-md">
                           {sortedPlayersFixed.map(p => (
@@ -1163,6 +1168,7 @@ export function MultiplayerGameClient({
                         {trackOwnerUsername && (
                           <p className="mt-1 text-xs text-[var(--muted)]">Proposé par <span style={{ color: accent }}>{trackOwnerUsername}</span></p>
                         )}
+                        <SpotifyTrackLink provider={currentTrack.provider} trackId={currentTrack.trackId} className="mt-3" />
                       </motion.div>
 
                       {/* Verdict card */}

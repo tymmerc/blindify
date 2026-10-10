@@ -23,6 +23,7 @@ export interface StreamerRound {
   albumCover?: string | null;
   metadata?: Record<string, any> | null;
   trackSource: TrackSource;
+  provider?: string | null;
 }
 
 export interface StreamerChatSnapshot {

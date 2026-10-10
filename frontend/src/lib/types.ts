@@ -157,6 +157,8 @@ export type MultiplayerGameState = {
     albumCover?: string | null
     metadata?: Record<string, unknown> | null
     ownerChoices?: number[]
+    /** Source du morceau : seulement au reveal (caviardee pendant la manche). */
+    provider?: string | null
   } | null
   players: Record<number, MultiplayerPlayerState>
   /** Partie mise en pause par l'hote. */
@@ -194,6 +196,8 @@ export interface RoundTrack {
   albumCover?: string | null
   metadata?: Record<string, unknown> | null
   ownerChoices?: number[]
+  /** Source du morceau (spotify, deezer...). Absente pendant la manche : seulement au reveal. */
+  provider?: string | null
 }
 
 export interface PlayerState {
@@ -274,6 +278,7 @@ export type StreamerRound = {
   albumCover?: string | null
   metadata?: Record<string, unknown> | null
   trackSource: TrackSource
+  provider?: string | null
 }
 
 export type StreamerState = {
