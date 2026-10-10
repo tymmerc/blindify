@@ -69,13 +69,27 @@ async function waitLobby(p) {
   await p.frame.getByTestId("lobby-salon-discord").waitFor({ timeout: 45000 })
 }
 
+/** Repond a la manche en cours ; l'ecran de jeu (TheaterGameView sur PC) nomme ses champs par placeholder. */
 async function answer(p, truth) {
   const guess = p.plan === "juste" ? truth : p.plan === "proche" ? { title: truth.title, artist: "personne" } : { title: "rien du tout", artist: "personne" }
-  const title = p.frame.getByLabel("Titre du morceau")
-  await title.waitFor({ timeout: 40000 })
+  const title = p.frame.getByPlaceholder("Titre du morceau")
+  await title.waitFor({ timeout: 6000 })
   await title.fill(guess.title)
-  await p.frame.getByLabel("Artiste").fill(guess.artist ?? "")
-  await p.frame.locator('button[type="submit"]').first().click({ timeout: 5000 })
+  await p.frame.getByPlaceholder("Tape ici...").fill(guess.artist ?? "")
+  await p.frame.getByRole("button", { name: /valider/i }).first().click({ timeout: 4000 })
+}
+
+/** Numero de la manche affichee (« ROUND 03 / 05 »), ou null entre deux ecrans. */
+async function shownRound(p) {
+  const text = await p.frame.locator("body").innerText().catch(() => "")
+  const m = /ROUND\s*0?(\d+)\s*\/\s*0?(\d+)/i.exec(text)
+  return m ? Number(m[1]) : null
+}
+
+/** Clique « Prêt pour la suite » s'il est la (sinon la manche avance toute seule). */
+async function readyIfShown(p) {
+  const btn = p.frame.getByRole("button", { name: /prêt pour la suite/i }).first()
+  if (await btn.isVisible().catch(() => false)) await btn.click({ timeout: 2000 }).catch(() => {})
 }
 
 /** Titres passes sur le fil (trames websocket recues) avant leur revelation. */
@@ -166,27 +180,35 @@ try {
   await host.frame.getByRole("button", { name: /lancer la partie/i }).click({ timeout: 15000 })
   ok("l'hôte a lancé la partie")
 
-  for (let round = 1; round <= ROUNDS; round++) {
-    let truth = null
-    for (let i = 0; i < 60 && !truth?.title; i++) { truth = oracle(code, round); if (!truth?.title) await sleep(500) }
-    if (!truth?.title) { bad(`manche ${round} : pas de morceau en base`); break }
-    for (const p of players) await answer(p, truth)
-    if (round === 1) await shot(host.page, "03-manche-1-hote")
-    for (const p of players) {
-      const ready = p.frame.getByRole("button", { name: /prêt|classement|terminer|résultat/i }).first()
-      await ready.waitFor({ timeout: 40000 })
-      if (round === 1 && p === second) await shot(p.page, "04-revelation-1-joueur")
-      await ready.click({ timeout: 5000 }).catch(() => {})
-    }
-    say(`  manche ${round} : « ${truth.title} » jouée et révélée chez les trois`)
-  }
-
+  // Les manches avancent toutes seules (10 s, puis la revelation) : on suit la
+  // manche affichee chez l'hote et chacun repond a celle-la, une fois.
+  const answered = new Set()
+  const missed = []
   let facts = null
-  for (let i = 0; i < 60; i++) {
+  const t0 = Date.now()
+  while (Date.now() - t0 < ROUNDS * 30000 + 60000) {
     facts = sessionFacts(code)
     if (facts?.roomStatus === "finished") break
-    await sleep(1000)
+    const round = await shownRound(host)
+    if (round && !answered.has(round)) {
+      answered.add(round)
+      const truth = oracle(code, round)
+      if (!truth?.title) { bad(`manche ${round} : pas de morceau en base`); continue }
+      for (const p of players) {
+        try { await answer(p, truth) } catch (e) { missed.push(`${p.tag}, manche ${round} : ${String(e.message).split("\n")[0]}`) }
+      }
+      if (round === 1) await shot(host.page, "03-manche-1-hote")
+      say(`  manche ${round} : « ${truth.title} », les trois ont répondu`)
+      if (round === 1) {
+        const reveal = second.frame.getByRole("button", { name: /prêt pour la suite/i }).first()
+        if (await reveal.waitFor({ timeout: 20000 }).then(() => true).catch(() => false)) await shot(second.page, "04-revelation-1-joueur")
+      }
+    }
+    for (const p of players) await readyIfShown(p)
+    await sleep(400)
   }
+  missed.forEach(bad)
+  if (answered.size < ROUNDS) bad(`${answered.size} manche(s) vue(s) sur ${ROUNDS}`)
   if (facts?.roomStatus === "finished") ok(`partie terminée en base (${facts.manches} manches)`)
   else bad(`la partie n'est pas terminée en base (statut ${facts?.roomStatus ?? "?"})`)
   await sleep(4000)
