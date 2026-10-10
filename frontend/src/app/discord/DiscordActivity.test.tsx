@@ -34,6 +34,9 @@ vi.mock("@/lib/discord/urlMappings", async () => {
   const actual = await vi.importActual<typeof import("@/lib/discord/urlMappings")>("@/lib/discord/urlMappings")
   return { ...actual, installUrlMappings: mocks.installUrlMappings }
 })
+vi.mock("./DiscordMenu", () => ({
+  DiscordMenu: (props: { onDeleted: () => void }) => <button type="button" onClick={props.onDeleted}>Menu (supprimer)</button>,
+}))
 vi.mock("@/app/multiplayer/ModeLobbyView", () => ({
   ModeLobbyView: (props: Record<string, unknown>) => {
     mocks.lobbyProps = props
@@ -106,6 +109,15 @@ describe("DiscordActivity", () => {
     await screen.findByText(/Lobby ABC123/)
     await waitFor(() => expect(screen.getByText(/Tym/)).toBeInTheDocument())
     expect(screen.getByText(/lea/)).toBeInTheDocument()
+  })
+
+  it("compte supprime depuis le menu : l'ecran le dit et le lobby disparait", async () => {
+    const { fireEvent } = await import("@testing-library/react")
+    renderActivity(IN_DISCORD)
+    await screen.findByText(/Lobby ABC123/)
+    fireEvent.click(screen.getByRole("button", { name: /menu \(supprimer\)/i }))
+    expect(await screen.findByText(/compte supprimé/i)).toBeInTheDocument()
+    expect(screen.queryByText(/Lobby ABC123/)).not.toBeInTheDocument()
   })
 
   it("Activite desactivee cote serveur : le dit, sans socket ni session", async () => {

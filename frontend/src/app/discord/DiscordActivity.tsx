@@ -21,6 +21,7 @@ import {
 } from "@/lib/discord/boot"
 import { useInstanceParticipants } from "@/lib/discord/useInstanceParticipants"
 import { ModeLobbyView } from "@/app/multiplayer/ModeLobbyView"
+import { DiscordMenu } from "./DiscordMenu"
 
 /**
  * Blindz dans un salon vocal Discord. La page est chargee par le proxy de
@@ -43,6 +44,7 @@ type Props = {
 type Status =
   | { kind: "boot"; step: DiscordBootStep }
   | { kind: "ready"; result: DiscordBootResult }
+  | { kind: "deleted" }
   | { kind: "error"; code: DiscordBootErrorCode | "unexpected"; message: string }
 
 // A distance : terracotta, comme le mode entre amis dont la salle herite.
@@ -170,6 +172,17 @@ export function DiscordActivity({ search, createSdk = defaultCreateSdk, apiBaseU
     )
   }
 
+  if (status.kind === "deleted") {
+    return (
+      <Shell title="Compte supprimé">
+        <p className="m-0 text-sm text-[#6b573f]">
+          Ton compte et tes données sont effacés. Si tu relances l&apos;Activité, Blindz te recrée un compte neuf à partir de
+          ton pseudo Discord.
+        </p>
+      </Shell>
+    )
+  }
+
   if (status.kind === "boot") {
     return (
       <Shell title="Blindz dans ton salon">
@@ -184,7 +197,10 @@ export function DiscordActivity({ search, createSdk = defaultCreateSdk, apiBaseU
   const { result } = status
   return (
     <div className="min-h-screen">
-      <VoiceStrip sdk={result.sdk} />
+      <div className="mx-auto flex w-full max-w-6xl items-start justify-between gap-3 px-4 pt-4 sm:px-6">
+        <VoiceStrip sdk={result.sdk} />
+        <DiscordMenu onDeleted={() => setStatus({ kind: "deleted" })} />
+      </div>
       <ModeLobbyView
         mode="friends"
         modeConfig={GAME_MODES.friends}
@@ -219,9 +235,9 @@ function Shell({ title, children }: { title: string; children: ReactNode }) {
 /** Qui est dans le salon vocal, d'apres Discord : ceux qui peuvent encore entrer. */
 function VoiceStrip({ sdk }: { sdk: ActivitySdk }) {
   const participants = useInstanceParticipants(sdk)
-  if (participants.length === 0) return null
+  if (participants.length === 0) return <span />
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-2 gap-y-1 px-4 pt-4 text-xs text-[#6b573f] sm:px-6" data-testid="salon-vocal">
+    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 pt-1 text-xs text-[#6b573f]" data-testid="salon-vocal">
       <span className="font-bold uppercase tracking-[0.18em]">Dans le salon vocal</span>
       {participants.map(p => (
         <span key={p.id} className="rounded-full border-[1.5px] border-[#2e2014] bg-[#f4ecdb] px-2.5 py-0.5 font-semibold text-[#2e2014]">
