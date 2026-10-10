@@ -35,7 +35,7 @@ const mockQuery = pool.query as jest.MockedFunction<typeof pool.query>;
 const mockGetSessionContext = getSessionContext as jest.MockedFunction<typeof getSessionContext>;
 const mockHydratePreviewUrl = hydratePreviewUrl as jest.MockedFunction<typeof hydratePreviewUrl>;
 const mockAxiosGet = (axios as any).get as jest.MockedFunction<any>;
-const mockFetchChart = deezerPreviewService.fetchChartTracks as jest.MockedFunction<any>;
+const mockFetchChart = deezerPreviewService.fetchChartTracks as jest.MockedFunction<typeof deezerPreviewService.fetchChartTracks>;
 
 function mockReq(overrides: any = {}): Request {
   return { body: {}, query: {}, params: {}, headers: {}, session: {}, ...overrides } as any;
@@ -1201,8 +1201,8 @@ describe('gamesController', () => {
 
     function guestSetup() {
       setupStartGameQueries([]);
-      const base = mockQuery.getMockImplementation()!;
-      mockQuery.mockImplementation(((sql: string, params?: any[]) => {
+      const base = mockQuery.getMockImplementation() as unknown as (sql: string, params?: unknown[]) => Promise<unknown>;
+      mockQuery.mockImplementation(((sql: string, params?: unknown[]) => {
         if (typeof sql === 'string' && sql.includes('INSERT INTO audio_sources')) {
           const [provider, externalId, title, artist, cover, audioUrl, durationMs, metadata] = params ?? [];
           return Promise.resolve({
@@ -1210,8 +1210,8 @@ describe('gamesController', () => {
             rowCount: 1,
           });
         }
-        return base(sql as any, params as any);
-      }) as any);
+        return base(sql, params);
+      }) as typeof pool.query);
       mockGetSessionContext.mockResolvedValue(makeSessionContext({ user: makeUser({ provider: 'guest' }), connection: null }));
     }
 
@@ -1234,8 +1234,9 @@ describe('gamesController', () => {
       const inserts = mockQuery.mock.calls.filter(c => String(c[0]).includes('INSERT INTO audio_sources'));
       expect(inserts.length).toBeGreaterThan(0);
       for (const c of inserts) {
-        expect((c[1] as any[])[0]).toBe('deezer');
-        expect((c[1] as any[])[7]).toMatchObject({ source: 'deezer_chart' });
+        const params = c[1] as unknown[];
+        expect(params[0]).toBe('deezer');
+        expect(params[7]).toMatchObject({ source: 'deezer_chart' });
       }
     });
 
