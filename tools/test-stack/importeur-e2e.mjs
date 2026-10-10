@@ -127,15 +127,25 @@ try {
   await sleep(800)
   const start = await api(`/api/rooms/${room}/start`, { method: "POST", token: eli.token, body: { source: "library" } })
   if (start.status !== 200) bad(`lancement de ${room} : HTTP ${start.status} ${start.error?.code ?? ""}`)
-  const tracks = start.data?.tracks ?? []
-  const part = id => tracks.filter(t => t.metadata?.owner_user_id === id).length
+  // La reponse du lancement est caviardee depuis #55 (ni titre ni proprietaire
+  // avant le reveal) : on lit les manches tirees en base, pas dans la reponse.
+  const caviardee = (start.data?.tracks ?? []).every(t => !t.title && !t.metadata?.owner_user_id)
+  caviardee ? ok("reponse du lancement caviardee (anti-triche)") : bad("la reponse du lancement donne des titres ou des proprietaires")
+  if (!/^[A-Z0-9]{4,8}$/.test(String(room))) throw new Error(`code de salle inattendu : ${room}`)
+  const session = Number(psql(`SELECT session_id FROM multiplayer_rooms WHERE room_code = '${room}'`))
+  const manches = psql(`SELECT gr.owner_user_id,
+           (SELECT count(*) FROM user_audio_sources u
+             WHERE u.audio_source_id = gr.audio_source_id AND u.user_id IN (${Number(dora.id)}, ${Number(eli.id)}))
+      FROM game_rounds gr WHERE gr.session_id = ${session} ORDER BY gr.round_index`)
+    .split("\n").filter(Boolean).map(l => l.split("|").map(Number))
+  const part = id => manches.filter(([owner]) => owner === id).length
   const [d, e] = [part(dora.id), part(eli.id)]
-  say(`  partie ${room} : ${tracks.length} manches, ${d} de Dora, ${e} d'Eli`)
+  say(`  partie ${room} (session ${session}) : ${manches.length} manches, ${d} de Dora, ${e} d'Eli`)
   Math.abs(d - e) <= 1 && d > 0 && e > 0 ? ok("tourniquet equitable entre les deux") : bad(`tourniquet desequilibre : ${d} / ${e}`)
-  const both = tracks.filter(t => [dora.id, eli.id].every(id => t.metadata?.owner_user_ids?.includes(id))).length
-  both === tracks.length && tracks.length > 0
-    ? ok("qui a mis quoi : chaque manche compte Dora ET Eli")
-    : bad(`qui a mis quoi : ${both}/${tracks.length} manches comptent les deux importeurs`)
+  const both = manches.filter(([, liens]) => liens === 2).length
+  both === manches.length && manches.length > 0
+    ? ok("qui a mis quoi : chaque manche est liee a Dora ET a Eli")
+    : bad(`qui a mis quoi : ${both}/${manches.length} manches liees aux deux importeurs`)
   const rowsFriends = Number(psql(`SELECT count(*) FROM audio_sources WHERE provider = 'deezer' AND external_id IN (${sqlList(friendIds)})`))
   rowsFriends === 12 ? ok("12 lignes audio_sources pour la playlist, aucun doublon") : bad(`${rowsFriends} lignes pour 12 morceaux`)
   for (const b of [dora, eli]) b.socket?.close()
