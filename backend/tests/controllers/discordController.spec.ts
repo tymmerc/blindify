@@ -197,6 +197,19 @@ describe("discordController.room (POST /api/discord/room)", () => {
     expect(mockJoin).not.toHaveBeenCalled();
   });
 
+  it("403 discord_session_required pour une session qui n'est pas Discord (un invite de blindz.app)", async () => {
+    // Sans ce refus, un invite du site pouvait ouvrir une salle par instanceId
+    // invente, autant de fois qu'il veut, et ces salles vivent 7 jours.
+    mockGetSession.mockResolvedValue({ user: { ...USER, provider: "guest" }, connection: null, sessionToken: "sess-g" });
+    const res = mockRes();
+    await discordController.room(mockReq({ body: { instanceId: "i-1" } } as Partial<Request>), res);
+
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(body(res).error.code).toBe("discord_session_required");
+    expect(mockResolve).not.toHaveBeenCalled();
+    expect(mockJoin).not.toHaveBeenCalled();
+  });
+
   it("400 discord_instance_invalid pour un identifiant d'instance impossible", async () => {
     const res = mockRes();
     await discordController.room(mockReq({ body: { instanceId: "<script>" } } as Partial<Request>), res);

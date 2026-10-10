@@ -74,6 +74,13 @@ export const discordController = {
   async room(req: Request, res: Response): Promise<void> {
     const context = await getSessionContext(req, res);
     if (!context) return;
+    // Seule une session ouverte par l'Activite (compte discord) entre ici. Sinon
+    // un invite du site ouvrait une salle par instanceId invente, a volonte, et
+    // ces salles vivent 7 jours.
+    if (context.user.provider !== "discord") {
+      fail(res, "discord_session_required", "Cette route est réservée à l'Activité Discord", 403);
+      return;
+    }
     const instanceId = req.body?.instanceId;
     if (!isValidInstanceId(instanceId)) {
       fail(res, "discord_instance_invalid", "Identifiant de salon Discord invalide", 400);
