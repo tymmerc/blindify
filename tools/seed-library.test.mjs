@@ -50,6 +50,14 @@ test("au menage, un id absent est ignore mais un vrai joueur arrete tout", () =>
   assert.throws(() => verifierJoueursDeTest([48211, 5], prod), /joueur de test/)
 })
 
+test("la requete rend t ou f explicitement : un booleen colle par || donnerait true", () => {
+  // Trouve a l'essai reel du 11/10 : id||'|'||(created_at > ...) rend "true",
+  // et une garde qui attendait "t" refusait meme les vrais joueurs de test.
+  let requete = ""
+  verifierJoueursDeTest([5], sql => { requete = sql; return "5|guest|t" }, { exiger: true })
+  assert.match(requete, /CASE WHEN created_at > NOW\(\) - INTERVAL '1 hour' THEN 't' ELSE 'f' END/)
+})
+
 test("un id qui n'est pas un entier est refuse avant toute lecture", () => {
   let lu = false
   assert.throws(() => verifierJoueursDeTest(["5); DROP TABLE users"], () => { lu = true; return "" }), /id inattendu/)

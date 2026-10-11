@@ -101,7 +101,8 @@ export function verifierJoueursDeTest(userIds, lire = psql, { exiger = false } =
   const ids = userIds.filter(Boolean).map(id => String(entier(id)))
   if (!ids.length) return []
   const trouves = new Map()
-  for (const l of lire(`SELECT id||'|'||provider||'|'||(created_at > NOW() - INTERVAL '1 hour')
+  // CASE explicite : un booleen colle par || sort en "true", pas en "t".
+  for (const l of lire(`SELECT id||'|'||provider||'|'||CASE WHEN created_at > NOW() - INTERVAL '1 hour' THEN 't' ELSE 'f' END
                         FROM users WHERE id IN (${ids.join(",")})`).split("\n")) {
     const [id, provider, recent] = l.split("|"); if (id) trouves.set(id, { provider, recent: recent === "t" })
   }
