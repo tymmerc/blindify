@@ -1,0 +1,51 @@
+# Backend de dev de Blindz (dev.tymmerc.eu/blindify, port 3097), depuis C0.
+#
+# Avant C0 : ts-node-dev --respawn dans /opt/blindify/backend, sur la base de
+# PROD. Chaque fichier modifie du depot (checkout, pull, correctif en cours)
+# relancait le backend, qui rejouait son schema dans la prod.
+#
+# Maintenant :
+# - le code vient d'un worktree dedie, /opt/blindify-wt/dev, pose sur un commit
+#   choisi. Rien ne le fait bouger tout seul ;
+# - ts-node sans watcher : un fichier modifie ne relance rien. On change de
+#   version a la main (docs/BASE-DEV.md, « Changer la version du dev ») ;
+# - la base est blindify_dev (conteneur blindz-dev-postgres, 127.0.0.1:5438,
+#   tools/dev-db/dev-db.sh), et le backend refuse `blindify` hors production
+#   (backend/src/config/databaseGuard.ts, code de sortie 78).
+#
+#   systemctl restart blindify-dev-backend       apres un changement de version
+#   journalctl -u blindify-dev-backend -n 50     demarrage, garde-fou, erreurs
+[Unit]
+Description=Blindz DEV backend (ts-node :3097, dev.tymmerc.eu/blindify, base blindify_dev)
+Documentation=https://github.com/tymmerc/blindify/tree/main/tools/dev-db
+After=network.target docker.service
+# La base de dev vit dans un conteneur Docker (redemarrage unless-stopped).
+# Si elle n'est pas encore prete, le backend sort en erreur et systemd le
+# relance 5 s plus tard.
+Wants=docker.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/blindify-wt/dev/backend
+EnvironmentFile=/etc/blindz/dev-backend.env
+Environment=PATH=/root/.nvm/versions/node/v22.21.1/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/root/.nvm/versions/node/v22.21.1/bin/node node_modules/ts-node/dist/bin.js --transpile-only src/index.ts
+Restart=on-failure
+RestartSec=5
+# 78 (EX_CONFIG) : le garde-fou refuse la base visee. Relancer n'y changera
+# rien, et toutes les 5 s la limite de demarrages n'est jamais atteinte : sans
+# cette ligne, un refus tournerait en boucle.
+RestartPreventExitStatus=78
+# Arret propre : le backend ferme le serveur puis le pool (10 s au plus).
+TimeoutStopSec=15
+
+# Le dev seul sur le VPS : pic constate a 245 Mo (09/10/2026).
+MemoryHigh=600M
+MemoryMax=800M
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
