@@ -30,14 +30,28 @@
 
 import { execFileSync } from "child_process"
 
+// La base ensemencee est celle du backend que visent ces outils : le site de
+// dev (dev.tymmerc.eu). Depuis C0, ce backend tourne sur sa propre base
+// (blindify_dev, conteneur blindz-dev-postgres, tools/dev-db/dev-db.sh) : on
+// n'ecrit plus dans la base de prod. Avant C0, ces outils inseraient en root
+// dans `blindify`. SEED_PG_* surchargent la cible, jamais vers la prod.
+const SEED_PG = {
+  container: process.env.SEED_PG_CONTAINER || "blindz-dev-postgres",
+  user: process.env.SEED_PG_USER || "blindz_dev",
+  db: process.env.SEED_PG_DB || "blindify_dev",
+}
+if (SEED_PG.container === "blindify-postgres" || SEED_PG.db === "blindify") {
+  throw new Error("seed-library : la base de prod n'est plus une cible d'ensemencement (C0)")
+}
+
 // Arguments separes, SANS shell : les titres viennent de Deezer (donnees
-// tierces) et finissent dans une commande lancee en root contre la base de
-// prod. Avec l'ancien execSync, une apostrophe inverse dans un titre etait
-// executee par le shell (constate par la relecture du 30/09/2026).
+// tierces) et finissent dans une commande lancee en root. Avec l'ancien
+// execSync, une apostrophe inverse dans un titre etait executee par le shell
+// (constate par la relecture du 30/09/2026).
 // Exporte : les autres outils E2E s'en servent au lieu de leur copie en
 // execSync (alertes CodeQL 7 a 12, relecture du 01/10/2026).
 export const psql = sql => execFileSync(
-  "docker", ["exec", "blindify-postgres", "psql", "-U", "blindify", "-d", "blindify", "-qAt", "-c", sql],
+  "docker", ["exec", SEED_PG.container, "psql", "-U", SEED_PG.user, "-d", SEED_PG.db, "-qAt", "-c", sql],
   { maxBuffer: 16 * 1024 * 1024 },
 ).toString().trim()
 
@@ -47,8 +61,8 @@ const sq = v => "'" + String(v ?? "").replace(/'/g, "''") + "'"
 // Gardes SQL. Sans shell, une valeur piegee arrive encore dans la requete, et
 // psql -c en enchaine plusieurs. Or les ids et les codes de salle viennent des
 // reponses du serveur : un faux backend (port 3097 pris pendant un redemarrage
-// de ts-node-dev, DNS detourne) pourrait y glisser du SQL, lance avec le role
-// blindify (sans doute superuser) sur la base de prod. On refuse donc toute valeur qui n'a pas la forme
+// du backend de dev, DNS detourne) pourrait y glisser du SQL, lance avec les droits
+// du role de la base visee. On refuse donc toute valeur qui n'a pas la forme
 // attendue. Une valeur absente passe telle quelle : chaque script traite deja ce
 // cas, et elle n'injecte rien. La valeur est rendue inchangee (meme type).
 export const entier = v => {
