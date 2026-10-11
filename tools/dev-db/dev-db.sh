@@ -86,8 +86,9 @@ up() {
   else
     # POSTGRES_PASSWORD_FILE : le mot de passe ne figure ni dans `docker
     # inspect` ni dans la ligne de commande. 127.0.0.1 seulement.
+    # --memory-swap egal a --memory : pas de swap en plus (celui du VPS est compte).
     docker run -d --name "$CONTAINER" --restart unless-stopped \
-      --memory 384m --cpus 1 \
+      --memory 384m --memory-swap 384m --cpus 1 \
       -v "$VOLUME:/var/lib/postgresql/data" \
       -v "$SUPER_PASS_FILE:/run/secrets/pg_super:ro" \
       -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD_FILE=/run/secrets/pg_super \
@@ -128,7 +129,9 @@ SQL
   local tables
   tables=$(echo "SELECT count(*) FROM pg_tables WHERE schemaname = 'public'" | psql_super "$DB")
   if [ "$tables" = 0 ]; then
-    docker exec -i "$CONTAINER" psql -X -q -U "$ROLE" -d "$DB" -v ON_ERROR_STOP=1 <"$SCHEMA" >/dev/null
+    # -1 : une seule transaction. Un chargement casse au milieu ne laisse rien,
+    # et le passage suivant recommence (sinon « schema deja present » a jamais).
+    docker exec -i "$CONTAINER" psql -X -q -1 -U "$ROLE" -d "$DB" -v ON_ERROR_STOP=1 <"$SCHEMA" >/dev/null
     tables=$(echo "SELECT count(*) FROM pg_tables WHERE schemaname = 'public'" | psql_super "$DB")
     log "schema charge depuis $(basename "$SCHEMA") : $tables tables"
   else
