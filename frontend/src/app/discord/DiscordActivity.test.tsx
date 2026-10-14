@@ -44,7 +44,7 @@ vi.mock("@/app/multiplayer/ModeLobbyView", () => ({
   },
 }))
 
-import { DiscordActivity } from "./DiscordActivity"
+import { DiscordActivity, resetDiscordBootForTests } from "./DiscordActivity"
 
 const CLIENT_ID = "123456789012345678"
 const IN_DISCORD = "?frame_id=f-1&instance_id=i-4f2a&platform=desktop"
@@ -73,6 +73,7 @@ function renderActivity(search: string) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  resetDiscordBootForTests()
   mocks.lobbyProps = null
   vi.spyOn(console, "info").mockImplementation(() => {})
   mocks.api.discordConfig.mockResolvedValue({ enabled: true, clientId: CLIENT_ID })
@@ -118,6 +119,29 @@ describe("DiscordActivity", () => {
     fireEvent.click(screen.getByRole("button", { name: /menu \(supprimer\)/i }))
     expect(await screen.findByText(/compte supprimé/i)).toBeInTheDocument()
     expect(screen.queryByText(/Lobby ABC123/)).not.toBeInTheDocument()
+  })
+
+  it("un seul SDK et un seul demarrage par page, meme si le composant est remonte", async () => {
+    // Une erreur d'hydratation fait regenerer l'arbre : le composant est
+    // remonte. Un second SDK enverrait une seconde poignee de main que Discord
+    // ignore, et attendrait un READY qui ne vient jamais.
+    const createSdk = vi.fn(sdkFactory())
+    const first = render(<ModeProvider><DiscordActivity search={IN_DISCORD} createSdk={createSdk} apiBaseUrl="https://blindz.app" /></ModeProvider>)
+    await screen.findByText(/Lobby ABC123/)
+    first.unmount()
+    render(<ModeProvider><DiscordActivity search={IN_DISCORD} createSdk={createSdk} apiBaseUrl="https://blindz.app" /></ModeProvider>)
+    expect(await screen.findByText(/Lobby ABC123/)).toBeInTheDocument()
+    expect(createSdk).toHaveBeenCalledTimes(1)
+    expect(mocks.installUrlMappings).toHaveBeenCalledTimes(1)
+    expect(mocks.api.discordConfig).toHaveBeenCalledTimes(1)
+  })
+
+  it("journalise le demarrage sous [blindz-discord]", async () => {
+    renderActivity(IN_DISCORD)
+    await screen.findByText(/Lobby ABC123/)
+    const lines = vi.mocked(console.info).mock.calls.map(call => String(call[0]))
+    expect(lines).toContain("[blindz-discord] montage")
+    expect(lines).toContain("[blindz-discord] salle ok")
   })
 
   it("Activite desactivee cote serveur : le dit, sans socket ni session", async () => {

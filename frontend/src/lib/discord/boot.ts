@@ -1,6 +1,7 @@
 import type { IDiscordSDK } from "@discord/embedded-app-sdk"
 import { ApiError } from "@/lib/apiClient"
 import type { MultiplayerRoom, UserSummary } from "@/lib/types"
+import { describeError, type DiscordLog } from "./log"
 
 /**
  * Demarrage de l'Activite Discord, dans l'ordre impose par le SDK :
@@ -57,6 +58,8 @@ export type DiscordBootDeps = {
   onStep?: (step: DiscordBootStep) => void
   /** Delai accorde au READY du client Discord (tests). */
   readyTimeoutMs?: number
+  /** Journal de chaque etape (console de la page) ; jamais de code ni de jeton. */
+  log?: DiscordLog
 }
 
 export type DiscordBootResult = {
@@ -75,25 +78,36 @@ export const DISCORD_SCOPES = ["identify"] as const
 // le dire qu'un chargement sans fin.
 export const SDK_READY_TIMEOUT_MS = 15_000
 
-function readyWithin(sdk: ActivitySdk, ms: number): Promise<void> {
+function readyWithin(sdk: ActivitySdk, ms: number, log: DiscordLog): Promise<void> {
+  const started = Date.now()
   return new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new DiscordBootError("discord_unavailable", "Discord ne répond pas. Relance l'Activité.")), ms)
-    sdk.ready().then(() => { clearTimeout(timer); resolve() }, err => { clearTimeout(timer); reject(err) })
+    const timer = setTimeout(() => {
+      log("ready absent", { timeoutMs: ms })
+      reject(new DiscordBootError("discord_unavailable", "Discord ne répond pas. Relance l'Activité."))
+    }, ms)
+    sdk.ready().then(
+      () => { clearTimeout(timer); log("ready ok", { ms: Date.now() - started }); resolve() },
+      err => { clearTimeout(timer); log("ready en erreur", describeError(err)); reject(err) },
+    )
   })
 }
 
 const CONFIG_UNREACHABLE = "Impossible de joindre le serveur de Blindz. Vérifie ta connexion et réessaie."
 
 export async function bootDiscordActivity(deps: DiscordBootDeps): Promise<DiscordBootResult> {
+  const log: DiscordLog = deps.log ?? (() => {})
   const step = (s: DiscordBootStep) => deps.onStep?.(s)
 
   step("config")
+  log("config")
   let config: { enabled: boolean; clientId: string | null }
   try {
     config = await deps.api.discordConfig()
   } catch (err) {
+    log("config injoignable", describeError(err))
     throw new DiscordBootError("session_failed", CONFIG_UNREACHABLE, err)
   }
+  log("config ok", { enabled: config.enabled, clientId: config.clientId })
   if (!config.enabled || !config.clientId) {
     throw new DiscordBootError("disabled", "L'Activité Discord n'est pas encore activée sur ce serveur.")
   }
@@ -101,10 +115,12 @@ export async function bootDiscordActivity(deps: DiscordBootDeps): Promise<Discor
 
   step("sdk")
   const sdk = deps.createSdk(clientId)
-  await readyWithin(sdk, deps.readyTimeoutMs ?? SDK_READY_TIMEOUT_MS)
+  log("sdk cree", { instanceId: sdk.instanceId, platform: sdk.platform, sdkVersion: (sdk as { sdkVersion?: string }).sdkVersion })
+  await readyWithin(sdk, deps.readyTimeoutMs ?? SDK_READY_TIMEOUT_MS, log)
 
   step("authorize")
   let code: string
+  log("authorize envoye")
   try {
     ;({ code } = await sdk.commands.authorize({
       client_id: clientId,
@@ -113,7 +129,9 @@ export async function bootDiscordActivity(deps: DiscordBootDeps): Promise<Discor
       prompt: "none",
       scope: [...DISCORD_SCOPES],
     }))
+    log("authorize ok")
   } catch (err) {
+    log("authorize refuse", describeError(err))
     throw new DiscordBootError(
       "authorize_refused",
       "Blindz a besoin de ton pseudo Discord pour te mettre dans la partie. Relance l'Activité et accepte.",
@@ -125,7 +143,9 @@ export async function bootDiscordActivity(deps: DiscordBootDeps): Promise<Discor
   let auth: DiscordAuthPayload
   try {
     auth = await deps.api.discordAuth(code)
+    log("session ok", { userId: auth.user.id })
   } catch (err) {
+    log("session refusee", describeError(err))
     if (err instanceof ApiError && err.status === 502) {
       throw new DiscordBootError("discord_unavailable", err.message, err)
     }
@@ -137,15 +157,19 @@ export async function bootDiscordActivity(deps: DiscordBootDeps): Promise<Discor
   step("authenticate")
   try {
     await sdk.commands.authenticate({ access_token: auth.discordAccessToken })
+    log("authenticate ok")
   } catch (err) {
+    log("authenticate refuse", describeError(err))
     throw new DiscordBootError("authenticate_failed", "Discord n'a pas accepté la connexion. Relance l'Activité.", err)
   }
 
   step("room")
   try {
     const { room } = await deps.api.discordRoom(deps.instanceId, deps.nickname ?? auth.user.username ?? undefined)
+    log("salle ok", { roomCode: room.room_code })
     return { sdk, clientId, user: auth.user, sessionToken: auth.sessionToken, room }
   } catch (err) {
+    log("salle refusee", describeError(err))
     const message = err instanceof ApiError && err.message ? err.message : "Impossible de rejoindre la salle du salon. Réessaie."
     throw new DiscordBootError("room_failed", message, err)
   }

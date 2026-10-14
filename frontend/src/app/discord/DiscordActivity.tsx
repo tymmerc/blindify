@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState, type ReactNode } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import { DiscordSDK } from "@discord/embedded-app-sdk"
 import { Loader2 } from "lucide-react"
 import { api } from "@/lib/api"
@@ -19,6 +19,8 @@ import {
   type DiscordBootResult,
   type DiscordBootStep,
 } from "@/lib/discord/boot"
+import { describeError, discordLog } from "@/lib/discord/log"
+import { traceRpcMessages } from "@/lib/discord/rpcTrace"
 import { useInstanceParticipants } from "@/lib/discord/useInstanceParticipants"
 import { ModeLobbyView } from "@/app/multiplayer/ModeLobbyView"
 import { DiscordMenu } from "./DiscordMenu"
@@ -71,6 +73,32 @@ const ERROR_TITLE: Record<DiscordBootErrorCode | "unexpected", string> = {
 
 const defaultCreateSdk = (clientId: string): ActivitySdk => new DiscordSDK(clientId)
 
+// Un seul demarrage pour toute la page, hors de React : si l'arbre est
+// regenere (erreur d'hydratation) ou le composant remonte, un second SDK
+// enverrait une seconde poignee de main que Discord ignore, et attendrait un
+// READY qui ne vient jamais. Chaque montage s'abonne a la meme promesse.
+let pageBoot: Promise<DiscordBootResult> | null = null
+// Le dernier montage affiche l'etape en cours ; un ancien, demonte, n'a plus d'ecran.
+let lastStep: DiscordBootStep = "config"
+let showStep: ((step: DiscordBootStep) => void) | null = null
+let mounts = 0
+
+/** Tests seulement : chaque test repart d'une page neuve. */
+export function resetDiscordBootForTests(): void {
+  pageBoot = null
+  lastStep = "config"
+  showStep = null
+  mounts = 0
+}
+
+function referrerOrigin(): string | null {
+  try {
+    return document.referrer ? new URL(document.referrer).origin : null
+  } catch {
+    return null
+  }
+}
+
 /**
  * Le socket vise directement le proxy : l'origine de la page et le chemin de
  * la correspondance /blindz (qui retire le chemin de base de l'API), avec la
@@ -92,28 +120,46 @@ export function DiscordActivity({ search, createSdk = defaultCreateSdk, apiBaseU
   useEffect(() => {
     setParams(readActivityParams(search ?? window.location.search))
   }, [search])
-  const [status, setStatus] = useState<Status>({ kind: "boot", step: "config" })
-  // Un seul demarrage, meme si l'effet est rejoue (StrictMode, nouvelle
-  // fonction createSdk) : la promesse est gardee, chaque passage s'y abonne.
-  const bootRef = useRef<Promise<DiscordBootResult> | null>(null)
+  const [status, setStatus] = useState<Status>(() => ({ kind: "boot", step: lastStep }))
+
+  useEffect(() => {
+    if (params === undefined) return
+    mounts += 1
+    discordLog("montage", {
+      n: mounts,
+      dansDiscord: Boolean(params),
+      chemin: window.location.pathname,
+      origine: window.location.origin,
+      referrer: referrerOrigin(),
+      iframe: window.parent !== window,
+    })
+  }, [params])
 
   useEffect(() => {
     if (!params) return
     let active = true
-    if (!bootRef.current) {
+    const show = (step: DiscordBootStep) => {
+      if (active) setStatus({ kind: "boot", step })
+    }
+    showStep = show
+    if (!pageBoot) {
+      const stopTrace = traceRpcMessages(discordLog)
       const mappings = installUrlMappings(apiBaseUrl)
       audioManager.setSrcMapper(createPreviewSrcMapper(mappings))
-      bootRef.current = bootDiscordActivity({
+      pageBoot = bootDiscordActivity({
         api,
         createSdk,
         instanceId: params.instanceId,
         setBearer: setApiBearerToken,
+        log: discordLog,
         onStep: step => {
-          if (active) setStatus({ kind: "boot", step })
+          lastStep = step
+          showStep?.(step)
         },
       })
+      pageBoot.finally(stopTrace).catch(() => {})
     }
-    bootRef.current
+    pageBoot
       .then(result => {
         if (!active) return
         configureSocket(socketSettings(window.location.origin, result.sessionToken))
@@ -121,6 +167,7 @@ export function DiscordActivity({ search, createSdk = defaultCreateSdk, apiBaseU
       })
       .catch((err: unknown) => {
         if (!active) return
+        discordLog("demarrage en echec", err instanceof DiscordBootError ? { code: err.code, cause: describeError(err.cause) } : describeError(err))
         if (err instanceof DiscordBootError) {
           setStatus({ kind: "error", code: err.code, message: err.message })
         } else {
@@ -130,6 +177,7 @@ export function DiscordActivity({ search, createSdk = defaultCreateSdk, apiBaseU
       })
     return () => {
       active = false
+      if (showStep === show) showStep = null
     }
   }, [params, createSdk, apiBaseUrl])
 
