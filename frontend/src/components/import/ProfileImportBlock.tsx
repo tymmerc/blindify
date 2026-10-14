@@ -39,7 +39,7 @@ function recognitionText(r: MusicLinkRecognition): { text: string; tone: "ok" | 
       : { text: `Profil ${name} : toutes ses playlists publiques`, tone: "ok" }
   }
   if (r.kind === "short") {
-    return { text: "Lien court de l'appli : ouvre-le dans ton navigateur, puis copie l'adresse complète.", tone: "warn" }
+    return { text: "Lien court de l'appli : ouvre-le dans ton navigateur, puis copie l'adresse de la playlist qui s'affiche.", tone: "warn" }
   }
   if (r.kind === "unknown") {
     return { text: "Ce n'est pas un lien de playlist ni de profil Spotify ou Deezer.", tone: "warn" }
@@ -216,11 +216,13 @@ export function ProfileImportBlock({ accent = "#c65133", onImportingChange, onIm
           <span aria-hidden className="mr-1.5 inline-block transition group-open:rotate-90">›</span>
           Où trouver ton lien ?
         </summary>
-        <ol className="m-0 mt-2 list-decimal space-y-1 pl-5 text-[13px] leading-snug text-[#2e2014]">
-          <li>Ouvre ta playlist (ou ton profil) dans Spotify ou Deezer.</li>
-          <li>Appuie sur « Partager », puis « Copier le lien ».</li>
-          <li>Reviens ici et colle-le. La playlist doit être publique.</li>
-        </ol>
+        {/* L'appli Deezer ne partage qu'un lien court (link.deezer.com), que le
+            serveur ne suit pas : on passe par le site, ou on ouvre le lien court. */}
+        <ul className="m-0 mt-2 list-none space-y-1.5 p-0 text-[13px] leading-snug text-[#2e2014]">
+          <li><strong>Spotify</strong> : sur la playlist, « Partager » puis « Copier le lien ».</li>
+          <li><strong>Deezer</strong> : copie l&apos;adresse de la playlist sur deezer.com. Depuis l&apos;appli, ouvre d&apos;abord le lien partagé dans ton navigateur.</li>
+          <li>La playlist doit être publique.</li>
+        </ul>
         <div className="mt-2.5 flex flex-wrap gap-2">
           <a
             href="https://open.spotify.com/collection/playlists"

@@ -49,7 +49,7 @@ export function DiscordMusicStep({ mode, onContinue, entering = false, error = n
       </p>
 
       <section className={`${CARD} p-4 sm:p-5`}>
-        <Label dot={ACCENT} className="mb-3">Une playlist</Label>
+        <Label dot={ACCENT} className="mb-3">Ajouter de la musique</Label>
         <ProfileImportBlock accent={ACCENT} hideHeader onImported={() => setLibRefresh(n => n + 1)} />
       </section>
 
