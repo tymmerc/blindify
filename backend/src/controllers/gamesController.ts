@@ -11,55 +11,36 @@ import { isIsrc } from "../services/previewMatch";
 import { METADATA_KEEPING_ISRC } from "../services/isrcMetadata";
 import { linkTrackToUser, UNOWNED } from "../services/userTracks";
 import { isSpotifyId } from "../utils/providerIds";
+import { deezerPreviewService } from "../services/deezerPreviewService";
 
-async function importItunesTopTracks(limit: number): Promise<AudioSourceRow[]> {
+/**
+ * Repli des invites sans musique : le classement Deezer du moment, mis en
+ * base comme n'importe quel morceau Deezer. Remplace le top iTunes le
+ * 10/10/2026 : Apple reserve ses extraits a la promotion du store, « not for
+ * entertainment purposes » (docs/CONDITIONS-API-MUSIQUE.md).
+ */
+async function importDeezerChartTracks(limit: number): Promise<AudioSourceRow[]> {
   try {
-    const capped = Math.max(5, Math.min(limit, 50));
-    const { data } = await axios.get(`https://itunes.apple.com/us/rss/topsongs/limit=${capped}/json`, {
-      timeout: 8000,
-    });
-    const entries: any[] = data?.feed?.entry ?? [];
+    const chart = await deezerPreviewService.fetchChartTracks(limit);
+    const fetchedAt = new Date().toISOString();
     const results: AudioSourceRow[] = [];
 
-    for (const entry of entries.slice(0, capped)) {
-      const externalId =
-        entry?.id?.attributes?.["im:id"] ??
-        entry?.id?.label ??
-        entry?.id ??
-        null;
-      const title = entry?.["im:name"]?.label ?? entry?.title?.label ?? null;
-      const artist = entry?.["im:artist"]?.label ?? entry?.artist?.label ?? "Artiste inconnu";
-      const cover =
-        Array.isArray(entry?.["im:image"]) && entry["im:image"].length
-          ? entry["im:image"][entry["im:image"].length - 1]?.label ?? null
-          : null;
-      const previewUrl =
-        Array.isArray(entry?.link)
-          ? entry.link.find((link: any) => link?.rel === "enclosure")?.attributes?.href ?? null
-          : entry?.link?.attributes?.href ?? null;
-
-      if (!title || !previewUrl) continue;
-
-      const metadata = { source: "itunes_top", feed: "us", fetched_at: new Date().toISOString() };
+    for (const track of chart) {
+      const metadata = { source: "deezer_chart", fetched_at: fetchedAt };
       const { rows } = await pool.query<AudioSourceRow>(
         `INSERT INTO audio_sources (provider, external_id, user_id, title, artist, album_cover, audio_url, duration_ms, metadata)
          VALUES ($1,$2,NULL,$3,$4,$5,$6,$7,$8)
          ON CONFLICT (provider, external_id)
-         DO UPDATE SET
-           title=EXCLUDED.title,
-           artist=EXCLUDED.artist,
-           album_cover=EXCLUDED.album_cover,
-           audio_url=EXCLUDED.audio_url,
-           metadata=EXCLUDED.metadata
+         DO UPDATE SET audio_url=EXCLUDED.audio_url
          RETURNING id, provider, external_id, title, artist, album_cover, audio_url, duration_ms, metadata`,
-        ["apple", externalId, title, artist, cover, previewUrl, null, metadata]
+        ["deezer", String(track.id), track.title, track.artist || "Artiste inconnu", track.albumCover, track.preview, track.duration ? track.duration * 1000 : null, metadata]
       );
       if (rows[0]) results.push(rows[0]);
     }
 
     return results;
   } catch (err) {
-    logger.error("itunes_top_import_failed", { error: err });
+    logger.error("deezer_chart_import_failed", { error: err });
     return [];
   }
 }
@@ -105,6 +86,8 @@ async function fetchGlobalRandomSources(count: number): Promise<AudioSourceRow[]
             s.duration_ms,
             s.metadata
      FROM audio_sources s
+     -- Jamais d'extrait Apple (ancien repli iTunes) : interdit pour un jeu.
+     WHERE s.provider <> 'apple'
      ORDER BY RANDOM()
      LIMIT $1`,
     [Math.max(1, count * 2)]
@@ -596,10 +579,10 @@ export const gamesController = {
       }
     }
 
-    // Fallback invité : puiser dans le top iTunes si on manque encore de pistes jouables
+    // Repli invite : le classement Deezer si on manque encore de pistes jouables
     if (provider === "guest" && sources.length < count) {
       const remaining = count - sources.length;
-      const topTracks = await importItunesTopTracks(Math.max(10, remaining * 2));
+      const topTracks = await importDeezerChartTracks(Math.max(10, remaining * 2));
       const existingKeys = new Set(sources.map(src => src.external_id ?? String(src.id)));
       for (const track of topTracks) {
         const key = track.external_id ?? String(track.id);

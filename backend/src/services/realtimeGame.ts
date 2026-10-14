@@ -12,6 +12,8 @@ export type RoundTrack = {
   albumCover?: string | null;
   metadata?: Record<string, unknown> | null;
   ownerChoices?: number[];
+  // Source du morceau : jamais copiee par redactedGuessingTrack (reveal seulement).
+  provider?: string | null;
 };
 
 export type PlayerState = {

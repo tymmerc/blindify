@@ -508,3 +508,27 @@ describe("gameStateSnapshot : rien de la piste avant le reveal", () => {
     expect(raw).not.toContain("OST secret");
   });
 });
+
+// Lien « Ecouter sur Spotify » du reveal (guidelines Spotify, T10) : la source
+// et l'identifiant du morceau SONT la reponse. Ils ne sortent qu'au reveal.
+describe("gameStateSnapshot : source du morceau seulement au reveal", () => {
+  const SPOTIFY_ID = "4uLU6hMCjMI75M1A2tKUQC";
+
+  it("ni la source ni l'identifiant Spotify pendant la manche", () => {
+    const tracks = makeTracks(2).map(t => ({ ...t, trackId: SPOTIFY_ID, provider: "spotify" }));
+    setupGame({ tracks });
+    startNextRound(ROOM);
+    const snap = gameStateSnapshot(ROOM);
+    expect(snap?.currentTrack?.provider).toBeUndefined();
+    expect(JSON.stringify(snap)).not.toContain(SPOTIFY_ID);
+  });
+
+  it("au reveal : la source et l'identifiant, pour le lien vers Spotify", () => {
+    const tracks = makeTracks(2).map(t => ({ ...t, trackId: SPOTIFY_ID, provider: "spotify" }));
+    setupGame({ tracks });
+    startNextRound(ROOM);
+    revealRound(ROOM);
+    const snap = gameStateSnapshot(ROOM);
+    expect(snap?.currentTrack).toMatchObject({ provider: "spotify", trackId: SPOTIFY_ID });
+  });
+});

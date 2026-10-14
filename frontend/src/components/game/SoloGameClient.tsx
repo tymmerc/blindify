@@ -16,6 +16,7 @@ import { HintButton } from "./HintButton"
 import { EndFeedback } from "./EndFeedback"
 import { useMode } from "@/contexts/ModeContext"
 import { evaluateGuess as evaluateGuessShared, evaluateGuessSeparate, normalize, tokenize, type Verdict } from "@/lib/matching"
+import { DeezerCredit, SpotifyTrackLink } from "./SourceCredits"
 
 type FinalizeReason = "timeout" | "reveal" | "guess"
 type RoundState = "pending" | "current" | Verdict
@@ -1237,7 +1238,9 @@ export function SoloGameClient({
           <div className="text-center font-display text-6xl font-bold text-[#2e2014] mb-2 transition-all">
             {isArmed ? countdown.toString().padStart(2, "0") : timer.toString().padStart(2, "0")}
           </div>
-          <div className="mb-6 text-center text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">secondes restantes</div>
+          <div className="mb-3 text-center text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">secondes restantes</div>
+          {/* Logo Deezer et usage prive : obligatoires la ou les extraits jouent. */}
+          <DeezerCredit className="mb-5" />
 
           <form className="flex flex-col gap-3" onSubmit={handleGuessSubmit}>
             <input
@@ -1410,6 +1413,7 @@ export function SoloGameClient({
           <div className="mt-3 text-center text-sm text-[#8a7558]">
             <button className="italic underline-offset-4 transition hover:text-[#c65133] hover:underline" onClick={handleSkipQuestion}>Passer cette question →</button>
           </div>
+
         </div>
       </div>
 
@@ -1534,6 +1538,8 @@ export function SoloGameClient({
                   Album : {String((resultDialog.track.metadata as Record<string, unknown>).album)}
                 </div>
               ) : null}
+              {/* Lien retour Spotify (guidelines) : fiche de fin de manche seulement. */}
+              <SpotifyTrackLink provider={resultDialog.track.type} trackId={resultDialog.track.track_id} className="mt-2 self-start" />
             </div>
           </div>
 
