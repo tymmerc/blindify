@@ -1,4 +1,4 @@
-export type MusicProvider = "spotify" | "deezer" | "apple" | "local" | "guest"
+export type MusicProvider = "spotify" | "deezer" | "apple" | "local" | "guest" | "discord"
 
 export type PresenceContext = { type: "room" | "event"; id: string }
 

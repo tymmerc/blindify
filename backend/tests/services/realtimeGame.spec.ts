@@ -509,6 +509,24 @@ describe("gameStateSnapshot : rien de la piste avant le reveal", () => {
   });
 });
 
+// Relais de l'hote d'un salon Discord : l'etat en memoire suit la base hors
+// manche, jamais en pleine manche.
+describe("setHostUser", () => {
+  const { bootstrapGameState, setHostUser, getGameState, clearGame } = jest.requireActual("../../src/services/realtimeGame");
+  const track = (round: number) => ({ round, trackId: `t${round}`, title: `T${round}`, artist: `A${round}`, previewUrl: null, albumCover: null, metadata: null });
+
+  it("au lobby ou au podium : l'hote change et redevient connecte", () => {
+    bootstrapGameState({ roomCode: "RELAI1", hostUserId: 1, tracks: [track(1)], participants: [{ userId: 1, username: "a" }, { userId: 2, username: "b" }] });
+    setHostUser("RELAI1", 2);
+    expect(getGameState("RELAI1")).toMatchObject({ hostUserId: 2, hostConnected: true });
+    clearGame("RELAI1");
+  });
+
+  it("salle sans partie en memoire : rien", () => {
+    expect(setHostUser("AUCUNE", 2)).toBeUndefined();
+  });
+});
+
 // Lien « Ecouter sur Spotify » du reveal (guidelines Spotify, T10) : la source
 // et l'identifiant du morceau SONT la reponse. Ils ne sortent qu'au reveal.
 describe("gameStateSnapshot : source du morceau seulement au reveal", () => {

@@ -86,6 +86,9 @@ function FriendsLobby(props: LobbyRendererProps) {
   const link = `${origin}${publicPath("/friends/")}?join=${code}`
   const shortUrl = `${origin.replace(/^https?:\/\//, "")}${publicPath("/jouer/")}`
   const alone = participants.length < MIN_PLAYERS
+  // Activite Discord : le salon vocal est la salle. Personne n'a de code a
+  // taper, chacun lance l'Activite et arrive ici ; le bloc de partage disparait.
+  const discord = props.surface === "discord"
 
   return (
     // Ossature (30/09) : la salle en banniere pleine largeur, puis la regie a
@@ -99,14 +102,27 @@ function FriendsLobby(props: LobbyRendererProps) {
         style={{ background: "#2e2014" }}
         data-testid="lobby-salle"
       >
-        <div className="min-w-0">
-          <Label dot={ACCENT} className="mb-4">{isHost ? "Invite tes amis" : "Tu es dans la partie"}</Label>
-          <RoomCode code={code} size="xl" />
-          <p className="mb-3 mt-4 text-center text-sm text-[#e9dcc0]">
-            Envoie le lien, ou donne le code à taper sur {shortUrl}
-          </p>
-          <ShareButtons code={code} link={link} />
-        </div>
+        {discord ? (
+          <div className="min-w-0" data-testid="lobby-salon-discord">
+            <Label dot={ACCENT} className="mb-4">Salon Discord</Label>
+            <p className="m-0 font-display text-2xl font-semibold leading-tight sm:text-3xl">
+              Tout le salon vocal peut entrer.
+            </p>
+            <p className="mb-0 mt-3 text-sm text-[#e9dcc0]">
+              Chacun lance Blindz depuis le salon et arrive ici tout seul. Pas de code à partager : la salle, c&apos;est le salon.
+              {isHost ? " Tu lances quand tout le monde est là." : ""}
+            </p>
+          </div>
+        ) : (
+          <div className="min-w-0">
+            <Label dot={ACCENT} className="mb-4">{isHost ? "Invite tes amis" : "Tu es dans la partie"}</Label>
+            <RoomCode code={code} size="xl" />
+            <p className="mb-3 mt-4 text-center text-sm text-[#e9dcc0]">
+              Envoie le lien, ou donne le code à taper sur {shortUrl}
+            </p>
+            <ShareButtons code={code} link={link} />
+          </div>
+        )}
         <div className="min-w-0 border-t-2 border-dashed border-[#6b573f] pt-4 lg:border-l-2 lg:border-t-0 lg:pl-8 lg:pt-0">
           <div className="mb-3 flex items-center justify-between gap-3">
             <p className="m-0 text-[11px] font-bold uppercase tracking-[0.18em] text-[#e9dcc0]">Dans la salle</p>
@@ -121,7 +137,7 @@ function FriendsLobby(props: LobbyRendererProps) {
             accent={ACCENT}
             emptyLabel="Personne pour l'instant."
           />
-          {isHost && code ? (
+          {isHost && code && !discord ? (
             <RecentPlayers roomCode={code} accent={ACCENT} tone="dark" exclude={participants.map(p => p.user_id)} />
           ) : null}
         </div>
@@ -146,7 +162,13 @@ function FriendsLobby(props: LobbyRendererProps) {
                 canStart={props.canStart}
                 starting={props.starting}
                 importing={props.importing}
-                hint={alone ? `Il faut au moins ${MIN_PLAYERS} joueurs : envoie le lien.` : `${participants.length} joueurs dans la salle`}
+                hint={
+                  alone
+                    ? discord
+                      ? `Il faut au moins ${MIN_PLAYERS} joueurs : attends qu'un pote du salon lance l'Activité.`
+                      : `Il faut au moins ${MIN_PLAYERS} joueurs : envoie le lien.`
+                    : `${participants.length} joueurs dans la salle`
+                }
               />
             ) : (
               <WaitingForHost hostName={hostName} accent={ACCENT} />

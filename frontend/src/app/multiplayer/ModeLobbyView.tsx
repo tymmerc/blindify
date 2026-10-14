@@ -32,7 +32,7 @@ import { StreamerLobbyView } from "./StreamerLobbyView"
 import { ResultsView } from "./LobbyViews"
 import { multiplayerFeedbackContext } from "@/lib/feedback"
 import { ENTRY_ROUTE, HEADER_COPY } from "./lobbyCopy"
-import type { LobbyRendererProps, LobbyViewState } from "./lobbyTypes"
+import type { LobbyRendererProps, LobbySurface, LobbyViewState } from "./lobbyTypes"
 import { initialLobbyContext, lobbyReducer } from "./lobbyMachine"
 import { RequestTimeoutError, withTimeoutRetry } from "@/lib/withTimeoutRetry"
 
@@ -91,6 +91,10 @@ type ModeLobbyViewProps = {
   autojoin?: string | null
   initialProfileUrl?: string | null
   initialNickname?: string | null
+  /** Activite Discord : le salon est la salle, pas de code a partager. */
+  surface?: LobbySurface
+  /** Remplace le retour au choix des modes (Quitter, Retour) : dans Discord, il n'y a pas de menu. */
+  onLeave?: () => void
 }
 
 function friendlyError(mode: GameMode, phase: "create" | "join" | "start" | "invite"): string {
@@ -117,7 +121,7 @@ function friendlyError(mode: GameMode, phase: "create" | "join" | "start" | "inv
   return base[mode as keyof typeof base][phase]
 }
 
-export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autojoin, initialProfileUrl, initialNickname }: ModeLobbyViewProps) {
+export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autojoin, initialProfileUrl, initialNickname, surface = "web", onLeave }: ModeLobbyViewProps) {
   const router = useRouter()
   const { accentColor, isGuest, setGuest } = useMode()
   const [userPayload, setUserPayload] = useState<CurrentUserPayload | null>(null)
@@ -223,6 +227,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     gameOver?: (payload: { roomCode: string; players: MultiplayerGameState["players"] }) => void
     gameLost?: (payload: { roomCode: string }) => void
     roomError?: (payload: { code?: string; message?: string }) => void
+    hostChange?: (payload: { roomCode: string; hostUserId: number }) => void
   }>({})
   const roomRef = useRef<MultiplayerRoom | null>(null)
   const gameStateRef = useRef<MultiplayerGameState | StreamerState | null>(null)
@@ -365,6 +370,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         }
         if (handlersRef.current.gameLost) socket.off("game:lost", handlersRef.current.gameLost)
         if (handlersRef.current.roomError) socket.off("room:error", handlersRef.current.roomError)
+        if (handlersRef.current.hostChange) socket.off("room:host", handlersRef.current.hostChange)
       }
       disconnectSocket()
     }
@@ -697,6 +703,21 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       }
       if (handlersRef.current.gameLost) socket.off("game:lost", handlersRef.current.gameLost)
       if (handlersRef.current.roomError) socket.off("room:error", handlersRef.current.roomError)
+      if (handlersRef.current.hostChange) socket.off("room:host", handlersRef.current.hostChange)
+
+      // Relais de l'hote (salon Discord) : l'hote est parti, le serveur a nomme
+      // le plus ancien joueur present. La salle suit sans recharger ; le nouvel
+      // hote recoit la regie (vue hosting) et un mot pour le lui dire.
+      const hostChangeHandler = (payload: { roomCode: string; hostUserId: number }) => {
+        if (payload.roomCode !== roomCode || typeof payload.hostUserId !== "number") return
+        setRoom(prev => (prev ? { ...prev, host_user_id: payload.hostUserId } : prev))
+        if (payload.hostUserId !== userRef.current?.user.id) return
+        showNotice("L'hôte est parti : c'est toi qui lances la partie maintenant.")
+        if (viewRef.current === "waiting") {
+          setView("hosting")
+          dispatchLobby({ type: "hosting" })
+        }
+      }
 
       const presenceHandler = (payload: RoomPresenceEvent) => {
         if (payload.roomCode !== roomCode) return
@@ -890,6 +911,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         showNotice(msg, isAnswerReject)
       }
       socket.on("room:error", roomErrorHandler)
+      socket.on("room:host", hostChangeHandler)
 
       handlersRef.current = {
         connect: undefined,
@@ -901,6 +923,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         gameOver: gameOverHandler,
         gameLost: gameLostHandler,
         roomError: roomErrorHandler,
+        hostChange: hostChangeHandler,
       }
 
       const emitJoin = () => {
@@ -1452,8 +1475,10 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     dispatchLobby({ type: "reset" })
     // Retour au CHOIX DES MODES, pas au tout debut du wizard : le nom et la musique
     // sont deja poses, revenir a la saisie du nom etait percu comme "tout recommencer".
-    router.replace("/modes")
-  }, [room, userPayload, router, mode])
+    // Dans Discord, c'est la page de l'Activite qui decide (elle recharge).
+    if (onLeave) onLeave()
+    else router.replace("/modes")
+  }, [room, userPayload, router, mode, onLeave])
 
   useEffect(() => {
     const hasCode = Boolean(initialJoinCode)
@@ -1559,6 +1584,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     mode,
     modeConfig,
     view,
+    surface,
     intent,
     lobbyStatus: lobby.status,
     errorCode,
@@ -1769,7 +1795,10 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
           // Sans etat de partie, l'hote d'un event est traite en presentateur : pas de bloc.
           hostPlays: (gameState as MultiplayerGameState | null)?.hostPlays === true,
         })}
-        onReturn={() => router.replace("/modes")}
+        // Dans Discord (onLeave), pas de « Retour modes » : recharger ramenait
+        // sur ce meme podium (la partie est finie, l'etat le dit). On y reste
+        // jusqu'au Rejouer de l'hote, le bouton grise le dit deja.
+        onReturn={onLeave ? undefined : () => router.replace("/modes")}
         onReplay={() => runExclusive(restartingRef, async () => {
           if (!room || !isHost) return
           try {

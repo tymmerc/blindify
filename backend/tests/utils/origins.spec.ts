@@ -153,3 +153,56 @@ describe("isSocketOriginAllowed (handshake socket.io)", () => {
     expect(isSocketOriginAllowed("https://evil.test", ["*"])).toBe(true);
   });
 });
+
+// Activite Discord : la page est servie par le proxy de Discord sous
+// https://<id de l'appli>.discordsays.com, et c'est cette origine que le
+// navigateur presente a l'API et au socket. Elle s'ouvre avec DISCORD_CLIENT_ID,
+// jamais en dur : sans variable, rien ne change.
+describe("buildAllowedOrigins : origine de l'Activite Discord", () => {
+  it("ajoute https://<id>.discordsays.com quand DISCORD_CLIENT_ID est un identifiant Discord", () => {
+    const { origins, ignored } = buildAllowedOrigins({
+      frontendUrl: "https://blindz.app",
+      discordClientId: "123456789012345678",
+      isProd: true,
+    });
+
+    expect(origins).toEqual(["https://blindz.app", "https://123456789012345678.discordsays.com"]);
+    expect(ignored).toEqual([]);
+  });
+
+  it("sans DISCORD_CLIENT_ID (absent ou vide) : la liste ne bouge pas", () => {
+    expect(buildAllowedOrigins({ frontendUrl: "https://blindz.app", isProd: true }).origins)
+      .toEqual(["https://blindz.app"]);
+    expect(buildAllowedOrigins({ frontendUrl: "https://blindz.app", discordClientId: "  ", isProd: true }).origins)
+      .toEqual(["https://blindz.app"]);
+  });
+
+  it("un identifiant qui n'a pas la forme d'un identifiant Discord n'ouvre aucune origine, et il est signale", () => {
+    const { origins, ignored } = buildAllowedOrigins({
+      frontendUrl: "https://blindz.app",
+      // Un identifiant est une suite de chiffres (snowflake) : rien d'autre ne
+      // doit pouvoir fabriquer une origine, par exemple "evil.com/" ou "*".
+      discordClientId: "evil.com",
+      isProd: true,
+    });
+
+    expect(origins).toEqual(["https://blindz.app"]);
+    // Sans la valeur : si identifiant et secret sont intervertis, le secret ne doit pas partir dans le journal.
+    expect(ignored).toEqual(["DISCORD_CLIENT_ID (format invalide)"]);
+    expect(JSON.stringify(ignored)).not.toContain("evil.com");
+  });
+
+  it("l'origine Discord passe le filtre CSRF et le handshake socket", () => {
+    const { origins } = buildAllowedOrigins({
+      frontendUrl: "https://blindz.app",
+      discordClientId: "123456789012345678",
+      isProd: true,
+    });
+
+    expect(matchesAllowedOrigin("https://123456789012345678.discordsays.com", origins)).toBe(true);
+    expect(matchesAllowedOrigin("https://123456789012345678.discordsays.com/", origins)).toBe(true);
+    expect(isSocketOriginAllowed("https://123456789012345678.discordsays.com", origins)).toBe(true);
+    // Une autre appli Discord n'est pas la notre.
+    expect(isSocketOriginAllowed("https://999999999999999999.discordsays.com", origins)).toBe(false);
+  });
+});
