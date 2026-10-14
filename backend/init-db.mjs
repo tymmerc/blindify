@@ -1,61 +1,23 @@
 /**
- * Script d'initialisation de la base de données
- * Exécute le schéma SQL pour créer toutes les tables
+ * Ancien script d'initialisation de la base : il ne fait plus rien que refuser.
+ *
+ * Il jouait backend/schema.sql (19 tables, aout 2026) avec son propre pool,
+ * hors du garde-fou de config/databaseGuard.ts, sur le DATABASE_URL de
+ * ../.env, c'est-a-dire la base de PROD quand on le lancait dans
+ * /opt/blindify/backend. Relecture de #75 (C0), point M4.
+ *
+ * Le fichier reste : docker-compose.yml le monte dans
+ * /docker-entrypoint-initdb.d du Postgres de la prod (l'image n'y execute que
+ * les .sh et .sql, il n'y a jamais tourne).
+ *
+ * A la place :
+ * - base de dev : bash tools/dev-db/dev-db.sh up (schema de la prod) ;
+ * - base de test : npm run test:db ;
+ * - structure de la prod : backend/db/schema.sql, tenu par tools/schema-snapshot.sh.
  */
-
-import dotenv from "dotenv";
-import pg from "pg";
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-dotenv.config({
-  path: path.join(__dirname, "../.env"),
-});
-
-// Lecture du fichier SQL
-const sqlPath = path.join(__dirname, "schema.sql");
-const sql = fs.readFileSync(sqlPath, "utf8");
-
-// Connexion à la base de données
-const pool = new pg.Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: false,
-});
-
-/**
- * Initialise la base de données avec le schéma complet
- */
-async function initDB() {
-  console.log("🔧 Initializing Blindify database...");
-  
-  try {
-    // Exécution du schéma SQL complet
-    await pool.query(sql);
-    console.log("✅ Database schema created successfully");
-    console.log("📊 All tables, views, and triggers are ready");
-    
-    // Vérification des tables créées
-    const { rows: tables } = await pool.query(`
-      SELECT table_name 
-      FROM information_schema.tables 
-      WHERE table_schema = 'public'
-      ORDER BY table_name
-    `);
-    
-    console.log(`\n📋 Created tables (${tables.length}):`);
-    tables.forEach(t => console.log(`   - ${t.table_name}`));
-    
-  } catch (err) {
-    console.error("❌ Error initializing database:", err);
-    process.exit(1);
-  } finally {
-    await pool.end();
-  }
-}
-
-// Exécution
-initDB();
+console.error(
+  "[init-db] script retire : il visait la base de ../.env avec un schema perime.\n" +
+  "  base de dev  : bash tools/dev-db/dev-db.sh up\n" +
+  "  base de test : npm run test:db"
+);
+process.exit(2);
