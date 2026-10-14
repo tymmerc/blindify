@@ -9,6 +9,7 @@ import cookieSession from "cookie-session";
 import dotenv from "dotenv";
 
 import { pool } from "./config/db";
+import { assertConnectedDatabase } from "./config/databaseGuard";
 import { initSocket } from "./socket";
 import authRoutes from "./routes/auth";
 import gamesRoutes from "./routes/games";
@@ -334,6 +335,9 @@ async function bootstrap() {
     logger.error("❌ Database connection failed", { error });
     process.exit(1);
   }
+  // Second verrou du garde-fou (config/databaseGuard.ts) : la base reellement
+  // ouverte, d'apres le serveur, avant tout schema.
+  await assertConnectedDatabase(pool);
 
   // Schema de la bibliotheque de liens des le BOOT : le poll room details y fait
 // reference, un premier deploiement sans la table crash-loopait le serveur.

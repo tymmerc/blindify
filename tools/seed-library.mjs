@@ -30,14 +30,43 @@
 
 import { execFileSync } from "child_process"
 
+// La base ensemencee suit le mode de l'outil, comme son adresse : avec
+// l'argument "prod" (soiree.mjs prod, party-4-joueurs.mjs prod...), il joue
+// contre blindz.app et ensemence la base de prod, c'est la verification
+// apres une mise en prod. Sans lui, il joue contre le site de dev, dont le
+// backend a sa propre base depuis C0 (blindify_dev, conteneur
+// blindz-dev-postgres, tools/dev-db/dev-db.sh). Avant C0, le mode dev
+// ensemencait aussi la prod.
+// Les deux bases ont leurs propres ids : un id lu dans l'API de l'une ne doit
+// jamais servir dans l'autre. D'ou verifierJoueursDeTest avant chaque ecriture.
+// SEED_PG_CONTAINER / _USER / _DB surchargent la cible (essais) ; en mode dev,
+// jamais vers la prod.
+export function cibleSeed(argv = process.argv, env = process.env) {
+  const mode = argv[2] === "prod" ? "prod" : "dev"
+  const defaut = mode === "prod"
+    ? { container: "blindify-postgres", user: "blindify", db: "blindify" }
+    : { container: "blindz-dev-postgres", user: "blindz_dev", db: "blindify_dev" }
+  const cible = {
+    mode,
+    container: env.SEED_PG_CONTAINER || defaut.container,
+    user: env.SEED_PG_USER || defaut.user,
+    db: env.SEED_PG_DB || defaut.db,
+  }
+  if (mode === "dev" && (cible.container === "blindify-postgres" || cible.db === "blindify")) {
+    throw new Error("seed-library : en mode dev, la base de prod n'est pas une cible (C0)")
+  }
+  return cible
+}
+const SEED_PG = cibleSeed()
+
 // Arguments separes, SANS shell : les titres viennent de Deezer (donnees
-// tierces) et finissent dans une commande lancee en root contre la base de
-// prod. Avec l'ancien execSync, une apostrophe inverse dans un titre etait
-// executee par le shell (constate par la relecture du 30/09/2026).
+// tierces) et finissent dans une commande lancee en root. Avec l'ancien
+// execSync, une apostrophe inverse dans un titre etait executee par le shell
+// (constate par la relecture du 30/09/2026).
 // Exporte : les autres outils E2E s'en servent au lieu de leur copie en
 // execSync (alertes CodeQL 7 a 12, relecture du 01/10/2026).
 export const psql = sql => execFileSync(
-  "docker", ["exec", "blindify-postgres", "psql", "-U", "blindify", "-d", "blindify", "-qAt", "-c", sql],
+  "docker", ["exec", SEED_PG.container, "psql", "-U", SEED_PG.user, "-d", SEED_PG.db, "-qAt", "-c", sql],
   { maxBuffer: 16 * 1024 * 1024 },
 ).toString().trim()
 
@@ -47,8 +76,8 @@ const sq = v => "'" + String(v ?? "").replace(/'/g, "''") + "'"
 // Gardes SQL. Sans shell, une valeur piegee arrive encore dans la requete, et
 // psql -c en enchaine plusieurs. Or les ids et les codes de salle viennent des
 // reponses du serveur : un faux backend (port 3097 pris pendant un redemarrage
-// de ts-node-dev, DNS detourne) pourrait y glisser du SQL, lance avec le role
-// blindify (sans doute superuser) sur la base de prod. On refuse donc toute valeur qui n'a pas la forme
+// du backend de dev, DNS detourne) pourrait y glisser du SQL, lance avec les droits
+// du role de la base visee. On refuse donc toute valeur qui n'a pas la forme
 // attendue. Une valeur absente passe telle quelle : chaque script traite deja ce
 // cas, et elle n'injecte rien. La valeur est rendue inchangee (meme type).
 export const entier = v => {
@@ -59,6 +88,38 @@ export const entier = v => {
 export const codeSalle = c => {
   if (c && !/^[A-Z0-9]{6}$/.test(String(c))) throw new Error(`code de salle inattendu : ${String(c).slice(0, 40)}`)
   return c
+}
+
+// Un joueur de test, c'est un invite cree il y a moins d'une heure dans la base
+// visee : c'est ce que font tous les outils juste avant d'ensemencer. Un vrai
+// joueur (compte ancien, compte avec mot de passe) arrete tout, avant la
+// moindre ecriture. Un id absent arrete l'ensemencement (`exiger`) ; au menage,
+// il est seulement ignore (rien a supprimer pour lui).
+// `lire` execute une requete et rend ses lignes (psql en vrai, une fausse base
+// dans tools/seed-library.test.mjs). Rend les ids retenus, en texte.
+export function verifierJoueursDeTest(userIds, lire = psql, { exiger = false } = {}) {
+  const ids = userIds.filter(Boolean).map(id => String(entier(id)))
+  if (!ids.length) return []
+  const trouves = new Map()
+  // CASE explicite : un booleen colle par || sort en "true", pas en "t".
+  for (const l of lire(`SELECT id||'|'||provider||'|'||CASE WHEN created_at > NOW() - INTERVAL '1 hour' THEN 't' ELSE 'f' END
+                        FROM users WHERE id IN (${ids.join(",")})`).split("\n")) {
+    const [id, provider, recent] = l.split("|"); if (id) trouves.set(id, { provider, recent: recent === "t" })
+  }
+  const ou = `base ${SEED_PG.db} (mode ${SEED_PG.mode})`
+  const retenus = []
+  for (const id of ids) {
+    const u = trouves.get(id)
+    if (!u) {
+      if (exiger) throw new Error(`seed-library : utilisateur ${id} absent de la ${ou}, il vient sans doute de l'autre base. Arret.`)
+      continue
+    }
+    if (u.provider !== "guest" || !u.recent) {
+      throw new Error(`seed-library : l'utilisateur ${id} de la ${ou} n'est pas un joueur de test (invite cree il y a moins d'une heure). Arret, rien n'est ecrit.`)
+    }
+    retenus.push(id)
+  }
+  return retenus
 }
 
 const MOTS = [
@@ -123,6 +184,7 @@ async function remplirLaReserve(minimum) {
  */
 export async function seedLibrary(userId, n = 12) {
   entier(userId) // colle brut dans l'INSERT ; vient de la reponse du serveur
+  verifierJoueursDeTest([userId], psql, { exiger: true })
   const pool = await remplirLaReserve(n)
   const lot = pool.splice(0, n)
   if (!lot.length) throw new Error("reserve de titres epuisee")
@@ -154,7 +216,9 @@ export async function seedLibrary(userId, n = 12) {
  *  vrais identifiants Deezer, l'ancien filtre `external_id LIKE 'e2e-%'` ne
  *  matche plus rien. */
 export function cleanupSeeded(userIds = [...seedes]) {
-  const ids = userIds.filter(Boolean).map(entier).join(",")
+  // Avant toute ecriture : un id qui serait un vrai joueur de la base visee
+  // arrete le menage (il viderait sa bibliotheque).
+  const ids = verifierJoueursDeTest(userIds, psql).join(",")
   // D'abord rendre les orphelins reattribues (ils portent des manches reelles :
   // on ne les supprime jamais), y compris ceux d'un run interrompu avant. Le
   // marqueur suffit a les retrouver ; attention, audio_sources.id est un UUID.
