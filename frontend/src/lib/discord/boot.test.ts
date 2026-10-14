@@ -117,6 +117,47 @@ describe("bootDiscordActivity", () => {
     expect(api.discordAuth).not.toHaveBeenCalled()
   })
 
+  it("journalise chaque etape, sans jamais ecrire le code, le jeton Discord ni la session", async () => {
+    const api = makeApi()
+    const { sdk } = makeSdk()
+    const log = vi.fn()
+
+    await bootDiscordActivity({ api, createSdk: () => sdk, instanceId: "i-1", setBearer: vi.fn(), log })
+
+    const events = log.mock.calls.map(call => call[0])
+    expect(events).toEqual([
+      "config", "config ok", "sdk cree", "ready ok", "authorize envoye", "authorize ok",
+      "session ok", "authenticate ok", "salle ok",
+    ])
+    const written = JSON.stringify(log.mock.calls)
+    expect(written).not.toContain("le-code")
+    expect(written).not.toContain("discord-tok")
+    expect(written).not.toContain("sess-1")
+  })
+
+  it("journalise l'echec avec son etape et la reponse de Discord", async () => {
+    const api = makeApi()
+    const { sdk, authorize } = makeSdk()
+    authorize.mockRejectedValue({ code: 5000, message: "Interaction required" })
+    const log = vi.fn()
+
+    await expect(bootDiscordActivity({ api, createSdk: () => sdk, instanceId: "i-1", setBearer: vi.fn(), log }))
+      .rejects.toMatchObject({ code: "authorize_refused" })
+
+    expect(log).toHaveBeenCalledWith("authorize refuse", expect.objectContaining({ code: 5000, message: "Interaction required" }))
+  })
+
+  it("READY absent : le journal dit qu'il manque, avec le delai", async () => {
+    const api = makeApi()
+    const { sdk } = makeSdk()
+    sdk.ready = () => new Promise(() => {})
+    const log = vi.fn()
+
+    await expect(bootDiscordActivity({ api, createSdk: () => sdk, instanceId: "i-1", setBearer: vi.fn(), readyTimeoutMs: 20, log }))
+      .rejects.toMatchObject({ code: "discord_unavailable" })
+    expect(log).toHaveBeenCalledWith("ready absent", expect.objectContaining({ timeoutMs: 20 }))
+  })
+
   it("DiscordBootError garde la cause", () => {
     const cause = new Error("x")
     const err = new DiscordBootError("session_failed", "message", cause)
