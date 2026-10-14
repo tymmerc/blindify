@@ -33,6 +33,8 @@ export type LobbyRendererProps = {
   modeConfig: GameModeConfig
   view: LobbyViewState
   surface?: LobbySurface
+  /** Activite Discord : la musique se choisit au lancement ; le lobby rouvre cet ecran par-dessus. */
+  onEditMusic?: () => void
   intent?: string | null
   lobbyStatus: LobbyStatus
   /** Code d'erreur structure du dernier join (ex: "room_in_progress"). */

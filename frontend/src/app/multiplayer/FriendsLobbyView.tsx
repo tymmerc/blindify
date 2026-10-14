@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { useState } from "react"
+import { Loader2 } from "lucide-react"
 import { MusicLibrary } from "@/components/import/MusicLibrary"
 import { ProfileImportBlock } from "@/components/import/ProfileImportBlock"
 import { publicPath } from "@/lib/publicPath"
@@ -176,7 +177,22 @@ function FriendsLobby(props: LobbyRendererProps) {
           </LaunchDock>
         </Panel>
 
-        {/* 3. TA MUSIQUE */}
+        {/* 3. TA MUSIQUE. Dans Discord, elle se choisit au lancement : ici, un
+            bouton rouvre cet ecran par-dessus le lobby, sans quitter la salle. */}
+        {discord && props.onEditMusic ? (
+          <Panel fill label="Ta musique" dot={ACCENT} testId="lobby-musique" className="min-w-0">
+            <p className="-mt-2 mb-4 text-sm">
+              Choisie en entrant. La partie pioche dans la musique de chaque joueur présent.
+            </p>
+            <button
+              type="button"
+              onClick={props.onEditMusic}
+              className="rounded-md border-2 border-[#2e2014] bg-[#f4ecdb] px-4 py-2.5 text-sm font-bold text-[#2e2014] shadow-[3px_3px_0_#2e2014] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0_#2e2014]"
+            >
+              Changer ma musique
+            </button>
+          </Panel>
+        ) : (
         <Panel fill label="Ta musique" dot={ACCENT} testId="lobby-musique" className="min-w-0">
           <p className="-mt-2 mb-3 text-sm text-[#6b573f]">
             La partie pioche dans la musique de chaque joueur présent. Coche ce que tu amènes ce soir.
@@ -189,6 +205,7 @@ function FriendsLobby(props: LobbyRendererProps) {
             <ProfileImportBlock accent={ACCENT} hideHeader onImported={() => setLibRefresh(n => n + 1)} />
           </div>
         </Panel>
+        )}
       </div>
 
       {/* 4. EN ATTENDANT : le chat et pierre-feuille-ciseaux dans la bulle */}
@@ -207,7 +224,21 @@ function FriendsLobby(props: LobbyRendererProps) {
   )
 }
 
+/** Discord : le temps d'entrer dans la salle du salon. L'ecran d'entree du site
+ *  (code a taper, lien « Retour ») sortirait de l'Activite. */
+function DiscordEntering() {
+  return (
+    <div className="grid min-h-[40vh] place-items-center px-6 text-center">
+      <p className="m-0 flex items-center gap-3 text-sm" role="status">
+        <Loader2 className="h-5 w-5 shrink-0 animate-spin" style={{ color: ACCENT }} aria-hidden />
+        On entre dans la salle du salon…
+      </p>
+    </div>
+  )
+}
+
 export function FriendsLobbyView(props: LobbyRendererProps) {
+  if (props.view === "landing" && props.surface === "discord") return <DiscordEntering />
   if (props.view === "landing") {
     return (
       <FriendsEntry

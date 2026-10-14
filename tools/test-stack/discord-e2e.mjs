@@ -11,7 +11,10 @@
 //   - la partie se joue : manches, reponses comptees en base, classement ;
 //   - contrat anti-triche : aucun titre sur le fil avant sa revelation, et pas
 //     de source du morceau (provider) sur une piste caviardee ;
-//   - Quitter recharge l'Activite et remet le joueur dans la salle du salon.
+//   - « Ta musique » avant la salle, pour chacun ;
+//   - Quitter ramene a « Ta musique » sans recharger (une seule poignee de main
+//     par frame, comme le vrai client), Entrer remet le joueur dans la salle ;
+//   - relancer l'Activite (nouvelle frame) remet le joueur dans la meme salle.
 //
 //   campagne-ref.sh <branche> --script /chemin/discord-e2e.mjs /dossier/des/preuves
 import { chromium, webkit } from "@playwright/test"
@@ -70,6 +73,15 @@ async function waitLobby(p) {
   await p.frame.getByTestId("lobby-salon-discord").waitFor({ timeout: 45000 })
 }
 
+/** « Ta musique » : l'ecran d'avant la salle ; on entre (sans musique, la partie a le repli). */
+async function passMusic(p) {
+  await p.frame.getByTestId("discord-musique").waitFor({ timeout: 45000 })
+  await p.frame.getByRole("button", { name: /^entrer/i }).click({ timeout: 10000 })
+}
+
+/** Poignees de main vues par le harnais (le client Discord) pour la page en cours. */
+const handshakes = p => p.page.evaluate(() => window.__harness.log.filter(x => x.op === "HANDSHAKE").length)
+
 /** Repond a la manche en cours ; l'ecran de jeu (TheaterGameView sur PC) nomme ses champs par placeholder. */
 async function answer(p, truth) {
   const guess = p.plan === "juste" ? truth : p.plan === "proche" ? { title: truth.title, artist: "personne" } : { title: "rien du tout", artist: "personne" }
@@ -126,8 +138,11 @@ try {
   for (const def of PLAYERS) {
     const p = await open(def)
     players.push(p)
+    await p.frame.getByTestId("discord-musique").waitFor({ timeout: 45000 })
+    if (players.length === 1) await shot(p.page, "00-ta-musique")
+    await passMusic(p)
     await waitLobby(p)
-    ok(`${p.tag} (${p.name}) est dans le lobby de l'Activité`)
+    ok(`${p.tag} (${p.name}) passe par « Ta musique » et arrive dans le lobby de l'Activité`)
   }
   const [host, second, third] = players
 
@@ -185,17 +200,31 @@ try {
   }
   if (!problems.some(x => /proxy|jeton|websocket/.test(x))) ok("API et websocket passent par /.proxy/blindz, le jeton de session reste hors des adresses")
 
-  // 4b. Quitter depuis le lobby : l'Activite se recharge et remet le joueur dans la salle du salon.
+  // 4b. Quitter depuis le lobby : retour a « Ta musique » sans recharger (le
+  // harnais, comme Discord, ne repond qu'a une poignee de main), puis Entrer.
   await third.frame.getByRole("button", { name: /quitter/i }).first().click({ timeout: 5000 })
+  await third.frame.getByTestId("discord-musique").waitFor({ timeout: 15000 })
+  await shot(third.page, "02a-quitter-ta-musique-webkit")
+  await passMusic(third)
   await waitLobby(third)
+  const shakes = await handshakes(third)
   const again = psql(`SELECT count(*) FROM multiplayer_rooms WHERE discord_instance_id=${q(INSTANCE)}`)
   let back = 0
   for (let i = 0; i < 40 && back < PLAYERS.length; i++) {
     back = Number(psql(`SELECT count(*) FROM room_participants rp JOIN multiplayer_rooms m ON m.id=rp.room_id WHERE m.room_code=${q(code)}`))
     if (back < PLAYERS.length) await sleep(500)
   }
-  if (again === "1" && back === PLAYERS.length) ok("Quitter recharge l'Activité : le joueur WebKit revient dans la même salle du salon")
-  else bad(`après Quitter : ${again} salle(s) pour le salon, ${back} participant(s)`)
+  if (again === "1" && back === PLAYERS.length && shakes === 1) ok("Quitter ramène à « Ta musique » sans recharger, Entrer remet le joueur WebKit dans la même salle")
+  else bad(`après Quitter : ${again} salle(s) pour le salon, ${back} participant(s), ${shakes} poignée(s) de main (attendu 1)`)
+
+  // 4b bis. Relancer l'Activite : une nouvelle frame (nouveau frame_id), une
+  // nouvelle poignee de main, et le joueur retrouve la salle du salon.
+  await third.page.reload()
+  await passMusic(third)
+  await waitLobby(third)
+  const relaunched = psql(`SELECT count(*) FROM multiplayer_rooms WHERE discord_instance_id=${q(INSTANCE)}`)
+  if (relaunched === "1" && (await handshakes(third)) === 1) ok("relance de l'Activité (nouvelle frame) : le joueur WebKit retrouve la même salle")
+  else bad(`après relance : ${relaunched} salle(s) pour le salon`)
   await shot(third.page, "02b-quitter-retour-lobby-webkit")
 
   // 4c. Relais : l'hote quitte le lobby, la plus ancienne joueuse presente (Lea) devient hote
@@ -212,6 +241,7 @@ try {
   if (await launch.waitFor({ timeout: 15000 }).then(() => true).catch(() => false)) ok("relais : Léa voit le bouton « Lancer la partie » sans recharger")
   else bad("relais : Léa ne voit pas « Lancer la partie »")
   await shot(second.page, "02c-relais-lea-hote")
+  await passMusic(host)
   await waitLobby(host)
   if (await host.frame.getByRole("button", { name: /lancer la partie/i }).count()) bad("relais : l'ancien hôte, revenu, a encore le bouton de lancement")
   const launcher = second
