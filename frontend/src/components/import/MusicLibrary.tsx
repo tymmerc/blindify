@@ -13,7 +13,14 @@ import type { ImportedLink, LinkDetails } from "@/lib/types"
 
 const DECADE_ORDER = [1960, 1970, 1980, 1990, 2000, 2010, 2020]
 
-export function MusicLibrary({ accent, refreshSignal }: { accent: string; refreshSignal?: number }) {
+type MusicLibraryProps = {
+  accent: string
+  refreshSignal?: number
+  /** La bibliotheque chargee ou modifiee (l'ecran « Ta musique » de l'Activite dit s'il y a de quoi jouer). */
+  onLinksChange?: (links: ImportedLink[]) => void
+}
+
+export function MusicLibrary({ accent, refreshSignal, onLinksChange }: MusicLibraryProps) {
   const [links, setLinks] = useState<ImportedLink[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [detail, setDetail] = useState<LinkDetails | null>(null)
@@ -32,6 +39,10 @@ export function MusicLibrary({ accent, refreshSignal }: { accent: string; refres
   }, [])
 
   useEffect(() => { void load() }, [load, refreshSignal])
+
+  useEffect(() => {
+    if (links) onLinksChange?.(links)
+  }, [links, onLinksChange])
 
   const toggle = async (link: ImportedLink) => {
     // optimiste : la case repond tout de suite

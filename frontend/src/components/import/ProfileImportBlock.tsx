@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { ExternalLink } from "lucide-react"
 import { api } from "@/lib/api"
+import { followExternalLink } from "@/lib/externalLink"
 import { Button } from "@/components/ui/button"
 
 type ImportState = "idle" | "loading" | "syncing" | "done"
@@ -133,6 +134,7 @@ export function ProfileImportBlock({ accent = "#c65133", onImportingChange, onIm
         <span>Besoin de ton lien&nbsp;?</span>
         <a
           href="https://open.spotify.com/collection/playlists"
+          onClick={event => followExternalLink(event, "https://open.spotify.com/collection/playlists")}
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-1 rounded-full border-[1.5px] border-[#2e2014] bg-[#ece1c8] px-2.5 py-1 font-bold text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
@@ -141,6 +143,7 @@ export function ProfileImportBlock({ accent = "#c65133", onImportingChange, onIm
         </a>
         <a
           href="https://www.deezer.com/"
+          onClick={event => followExternalLink(event, "https://www.deezer.com/")}
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-1 rounded-full border-[1.5px] border-[#2e2014] bg-[#ece1c8] px-2.5 py-1 font-bold text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
