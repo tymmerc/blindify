@@ -325,3 +325,43 @@ describe("DeezerPreviewService : debit et cache", () => {
     expect(get).toHaveBeenCalledTimes(1);
   });
 });
+
+// Repli des invites sans musique : le classement Deezer remplace le top iTunes
+// depuis le 10/10/2026 (Apple reserve ses extraits a la promotion du store,
+// docs/CONDITIONS-API-MUSIQUE.md). Un seul appel, par le meme limiteur.
+describe("DeezerPreviewService.fetchChartTracks", () => {
+  it("lit le classement Deezer, borne a 50, et garde les morceaux avec extrait", async () => {
+    get.mockResolvedValue({ data: { data: [
+      item(1, "Titre 1", "Artiste 1"),
+      item(2, "Sans extrait", "Artiste 2", ""),
+      item(3, "Titre 3", "Artiste 3"),
+    ] } });
+    const tracks = await new DeezerPreviewService().fetchChartTracks(80);
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(get.mock.calls[0][0]).toMatch(/\/chart\/0\/tracks$/);
+    expect(get.mock.calls[0][0]).not.toMatch(/itunes|apple/);
+    expect(get.mock.calls[0][1].params.limit).toBe(50);
+    expect(tracks.map(t => t.id)).toEqual([1, 3]);
+    expect(tracks[0]).toMatchObject({ title: "Titre 1", artist: "Artiste 1", preview: "https://cdn.example/1.mp3" });
+  });
+
+  it("Deezer en erreur, page HTML ou panne : liste vide, sans exception", async () => {
+    const svc = new DeezerPreviewService();
+    get.mockResolvedValueOnce({ data: { error: { code: 100, message: "boom" } } });
+    expect(await svc.fetchChartTracks(10)).toEqual([]);
+    get.mockResolvedValueOnce({ data: "<html>blocked</html>" });
+    expect(await svc.fetchChartTracks(10)).toEqual([]);
+    get.mockRejectedValueOnce(new Error("ETIMEDOUT"));
+    expect(await svc.fetchChartTracks(10)).toEqual([]);
+  });
+
+  it("passe par le disjoncteur : pendant une pause quota, aucun appel", async () => {
+    let now = 1_000_000;
+    const svc = new DeezerPreviewService({ now: () => now, sleep: async ms => { now += ms; } });
+    get.mockResolvedValueOnce({ data: { error: { code: 4, message: "Quota limit exceeded" } } });
+    await svc.resolvePreviewOutcome({ title: "Song", artist: "A" });
+    get.mockResolvedValue({ data: { data: [item(1, "Titre", "Artiste")] } });
+    expect(await svc.fetchChartTracks(10)).toEqual([]);
+    expect(get).toHaveBeenCalledTimes(1);
+  });
+});

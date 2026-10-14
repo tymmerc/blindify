@@ -25,3 +25,17 @@ describe("FAQ : question beta", () => {
     expect(names).toContain(QUESTION)
   })
 })
+
+// Conditions Deezer (docs/CONDITIONS-API-MUSIQUE.md) : prevenir « by any
+// means » que l'ecoute des extraits est reservee a un usage prive.
+describe("FAQ : d'ou viennent les extraits", () => {
+  const QUESTION = "D'où viennent les extraits, et peut-on les diffuser en public ?"
+
+  it("dit que les extraits viennent de Deezer et sont reserves a une ecoute privee", () => {
+    render(<FaqPage />)
+    const answer = screen.getByText(QUESTION).closest("details")?.textContent ?? ""
+    expect(answer).toMatch(/Deezer/)
+    expect(answer).toMatch(/usage privé/)
+    expect(answer).toMatch(/Spotify/)
+  })
+})

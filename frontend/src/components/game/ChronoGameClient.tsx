@@ -11,6 +11,7 @@ import { computeScore } from "@/lib/roundFlow"
 import { evaluateGuessSeparate, type Verdict } from "@/lib/matching"
 import { playCorrectSound, playPartialSound, playWrongSound } from "@/lib/audioManager"
 import { Flame, Timer, SkipForward, Check } from "lucide-react"
+import { DeezerCredit } from "./SourceCredits"
 
 const ACCENT = "#c65133"
 const AUDIO_OWNER = "chrono"
@@ -419,6 +420,8 @@ export function ChronoGameClient({ tracks, durationSeconds, onGameComplete }: Ch
             </div>
           </form>
         </div>
+        {/* Logo Deezer et usage prive : obligatoires la ou les extraits jouent. */}
+        <DeezerCredit />
       </div>
     </div>
   )

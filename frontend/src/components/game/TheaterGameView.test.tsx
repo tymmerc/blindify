@@ -82,3 +82,32 @@ describe("TheaterGameView, en-tete et carte de reponse", () => {
     expect(stage?.style.gridTemplateColumns).toBe("minmax(0, 1fr)")
   })
 })
+
+// Conditions des API musicales (T10, docs/CONDITIONS-API-MUSIQUE.md).
+describe("TheaterGameView, credits des sources", () => {
+  const SPOTIFY_ID = "4uLU6hMCjMI75M1A2tKUQC"
+  const revealed = {
+    round: 1, trackId: SPOTIFY_ID, provider: "spotify", title: "Titre", artist: "Artiste",
+    previewUrl: "https://cdnt-preview.dzcdn.net/x.mp3", albumCover: null,
+  }
+
+  it("pendant la manche : logo Deezer et mention d'ecoute privee, aucun lien Spotify", () => {
+    // Piste telle que le serveur l'envoie pendant la manche : caviardee.
+    renderView({ currentTrack: { round: 1, trackId: "hidden", title: "", artist: "", previewUrl: revealed.previewUrl, albumCover: null } })
+    expect(screen.getByRole("img", { name: "Deezer" })).toBeInTheDocument()
+    expect(screen.getByText(/écoute privée/i)).toBeInTheDocument()
+    expect(screen.queryByRole("link", { name: /spotify/i })).toBeNull()
+  })
+
+  it("au reveal d'un morceau Spotify : lien vers le morceau, logo Deezer toujours la", () => {
+    renderView({ uiPhase: "reveal", isRevealed: true, isPlaying: false, currentTrack: revealed })
+    const link = screen.getByRole("link", { name: /écouter sur spotify/i })
+    expect(link.getAttribute("href")).toBe(`https://open.spotify.com/track/${SPOTIFY_ID}`)
+    expect(screen.getByRole("img", { name: "Deezer" })).toBeInTheDocument()
+  })
+
+  it("au reveal d'un morceau Deezer : pas de lien Spotify", () => {
+    renderView({ uiPhase: "reveal", isRevealed: true, isPlaying: false, currentTrack: { ...revealed, trackId: "3135556", provider: "deezer" } })
+    expect(screen.queryByRole("link", { name: /spotify/i })).toBeNull()
+  })
+})
