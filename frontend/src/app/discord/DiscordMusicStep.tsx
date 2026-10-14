@@ -55,7 +55,12 @@ export function DiscordMusicStep({ mode, onContinue, entering = false, error = n
 
       <section className={`${CARD} mt-4 p-4 sm:p-5`}>
         <Label dot="#789084" className="mb-3">Déjà dans ta bibliothèque</Label>
-        <MusicLibrary accent={ACCENT} refreshSignal={libRefresh} onLinksChange={onLinksChange} />
+        <MusicLibrary
+          accent={ACCENT}
+          refreshSignal={libRefresh}
+          onLinksChange={onLinksChange}
+          emptyText="Rien pour l'instant : ce que tu importes au-dessus arrive ici, et reste pour tes prochaines parties."
+        />
       </section>
 
       {/* Le bouton reste a portee du pouce, au-dessus du papier qui defile. */}

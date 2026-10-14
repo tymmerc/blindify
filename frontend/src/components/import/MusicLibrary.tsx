@@ -18,9 +18,11 @@ type MusicLibraryProps = {
   refreshSignal?: number
   /** La bibliotheque chargee ou modifiee (l'ecran « Ta musique » de l'Activite dit s'il y a de quoi jouer). */
   onLinksChange?: (links: ImportedLink[]) => void
+  /** Texte d'une bibliotheque vide (le champ d'import n'est pas toujours en dessous). */
+  emptyText?: string
 }
 
-export function MusicLibrary({ accent, refreshSignal, onLinksChange }: MusicLibraryProps) {
+export function MusicLibrary({ accent, refreshSignal, onLinksChange, emptyText = "Aucun lien importé pour l'instant : colle un lien ci-dessous." }: MusicLibraryProps) {
   const [links, setLinks] = useState<ImportedLink[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [detail, setDetail] = useState<LinkDetails | null>(null)
@@ -80,7 +82,7 @@ export function MusicLibrary({ accent, refreshSignal, onLinksChange }: MusicLibr
     return <p className="text-xs text-[#8a7558]">Chargement de ta musique…</p>
   }
   if (links.length === 0) {
-    return <p className="text-xs text-[#8a7558]">Aucun lien importé pour l'instant : colle un lien ci-dessous.</p>
+    return <p className="text-xs text-[#8a7558]">{emptyText}</p>
   }
 
   const activeCount = links.filter(l => l.active).reduce((a, l) => a + Number(l.track_count), 0)
