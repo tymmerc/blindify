@@ -9,7 +9,8 @@
 //   - la page passe par le proxy (/.proxy/blindz) pour l'API et le websocket ;
 //   - le jeton de session ne voyage jamais dans une adresse ;
 //   - la partie se joue : manches, reponses comptees en base, classement ;
-//   - contrat anti-triche : aucun titre sur le fil avant sa revelation ;
+//   - contrat anti-triche : aucun titre sur le fil avant sa revelation, et pas
+//     de source du morceau (provider) sur une piste caviardee ;
 //   - Quitter recharge l'Activite et remet le joueur dans la salle du salon.
 //
 //   campagne-ref.sh <branche> --script /chemin/discord-e2e.mjs /dossier/des/preuves
@@ -104,6 +105,17 @@ function leaks(p, code) {
     if (early) out.push(`${p.tag}, manche ${r} : le titre « ${truth.title} » est passé sur le fil avant la révélation`)
   }
   return out
+}
+
+/**
+ * Source du morceau (#74, lien Spotify du reveal) : jamais avec une piste
+ * caviardee. Le temoin prouve que le champ circule bien au reveal, sinon le
+ * controle passerait a vide.
+ */
+function providerLeaks(p) {
+  const masked = p.seen.frames.filter(f => f.p.includes('"trackId":"hidden"') && f.p.includes('"provider"'))
+  const witness = p.seen.frames.some(f => !f.p.includes('"trackId":"hidden"') && /"provider":"[a-z]+"/.test(f.p))
+  return { masked: masked.length, witness }
 }
 
 const players = []
@@ -259,6 +271,11 @@ try {
   const fuites = players.flatMap(p => leaks(p, code))
   if (fuites.length) fuites.forEach(bad)
   else ok("aucun titre sur le fil avant sa révélation, chez les trois")
+  const sources = players.map(p => ({ tag: p.tag, ...providerLeaks(p) }))
+  const masques = sources.filter(x => x.masked > 0)
+  if (masques.length) masques.forEach(x => bad(`${x.tag} : ${x.masked} trame(s) avec la source du morceau sur une piste caviardée`))
+  else if (!sources.some(x => x.witness)) bad("source du morceau jamais vue au reveal : le contrôle passerait à vide")
+  else ok("source du morceau absente des pistes caviardées, présente au reveal")
 
   // 8. Le son chez l'hote (Chromium) : l'extrait a demarre, via l'audioManager et son mapper.
   const probe = await activityFrame(host.page)?.evaluate(() => window.__probe).catch(() => null)
