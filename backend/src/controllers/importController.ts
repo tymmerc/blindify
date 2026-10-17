@@ -4,7 +4,8 @@ import { pool } from "../config/db";
 import { getSessionContext } from "../utils/session";
 import { ok, fail } from "../utils/response";
 import { logger } from "../utils/logger";
-import { parseProfileUrl, fetchPublicPlaylists, fetchPlaylistTracks, type ImportedTrack } from "../services/profileImportService";
+import { profileLinkOrFail } from "./profileLink";
+import { fetchPublicPlaylists, fetchPlaylistTracks, type ImportedTrack } from "../services/profileImportService";
 import { upsertLink, claimLegacyTracks, ownLinkId } from "./linksController";
 import axios from "axios";
 import { deezerPreviewService } from "../services/deezerPreviewService";
@@ -128,11 +129,9 @@ export const importController = {
       return;
     }
 
-    const parsed = parseProfileUrl(url.trim());
-    if (!parsed) {
-      fail(res, "unsupported_url", "URL non reconnue. Utilise un lien de profil ou playlist Spotify ou Deezer.");
-      return;
-    }
+    const link = await profileLinkOrFail(res, url);
+    if (!link) return;
+    const { parsed } = link;
 
     try {
       const playlists = await fetchPublicPlaylists(parsed);
@@ -161,7 +160,8 @@ export const importController = {
         await claimLegacyTracks(context.user.id);
         linkId = await upsertLink({
           userId: context.user.id,
-          url: url.trim(),
+          // L'adresse longue (arrivee d'un lien court) : le dedoublonnage des liens la reconnait.
+          url: link.url,
           provider: parsed.provider,
           kind: parsed.type,
           label,

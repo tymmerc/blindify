@@ -11,7 +11,8 @@ import { recognizeMusicLink, type MusicLinkRecognition } from "@/lib/musicLink"
  * l'Activite Discord). Club analogique, mobile d'abord :
  *   - un vrai libelle et un champ en 16 px (iOS zoome sous 16 px au focus) ;
  *   - le lien est reconnu pendant la saisie (lib/musicLink : memes formes que
- *     le serveur) et Importer ne s'active que pour un lien reconnu ;
+ *     le serveur, liens courts des applis compris) et Importer ne s'active que
+ *     pour un lien reconnu ;
  *   - l'import se raconte en clair, le texte reste en encre (regle du brief).
  */
 type ImportState = "idle" | "loading" | "syncing" | "done"
@@ -39,7 +40,7 @@ function recognitionText(r: MusicLinkRecognition): { text: string; tone: "ok" | 
       : { text: `Profil ${name} : toutes ses playlists publiques`, tone: "ok" }
   }
   if (r.kind === "short") {
-    return { text: "Lien court de l'appli : ouvre-le dans ton navigateur, puis copie l'adresse de la playlist qui s'affiche.", tone: "warn" }
+    return { text: `Lien court ${PROVIDER_NAME[r.provider]} : on l'ouvre pour toi à l'import`, tone: "ok" }
   }
   if (r.kind === "unknown") {
     return { text: "Ce n'est pas un lien de playlist ni de profil Spotify ou Deezer.", tone: "warn" }
@@ -60,6 +61,7 @@ export function ProfileImportBlock({ accent = "#c65133", onImportingChange, onIm
   const [playlistCount, setPlaylistCount] = useState(0)
 
   const recognition = recognizeMusicLink(url)
+  const importable = recognition.kind === "ok" || recognition.kind === "short"
   const hint = recognitionText(recognition)
   const busy = state === "loading" || state === "syncing"
 
@@ -71,7 +73,7 @@ export function ProfileImportBlock({ accent = "#c65133", onImportingChange, onIm
   const runImport = async (raw: string) => {
     const found = recognizeMusicLink(raw)
     // Le lien normalise (https, sans /intl-xx/) quand on le reconnait ; sinon tel quel, le serveur tranchera.
-    const target = found.kind === "ok" ? found.url : raw.trim()
+    const target = found.kind === "ok" || found.kind === "short" ? found.url : raw.trim()
     if (!target) return
 
     updateState("loading")
@@ -102,7 +104,7 @@ export function ProfileImportBlock({ accent = "#c65133", onImportingChange, onIm
 
   const handleImportAll = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (recognition.kind !== "ok" || busy) return
+    if (!importable || busy) return
     await runImport(url)
   }
 
@@ -182,12 +184,12 @@ export function ProfileImportBlock({ accent = "#c65133", onImportingChange, onIm
             spellCheck={false}
             enterKeyHint="go"
             aria-describedby={hint || error ? hintId : undefined}
-            aria-invalid={recognition.kind === "unknown" || recognition.kind === "short" || Boolean(error)}
+            aria-invalid={recognition.kind === "unknown" || Boolean(error)}
             className="min-w-0 flex-1 rounded-md border-2 border-[#2e2014] bg-[#f4ecdb] px-3.5 py-3 text-base text-[#2e2014] outline-none placeholder:text-[#8a7558] focus:shadow-[3px_3px_0_#2e2014] disabled:opacity-60"
           />
           <button
             type="submit"
-            disabled={busy || recognition.kind !== "ok"}
+            disabled={busy || !importable}
             className="flex items-center justify-center gap-2 rounded-md border-2 border-[#2e2014] bg-[#2e2014] px-5 py-3 text-[15px] font-bold text-[#f4ecdb] transition enabled:hover:bg-[#3d2b1b] disabled:cursor-not-allowed disabled:border-[rgba(46,32,20,.35)] disabled:bg-transparent disabled:text-[rgba(46,32,20,.5)]"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
@@ -216,11 +218,9 @@ export function ProfileImportBlock({ accent = "#c65133", onImportingChange, onIm
           <span aria-hidden className="mr-1.5 inline-block transition group-open:rotate-90">›</span>
           Où trouver ton lien ?
         </summary>
-        {/* L'appli Deezer ne partage qu'un lien court (link.deezer.com), que le
-            serveur ne suit pas : on passe par le site, ou on ouvre le lien court. */}
         <ul className="m-0 mt-2 list-none space-y-1.5 p-0 text-[13px] leading-snug text-[#2e2014]">
           <li><strong>Spotify</strong> : sur la playlist, « Partager » puis « Copier le lien ».</li>
-          <li><strong>Deezer</strong> : copie l&apos;adresse de la playlist sur deezer.com. Depuis l&apos;appli, ouvre d&apos;abord le lien partagé dans ton navigateur.</li>
+          <li><strong>Deezer</strong> : sur la playlist, « Partager » puis « Copier le lien », ou l&apos;adresse de la playlist sur deezer.com.</li>
           <li>La playlist doit être publique.</li>
         </ul>
         <div className="mt-2.5 flex flex-wrap gap-2">

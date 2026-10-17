@@ -1,6 +1,7 @@
 // Reconnaissance d'un lien de musique a la saisie, avant l'envoi : les memes
 // formes que le serveur (backend/src/services/profileImportService.ts,
-// parseProfileUrl), plus les liens courts des applis, que le serveur refuse.
+// parseProfileUrl), plus les liens courts des applis, que le serveur ouvre
+// lui-meme (backend/src/services/shortLinkResolver.ts).
 import { describe, expect, it } from "vitest"
 import { recognizeMusicLink } from "@/lib/musicLink"
 
@@ -24,11 +25,22 @@ describe("recognizeMusicLink", () => {
   })
 
   it.each([
-    "https://link.deezer.com/s/30ZnBD9L4b4a1R5V6NWDu",
-    "https://deezer.page.link/abcd1234",
-    "https://spotify.link/aBcD3fGh1Jb",
-  ])("lien court d'appli : %s", raw => {
-    expect(recognizeMusicLink(raw)).toEqual({ kind: "short" })
+    ["https://link.deezer.com/s/30ZnBD9L4b4a1R5V6NWDu", "deezer", "https://link.deezer.com/s/30ZnBD9L4b4a1R5V6NWDu"],
+    ["https://deezer.page.link/abcd1234", "deezer", "https://deezer.page.link/abcd1234"],
+    ["https://spotify.link/aBcD3fGh1Jb", "spotify", "https://spotify.link/aBcD3fGh1Jb"],
+    ["https://spotify.app.link/aBcD3fGh1Jb?_p=1", "spotify", "https://spotify.app.link/aBcD3fGh1Jb?_p=1"],
+    ["spotify.link/aBcD3fGh1Jb", "spotify", "https://spotify.link/aBcD3fGh1Jb"],
+    ["http://link.deezer.com/s/30ZnBD9L4b4a1R5V6NWDu", "deezer", "https://link.deezer.com/s/30ZnBD9L4b4a1R5V6NWDu"],
+  ])("lien court d'appli, accepte et envoye en https : %s", (raw, provider, url) => {
+    expect(recognizeMusicLink(raw)).toEqual({ kind: "short", provider, url })
+  })
+
+  it.each([
+    "https://spotify.link:8443/aBcD3fGh1Jb",
+    "https://moi@link.deezer.com/s/30ZnBD9L4b4a1R5V6NWDu",
+    "https://spotify.link.evil.com/aBcD3fGh1Jb",
+  ])("lien court suspect, que le serveur refuserait : %s", raw => {
+    expect(recognizeMusicLink(raw)).toEqual({ kind: "unknown" })
   })
 
   it.each([
