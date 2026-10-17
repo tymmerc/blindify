@@ -508,3 +508,45 @@ describe("gameStateSnapshot : rien de la piste avant le reveal", () => {
     expect(raw).not.toContain("OST secret");
   });
 });
+
+// Relais de l'hote d'un salon Discord : l'etat en memoire suit la base hors
+// manche, jamais en pleine manche.
+describe("setHostUser", () => {
+  const { bootstrapGameState, setHostUser, getGameState, clearGame } = jest.requireActual("../../src/services/realtimeGame");
+  const track = (round: number) => ({ round, trackId: `t${round}`, title: `T${round}`, artist: `A${round}`, previewUrl: null, albumCover: null, metadata: null });
+
+  it("au lobby ou au podium : l'hote change et redevient connecte", () => {
+    bootstrapGameState({ roomCode: "RELAI1", hostUserId: 1, tracks: [track(1)], participants: [{ userId: 1, username: "a" }, { userId: 2, username: "b" }] });
+    setHostUser("RELAI1", 2);
+    expect(getGameState("RELAI1")).toMatchObject({ hostUserId: 2, hostConnected: true });
+    clearGame("RELAI1");
+  });
+
+  it("salle sans partie en memoire : rien", () => {
+    expect(setHostUser("AUCUNE", 2)).toBeUndefined();
+  });
+});
+
+// Lien « Ecouter sur Spotify » du reveal (guidelines Spotify, T10) : la source
+// et l'identifiant du morceau SONT la reponse. Ils ne sortent qu'au reveal.
+describe("gameStateSnapshot : source du morceau seulement au reveal", () => {
+  const SPOTIFY_ID = "4uLU6hMCjMI75M1A2tKUQC";
+
+  it("ni la source ni l'identifiant Spotify pendant la manche", () => {
+    const tracks = makeTracks(2).map(t => ({ ...t, trackId: SPOTIFY_ID, provider: "spotify" }));
+    setupGame({ tracks });
+    startNextRound(ROOM);
+    const snap = gameStateSnapshot(ROOM);
+    expect(snap?.currentTrack?.provider).toBeUndefined();
+    expect(JSON.stringify(snap)).not.toContain(SPOTIFY_ID);
+  });
+
+  it("au reveal : la source et l'identifiant, pour le lien vers Spotify", () => {
+    const tracks = makeTracks(2).map(t => ({ ...t, trackId: SPOTIFY_ID, provider: "spotify" }));
+    setupGame({ tracks });
+    startNextRound(ROOM);
+    revealRound(ROOM);
+    const snap = gameStateSnapshot(ROOM);
+    expect(snap?.currentTrack).toMatchObject({ provider: "spotify", trackId: SPOTIFY_ID });
+  });
+});

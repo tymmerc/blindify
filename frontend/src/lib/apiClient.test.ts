@@ -321,3 +321,70 @@ describe("clientApi", () => {
     })
   })
 })
+
+// Activite Discord : la page est servie par le proxy de Discord, sous une autre
+// origine que l'API. Le cookie de session ne passe pas ; la session voyage en
+// Authorization: Bearer, que l'API et le socket acceptent deja.
+describe("clientApi : jeton de session en Bearer (Activite Discord)", () => {
+  beforeEach(async () => {
+    mockFetch.mockReset()
+    const { setApiBearerToken } = await import("@/lib/apiClient")
+    setApiBearerToken(null)
+  })
+
+  it("sans jeton pose : aucune en-tete Authorization, les cookies partent comme avant", async () => {
+    mockFetch.mockResolvedValueOnce(okResponse({ user: { id: 1 }, providerConnection: null }))
+    await clientApi.currentUser()
+    const [, init] = mockFetch.mock.calls[0]
+    expect((init.headers as Record<string, string>).Authorization).toBeUndefined()
+    expect(init.credentials).toBe("include")
+  })
+
+  it("avec un jeton pose : Authorization: Bearer sur chaque requete, jusqu'au retrait", async () => {
+    const { setApiBearerToken } = await import("@/lib/apiClient")
+    setApiBearerToken("sess-42")
+    mockFetch.mockResolvedValue(okResponse({ user: { id: 1 }, providerConnection: null }))
+
+    await clientApi.currentUser()
+    await clientApi.roomDetails("ABC123")
+    expect((mockFetch.mock.calls[0][1].headers as Record<string, string>).Authorization).toBe("Bearer sess-42")
+    expect((mockFetch.mock.calls[1][1].headers as Record<string, string>).Authorization).toBe("Bearer sess-42")
+
+    setApiBearerToken(null)
+    await clientApi.currentUser()
+    expect((mockFetch.mock.calls[2][1].headers as Record<string, string>).Authorization).toBeUndefined()
+  })
+
+  it("discordConfig : GET /api/discord/config", async () => {
+    mockFetch.mockResolvedValueOnce(okResponse({ enabled: true, clientId: "123456789012345678" }))
+    const config = await clientApi.discordConfig()
+    expect(mockFetch.mock.calls[0][0]).toContain("/api/discord/config")
+    expect(config).toEqual({ enabled: true, clientId: "123456789012345678" })
+  })
+
+  it("discordAuth : POST /api/auth/discord avec le code, rend la session et le jeton Discord", async () => {
+    const data = { discordAccessToken: "tok", sessionToken: "sess-1", user: { id: 12, username: "Tym", provider: "discord" } }
+    mockFetch.mockResolvedValueOnce(okResponse(data))
+    const result = await clientApi.discordAuth("le-code")
+    const [url, init] = mockFetch.mock.calls[0]
+    expect(url).toContain("/api/auth/discord")
+    expect(init.method).toBe("POST")
+    expect(JSON.parse(init.body)).toEqual({ code: "le-code" })
+    expect(result).toEqual(data)
+  })
+
+  it("discordRoom : POST /api/discord/room avec l'instance et le pseudo", async () => {
+    mockFetch.mockResolvedValueOnce(okResponse({ room: { room_code: "ABC123" } }))
+    const result = await clientApi.discordRoom("i-1", "Tym")
+    const [url, init] = mockFetch.mock.calls[0]
+    expect(url).toContain("/api/discord/room")
+    expect(init.method).toBe("POST")
+    expect(JSON.parse(init.body)).toEqual({ instanceId: "i-1", nickname: "Tym" })
+    expect(result.room.room_code).toBe("ABC123")
+  })
+
+  it("discordAuth : une erreur de l'API remonte avec son code (ex. Discord indisponible)", async () => {
+    mockFetch.mockResolvedValueOnce(errorResponse(502, "discord_unavailable", "Discord ne répond pas"))
+    await expect(clientApi.discordAuth("abc")).rejects.toMatchObject({ status: 502, code: "discord_unavailable" })
+  })
+})

@@ -29,6 +29,20 @@ function buildUrl(path: string): string {
   return `${API_BASE_URL}${path}`
 }
 
+// Activite Discord : la page vit a l'origine du proxy de Discord, le cookie de
+// session ne la suit pas. La session voyage alors en Authorization: Bearer,
+// que l'API et le handshake du socket acceptent deja. Nulle part ailleurs : sur
+// le site, rien ne change (aucun jeton pose).
+let bearerToken: string | null = null
+
+export function setApiBearerToken(token: string | null): void {
+  bearerToken = token
+}
+
+export function getApiBearerToken(): string | null {
+  return bearerToken
+}
+
 type ApiEnvelope<T> = {
   success: boolean
   data: T | null
@@ -89,6 +103,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     credentials: "include",
     headers: {
       Accept: "application/json",
+      ...(bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {}),
       ...init?.headers,
     },
   })
@@ -152,6 +167,26 @@ export const clientApi = {
       }
       throw err
     }
+  },
+  /** Activite Discord : l'identifiant public de l'appli, ou enabled: false. */
+  async discordConfig(): Promise<{ enabled: boolean; clientId: string | null }> {
+    return request("/api/discord/config", { cache: "no-store" })
+  },
+  /** Le code OAuth2 du SDK devient une session Blindz ; le jeton Discord repart pour authenticate(). */
+  async discordAuth(code: string): Promise<{ discordAccessToken: string; sessionToken: string; user: UserSummary }> {
+    return request("/api/auth/discord", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code }),
+    })
+  },
+  /** La salle du salon Discord (retrouvee ou creee), puis le join habituel. */
+  async discordRoom(instanceId: string, nickname?: string): Promise<{ room: MultiplayerRoom; rejoined?: boolean }> {
+    return request("/api/discord/room", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ instanceId, nickname }),
+    })
   },
   async startSoloGame(options: {
     difficulty?: "easy" | "normal" | "hard"

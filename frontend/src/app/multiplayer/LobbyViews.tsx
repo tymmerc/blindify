@@ -92,7 +92,8 @@ export function ResultsView({
   }>
   tracks: SoloTrack[]
   currentUserId?: number | null
-  onReturn: () => void
+  /** Retour au choix des modes. Absent dans l'Activite Discord : il n'y a pas de menu, on reste sur le podium jusqu'au Rejouer de l'hote. */
+  onReturn?: () => void
   onReplay: () => void
   accentColor?: string
   isHost?: boolean
@@ -505,14 +506,16 @@ export function ResultsView({
           <Share2 className="h-4 w-4" />
           {shared ? "Copié !" : "Partager"}
         </Button>
-        <Button
-          variant="outline"
-          onClick={onReturn}
-          className="gap-2 rounded-full border-[1.5px] border-[#2e2014] bg-transparent px-4 py-2 text-sm font-bold text-[#2e2014] hover:bg-[#2e2014] hover:text-[#f4ecdb]"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Retour modes
-        </Button>
+        {onReturn ? (
+          <Button
+            variant="outline"
+            onClick={onReturn}
+            className="gap-2 rounded-full border-[1.5px] border-[#2e2014] bg-transparent px-4 py-2 text-sm font-bold text-[#2e2014] hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Retour modes
+          </Button>
+        ) : null}
         <Button
           variant="outline"
           onClick={onReplay}

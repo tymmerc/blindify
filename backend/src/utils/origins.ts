@@ -7,6 +7,8 @@
 // d'autres applis, pouvait piloter le compte d'un joueur sur la prod. Desormais chaque
 // deploiement n'accepte que son propre front, lu dans FRONTEND_URL.
 
+import { DISCORD_CLIENT_ID_PATTERN, discordActivityOrigin } from "../config/discord";
+
 export const LOCAL_DEV_ORIGINS: readonly string[] = ["http://localhost:3000", "http://localhost:5173"];
 
 export type AllowedOriginsConfig = {
@@ -14,6 +16,11 @@ export type AllowedOriginsConfig = {
   frontendUrl: string;
   // ALLOWED_ORIGINS : cas exceptionnel, liste separee par des virgules.
   extra?: string;
+  // DISCORD_CLIENT_ID : l'Activite Discord est servie par le proxy de Discord
+  // sous https://<id>.discordsays.com, l'origine que le navigateur presente a
+  // l'API et au socket. Seul un identifiant Discord (chiffres) ouvre cette
+  // origine ; toute autre valeur est ecartee et signalee.
+  discordClientId?: string;
   isProd: boolean;
 };
 
@@ -47,9 +54,19 @@ export function buildAllowedOrigins(config: AllowedOriginsConfig): AllowedOrigin
   const forms = entries.map(entry => ({ entry, forms: originForms(entry) }));
   const origins = forms.flatMap(f => f.forms ?? []);
   const ignored = forms.filter(f => f.forms === null).map(f => f.entry);
+  const discord = discordOrigins(config.discordClientId);
   const local = config.isProd ? [] : LOCAL_DEV_ORIGINS;
 
-  return { origins: [...new Set([...origins, ...local])], ignored };
+  return { origins: [...new Set([...origins, ...discord.origins, ...local])], ignored: [...ignored, ...discord.ignored] };
+}
+
+function discordOrigins(clientId: string | undefined): AllowedOrigins {
+  const id = (clientId ?? "").trim();
+  if (!id) return { origins: [], ignored: [] };
+  // Jamais la valeur dans le journal : un identifiant et un secret intervertis
+  // dans le .env enverraient le secret dans les logs.
+  if (!DISCORD_CLIENT_ID_PATTERN.test(id)) return { origins: [], ignored: ["DISCORD_CLIENT_ID (format invalide)"] };
+  return { origins: [discordActivityOrigin(id)], ignored: [] };
 }
 
 // Filtre CSRF : egalite exacte, ou prefixe borne par un "/".
