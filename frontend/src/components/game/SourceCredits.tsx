@@ -1,4 +1,5 @@
 import Image from "next/image"
+import { followExternalLink } from "@/lib/externalLink"
 import { publicPath } from "@/lib/publicPath"
 
 /**
@@ -54,6 +55,7 @@ export function SpotifyTrackLink({ provider, trackId, className = "" }: SpotifyT
       href={href}
       target="_blank"
       rel="noopener noreferrer"
+      onClick={event => followExternalLink(event, href)}
       className={`inline-flex items-center gap-3 rounded-md border-[1.5px] border-[rgba(46,32,20,.35)] bg-[#f4ecdb] px-3 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[#2e2014] transition hover:border-[#2e2014] ${className}`}
     >
       <Image src={publicPath("/marques/spotify-logo-noir.svg")} alt="" width={80} height={22} className="h-[22px] w-auto" unoptimized />

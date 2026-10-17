@@ -95,6 +95,10 @@ type ModeLobbyViewProps = {
   surface?: LobbySurface
   /** Remplace le retour au choix des modes (Quitter, Retour) : dans Discord, il n'y a pas de menu. */
   onLeave?: () => void
+  /** Activite Discord : rouvrir l'ecran « Ta musique » par-dessus le lobby, sans quitter la salle. */
+  onEditMusic?: () => void
+  /** Remplace le rechargement de « Reessayer » : dans Discord, recharger l'iframe coupe la session. */
+  onRetry?: () => void
 }
 
 function friendlyError(mode: GameMode, phase: "create" | "join" | "start" | "invite"): string {
@@ -121,7 +125,7 @@ function friendlyError(mode: GameMode, phase: "create" | "join" | "start" | "inv
   return base[mode as keyof typeof base][phase]
 }
 
-export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autojoin, initialProfileUrl, initialNickname, surface = "web", onLeave }: ModeLobbyViewProps) {
+export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autojoin, initialProfileUrl, initialNickname, surface = "web", onLeave, onEditMusic, onRetry }: ModeLobbyViewProps) {
   const router = useRouter()
   const { accentColor, isGuest, setGuest } = useMode()
   const [userPayload, setUserPayload] = useState<CurrentUserPayload | null>(null)
@@ -130,6 +134,9 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   const [errorAction, setErrorAction] = useState<{ label: string; onClick: () => void } | null>(null)
   const [showMusicImport, setShowMusicImport] = useState(false)
   const [view, setView] = useState<LobbyViewState>("landing")
+  // Deja entre dans la salle : un retour a "landing" (partie perdue cote
+  // serveur, Rejouer en echec) n'a pas d'ecran d'entree dans Discord.
+  const enteredRef = useRef(false)
   const [lobby, dispatchLobby] = useReducer(lobbyReducer, initialLobbyContext)
   const [flowStarted, setFlowStarted] = useState<boolean>(Boolean(initialJoinCode || autojoin))
   const [requireSpotify, setRequireSpotify] = useState(false)
@@ -1475,10 +1482,21 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     dispatchLobby({ type: "reset" })
     // Retour au CHOIX DES MODES, pas au tout debut du wizard : le nom et la musique
     // sont deja poses, revenir a la saisie du nom etait percu comme "tout recommencer".
-    // Dans Discord, c'est la page de l'Activite qui decide (elle recharge).
+    // Dans Discord, c'est l'Activite qui decide (retour a « Ta musique », sans recharger).
+    enteredRef.current = false
     if (onLeave) onLeave()
     else router.replace("/modes")
   }, [room, userPayload, router, mode, onLeave])
+
+  useEffect(() => {
+    if (view !== "landing") {
+      enteredRef.current = true
+      return
+    }
+    // Dans Discord, l'ecran d'entree du site (code a taper, lien « Retour »)
+    // sortirait de l'Activite : on rend la main a l'Activite.
+    if (surface === "discord" && enteredRef.current) handleLeaveRoom()
+  }, [view, surface, handleLeaveRoom])
 
   useEffect(() => {
     const hasCode = Boolean(initialJoinCode)
@@ -1539,7 +1557,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
             <p className="text-sm font-semibold text-[#9c2f1d]">{error}</p>
             <button
               type="button"
-              onClick={() => window.location.reload()}
+              onClick={() => (onRetry ? onRetry() : window.location.reload())}
               className="rounded-md border-2 border-[#2e2014] bg-[#c65133] px-5 py-2.5 text-sm font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014]"
             >
               Réessayer
@@ -1585,6 +1603,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     modeConfig,
     view,
     surface,
+    onEditMusic,
     intent,
     lobbyStatus: lobby.status,
     errorCode,
