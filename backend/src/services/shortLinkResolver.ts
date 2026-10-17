@@ -1,0 +1,242 @@
+import dns from "node:dns";
+import http from "node:http";
+import https from "node:https";
+import net from "node:net";
+
+/**
+ * Liens courts du bouton Partager des applis mobiles (link.deezer.com/s/...,
+ * spotify.link/...). Ils ne menent a la playlist qu'en suivant une
+ * redirection : on la suit cote serveur, mais sous bonne garde, parce que
+ * c'est une requete sortante dont l'adresse vient d'un joueur (SSRF).
+ *
+ *   - depart : une liste fermee d'hotes (SHORT_LINK_HOSTS), en https sur le
+ *     port par defaut, sans identifiants. Rien d'autre n'est appele.
+ *   - chaque saut est revalide avec les memes regles ; on s'arrete au premier
+ *     hote d'arrivee (TARGET_HOSTS), SANS l'appeler : l'adresse rendue passe
+ *     ensuite par parseProfileUrl comme un lien colle a la main.
+ *   - au plus MAX_REDIRECTS requetes, un delai court, GET sans lire le corps.
+ *   - le nom resolu doit donner une adresse publique (safeLookup) : meme une
+ *     entree DNS piegee ne peut pas viser la machine ou le reseau prive.
+ *   - aucune adresse n'est decodee : on compare les noms d'hote tels que les
+ *     normalise l'analyseur WHATWG, et le chemin repart tel quel.
+ *
+ * Hotes verifies le 17/10/2026 (link.deezer.com : 302 vers www.deezer.com ;
+ * spotify.link : 307 vers open.spotify.com). deezer.page.link et
+ * spotify.app.link sont les anciens domaines (Firebase, Branch) des memes liens.
+ */
+export const SHORT_LINK_HOSTS: ReadonlySet<string> = new Set([
+  "link.deezer.com",
+  "deezer.page.link",
+  "spotify.link",
+  "spotify.app.link",
+]);
+
+export const TARGET_HOSTS: ReadonlySet<string> = new Set(["www.deezer.com", "deezer.com", "open.spotify.com"]);
+
+export const MAX_REDIRECTS = 5;
+/** Delai total de la resolution, tous sauts compris. */
+const DEFAULT_TIMEOUT_MS = 6_000;
+/** Resolutions en cours en meme temps, tous joueurs confondus. */
+const MAX_IN_FLIGHT = 5;
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+// Le corps n'est jamais lu, mais spotify.link (Branch) sert une page HTML au
+// lieu d'une redirection a certains robots : on se presente comme un navigateur.
+const USER_AGENT = "Mozilla/5.0";
+
+export type ShortLinkErrorCode =
+  | "not_short_link"
+  | "redirect_refused"
+  | "no_redirect"
+  | "too_many_redirects"
+  | "not_a_playlist"
+  | "unreachable"
+  | "busy";
+
+export class ShortLinkError extends Error {
+  constructor(public readonly code: ShortLinkErrorCode, message: string = code) {
+    super(message);
+    this.name = "ShortLinkError";
+  }
+}
+
+export interface HopResult {
+  status: number;
+  location: string | null;
+}
+
+/** Une requete, sans suivre la redirection. Remplacable dans les tests. */
+export type Hop = (url: URL, timeoutMs: number) => Promise<HopResult>;
+
+export interface ResolveOptions {
+  hop?: Hop;
+  /** Delai total, tous sauts compris. */
+  timeoutMs?: number;
+}
+
+/** Adresse https sur le port par defaut, sans identifiants, vers un hote de la liste. */
+function allowedUrl(url: URL, hosts: ReadonlySet<string>): boolean {
+  return url.protocol === "https:" && url.port === "" && url.username === "" && url.password === "" && hosts.has(url.hostname);
+}
+
+function parseUrl(raw: string, base?: URL): URL | null {
+  try {
+    return new URL(raw, base);
+  } catch {
+    return null;
+  }
+}
+
+export function isShortLink(raw: string): boolean {
+  const url = parseUrl(raw.trim());
+  return url !== null && allowedUrl(url, SHORT_LINK_HOSTS);
+}
+
+let inFlight = 0;
+
+/**
+ * Suit un lien court jusqu'a son adresse d'arrivee (www.deezer.com, deezer.com
+ * ou open.spotify.com) et la rend telle quelle. Leve une ShortLinkError sinon.
+ */
+export async function resolveShortLink(raw: string, options: ResolveOptions = {}): Promise<string> {
+  const start = parseUrl(raw.trim());
+  if (!start || !allowedUrl(start, SHORT_LINK_HOSTS)) throw new ShortLinkError("not_short_link");
+  if (inFlight >= MAX_IN_FLIGHT) throw new ShortLinkError("busy");
+
+  const hop = options.hop ?? httpsHop;
+  const deadline = Date.now() + (options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+  inFlight += 1;
+  try {
+    let current = start;
+    for (let i = 0; i < MAX_REDIRECTS; i += 1) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) throw new ShortLinkError("unreachable", "timeout");
+      const next = await followOnce(current, hop, remaining);
+      if (allowedUrl(next, TARGET_HOSTS)) return next.toString();
+      current = next;
+    }
+    throw new ShortLinkError("too_many_redirects");
+  } finally {
+    inFlight -= 1;
+  }
+}
+
+/** Un saut : l'adresse suivante, deja validee (hote de depart ou d'arrivee). */
+async function followOnce(current: URL, hop: Hop, timeoutMs: number): Promise<URL> {
+  let result: HopResult;
+  try {
+    result = await hop(current, timeoutMs);
+  } catch (err) {
+    throw new ShortLinkError("unreachable", err instanceof Error ? err.message : "unreachable");
+  }
+  if (!REDIRECT_STATUSES.has(result.status) || !result.location) {
+    throw new ShortLinkError("no_redirect", `status ${result.status}`);
+  }
+  const next = parseUrl(result.location, current);
+  if (!next || !(allowedUrl(next, SHORT_LINK_HOSTS) || allowedUrl(next, TARGET_HOSTS))) {
+    throw new ShortLinkError("redirect_refused");
+  }
+  return next;
+}
+
+/** Reponse a donner au joueur quand un lien court n'aboutit pas. */
+export function shortLinkFailure(code: ShortLinkErrorCode): { status: number; message: string } {
+  if (code === "busy") {
+    return { status: 503, message: "Trop de liens courts à ouvrir en même temps. Réessaie dans un instant." };
+  }
+  if (code === "not_a_playlist") {
+    return { status: 400, message: "Ce lien court ne mène pas à une playlist ni à un profil Spotify ou Deezer." };
+  }
+  return {
+    status: 400,
+    message: "Ce lien court n'a pas pu être ouvert. Ouvre-le dans ton navigateur et copie l'adresse de la playlist.",
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Adresses publiques seulement
+// ---------------------------------------------------------------------------
+
+const BLOCKED = new net.BlockList();
+for (const [prefix, bits] of [
+  ["0.0.0.0", 8], ["10.0.0.0", 8], ["100.64.0.0", 10], ["127.0.0.0", 8], ["169.254.0.0", 16],
+  ["172.16.0.0", 12], ["192.0.0.0", 24], ["192.0.2.0", 24], ["192.168.0.0", 16], ["198.18.0.0", 15],
+  ["198.51.100.0", 24], ["203.0.113.0", 24], ["224.0.0.0", 4], ["240.0.0.0", 4],
+] as const) BLOCKED.addSubnet(prefix, bits, "ipv4");
+for (const [prefix, bits] of [
+  ["::", 128], ["::1", 128], ["64:ff9b::", 96], ["100::", 64], ["2001:db8::", 32],
+  ["fc00::", 7], ["fe80::", 10], ["ff00::", 8],
+] as const) BLOCKED.addSubnet(prefix, bits, "ipv6");
+
+export function isPublicAddress(ip: string): boolean {
+  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(ip);
+  if (mapped) return isPublicAddress(mapped[1]);
+  const family = net.isIP(ip);
+  if (family === 4) return !BLOCKED.check(ip, "ipv4");
+  if (family === 6) return !BLOCKED.check(ip, "ipv6") && !ip.toLowerCase().startsWith("::ffff:");
+  return false;
+}
+
+type LookupCallback = (err: NodeJS.ErrnoException | null, address?: string | dns.LookupAddress[], family?: number) => void;
+
+/** dns.lookup qui refuse tout nom resolvant (meme en partie) vers une adresse non publique. */
+export function safeLookup(hostname: string, options: dns.LookupOptions, callback: LookupCallback): void {
+  dns.lookup(hostname, { ...options, all: true }, (err, addresses) => {
+    if (err) return callback(err);
+    if (addresses.length === 0 || addresses.some(a => !isPublicAddress(a.address))) {
+      const blocked: NodeJS.ErrnoException = new Error(`adresse non publique pour ${hostname}`);
+      blocked.code = "EBLOCKEDADDRESS";
+      return callback(blocked);
+    }
+    if (options.all) return callback(null, addresses);
+    return callback(null, addresses[0].address, addresses[0].family);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// La requete
+// ---------------------------------------------------------------------------
+
+/**
+ * Pile de test (tools/test-stack) : faux hebergeur de liens courts sur la
+ * boucle locale, comme DEEZER_API_BASE pour le faux Deezer. Ignoree si elle ne
+ * vise pas 127.0.0.1, ::1 ou localhost : elle ne peut pas servir de relais.
+ */
+export function shortLinkTestBase(): URL | null {
+  const raw = process.env.SHORT_LINK_TEST_BASE;
+  if (!raw) return null;
+  const base = parseUrl(raw);
+  if (!base || (base.protocol !== "http:" && base.protocol !== "https:")) return null;
+  return ["127.0.0.1", "[::1]", "localhost"].includes(base.hostname) ? base : null;
+}
+
+const httpsHop: Hop = (url, timeoutMs) => {
+  const testBase = shortLinkTestBase();
+  if (testBase) {
+    const target = new URL(testBase.toString());
+    target.pathname = `${testBase.pathname.replace(/\/+$/, "")}/${url.hostname}${url.pathname}`;
+    target.search = url.search;
+    return request(target, timeoutMs, {});
+  }
+  return request(url, timeoutMs, { lookup: safeLookup as unknown as net.LookupFunction });
+};
+
+function request(url: URL, timeoutMs: number, extra: { lookup?: net.LookupFunction }): Promise<HopResult> {
+  const client = url.protocol === "https:" ? https : http;
+  return new Promise((resolve, reject) => {
+    const req = client.request(
+      url,
+      { method: "GET", agent: false, headers: { "User-Agent": USER_AGENT, Accept: "text/html" }, ...extra },
+      res => {
+        const location = res.headers.location ?? null;
+        resolve({ status: res.statusCode ?? 0, location });
+        // Le corps ne nous sert a rien : on coupe sans le telecharger.
+        res.destroy();
+        req.destroy();
+      },
+    );
+    const timer = setTimeout(() => req.destroy(new Error("timeout")), timeoutMs);
+    req.on("error", reject);
+    req.on("close", () => clearTimeout(timer));
+    req.end();
+  });
+}

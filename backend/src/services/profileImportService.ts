@@ -4,6 +4,7 @@ import { Buffer } from "node:buffer";
 import { logger } from "../utils/logger";
 import { isDeezerId, isSpotifyId } from "../utils/providerIds";
 import { isIsrc } from "./previewMatch";
+import { ShortLinkError, isShortLink, resolveShortLink, type ResolveOptions } from "./shortLinkResolver";
 
 // ---------------------------------------------------------------------------
 // URL Parsing
@@ -66,6 +67,31 @@ export function parseProfileUrl(raw: string): ParsedUrl | null {
   }
 
   return null;
+}
+
+export interface ResolvedProfileLink {
+  parsed: ParsedUrl;
+  /** L'adresse longue : celle collee, ou l'arrivee du lien court. */
+  url: string;
+}
+
+/**
+ * parseProfileUrl, en ouvrant d'abord un lien court des applis
+ * (link.deezer.com, spotify.link...) : une seule resolution par appel. null
+ * pour un lien non reconnu ; ShortLinkError si le lien court n'aboutit pas a
+ * une playlist ou un profil.
+ */
+export async function parseProfileLink(raw: string, options?: ResolveOptions): Promise<ResolvedProfileLink | null> {
+  const trimmed = raw.trim();
+  if (!isShortLink(trimmed)) {
+    const parsed = parseProfileUrl(trimmed);
+    return parsed ? { parsed, url: trimmed } : null;
+  }
+  const url = await resolveShortLink(trimmed, options);
+  const parsed = parseProfileUrl(url);
+  if (!parsed) throw new ShortLinkError("not_a_playlist");
+  logger.info("short_link_resolved", { from: new URL(trimmed).hostname, provider: parsed.provider, type: parsed.type });
+  return { parsed, url };
 }
 
 // A broken escape ("%E0%A4%A") makes decodeURIComponent throw; callers run

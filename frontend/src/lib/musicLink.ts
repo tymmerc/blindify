@@ -6,19 +6,26 @@
  *   deezer.com/[xx/]profile/{id}, deezer.com/[xx/]playlist/{id}
  * L'adresse rendue (url) est celle que le serveur accepte : https ajoute s'il
  * manque, segment /intl-xx/ des liens Spotify partages depuis un ordinateur
- * retire. Les liens courts des applis (link.deezer.com, deezer.page.link,
- * spotify.link) ne s'ouvrent qu'en suivant une redirection : le serveur les
- * refuse, on explique quoi faire.
+ * retire. Les liens courts du bouton Partager des applis (link.deezer.com,
+ * deezer.page.link, spotify.link, spotify.app.link) sont acceptes : le serveur
+ * suit lui-meme leur redirection, sous bonne garde
+ * (backend/src/services/shortLinkResolver.ts). On les envoie en https, sur le
+ * port par defaut et sans identifiants, seule forme qu'il accepte.
  */
 export type MusicLinkProvider = "spotify" | "deezer"
 
 export type MusicLinkRecognition =
   | { kind: "empty" }
   | { kind: "ok"; provider: MusicLinkProvider; type: "user" | "playlist"; url: string }
-  | { kind: "short" }
+  | { kind: "short"; provider: MusicLinkProvider; url: string }
   | { kind: "unknown" }
 
-const SHORT_HOSTS = new Set(["link.deezer.com", "deezer.page.link", "spotify.link", "spotify.app.link"])
+const SHORT_HOSTS: Record<string, MusicLinkProvider> = {
+  "link.deezer.com": "deezer",
+  "deezer.page.link": "deezer",
+  "spotify.link": "spotify",
+  "spotify.app.link": "spotify",
+}
 const SPOTIFY_ID = /^[A-Za-z0-9]{22}$/
 const DEEZER_ID = /^\d{1,20}$/
 
@@ -31,9 +38,15 @@ export function recognizeMusicLink(raw: string): MusicLinkRecognition {
   } catch {
     return { kind: "unknown" }
   }
-  const host = url.hostname.replace(/^www\./, "")
-  if (SHORT_HOSTS.has(host)) return { kind: "short" }
+  const shortProvider = Object.hasOwn(SHORT_HOSTS, url.hostname) ? SHORT_HOSTS[url.hostname] : undefined
+  if (shortProvider) {
+    if (url.port || url.username || url.password) return { kind: "unknown" }
+    const clean = new URL(url.toString())
+    clean.protocol = "https:"
+    return { kind: "short", provider: shortProvider, url: clean.toString() }
+  }
 
+  const host = url.hostname.replace(/^www\./, "")
   if (host === "open.spotify.com") {
     const segments = url.pathname.split("/").filter(Boolean).filter(s => !/^intl-[a-z]{2}$/i.test(s))
     const [type, id] = segments
