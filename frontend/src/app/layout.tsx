@@ -9,6 +9,7 @@ import { BugReportDialog } from "@/components/BugReportDialog"
 import { ModeProvider } from "@/contexts/ModeContext"
 import { ThemeProvider } from "@/contexts/ThemeContext"
 import { publicPath } from "@/lib/publicPath"
+import { DISCORD_HEAD_CLEANUP } from "@/lib/discord/headCleanup"
 
 const karla = Karla({
   subsets: ["latin"],
@@ -104,7 +105,10 @@ export default function RootLayout({
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `document.documentElement.setAttribute("data-theme","dark");
+            // En tete : retire le script que le proxy de Discord insere dans le
+            // <head>, avant que React n'hydrate (lib/discord/headCleanup.ts).
+            __html: `${DISCORD_HEAD_CLEANUP}
+            document.documentElement.setAttribute("data-theme","dark");
             /* Tue tout ancien service worker PWA qui sert un cache perime et empeche les MAJ. */
             if ("serviceWorker" in navigator) {
               navigator.serviceWorker.getRegistrations().then(function(rs){

@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { audioManager, DEFAULT_AUDIO_VOLUME } from "@/lib/audioManager"
 import type { StreamerState } from "@/lib/types"
 import { shortGameNotice } from "@/lib/roundCount"
+import { DeezerCredit, SpotifyTrackLink } from "./SourceCredits"
 
 const PLAYBACK_VOLUME = DEFAULT_AUDIO_VOLUME
 
@@ -326,6 +327,8 @@ export function StreamerGameClient({
                   <p className="text-[10px] uppercase tracking-[0.4em] text-[var(--muted)]">La réponse était</p>
                   <h2 className="text-2xl font-bold">{state.currentTrack.title}</h2>
                   <p className="text-base text-[var(--muted)]">{state.currentTrack.artist}</p>
+                  {/* Lien retour Spotify (guidelines) : la reponse, donc reveal final seulement. */}
+                  <SpotifyTrackLink provider={state.currentTrack.provider} trackId={state.currentTrack.trackId} />
 
                   {state.chatSnapshot && (
                     <div className="mt-2 flex items-center gap-4 rounded-xl border border-[var(--border)] bg-[var(--surface-strong)] px-4 py-2">
@@ -501,6 +504,8 @@ export function StreamerGameClient({
               </motion.div>
             )}
           </AnimatePresence>
+          {/* Logo Deezer et usage prive : obligatoires la ou les extraits jouent. */}
+          <DeezerCredit className="mt-3" />
         </div>
       </div>
     </div>

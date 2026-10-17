@@ -17,7 +17,7 @@ const URL = "https://blindz.app/faq/"
 const TITLE = "FAQ · Blind test avec vos playlists, entre amis"
 const DESC =
   "Comment faire un blind test avec ses propres playlists Spotify ou Deezer, sans compte, sur téléphone, entre amis ou avec un seul tel. Toutes les réponses."
-const UPDATED = "2026-10-05"
+const UPDATED = "2026-10-10"
 
 export const metadata: Metadata = {
   title: TITLE,
@@ -42,6 +42,10 @@ const FAQ: Array<{ q: string; a: string }> = [
   {
     q: "Est-ce que ça marche avec Spotify ET Deezer en même temps ?",
     a: "Oui. Dans une même partie, un joueur peut importer sa musique depuis Spotify et un autre depuis Deezer : les extraits sont mélangés et tout le monde joue ensemble. Il suffit que les playlists ou le profil soient publics.",
+  },
+  {
+    q: "D'où viennent les extraits, et peut-on les diffuser en public ?",
+    a: "Les extraits de 30 secondes sont fournis par Deezer, quelle que soit la source de ta playlist : Spotify ne sert qu'à lire la liste des morceaux, et un lien « Écouter sur Spotify » s'affiche à la révélation des titres venus de Spotify. Leur écoute est réservée à un usage privé, entre amis ou en famille : pas de diffusion dans un bar, un commerce ou une entreprise, ni en direct sur Twitch ou YouTube.",
   },
   {
     q: "Mon lien de playlist n'est pas accepté, qu'est-ce qui cloche ?",

@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { useState } from "react"
+import { Loader2 } from "lucide-react"
 import { MusicLibrary } from "@/components/import/MusicLibrary"
 import { ProfileImportBlock } from "@/components/import/ProfileImportBlock"
 import { publicPath } from "@/lib/publicPath"
@@ -86,6 +87,9 @@ function FriendsLobby(props: LobbyRendererProps) {
   const link = `${origin}${publicPath("/friends/")}?join=${code}`
   const shortUrl = `${origin.replace(/^https?:\/\//, "")}${publicPath("/jouer/")}`
   const alone = participants.length < MIN_PLAYERS
+  // Activite Discord : le salon vocal est la salle. Personne n'a de code a
+  // taper, chacun lance l'Activite et arrive ici ; le bloc de partage disparait.
+  const discord = props.surface === "discord"
 
   return (
     // Ossature (30/09) : la salle en banniere pleine largeur, puis la regie a
@@ -99,14 +103,27 @@ function FriendsLobby(props: LobbyRendererProps) {
         style={{ background: "#2e2014" }}
         data-testid="lobby-salle"
       >
-        <div className="min-w-0">
-          <Label dot={ACCENT} className="mb-4">{isHost ? "Invite tes amis" : "Tu es dans la partie"}</Label>
-          <RoomCode code={code} size="xl" />
-          <p className="mb-3 mt-4 text-center text-sm text-[#e9dcc0]">
-            Envoie le lien, ou donne le code à taper sur {shortUrl}
-          </p>
-          <ShareButtons code={code} link={link} />
-        </div>
+        {discord ? (
+          <div className="min-w-0" data-testid="lobby-salon-discord">
+            <Label dot={ACCENT} className="mb-4">Salon Discord</Label>
+            <p className="m-0 font-display text-2xl font-semibold leading-tight sm:text-3xl">
+              Tout le salon vocal peut entrer.
+            </p>
+            <p className="mb-0 mt-3 text-sm text-[#e9dcc0]">
+              Chacun lance Blindz depuis le salon et arrive ici tout seul. Pas de code à partager : la salle, c&apos;est le salon.
+              {isHost ? " Tu lances quand tout le monde est là." : ""}
+            </p>
+          </div>
+        ) : (
+          <div className="min-w-0">
+            <Label dot={ACCENT} className="mb-4">{isHost ? "Invite tes amis" : "Tu es dans la partie"}</Label>
+            <RoomCode code={code} size="xl" />
+            <p className="mb-3 mt-4 text-center text-sm text-[#e9dcc0]">
+              Envoie le lien, ou donne le code à taper sur {shortUrl}
+            </p>
+            <ShareButtons code={code} link={link} />
+          </div>
+        )}
         <div className="min-w-0 border-t-2 border-dashed border-[#6b573f] pt-4 lg:border-l-2 lg:border-t-0 lg:pl-8 lg:pt-0">
           <div className="mb-3 flex items-center justify-between gap-3">
             <p className="m-0 text-[11px] font-bold uppercase tracking-[0.18em] text-[#e9dcc0]">Dans la salle</p>
@@ -121,7 +138,7 @@ function FriendsLobby(props: LobbyRendererProps) {
             accent={ACCENT}
             emptyLabel="Personne pour l'instant."
           />
-          {isHost && code ? (
+          {isHost && code && !discord ? (
             <RecentPlayers roomCode={code} accent={ACCENT} tone="dark" exclude={participants.map(p => p.user_id)} />
           ) : null}
         </div>
@@ -146,7 +163,13 @@ function FriendsLobby(props: LobbyRendererProps) {
                 canStart={props.canStart}
                 starting={props.starting}
                 importing={props.importing}
-                hint={alone ? `Il faut au moins ${MIN_PLAYERS} joueurs : envoie le lien.` : `${participants.length} joueurs dans la salle`}
+                hint={
+                  alone
+                    ? discord
+                      ? `Il faut au moins ${MIN_PLAYERS} joueurs : attends qu'un pote du salon lance l'Activité.`
+                      : `Il faut au moins ${MIN_PLAYERS} joueurs : envoie le lien.`
+                    : `${participants.length} joueurs dans la salle`
+                }
               />
             ) : (
               <WaitingForHost hostName={hostName} accent={ACCENT} />
@@ -154,7 +177,22 @@ function FriendsLobby(props: LobbyRendererProps) {
           </LaunchDock>
         </Panel>
 
-        {/* 3. TA MUSIQUE */}
+        {/* 3. TA MUSIQUE. Dans Discord, elle se choisit au lancement : ici, un
+            bouton rouvre cet ecran par-dessus le lobby, sans quitter la salle. */}
+        {discord && props.onEditMusic ? (
+          <Panel fill label="Ta musique" dot={ACCENT} testId="lobby-musique" className="min-w-0">
+            <p className="-mt-2 mb-4 text-sm">
+              Choisie en entrant. La partie pioche dans la musique de chaque joueur présent.
+            </p>
+            <button
+              type="button"
+              onClick={props.onEditMusic}
+              className="rounded-md border-2 border-[#2e2014] bg-[#f4ecdb] px-4 py-2.5 text-sm font-bold text-[#2e2014] shadow-[3px_3px_0_#2e2014] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0_#2e2014]"
+            >
+              Changer ma musique
+            </button>
+          </Panel>
+        ) : (
         <Panel fill label="Ta musique" dot={ACCENT} testId="lobby-musique" className="min-w-0">
           <p className="-mt-2 mb-3 text-sm text-[#6b573f]">
             La partie pioche dans la musique de chaque joueur présent. Coche ce que tu amènes ce soir.
@@ -167,6 +205,7 @@ function FriendsLobby(props: LobbyRendererProps) {
             <ProfileImportBlock accent={ACCENT} hideHeader onImported={() => setLibRefresh(n => n + 1)} />
           </div>
         </Panel>
+        )}
       </div>
 
       {/* 4. EN ATTENDANT : le chat et pierre-feuille-ciseaux dans la bulle */}
@@ -185,7 +224,21 @@ function FriendsLobby(props: LobbyRendererProps) {
   )
 }
 
+/** Discord : le temps d'entrer dans la salle du salon. L'ecran d'entree du site
+ *  (code a taper, lien « Retour ») sortirait de l'Activite. */
+function DiscordEntering() {
+  return (
+    <div className="grid min-h-[40vh] place-items-center px-6 text-center">
+      <p className="m-0 flex items-center gap-3 text-sm" role="status">
+        <Loader2 className="h-5 w-5 shrink-0 animate-spin" style={{ color: ACCENT }} aria-hidden />
+        On entre dans la salle du salon…
+      </p>
+    </div>
+  )
+}
+
 export function FriendsLobbyView(props: LobbyRendererProps) {
+  if (props.view === "landing" && props.surface === "discord") return <DiscordEntering />
   if (props.view === "landing") {
     return (
       <FriendsEntry

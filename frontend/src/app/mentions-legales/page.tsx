@@ -26,7 +26,7 @@ export default function MentionsLegalesPage() {
           <h1 className="font-display text-4xl font-semibold md:text-5xl">
             Mentions <em className="font-medium italic text-[#c65133]">légales</em>
           </h1>
-          <p className="text-sm text-[#8a7558]">Dernière mise à jour : 5 octobre 2026</p>
+          <p className="text-sm text-[#8a7558]">Dernière mise à jour : 10 octobre 2026</p>
         </div>
 
         <div className="space-y-6">
@@ -77,6 +77,19 @@ export default function MentionsLegalesPage() {
               Les métadonnées et extraits musicaux importés depuis des liens de profils publics Spotify ou
               Deezer restent la propriété de leurs ayants droit respectifs. Blindz ne revendique aucun
               droit sur ces contenus et se contente de les utiliser pour le déroulement du jeu.
+            </p>
+          </Section>
+
+          <Section title="Extraits musicaux" accent="#7d9471">
+            <p>
+              Les extraits audio de 30 secondes joués pendant les parties sont fournis par Deezer, y
+              compris pour les playlists importées depuis Spotify. Leur écoute est réservée à un usage
+              privé, entre amis ou en famille : ils ne doivent pas être diffusés en public (bar,
+              commerce, entreprise) ni en direct sur une plateforme de streaming.
+            </p>
+            <p className="mt-3">
+              Les titres importés depuis Spotify renvoient vers le morceau sur Spotify au moment de leur
+              révélation.
             </p>
           </Section>
 

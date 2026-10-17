@@ -24,6 +24,18 @@ class AudioManager {
   private lastStopReason: string | null = null;
   private listeners = new Set<(state: AudioState) => void>();
   private handlers: Array<[keyof HTMLMediaElementEventMap, EventListener]> = [];
+  // Activite Discord : les extraits passent par le proxy de Discord. La
+  // reecriture se fait ici, au moment de jouer ; le jeu continue de parler
+  // avec l'adresse d'origine (play, stopIfSrc).
+  private srcMapper: ((src: string) => string) | null = null;
+
+  setSrcMapper(mapper: ((src: string) => string) | null): void {
+    this.srcMapper = mapper;
+  }
+
+  private resolveSrc(src: string): string {
+    return this.srcMapper ? this.srcMapper(src) : src;
+  }
 
   getState(): AudioState {
     const active = Boolean(this.audio && !this.audio.paused && !this.audio.ended);
@@ -136,7 +148,7 @@ class AudioManager {
     this.audio.loop = options.loop ?? false;
     this.volume = clampVolume(options.volume ?? this.volume);
     this.applyVolume();
-    this.audio.src = options.src;
+    this.audio.src = this.resolveSrc(options.src);
     try { this.audio.currentTime = 0; } catch { /* ignore */ }
     this.bindLifecycle(this.owner);
 
@@ -162,7 +174,10 @@ class AudioManager {
    */
   stopIfSrc(expectedSrc: string, reason = "cleanup", owner?: AudioOwner): void {
     if (!this.audio) return;
-    if (this.audio.src !== expectedSrc && !this.audio.src.endsWith(expectedSrc)) return;
+    const current = this.audio.src;
+    // L'adresse d'origine ou sa reecriture (voir setSrcMapper) : les deux designent le meme morceau.
+    const wanted = [expectedSrc, this.resolveSrc(expectedSrc)];
+    if (!wanted.some(w => w !== "" && (current === w || current.endsWith(w)))) return;
     this.stop(reason, owner);
   }
 
