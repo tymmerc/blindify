@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState, type ReactNode } from "react"
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react"
 import { DiscordSDK } from "@discord/embedded-app-sdk"
 import { Loader2 } from "lucide-react"
 import { api } from "@/lib/api"
@@ -11,17 +11,15 @@ import { audioManager } from "@/lib/audioManager"
 import { GAME_MODES } from "@/lib/gameModes"
 import { readActivityParams, type ActivityParams } from "@/lib/discord/activityParams"
 import { BLINDZ_MAPPING_PREFIX, createPreviewSrcMapper, installUrlMappings } from "@/lib/discord/urlMappings"
-import {
-  DiscordBootError,
-  bootDiscordActivity,
-  type ActivitySdk,
-  type DiscordBootErrorCode,
-  type DiscordBootResult,
-  type DiscordBootStep,
-} from "@/lib/discord/boot"
+import type { ActivitySdk, DiscordBootErrorCode, DiscordBootStep } from "@/lib/discord/boot"
+import { createActivityStore, type ActivityState, type ActivityStore } from "@/lib/discord/activityStore"
+import { setExternalLinkOpener } from "@/lib/externalLink"
+import { describeError, discordLog } from "@/lib/discord/log"
+import { traceRpcMessages } from "@/lib/discord/rpcTrace"
 import { useInstanceParticipants } from "@/lib/discord/useInstanceParticipants"
 import { ModeLobbyView } from "@/app/multiplayer/ModeLobbyView"
 import { DiscordMenu } from "./DiscordMenu"
+import { DiscordMusicStep } from "./DiscordMusicStep"
 
 /**
  * Blindz dans un salon vocal Discord. La page est chargee par le proxy de
@@ -40,12 +38,6 @@ type Props = {
   createSdk?: (clientId: string) => ActivitySdk
   apiBaseUrl?: string
 }
-
-type Status =
-  | { kind: "boot"; step: DiscordBootStep }
-  | { kind: "ready"; result: DiscordBootResult }
-  | { kind: "deleted" }
-  | { kind: "error"; code: DiscordBootErrorCode | "unexpected"; message: string }
 
 // A distance : terracotta, comme le mode entre amis dont la salle herite.
 const ACCENT = "#c65133"
@@ -71,6 +63,30 @@ const ERROR_TITLE: Record<DiscordBootErrorCode | "unexpected", string> = {
 
 const defaultCreateSdk = (clientId: string): ActivitySdk => new DiscordSDK(clientId)
 
+// Un seul parcours pour toute la page, hors de React (lib/discord/activityStore) :
+// un composant remonte ou un arbre regenere reprend le meme, sans second SDK
+// ni rechargement. Discord ne repond pas a une seconde poignee de main.
+let pageStore: ActivityStore | null = null
+let mounts = 0
+
+/** Tests seulement : chaque test repart d'une page neuve. */
+export function resetDiscordActivityForTests(): void {
+  pageStore = null
+  mounts = 0
+  setExternalLinkOpener(null)
+}
+
+const BOOT: ActivityState = { kind: "boot", step: "config" }
+const noSubscribe = () => () => {}
+
+function referrerOrigin(): string | null {
+  try {
+    return document.referrer ? new URL(document.referrer).origin : null
+  } catch {
+    return null
+  }
+}
+
 /**
  * Le socket vise directement le proxy : l'origine de la page et le chemin de
  * la correspondance /blindz (qui retire le chemin de base de l'API), avec la
@@ -92,46 +108,56 @@ export function DiscordActivity({ search, createSdk = defaultCreateSdk, apiBaseU
   useEffect(() => {
     setParams(readActivityParams(search ?? window.location.search))
   }, [search])
-  const [status, setStatus] = useState<Status>({ kind: "boot", step: "config" })
-  // Un seul demarrage, meme si l'effet est rejoue (StrictMode, nouvelle
-  // fonction createSdk) : la promesse est gardee, chaque passage s'y abonne.
-  const bootRef = useRef<Promise<DiscordBootResult> | null>(null)
+  const [store, setStore] = useState<ActivityStore | null>(() => pageStore)
+  // « Ta musique » rouvert depuis le lobby, par-dessus : le lobby reste monte, on ne quitte pas la salle.
+  const [editingMusic, setEditingMusic] = useState(false)
+  // « Reessayer » du lobby : on le remonte, au lieu de recharger l'iframe.
+  const [lobbyKey, setLobbyKey] = useState(0)
+
+  useEffect(() => {
+    if (params === undefined) return
+    mounts += 1
+    discordLog("montage", {
+      n: mounts,
+      dansDiscord: Boolean(params),
+      chemin: window.location.pathname,
+      origine: window.location.origin,
+      referrer: referrerOrigin(),
+      iframe: window.parent !== window,
+    })
+  }, [params])
 
   useEffect(() => {
     if (!params) return
-    let active = true
-    if (!bootRef.current) {
-      const mappings = installUrlMappings(apiBaseUrl)
-      audioManager.setSrcMapper(createPreviewSrcMapper(mappings))
-      bootRef.current = bootDiscordActivity({
+    if (!pageStore) {
+      const stopTrace = traceRpcMessages(discordLog)
+      const created = createActivityStore({
         api,
         createSdk,
-        instanceId: params.instanceId,
         setBearer: setApiBearerToken,
-        onStep: step => {
-          if (active) setStatus({ kind: "boot", step })
+        installMappings: () => {
+          const mappings = installUrlMappings(apiBaseUrl)
+          audioManager.setSrcMapper(createPreviewSrcMapper(mappings))
         },
+        onSession: session => {
+          configureSocket(socketSettings(window.location.origin, session.sessionToken))
+          setExternalLinkOpener(url => {
+            session.sdk.commands.openExternalLink({ url }).catch((err: unknown) => discordLog("lien externe refuse", describeError(err)))
+          })
+        },
+        instanceId: params.instanceId,
+        log: discordLog,
       })
+      created.subscribe(() => {
+        if (created.getState().kind !== "boot") stopTrace()
+      })
+      pageStore = created
+      created.start()
     }
-    bootRef.current
-      .then(result => {
-        if (!active) return
-        configureSocket(socketSettings(window.location.origin, result.sessionToken))
-        setStatus({ kind: "ready", result })
-      })
-      .catch((err: unknown) => {
-        if (!active) return
-        if (err instanceof DiscordBootError) {
-          setStatus({ kind: "error", code: err.code, message: err.message })
-        } else {
-          console.error("discord_boot_failed", err)
-          setStatus({ kind: "error", code: "unexpected", message: "Un imprévu a coupé le démarrage. Réessaie." })
-        }
-      })
-    return () => {
-      active = false
-    }
+    setStore(pageStore)
   }, [params, createSdk, apiBaseUrl])
+
+  const state = useSyncExternalStore(store?.subscribe ?? noSubscribe, () => store?.getState() ?? BOOT, () => BOOT)
 
   if (params === undefined) {
     return (
@@ -155,24 +181,25 @@ export function DiscordActivity({ search, createSdk = defaultCreateSdk, apiBaseU
     )
   }
 
-  if (status.kind === "error") {
+  if (state.kind === "error") {
     return (
-      <Shell title={ERROR_TITLE[status.code]}>
-        <p className="m-0 text-sm font-semibold text-[#9c2f1d]">{status.message}</p>
-        {status.code !== "disabled" ? (
-          <button
-            type="button"
-            onClick={() => window.location.reload()}
-            className="mt-4 w-full rounded-md border-2 border-[#2e2014] bg-[#c65133] px-5 py-3 text-sm font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#2e2014]"
-          >
+      <Shell title={ERROR_TITLE[state.code]}>
+        <p className="m-0 text-sm font-semibold text-[#9c2f1d]">{state.message}</p>
+        {state.action === "retry" ? (
+          <button type="button" onClick={() => store?.retry()} className={PRIMARY}>
             Réessayer
+          </button>
+        ) : null}
+        {state.action === "relaunch" ? (
+          <button type="button" onClick={() => store?.close()} className={PRIMARY}>
+            Fermer l&apos;Activité
           </button>
         ) : null}
       </Shell>
     )
   }
 
-  if (status.kind === "deleted") {
+  if (state.kind === "deleted") {
     return (
       <Shell title="Compte supprimé">
         <p className="m-0 text-sm text-[#6b573f]">
@@ -183,38 +210,64 @@ export function DiscordActivity({ search, createSdk = defaultCreateSdk, apiBaseU
     )
   }
 
-  if (status.kind === "boot") {
+  if (state.kind === "boot") {
     return (
       <Shell title="Blindz dans ton salon">
         <div className="flex items-center gap-3 text-sm text-[#6b573f]">
           <Loader2 className="h-5 w-5 shrink-0 animate-spin" style={{ color: ACCENT }} aria-hidden />
-          <p className="m-0" role="status">{STEP_COPY[status.step]}</p>
+          <p className="m-0" role="status">{STEP_COPY[state.step]}</p>
         </div>
       </Shell>
     )
   }
 
-  const { result } = status
+  const topBar = (
+    <div className="mx-auto flex w-full max-w-6xl items-start justify-between gap-3 px-4 pt-4 sm:px-6">
+      <VoiceStrip sdk={state.session.sdk} />
+      <DiscordMenu onDeleted={() => store?.markDeleted()} />
+    </div>
+  )
+
+  if (state.kind === "music") {
+    return (
+      <div className="min-h-screen">
+        {topBar}
+        <DiscordMusicStep mode="launch" onContinue={() => store?.enter()} entering={state.entering} error={state.error} />
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen">
-      <div className="mx-auto flex w-full max-w-6xl items-start justify-between gap-3 px-4 pt-4 sm:px-6">
-        <VoiceStrip sdk={result.sdk} />
-        <DiscordMenu onDeleted={() => setStatus({ kind: "deleted" })} />
-      </div>
+      {topBar}
       <ModeLobbyView
+        key={lobbyKey}
         mode="friends"
         modeConfig={GAME_MODES.friends}
         intent={null}
-        initialJoinCode={result.room.room_code}
+        initialJoinCode={state.room.room_code}
         autojoin={null}
-        initialNickname={result.user.username ?? undefined}
+        initialNickname={state.session.user.username ?? undefined}
         surface="discord"
-        // Quitter ou revenir : on recharge, le salon nous remet dans sa salle.
-        onLeave={() => window.location.reload()}
+        // Quitter : retour a « Ta musique », sans recharger (Discord couperait la session).
+        onLeave={() => {
+          setEditingMusic(false)
+          store?.leave()
+        }}
+        onEditMusic={() => setEditingMusic(true)}
+        onRetry={() => setLobbyKey(k => k + 1)}
       />
+      {editingMusic ? (
+        <div role="dialog" aria-modal="true" aria-label="Ta musique" className="fixed inset-0 z-50 overflow-y-auto bg-[#f4ecdb]">
+          <DiscordMusicStep mode="edit" onContinue={() => setEditingMusic(false)} />
+        </div>
+      ) : null}
     </div>
   )
 }
+
+const PRIMARY =
+  "mt-4 w-full rounded-md border-2 border-[#2e2014] bg-[#c65133] px-5 py-3 text-sm font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#2e2014]"
 
 /** Ecran d'attente ou d'erreur, Club analogique : une carte sur le papier. */
 function Shell({ title, children }: { title: string; children: ReactNode }) {

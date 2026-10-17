@@ -28,6 +28,7 @@
   const frameId = crypto.randomUUID()
   const log = []
   let participants = []
+  let answered = false
   window.__harness = { log, me, instance, participants: () => participants }
 
   const send = payload => iframe.contentWindow.postMessage([FRAME, payload], location.origin)
@@ -54,6 +55,10 @@
     const [op, data] = Array.isArray(e.data) ? e.data : []
     if (op === HANDSHAKE) {
       log.push({ t: Date.now(), op: "HANDSHAKE", client_id: data && data.client_id, sdk: data && data.sdk_version })
+      // Comme le vrai client (vu le 14/10/2026) : une seule poignee de main par
+      // frame. Une iframe rechargee (meme frame_id) n'a plus de READY.
+      if (answered) { log.push({ t: Date.now(), op: "HANDSHAKE ignoree" }); return }
+      answered = true
       dispatch("READY", {
         v: 1,
         config: { cdn_host: "cdn.discordapp.com", api_endpoint: "//discord.com/api", environment: "harnais" },
