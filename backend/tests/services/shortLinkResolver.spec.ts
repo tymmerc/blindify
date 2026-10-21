@@ -1,4 +1,5 @@
-import { describe, it, expect, afterEach } from "@jest/globals";
+import { describe, it, expect, afterEach, jest } from "@jest/globals";
+import dns from "node:dns";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import {
@@ -239,6 +240,31 @@ describe("safeLookup", () => {
       safeLookup("localhost", { all: true }, e => resolve(e));
     });
     expect(err?.code).toBe("EBLOCKEDADDRESS");
+  });
+});
+
+describe("controle DNS sur le vrai chemin (sans SHORT_LINK_TEST_BASE)", () => {
+  const saved = process.env.SHORT_LINK_TEST_BASE;
+  afterEach(() => {
+    jest.restoreAllMocks();
+    if (saved === undefined) delete process.env.SHORT_LINK_TEST_BASE;
+    else process.env.SHORT_LINK_TEST_BASE = saved;
+  });
+
+  // Un DNS piege : link.deezer.com donne la boucle locale. La connexion doit
+  // etre refusee avant d'etre ouverte (rien ne sort, rien n'est contacte).
+  it.each([
+    [[{ address: "127.0.0.1", family: 4 }]],
+    [[{ address: "151.101.2.1", family: 4 }, { address: "10.0.0.7", family: 4 }]],
+    [[{ address: "::1", family: 6 }]],
+  ])("refuse un hote de la liste qui resout vers %j", async addresses => {
+    delete process.env.SHORT_LINK_TEST_BASE;
+    jest.spyOn(dns, "lookup").mockImplementation(((_h: string, _o: unknown, cb: (e: null, a: unknown) => void) =>
+      cb(null, addresses)) as unknown as typeof dns.lookup);
+    const err = await resolveShortLink("https://link.deezer.com/s/x", { timeoutMs: 2000 }).catch(e => e);
+    expect(err).toBeInstanceOf(ShortLinkError);
+    expect(err.code).toBe("unreachable");
+    expect(err.message).toMatch(/non publique/);
   });
 });
 
