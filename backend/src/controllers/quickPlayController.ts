@@ -75,7 +75,7 @@ export const quickPlayController = {
 
     const count = Math.min(Math.max(Number(rawCount) || 10, 5), 40);
 
-    const link = await profileLinkOrFail(res, url);
+    const link = await profileLinkOrFail(req, res, url);
     if (!link) return;
     const { parsed } = link;
 

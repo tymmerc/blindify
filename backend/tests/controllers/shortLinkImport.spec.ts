@@ -24,6 +24,7 @@ jest.mock("../../src/services/profileImportService", () => {
 import { getSessionContext } from "../../src/utils/session";
 import { upsertLink } from "../../src/controllers/linksController";
 import { fetchPublicPlaylists } from "../../src/services/profileImportService";
+import { clearShortLinkCache } from "../../src/services/shortLinkResolver";
 import { importController } from "../../src/controllers/importController";
 import { quickPlayController } from "../../src/controllers/quickPlayController";
 
@@ -36,6 +37,8 @@ const stubRoutes: Record<string, { status: number; location?: string }> = {
   "/spotify.link/ailleurs": { status: 302, location: "https://evil.com/" },
   "/link.deezer.com/s/perdu": { status: 302, location: "https://www.deezer.com/deezer-links-404" },
 };
+/** Chemins auxquels le faux hebergeur repond avec un retard. */
+const slowPaths = new Set(["/spotify.link/lent1", "/spotify.link/lent2", "/spotify.link/lent3", "/spotify.link/lent4"]);
 const stubCalls: string[] = [];
 let server: http.Server;
 const savedBase = process.env.SHORT_LINK_TEST_BASE;
@@ -44,8 +47,12 @@ beforeAll(async () => {
   server = http.createServer((req, res) => {
     stubCalls.push(req.url ?? "");
     const route = stubRoutes[req.url ?? ""];
-    res.writeHead(route?.status ?? 404, route?.location ? { Location: route.location } : {});
-    res.end();
+    const reply = () => {
+      res.writeHead(route?.status ?? 302, route?.location ? { Location: route.location } : { Location: "https://open.spotify.com/user/lent" });
+      res.end();
+    };
+    if (slowPaths.has(req.url ?? "")) setTimeout(reply, 150);
+    else reply();
   });
   await new Promise<void>(r => server.listen(0, "127.0.0.1", r));
   process.env.SHORT_LINK_TEST_BASE = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -59,6 +66,7 @@ afterAll(async () => {
 });
 
 beforeEach(() => {
+  clearShortLinkCache();
   stubCalls.length = 0;
   fetchPlaylists.mockReset();
   (upsertLink as jest.Mock).mockClear();
@@ -72,8 +80,8 @@ function fakeRes() {
   return res as unknown as Response & { statusCode: number; body: { success: boolean; error?: { code: string; message: string } } };
 }
 
-function req(body: unknown): Request {
-  return { body, headers: {}, cookies: {} } as unknown as Request;
+function req(body: unknown, ip = "198.51.100.7"): Request {
+  return { body, ip, headers: {}, cookies: {} } as unknown as Request;
 }
 
 describe("import par lien court", () => {
@@ -134,5 +142,20 @@ describe("partie rapide par lien court", () => {
     expect(stubCalls).toEqual(["/spotify.link/spotCourt"]);
     expect(fetchPlaylists).toHaveBeenCalledWith({ provider: "spotify", type: "playlist", id: "37i9dQZF1DXcBWIGoYBM5M" });
     expect(res.body.error?.code).toBe("no_playlists");
+  });
+});
+
+describe("une resolution a la fois par joueur (adresse IP)", () => {
+  it("4 liens courts colles en meme temps par la meme IP : le 4e est refuse, une autre IP passe", async () => {
+    fetchPlaylists.mockResolvedValue([]);
+    const replies = [1, 2, 3, 4].map(() => fakeRes());
+    const same = [1, 2, 3, 4].map(i => quickPlayController.start(req({ url: `https://spotify.link/lent${i}` }, "198.51.100.20"), replies[i - 1]));
+    const other = fakeRes();
+    await quickPlayController.start(req({ url: "https://spotify.link/spotCourt" }, "198.51.100.21"), other);
+    await Promise.all(same);
+
+    expect(replies.filter(r => r.body.error?.code === "short_link_failed" && r.statusCode === 429)).toHaveLength(1);
+    expect(other.body.error?.code).toBe("no_playlists");
+    expect(fetchPlaylists).toHaveBeenCalledWith({ provider: "spotify", type: "playlist", id: "37i9dQZF1DXcBWIGoYBM5M" });
   });
 });

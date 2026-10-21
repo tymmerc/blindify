@@ -129,7 +129,7 @@ export const importController = {
       return;
     }
 
-    const link = await profileLinkOrFail(res, url);
+    const link = await profileLinkOrFail(req, res, url);
     if (!link) return;
     const { parsed } = link;
 

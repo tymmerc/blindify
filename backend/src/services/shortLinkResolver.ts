@@ -38,6 +38,16 @@ export const MAX_REDIRECTS = 5;
 const DEFAULT_TIMEOUT_MS = 6_000;
 /** Resolutions en cours en meme temps, tous joueurs confondus. */
 const MAX_IN_FLIGHT = 5;
+/**
+ * Par adresse IP : une resolution a la fois, et au plus 3 en tout (en cours
+ * et en attente). Quelques IP qui collent en boucle ne prennent donc jamais
+ * plus d'une des 5 places chacune. La limite par minute est a cote
+ * (middleware/shortLinkLimiter.ts).
+ */
+const MAX_QUEUED_PER_CLIENT = 3;
+/** Cache des resolutions reussies : le meme lien recolle ne sort pas. */
+export const SHORT_LINK_CACHE_TTL_MS = 20 * 60_000;
+export const SHORT_LINK_CACHE_MAX = 500;
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 // Le corps n'est jamais lu, mais spotify.link (Branch) sert une page HTML au
 // lieu d'une redirection a certains robots : on se presente comme un navigateur.
@@ -50,7 +60,8 @@ export type ShortLinkErrorCode =
   | "too_many_redirects"
   | "not_a_playlist"
   | "unreachable"
-  | "busy";
+  | "busy"
+  | "rate_limited";
 
 export class ShortLinkError extends Error {
   constructor(public readonly code: ShortLinkErrorCode, message: string = code) {
@@ -69,8 +80,10 @@ export type Hop = (url: URL, timeoutMs: number) => Promise<HopResult>;
 
 export interface ResolveOptions {
   hop?: Hop;
-  /** Delai total, tous sauts compris. */
+  /** Delai total, tous sauts compris (compte une fois le tour venu). */
   timeoutMs?: number;
+  /** Cle du joueur (ipRateLimitKey) : une resolution a la fois par cle. */
+  clientKey?: string;
 }
 
 /** Adresse https sur le port par defaut, sans identifiants, vers un hote de la liste. */
@@ -92,6 +105,61 @@ export function isShortLink(raw: string): boolean {
 }
 
 let inFlight = 0;
+const cache = new Map<string, { target: string; expiresAt: number }>();
+const clientQueued = new Map<string, number>();
+const clientTail = new Map<string, Promise<void>>();
+
+/** Vide le cache (tests). */
+export function clearShortLinkCache(): void {
+  cache.clear();
+}
+
+function cached(key: string): string | null {
+  const entry = cache.get(key);
+  if (!entry) return null;
+  if (entry.expiresAt <= Date.now()) {
+    cache.delete(key);
+    return null;
+  }
+  return entry.target;
+}
+
+function remember(key: string, target: string): void {
+  cache.delete(key);
+  cache.set(key, { target, expiresAt: Date.now() + SHORT_LINK_CACHE_TTL_MS });
+  // Map garde l'ordre d'insertion : la premiere cle est la plus ancienne.
+  while (cache.size > SHORT_LINK_CACHE_MAX) {
+    const oldest = cache.keys().next().value;
+    if (oldest === undefined) break;
+    cache.delete(oldest);
+  }
+}
+
+/** Attend le tour de cette cle (une resolution a la fois), puis lance fn. */
+async function inClientTurn<T>(key: string | undefined, fn: () => Promise<T>): Promise<T> {
+  if (key === undefined) return fn();
+  const queued = clientQueued.get(key) ?? 0;
+  if (queued >= MAX_QUEUED_PER_CLIENT) throw new ShortLinkError("rate_limited");
+  clientQueued.set(key, queued + 1);
+  const previous = clientTail.get(key) ?? Promise.resolve();
+  let release: () => void = () => {};
+  const mine = new Promise<void>(resolve => { release = resolve; });
+  const tail = previous.then(() => mine);
+  clientTail.set(key, tail);
+  try {
+    await previous;
+    return await fn();
+  } finally {
+    release();
+    const left = (clientQueued.get(key) ?? 1) - 1;
+    if (left > 0) {
+      clientQueued.set(key, left);
+    } else {
+      clientQueued.delete(key);
+      if (clientTail.get(key) === tail) clientTail.delete(key);
+    }
+  }
+}
 
 /**
  * Suit un lien court jusqu'a son adresse d'arrivee (www.deezer.com, deezer.com
@@ -100,24 +168,36 @@ let inFlight = 0;
 export async function resolveShortLink(raw: string, options: ResolveOptions = {}): Promise<string> {
   const start = parseUrl(raw.trim());
   if (!start || !allowedUrl(start, SHORT_LINK_HOSTS)) throw new ShortLinkError("not_short_link");
-  if (inFlight >= MAX_IN_FLIGHT) throw new ShortLinkError("busy");
+  const key = start.toString();
+  const hit = cached(key);
+  if (hit) return hit;
 
-  const hop = options.hop ?? httpsHop;
-  const deadline = Date.now() + (options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
-  inFlight += 1;
-  try {
-    let current = start;
-    for (let i = 0; i < MAX_REDIRECTS; i += 1) {
-      const remaining = deadline - Date.now();
-      if (remaining <= 0) throw new ShortLinkError("unreachable", "timeout");
-      const next = await followOnce(current, hop, remaining);
-      if (allowedUrl(next, TARGET_HOSTS)) return next.toString();
-      current = next;
+  return inClientTurn(options.clientKey, async () => {
+    // Un lien identique a pu aboutir pendant l'attente.
+    const late = cached(key);
+    if (late) return late;
+    if (inFlight >= MAX_IN_FLIGHT) throw new ShortLinkError("busy");
+    inFlight += 1;
+    try {
+      const target = await follow(start, options.hop ?? httpsHop, Date.now() + (options.timeoutMs ?? DEFAULT_TIMEOUT_MS));
+      remember(key, target);
+      return target;
+    } finally {
+      inFlight -= 1;
     }
-    throw new ShortLinkError("too_many_redirects");
-  } finally {
-    inFlight -= 1;
+  });
+}
+
+async function follow(start: URL, hop: Hop, deadline: number): Promise<string> {
+  let current = start;
+  for (let i = 0; i < MAX_REDIRECTS; i += 1) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) throw new ShortLinkError("unreachable", "timeout");
+    const next = await followOnce(current, hop, remaining);
+    if (allowedUrl(next, TARGET_HOSTS)) return next.toString();
+    current = next;
   }
+  throw new ShortLinkError("too_many_redirects");
 }
 
 /** Un saut : l'adresse suivante, deja validee (hote de depart ou d'arrivee). */
@@ -142,6 +222,9 @@ async function followOnce(current: URL, hop: Hop, timeoutMs: number): Promise<UR
 export function shortLinkFailure(code: ShortLinkErrorCode): { status: number; message: string } {
   if (code === "busy") {
     return { status: 503, message: "Trop de liens courts à ouvrir en même temps. Réessaie dans un instant." };
+  }
+  if (code === "rate_limited") {
+    return { status: 429, message: "Beaucoup de liens courts d'un coup. Attends une minute, ou colle l'adresse complète." };
   }
   if (code === "not_a_playlist") {
     return { status: 400, message: "Ce lien court ne mène pas à une playlist ni à un profil Spotify ou Deezer." };

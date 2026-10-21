@@ -1,11 +1,14 @@
-import { describe, it, expect, afterEach, jest } from "@jest/globals";
+import { describe, it, expect, afterEach, beforeEach, jest } from "@jest/globals";
 import dns from "node:dns";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import {
   MAX_REDIRECTS,
   SHORT_LINK_HOSTS,
+  SHORT_LINK_CACHE_MAX,
+  SHORT_LINK_CACHE_TTL_MS,
   ShortLinkError,
+  clearShortLinkCache,
   isPublicAddress,
   isShortLink,
   outboundUrl,
@@ -14,6 +17,8 @@ import {
   shortLinkTestBase,
   type Hop,
 } from "../../src/services/shortLinkResolver";
+
+beforeEach(() => clearShortLinkCache());
 
 // Redirections simulees : aucun test de ce fichier ne sort de la machine. Le
 // seul serveur ouvert ecoute sur 127.0.0.1 (faux hebergeur de liens courts).
@@ -194,6 +199,100 @@ describe("resolveShortLink", () => {
     // Les places se liberent : une nouvelle resolution passe.
     const instant: Hop = async () => ({ status: 302, location: "https://open.spotify.com/user/abc" });
     await expect(resolveShortLink("https://spotify.link/x", { hop: instant })).resolves.toBe("https://open.spotify.com/user/abc");
+  });
+});
+
+describe("cache des resolutions reussies", () => {
+  const ok302 = (location: string): Hop => async () => ({ status: 302, location });
+
+  it("le meme lien recolle ne repart pas sur le reseau", async () => {
+    const { hop, calls } = fakeHop({ "https://spotify.link/x": { status: 307, location: "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M" } });
+    await resolveShortLink("https://spotify.link/x", { hop });
+    await expect(resolveShortLink(" https://spotify.link/x ", { hop })).resolves.toBe("https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M");
+    expect(calls).toHaveLength(1);
+  });
+
+  it("un echec n'est pas garde", async () => {
+    const { hop, calls } = fakeHop({ "https://spotify.link/x": { status: 404 } });
+    await resolveShortLink("https://spotify.link/x", { hop }).catch(() => null);
+    await resolveShortLink("https://spotify.link/x", { hop }).catch(() => null);
+    expect(calls).toHaveLength(2);
+  });
+
+  it("expire apres sa duree de vie", async () => {
+    const now = jest.spyOn(Date, "now");
+    now.mockReturnValue(1_000_000);
+    const { hop, calls } = fakeHop({ "https://spotify.link/x": { status: 307, location: "https://open.spotify.com/user/a" } });
+    await resolveShortLink("https://spotify.link/x", { hop });
+    now.mockReturnValue(1_000_000 + SHORT_LINK_CACHE_TTL_MS + 1);
+    await resolveShortLink("https://spotify.link/x", { hop });
+    expect(calls).toHaveLength(2);
+    now.mockRestore();
+  });
+
+  it(`taille bornee a ${SHORT_LINK_CACHE_MAX} entrees : la plus ancienne part`, async () => {
+    for (let i = 0; i <= SHORT_LINK_CACHE_MAX; i += 1) {
+      await resolveShortLink(`https://spotify.link/${i}`, { hop: ok302(`https://open.spotify.com/user/u${i}`) });
+    }
+    const { hop, calls } = fakeHop({
+      "https://spotify.link/0": { status: 307, location: "https://open.spotify.com/user/u0" },
+      [`https://spotify.link/${SHORT_LINK_CACHE_MAX}`]: { status: 307, location: "x" },
+    });
+    await resolveShortLink("https://spotify.link/0", { hop });
+    await resolveShortLink(`https://spotify.link/${SHORT_LINK_CACHE_MAX}`, { hop });
+    expect(calls).toEqual(["https://spotify.link/0"]);
+  });
+});
+
+describe("une resolution a la fois par adresse IP", () => {
+  /** Un faux reseau qui ne repond que quand on le libere. */
+  function heldHop() {
+    const waiting: Array<() => void> = [];
+    let active = 0;
+    let maxActive = 0;
+    const hop: Hop = () => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      return new Promise(resolve => waiting.push(() => { active -= 1; resolve({ status: 302, location: "https://open.spotify.com/user/a" }); }));
+    };
+    const releaseAll = async () => {
+      while (waiting.length) { waiting.shift()?.(); await new Promise(r => setImmediate(r)); }
+    };
+    return { hop, waiting, releaseAll, maxActive: () => maxActive };
+  }
+
+  it("les liens d'une meme IP passent l'un apres l'autre", async () => {
+    const net = heldHop();
+    const runs = [1, 2, 3].map(i => resolveShortLink(`https://spotify.link/${i}`, { hop: net.hop, clientKey: "1.2.3.4" }));
+    await new Promise(r => setImmediate(r));
+    expect(net.waiting).toHaveLength(1);
+    await net.releaseAll();
+    await expect(Promise.all(runs)).resolves.toHaveLength(3);
+    expect(net.maxActive()).toBe(1);
+  });
+
+  it("au-dela de 3 en attente pour une IP : rate_limited", async () => {
+    const net = heldHop();
+    const runs = [1, 2, 3].map(i => resolveShortLink(`https://spotify.link/${i}`, { hop: net.hop, clientKey: "1.2.3.4" }));
+    expect(await codeOf(resolveShortLink("https://spotify.link/4", { hop: net.hop, clientKey: "1.2.3.4" }))).toBe("rate_limited");
+    await net.releaseAll();
+    await Promise.all(runs);
+  });
+
+  it("3 IP qui collent en boucle n'empechent pas une 4e de resoudre", async () => {
+    const net = heldHop();
+    const flood = ["10.0.0.1", "10.0.0.2", "10.0.0.3"].flatMap(ip =>
+      Array.from({ length: 6 }, (_, i) => resolveShortLink(`https://spotify.link/${ip}-${i}`, { hop: net.hop, clientKey: ip }).catch(e => e)));
+    await new Promise(r => setImmediate(r));
+    expect(net.waiting).toHaveLength(3);
+    const instant: Hop = async () => ({ status: 302, location: "https://open.spotify.com/user/d" });
+    await expect(resolveShortLink("https://spotify.link/d", { hop: instant, clientKey: "10.0.0.4" })).resolves.toBe("https://open.spotify.com/user/d");
+    await net.releaseAll();
+    const outcomes = await Promise.all(flood);
+    // Par IP : 3 places (1 en cours, 2 en attente), les 3 autres envois refuses.
+    expect(outcomes.filter(o => o instanceof ShortLinkError && o.code === "rate_limited")).toHaveLength(9);
+    expect(outcomes.filter(o => o === "https://open.spotify.com/user/a")).toHaveLength(9);
+    expect(net.maxActive()).toBe(3);
   });
 });
 
