@@ -91,6 +91,11 @@ function allowedUrl(url: URL, hosts: ReadonlySet<string>): boolean {
   return url.protocol === "https:" && url.port === "" && url.username === "" && url.password === "" && hosts.has(url.hostname);
 }
 
+/** Un lien court qu'on accepte d'appeler : hote de depart ET chemin a la forme attendue. */
+function allowedShortLink(url: URL): boolean {
+  return allowedUrl(url, SHORT_LINK_HOSTS) && outboundUrl(url) !== null;
+}
+
 function parseUrl(raw: string, base?: URL): URL | null {
   try {
     return new URL(raw, base);
@@ -115,7 +120,7 @@ export function normalizeShortLink(raw: string): string | null {
     if (url.port !== "") return null;
     url.protocol = "https:";
   }
-  return allowedUrl(url, SHORT_LINK_HOSTS) ? url.toString() : null;
+  return allowedShortLink(url) ? url.toString() : null;
 }
 
 export function isShortLink(raw: string): boolean {
@@ -231,7 +236,7 @@ async function followOnce(current: URL, hop: Hop, timeoutMs: number): Promise<UR
     throw new ShortLinkError("no_redirect", `status ${result.status}`);
   }
   const next = parseUrl(result.location, current);
-  if (!next || !(allowedUrl(next, SHORT_LINK_HOSTS) || allowedUrl(next, TARGET_HOSTS))) {
+  if (!next || !(allowedShortLink(next) || allowedUrl(next, TARGET_HOSTS))) {
     throw new ShortLinkError("redirect_refused");
   }
   return next;
@@ -319,27 +324,47 @@ export function shortLinkTestBase(): URL | null {
   return ["127.0.0.1", "[::1]", "localhost"].includes(base.hostname) ? base : null;
 }
 
+/** Le jeton d'un lien court : lettres, chiffres, « _ » et « - ». */
+const TOKEN = "[A-Za-z0-9_-]{1,64}";
+const DEEZER_SHORT_PATH = new RegExp(`^/s/(${TOKEN})$`);
+const SPOTIFY_SHORT_PATH = new RegExp(`^/(${TOKEN})$`);
+
 /**
- * L'adresse reellement appelee, rebatie sur une origine CONSTANTE : chaque
- * hote de depart a sa branche, avec l'origine ecrite en dur (« https://hote/ »).
- * Le chemin et la requete viennent du lien, l'hote jamais. Ainsi l'analyse
- * statique (CodeQL, js/request-forgery) voit un prefixe fixe, et une erreur
- * future dans les controles plus haut ne pourrait pas changer d'hote.
- * A garder alignee sur SHORT_LINK_HOSTS (le test « outboundUrl » le verifie).
+ * L'adresse reellement appelee, rebatie piece par piece : origine ecrite en dur
+ * pour chaque hote de depart, jeton du chemin extrait d'une forme fixe
+ * (/s/<jeton> chez Deezer, /<jeton> chez Spotify) et encode, requete recollee
+ * apres un « ? » constant. Rien d'autre du lien ne passe. C'est ce qui fait
+ * taire CodeQL (js/request-forgery) : pour lui, un chemin libre est aussi
+ * dangereux qu'un hote libre ; seuls un encodage des « / » et une donnee
+ * placee apres « ? » coupent la trace. null : hote ou chemin hors forme.
+ * Sert aussi a valider le depart et chaque saut (allowedShortLink).
  */
 export function outboundUrl(url: URL): string | null {
-  // pathname commence toujours par « / » pour une adresse https.
-  const rest = `${url.pathname.slice(1)}${url.search}`;
+  const query = url.search.slice(1);
+  let base: string;
   switch (url.hostname) {
-    case "link.deezer.com":
-      return `https://link.deezer.com/${rest}`;
-    case "spotify.link":
-      return `https://spotify.link/${rest}`;
-    case "spotify.app.link":
-      return `https://spotify.app.link/${rest}`;
+    case "link.deezer.com": {
+      const m = DEEZER_SHORT_PATH.exec(url.pathname);
+      if (!m) return null;
+      base = `https://link.deezer.com/s/${encodeURIComponent(m[1])}`;
+      break;
+    }
+    case "spotify.link": {
+      const m = SPOTIFY_SHORT_PATH.exec(url.pathname);
+      if (!m) return null;
+      base = `https://spotify.link/${encodeURIComponent(m[1])}`;
+      break;
+    }
+    case "spotify.app.link": {
+      const m = SPOTIFY_SHORT_PATH.exec(url.pathname);
+      if (!m) return null;
+      base = `https://spotify.app.link/${encodeURIComponent(m[1])}`;
+      break;
+    }
     default:
       return null;
   }
+  return query ? `${base}?${query}` : base;
 }
 
 const httpsHop: Hop = (url, timeoutMs) => {

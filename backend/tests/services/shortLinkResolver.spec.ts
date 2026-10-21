@@ -75,6 +75,8 @@ describe("isShortLink", () => {
     ["http sur un port exotique", "http://spotify.link:8080/aBcD3fGh1Jb"],
     ["sans schema, port exotique", "spotify.link:8443/aBcD3fGh1Jb"],
     ["sans schema, identifiants", "moi@spotify.link/aBcD3fGh1Jb"],
+    ["chemin hors forme", "https://link.deezer.com/autre/30ZnBD9L4b4a1R5V6NWDu"],
+    ["jeton encode", "https://spotify.link/a%2F..%2Fb"],
     ["schema ftp", "ftp://spotify.link/aBcD3fGh1Jb"],
     ["schema javascript", "javascript://spotify.link/%0aalert(1)"],
     ["schema file", "file:///etc/passwd"],
@@ -177,13 +179,10 @@ describe("resolveShortLink", () => {
     await expect(resolveShortLink("https://spotify.link/x", { hop })).resolves.toBe(encoded);
   });
 
-  it("une adresse encodee relative ne quitte pas l'hote courant", async () => {
-    const { hop, calls } = fakeHop({
-      "https://spotify.link/x": { status: 302, location: "https%3A%2F%2Fevil.com%2F" },
-      "https://spotify.link/https%3A%2F%2Fevil.com%2F": { status: 404 },
-    });
-    expect(await codeOf(resolveShortLink("https://spotify.link/x", { hop }))).toBe("no_redirect");
-    expect(calls.every(c => c.startsWith("https://spotify.link/"))).toBe(true);
+  it("une adresse encodee relative ne quitte pas l'hote, et sort de la forme : refusee", async () => {
+    const { hop, calls } = fakeHop({ "https://spotify.link/x": { status: 302, location: "https%3A%2F%2Fevil.com%2F" } });
+    expect(await codeOf(resolveShortLink("https://spotify.link/x", { hop }))).toBe("redirect_refused");
+    expect(calls).toEqual(["https://spotify.link/x"]);
   });
 
   it(`au plus ${MAX_REDIRECTS} redirections`, async () => {
@@ -320,7 +319,7 @@ describe("une resolution a la fois par adresse IP", () => {
   it("3 IP qui collent en boucle n'empechent pas une 4e de resoudre", async () => {
     const net = heldHop();
     const flood = ["10.0.0.1", "10.0.0.2", "10.0.0.3"].flatMap(ip =>
-      Array.from({ length: 6 }, (_, i) => resolveShortLink(`https://spotify.link/${ip}-${i}`, { hop: net.hop, clientKey: ip }).catch(e => e)));
+      Array.from({ length: 6 }, (_, i) => resolveShortLink(`https://spotify.link/${ip.replace(/\./g, "_")}-${i}`, { hop: net.hop, clientKey: ip }).catch(e => e)));
     await new Promise(r => setImmediate(r));
     expect(net.waiting).toHaveLength(3);
     const instant: Hop = async () => ({ status: 302, location: "https://open.spotify.com/user/d" });
@@ -339,8 +338,6 @@ describe("outboundUrl : l'adresse appelee repart d'une origine constante", () =>
     ["https://link.deezer.com/s/abc?x=1", "https://link.deezer.com/s/abc?x=1"],
     ["https://spotify.link/aBcD3fGh1Jb", "https://spotify.link/aBcD3fGh1Jb"],
     ["https://spotify.app.link/aBcD3fGh1Jb?_p=1", "https://spotify.app.link/aBcD3fGh1Jb?_p=1"],
-    // Un chemin qui commence par // ne change pas d'hote.
-    ["https://spotify.link//evil.com/x", "https://spotify.link//evil.com/x"],
   ])("%s", (raw, expected) => {
     const out = outboundUrl(new URL(raw));
     expect(out).toBe(expected);
@@ -348,10 +345,19 @@ describe("outboundUrl : l'adresse appelee repart d'une origine constante", () =>
   });
 
   it("chaque hote de depart a son origine constante", () => {
-    for (const host of SHORT_LINK_HOSTS) expect(outboundUrl(new URL(`https://${host}/x`))).toBe(`https://${host}/x`);
+    for (const host of SHORT_LINK_HOSTS) {
+      const path = host === "link.deezer.com" ? "/s/x" : "/x";
+      expect(outboundUrl(new URL(`https://${host}${path}`))).toBe(`https://${host}${path}`);
+    }
   });
 
-  it.each(["https://open.spotify.com/playlist/1", "https://evil.com/x", "https://127.0.0.1/x"])("hors table : %s", raw => {
+  it.each([
+    "https://open.spotify.com/playlist/1", "https://evil.com/x", "https://127.0.0.1/x",
+    // Hors de la forme du chemin de chaque hote (/s/<jeton> chez Deezer, /<jeton> chez Spotify).
+    "https://spotify.link//evil.com/x", "https://spotify.link/a/b", "https://spotify.link/a%2Fb",
+    "https://spotify.link/a.b", "https://link.deezer.com/autre/x", "https://link.deezer.com/s/", "https://link.deezer.com/s/a/b",
+    `https://spotify.link/${"a".repeat(65)}`,
+  ])("hors table : %s", raw => {
     expect(outboundUrl(new URL(raw))).toBeNull();
   });
 });
