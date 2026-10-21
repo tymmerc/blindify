@@ -17,6 +17,7 @@ import {
   shortLinkTestBase,
   type Hop,
 } from "../../src/services/shortLinkResolver";
+import { parseProfileLink } from "../../src/services/profileImportService";
 
 beforeEach(() => clearShortLinkCache());
 
@@ -199,6 +200,22 @@ describe("resolveShortLink", () => {
     // Les places se liberent : une nouvelle resolution passe.
     const instant: Hop = async () => ({ status: 302, location: "https://open.spotify.com/user/abc" });
     await expect(resolveShortLink("https://spotify.link/x", { hop: instant })).resolves.toBe("https://open.spotify.com/user/abc");
+  });
+});
+
+describe("parseProfileLink : l'adresse gardee", () => {
+  it.each([
+    ["https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M?si=abc123&utm_source=copy-link&_branch_match_id=9", "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M"],
+    ["https://www.deezer.com/fr/playlist/42?host=0&deferredFl=1&utm_campaign=x#frag", "https://www.deezer.com/fr/playlist/42"],
+  ])("arrivee d'un lien court sans parametres de partage : %s", async (arrival, kept) => {
+    const hop: Hop = async () => ({ status: 302, location: arrival });
+    const link = await parseProfileLink("https://spotify.link/partage", { hop });
+    expect(link?.url).toBe(kept);
+  });
+
+  it("un lien long colle reste tel quel (comme avant)", async () => {
+    const pasted = "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M?si=abc";
+    await expect(parseProfileLink(pasted)).resolves.toMatchObject({ url: pasted });
   });
 });
 

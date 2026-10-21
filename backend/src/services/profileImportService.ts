@@ -87,11 +87,16 @@ export async function parseProfileLink(raw: string, options?: ResolveOptions): P
     const parsed = parseProfileUrl(trimmed);
     return parsed ? { parsed, url: trimmed } : null;
   }
-  const url = await resolveShortLink(trimmed, options);
-  const parsed = parseProfileUrl(url);
+  const arrival = await resolveShortLink(trimmed, options);
+  const parsed = parseProfileUrl(arrival);
   if (!parsed) throw new ShortLinkError("not_a_playlist");
   logger.info("short_link_resolved", { from: new URL(trimmed).hostname, provider: parsed.provider, type: parsed.type });
-  return { parsed, url };
+  // La requete de l'arrivee ne porte que des parametres de partage (si= rattache
+  // a celui qui partage, utm_*, _branch_match_id, host=...) : on ne les garde pas.
+  const kept = new URL(arrival);
+  kept.search = "";
+  kept.hash = "";
+  return { parsed, url: kept.toString() };
 }
 
 // A broken escape ("%E0%A4%A") makes decodeURIComponent throw; callers run

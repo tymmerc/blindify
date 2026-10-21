@@ -54,8 +54,8 @@ const ana = await guest("AnaCourt")
     : bad(`import Deezer par lien court : ${r.status} ${JSON.stringify(r.error ?? r.data)}`)
   calls.length === 1 ? ok("une seule requete au faux hebergeur") : bad(`${calls.length} requetes au faux hebergeur : ${calls.join(" | ")}`)
   const stored = psql(`SELECT url FROM imported_links WHERE id = ${Number(r.data?.linkId) || 0}`)
-  stored === `https://www.deezer.com/fr/playlist/${n}?host=0&utm_source=deezer`
-    ? ok("la carte garde l'adresse longue, pas le lien court")
+  stored === `https://www.deezer.com/fr/playlist/${n}`
+    ? ok("la carte garde l'adresse longue, sans les parametres de partage")
     : bad(`adresse gardee sur la carte : « ${stored} »`)
   if (r.data?.playlists?.length) {
     const s = await api("/api/import/sync-all", { method: "POST", token: ana.token, body: { provider: "deezer", playlistIds: [String(n)], maxTracksPerPlaylist: 10, linkId: r.data.linkId } })

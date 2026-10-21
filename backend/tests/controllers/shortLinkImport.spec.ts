@@ -85,7 +85,7 @@ function req(body: unknown, ip = "198.51.100.7"): Request {
 }
 
 describe("import par lien court", () => {
-  it("Deezer : resout une fois, importe la playlist et garde l'adresse longue", async () => {
+  it("Deezer : resout une fois, importe la playlist et garde l'adresse longue, sans parametres de partage", async () => {
     fetchPlaylists.mockResolvedValue([{ id: "42", name: "Soiree", trackCount: 12, cover: null }]);
     const res = fakeRes();
     await importController.playlists(req({ url: "https://link.deezer.com/s/deezerCourt" }), res);
@@ -93,7 +93,7 @@ describe("import par lien court", () => {
     expect(res.statusCode).toBe(200);
     expect(stubCalls).toEqual(["/link.deezer.com/s/deezerCourt"]);
     expect(fetchPlaylists).toHaveBeenCalledWith({ provider: "deezer", type: "playlist", id: "42" });
-    expect(upsertLink).toHaveBeenCalledWith(expect.objectContaining({ url: "https://www.deezer.com/fr/playlist/42?utm_source=share", provider: "deezer", kind: "playlist" }));
+    expect(upsertLink).toHaveBeenCalledWith(expect.objectContaining({ url: "https://www.deezer.com/fr/playlist/42", provider: "deezer", kind: "playlist" }));
   });
 
   it("redirection hors liste : refus net, rien d'importe", async () => {
