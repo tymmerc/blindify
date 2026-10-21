@@ -3,9 +3,11 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import {
   MAX_REDIRECTS,
+  SHORT_LINK_HOSTS,
   ShortLinkError,
   isPublicAddress,
   isShortLink,
+  outboundUrl,
   resolveShortLink,
   safeLookup,
   shortLinkTestBase,
@@ -191,6 +193,28 @@ describe("resolveShortLink", () => {
     // Les places se liberent : une nouvelle resolution passe.
     const instant: Hop = async () => ({ status: 302, location: "https://open.spotify.com/user/abc" });
     await expect(resolveShortLink("https://spotify.link/x", { hop: instant })).resolves.toBe("https://open.spotify.com/user/abc");
+  });
+});
+
+describe("outboundUrl : l'adresse appelee repart d'une origine constante", () => {
+  it.each([
+    ["https://link.deezer.com/s/abc?x=1", "https://link.deezer.com/s/abc?x=1"],
+    ["https://spotify.link/aBcD3fGh1Jb", "https://spotify.link/aBcD3fGh1Jb"],
+    ["https://spotify.app.link/aBcD3fGh1Jb?_p=1", "https://spotify.app.link/aBcD3fGh1Jb?_p=1"],
+    // Un chemin qui commence par // ne change pas d'hote.
+    ["https://spotify.link//evil.com/x", "https://spotify.link//evil.com/x"],
+  ])("%s", (raw, expected) => {
+    const out = outboundUrl(new URL(raw));
+    expect(out).toBe(expected);
+    expect(new URL(out ?? "http://x").hostname).toBe(new URL(raw).hostname);
+  });
+
+  it("chaque hote de depart a son origine constante", () => {
+    for (const host of SHORT_LINK_HOSTS) expect(outboundUrl(new URL(`https://${host}/x`))).toBe(`https://${host}/x`);
+  });
+
+  it.each(["https://open.spotify.com/playlist/1", "https://evil.com/x", "https://127.0.0.1/x"])("hors table : %s", raw => {
+    expect(outboundUrl(new URL(raw))).toBeNull();
   });
 });
 

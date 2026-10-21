@@ -209,15 +209,41 @@ export function shortLinkTestBase(): URL | null {
   return ["127.0.0.1", "[::1]", "localhost"].includes(base.hostname) ? base : null;
 }
 
+/**
+ * L'adresse reellement appelee, rebatie sur une origine CONSTANTE : chaque
+ * hote de depart a sa branche, avec l'origine ecrite en dur (« https://hote/ »).
+ * Le chemin et la requete viennent du lien, l'hote jamais. Ainsi l'analyse
+ * statique (CodeQL, js/request-forgery) voit un prefixe fixe, et une erreur
+ * future dans les controles plus haut ne pourrait pas changer d'hote.
+ * A garder alignee sur SHORT_LINK_HOSTS (le test « outboundUrl » le verifie).
+ */
+export function outboundUrl(url: URL): string | null {
+  // pathname commence toujours par « / » pour une adresse https.
+  const rest = `${url.pathname.slice(1)}${url.search}`;
+  switch (url.hostname) {
+    case "link.deezer.com":
+      return `https://link.deezer.com/${rest}`;
+    case "spotify.link":
+      return `https://spotify.link/${rest}`;
+    case "spotify.app.link":
+      return `https://spotify.app.link/${rest}`;
+    default:
+      return null;
+  }
+}
+
 const httpsHop: Hop = (url, timeoutMs) => {
+  const outbound = outboundUrl(url);
+  if (!outbound) return Promise.reject(new Error("hote hors liste"));
+  const safe = new URL(outbound);
   const testBase = shortLinkTestBase();
   if (testBase) {
     const target = new URL(testBase.toString());
-    target.pathname = `${testBase.pathname.replace(/\/+$/, "")}/${url.hostname}${url.pathname}`;
-    target.search = url.search;
+    target.pathname = `${testBase.pathname.replace(/\/+$/, "")}/${safe.hostname}${safe.pathname}`;
+    target.search = safe.search;
     return request(target, timeoutMs, {});
   }
-  return request(url, timeoutMs, { lookup: safeLookup as unknown as net.LookupFunction });
+  return request(safe, timeoutMs, { lookup: safeLookup as unknown as net.LookupFunction });
 };
 
 function request(url: URL, timeoutMs: number, extra: { lookup?: net.LookupFunction }): Promise<HopResult> {
