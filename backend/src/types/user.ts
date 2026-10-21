@@ -10,18 +10,6 @@ export interface AuthenticatedUser {
   created_at: string;
 }
 
-export interface UserConnection {
-  id: number;
-  user_id: number;
-  provider: MusicProvider;
-  access_token: string | null;
-  refresh_token: string | null;
-  expires_at: string | null;
-  scope: string[] | null;
-  created_at: string;
-  updated_at: string;
-}
-
 export interface UserSessionToken {
   token: string;
   user_id: number;

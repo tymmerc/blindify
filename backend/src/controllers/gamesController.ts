@@ -5,12 +5,8 @@ import { getSessionContext } from "../utils/session";
 import { ok, fail } from "../utils/response";
 import { logger } from "../utils/logger";
 import type { AudioSourceRow } from "../types/audio";
-import axios from "axios";
 import { hydratePreviewUrl, isExpiredPreview } from "../services/trackResolution";
-import { isIsrc } from "../services/previewMatch";
-import { METADATA_KEEPING_ISRC } from "../services/isrcMetadata";
-import { linkTrackToUser, UNOWNED } from "../services/userTracks";
-import { isSpotifyId } from "../utils/providerIds";
+import { UNOWNED } from "../services/userTracks";
 import { deezerPreviewService } from "../services/deezerPreviewService";
 
 /**
@@ -95,10 +91,6 @@ async function fetchGlobalRandomSources(count: number): Promise<AudioSourceRow[]
   return rows;
 }
 
-// La bibliotheque d'un joueur : ses liens joueur-morceau (un morceau peut etre
-// a plusieurs joueurs).
-const OWNED_BY = (userParam: string): string =>
-  `EXISTS (SELECT 1 FROM user_audio_sources ua WHERE ua.audio_source_id = s.id AND ua.user_id = ${userParam})`;
 const SOURCE_COLUMNS = `s.id, s.provider, s.external_id, s.title, s.artist, s.album_cover, s.audio_url, s.duration_ms, s.metadata`;
 
 async function fetchAudioSources(
@@ -106,9 +98,6 @@ async function fetchAudioSources(
   provider: MusicProvider,
   count: number,
   opts: {
-    likedOnly?: boolean;
-    playlistId?: string;
-    timeRange?: string;
     excludeIds?: string[];
     excludeExternalIds?: string[];
   } = {}
@@ -117,22 +106,14 @@ async function fetchAudioSources(
 
   const extraConds: string[] = [];
   const extraParams: unknown[] = [];
-  // For liked query, base params are (userId, provider); for general: (provider, userId)
-  const baseOffset = opts.likedOnly ? 2 : 2;
+  // Parametres de base : (provider, userId).
+  const baseOffset = 2;
   const usedFilter = `NOT EXISTS (
     SELECT 1 FROM used_tracks ut
     WHERE ut.audio_source_id = s.id
       AND ut.used_at >= NOW() - INTERVAL '12 hours'
   )`;
 
-  if (opts.playlistId) {
-    extraParams.push(opts.playlistId);
-    extraConds.push(`s.metadata->>'playlist_id' = $${baseOffset + extraParams.length}`);
-  }
-  if (opts.timeRange) {
-    extraParams.push(opts.timeRange);
-    extraConds.push(`s.metadata->>'time_range' = $${baseOffset + extraParams.length}`);
-  }
   if (opts.excludeIds?.length) {
     extraParams.push(opts.excludeIds);
     extraConds.push(`s.id <> ALL($${baseOffset + extraParams.length}::uuid[])`);
@@ -143,22 +124,6 @@ async function fetchAudioSources(
   }
 
   const extraClause = extraConds.length ? `AND ${extraConds.join(" AND ")}` : "";
-
-  // Liked-only branch
-  if (opts.likedOnly) {
-    const params = [userId, provider, ...extraParams, count];
-    const limitIndex = params.length;
-    const { rows } = await pool.query<AudioSourceRow>(
-      `SELECT s.id, s.provider, s.external_id, s.title, s.artist, s.album_cover, s.audio_url, s.duration_ms, s.metadata
-       FROM audio_sources s
-       INNER JOIN likes l ON l.audio_source_id = s.id
-       WHERE l.user_id = $1 AND (s.provider = $2 OR ${OWNED_BY("$1")}) ${extraClause ? extraClause + " AND " : " AND "}${usedFilter}
-       ORDER BY RANDOM()
-       LIMIT $${limitIndex}`,
-      params
-    );
-    return rows;
-  }
 
   // Sa bibliotheque, plus le fonds commun du service (morceaux que personne
   // n'a importes). Deux branches plutot qu'un OR : avec le OR, Postgres
@@ -293,18 +258,12 @@ async function collectPlayableSources(
   provider: MusicProvider,
   desiredCount: number,
   opts: {
-    likedOnly?: boolean;
-    playlistId?: string;
-    timeRange?: string;
     excludeIds?: string[];
     excludeExternalIds?: string[];
   }
 ): Promise<AudioSourceRow[]> {
   const candidateLimit = Math.min(desiredCount * 8, 400);
   const candidates = await fetchAudioSources(userId, provider, candidateLimit, {
-    likedOnly: opts.likedOnly,
-    playlistId: opts.playlistId,
-    timeRange: opts.timeRange,
     excludeIds: opts.excludeIds,
     excludeExternalIds: opts.excludeExternalIds,
   });
@@ -345,169 +304,18 @@ async function collectPlayableSources(
   return shuffle(Array.from(unique.values()));
 }
 
-async function syncPlaylistTracks(userId: number, playlistId: string, accessToken: string): Promise<void> {
-  const url = `https://api.spotify.com/v1/playlists/${encodeURIComponent(playlistId)}/tracks`;
-  let nextUrl: string | null = `${url}?limit=100`;
-  while (nextUrl) {
-    const response = await axios.get(nextUrl, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    const data = response.data as {
-      items?: Array<{
-        track?: {
-          id?: string;
-          name?: string;
-          artists?: { name?: string }[];
-          album?: { images?: { url?: string }[]; name?: string; release_date?: string };
-          duration_ms?: number;
-          external_ids?: { isrc?: string };
-        } | null;
-      }>;
-      next?: string | null;
-    };
-    const items = data.items ?? [];
-    for (const item of items) {
-      const track = item.track;
-      if (!track?.id || !track?.name) continue;
-      const artist = track.artists?.map(a => a?.name).filter(Boolean).join(", ") || "Artiste inconnu";
-      const cover = track.album?.images?.[0]?.url ?? null;
-      const metadata = {
-        album: track.album?.name ?? null,
-        release_date: track.album?.release_date ?? null,
-        playlist_id: playlistId,
-        provider: "spotify" as MusicProvider,
-        isrc: isIsrc(track.external_ids?.isrc) ? track.external_ids.isrc : null,
-      };
-      const { rows } = await pool.query<{ id: string }>(
-        `INSERT INTO audio_sources (provider, external_id, user_id, title, artist, album_cover, duration_ms, metadata)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-         ON CONFLICT (provider, external_id)
-         DO UPDATE SET
-           title=EXCLUDED.title,
-           artist=EXCLUDED.artist,
-           album_cover=EXCLUDED.album_cover,
-           duration_ms=EXCLUDED.duration_ms,
-           ${METADATA_KEEPING_ISRC},
-           user_id=COALESCE(audio_sources.user_id, EXCLUDED.user_id)
-         RETURNING id`,
-        ["spotify", track.id, userId, track.name, artist, cover, track.duration_ms ?? null, metadata]
-      );
-      await linkTrackToUser(userId, rows[0].id, null);
-    }
-    nextUrl = data.next ?? null;
-  }
-}
-
-async function syncTopTracks(
-  userId: number,
-  timeRange: "short_term" | "medium_term" | "long_term",
-  accessToken: string
-): Promise<void> {
-  const url = `https://api.spotify.com/v1/me/top/tracks?limit=50&time_range=${timeRange}`;
-  const { data } = await axios.get(url, { headers: { Authorization: `Bearer ${accessToken}` } });
-  const items: Array<{
-    id?: string;
-    name?: string;
-    artists?: { name?: string }[];
-    album?: { images?: { url?: string }[]; name?: string; release_date?: string };
-    duration_ms?: number;
-    external_ids?: { isrc?: string };
-  }> = data?.items ?? [];
-
-  for (const track of items) {
-    if (!track?.id || !track?.name) continue;
-    const artist = track.artists?.map(a => a?.name).filter(Boolean).join(", ") || "Artiste inconnu";
-    const cover = track.album?.images?.[0]?.url ?? null;
-    const metadata = {
-      album: track.album?.name ?? null,
-      release_date: track.album?.release_date ?? null,
-      time_range: timeRange,
-      provider: "spotify" as MusicProvider,
-      isrc: isIsrc(track.external_ids?.isrc) ? track.external_ids.isrc : null,
-    };
-    const { rows } = await pool.query<{ id: string }>(
-      `INSERT INTO audio_sources (provider, external_id, user_id, title, artist, album_cover, duration_ms, metadata)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-       ON CONFLICT (provider, external_id)
-       DO UPDATE SET
-         title=EXCLUDED.title,
-         artist=EXCLUDED.artist,
-         album_cover=EXCLUDED.album_cover,
-         duration_ms=EXCLUDED.duration_ms,
-         ${METADATA_KEEPING_ISRC},
-         user_id=COALESCE(audio_sources.user_id, EXCLUDED.user_id)
-       RETURNING id`,
-      ["spotify", track.id, userId, track.name, artist, cover, track.duration_ms ?? null, metadata]
-    );
-    await linkTrackToUser(userId, rows[0].id, null);
-  }
-}
-
 export const gamesController = {
   async startSoloGame(req: Request, res: Response): Promise<void> {
-    const sourceParam = typeof req.body?.source === "string" ? req.body.source : "library";
-    const preferredProvider = (req.body?.provider as MusicProvider | undefined) ?? undefined;
     const difficulty = typeof req.body?.difficulty === "string" ? req.body.difficulty : "normal";
     const count = Number.isFinite(Number(req.body?.count)) ? Math.min(Math.max(Number(req.body.count), 5), 25) : 10;
-    let likedOnly = sourceParam === "liked";
-    const rawPlaylistId = typeof req.body?.playlistId === "string" ? req.body.playlistId.trim() : "";
-    // Id Spotify mal forme : traite comme une playlist inutilisable (repli sur la
-    // bibliotheque plus bas), jamais colle dans l'URL de l'API.
-    let playlistId = isSpotifyId(rawPlaylistId) ? rawPlaylistId : null;
-    let topRange: "short_term" | "medium_term" | "long_term" | null =
-      sourceParam === "top_week"
-        ? "short_term"
-        : sourceParam === "top_month"
-          ? "medium_term"
-          : sourceParam === "top_all"
-            ? "long_term"
-            : null;
+    // T15 : plus de connexion au compte Spotify. Les sources qui la demandaient
+    // (likes, playlist du compte, tops) sont retirees : source, provider et
+    // playlistId du body sont ignores : le chemin invite, celui de tout joueur
+    // sans connexion depuis mars 2026 (sa bibliotheque, puis le tirage global).
+    const provider: MusicProvider = "guest";
 
-    const context = await getSessionContext(req, res, {
-      provider: preferredProvider,
-      requireConnection: Boolean(preferredProvider && preferredProvider !== "guest"),
-    });
+    const context = await getSessionContext(req, res);
     if (!context) return;
-
-    let provider: MusicProvider =
-      preferredProvider ?? context.connection?.provider ?? context.user.provider ?? "guest";
-
-    // Si aucune connexion et provider non invité, on bascule en invité avec catalogue global.
-    if (provider !== "guest" && !context.connection) {
-      provider = "guest";
-      likedOnly = false;
-      playlistId = null;
-      topRange = null;
-    }
-
-    // Pull a larger candidate set so we can filter out tracks without preview_url
-    // If a playlist is requested, ensure Spotify connection (otherwise fallback to guest pool)
-    if ((playlistId || topRange) && provider !== "spotify") {
-      playlistId = null;
-      topRange = null;
-      likedOnly = false;
-    }
-    if (topRange && !context.connection?.access_token) {
-      topRange = null;
-    }
-
-    // Load playlist tracks if requested
-    if (playlistId && provider === "spotify" && context.connection?.access_token) {
-      try {
-        await syncPlaylistTracks(context.user.id, playlistId, context.connection.access_token);
-      } catch (err) {
-        logger.error("sync_playlist_failed", { playlistId, error: err });
-        // continue with fallback below
-      }
-    }
-
-    if (topRange && provider === "spotify" && context.connection?.access_token) {
-      try {
-        await syncTopTracks(context.user.id, topRange, context.connection.access_token);
-      } catch (err) {
-        logger.error("sync_top_tracks_failed", { timeRange: topRange, error: err });
-      }
-    }
 
     const isQuickGame = count === 10;
     const recentIds = isQuickGame ? await recentAudioSourceIds(context.user.id, 120) : [];
@@ -515,25 +323,9 @@ export const gamesController = {
     const recentFirstExternalList = isQuickGame ? await recentFirstExternalIds(context.user.id, 40) : [];
 
     let sources = await collectPlayableSources(context.user.id, provider, count, {
-      likedOnly,
-      playlistId: playlistId ?? undefined,
-      timeRange: topRange ?? undefined,
       excludeIds: isQuickGame ? recentIds : undefined,
       excludeExternalIds: isQuickGame ? recentFirstExternalList : undefined,
     });
-
-    // If liked-only or playlist is too small, backfill with full library to avoid hard failure
-    if ((likedOnly || playlistId) && sources.length < count) {
-      const remaining = count - sources.length;
-      const fallback = await collectPlayableSources(context.user.id, provider, remaining, {
-        likedOnly: false,
-        playlistId: undefined,
-        timeRange: topRange ?? undefined,
-          excludeIds: isQuickGame ? recentIds : undefined,
-        excludeExternalIds: isQuickGame ? recentFirstExternalList : undefined,
-      });
-      sources = [...sources, ...fallback];
-    }
 
     if (isQuickGame) {
       sources = prioritizeFreshFirstTrack(sources, recentFirstIds, recentFirstExternalList);
@@ -542,10 +334,7 @@ export const gamesController = {
     if (isQuickGame && sources.length < count) {
       const existingKeys = new Set(sources.map(src => src.external_id ?? String(src.id)));
       const topUp = await collectPlayableSources(context.user.id, provider, count, {
-        likedOnly,
-        playlistId: playlistId ?? undefined,
-        timeRange: topRange ?? undefined,
-          excludeIds: undefined,
+        excludeIds: undefined,
         excludeExternalIds: undefined,
       });
       for (const candidate of topUp) {

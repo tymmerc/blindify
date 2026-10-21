@@ -4,11 +4,7 @@ import "cookie-session"
 declare module "cookie-session" {
   interface CookieSessionObject {
     userId?: number
-    spotifyId?: string
-    accessToken?: string
-    refreshToken?: string
-    expiresAt?: number
-    oauthState?: string
+    sessionToken?: string
   }
 }
 

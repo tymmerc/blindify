@@ -59,10 +59,7 @@ export const audioSourcesController = {
   async index(req: Request, res: Response): Promise<void> {
     const provider = req.query.provider ? String(req.query.provider) : undefined;
 
-    const context = await getSessionContext(req, res, {
-      provider: provider as MusicProvider | undefined,
-      autoExtend: true,
-    });
+    const context = await getSessionContext(req, res, { autoExtend: true });
     if (!context) return;
 
     const sources = await listAudioSources(context.user.id, provider as MusicProvider | undefined);

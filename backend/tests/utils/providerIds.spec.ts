@@ -53,7 +53,9 @@ function mockRes() {
   return res as unknown as Response & { status: jest.Mock; json: jest.Mock };
 }
 
-function spotifyContext() {
+// Contexte d'un joueur qui avait connecte son compte Spotify avant mars 2026 :
+// l'ancienne forme portait la connexion. Elle ne doit plus servir a rien.
+function legacySpotifyContext() {
   return {
     user: { id: 1, provider: "local", provider_id: "u1", username: "hote", email: null, avatar: null },
     connection: { id: 10, user_id: 1, provider: "spotify", access_token: "jeton-test" },
@@ -215,25 +217,24 @@ describe("fetchPublicPlaylists, playlist Deezer", () => {
 // Controleurs : playlistId Spotify venu du body (alertes CodeQL 2 et 3)
 // ---------------------------------------------------------------------------
 
+// T15 : la connexion au compte Spotify est retiree. Un playlistId ou une
+// source « top » venus du body ne declenchent plus aucune requete vers l'API
+// Spotify, meme pour un joueur qui avait connecte son compte avant mars 2026.
 describe("gamesController.startSoloGame, playlistId Spotify", () => {
-  it("ignore un playlistId mal forme : aucune requete vers l'API Spotify", async () => {
-    mockGetSessionContext.mockResolvedValue(spotifyContext());
-    const req = mockReq({ body: { source: "library", provider: "spotify", playlistId: TRAVERSAL, count: 10 } });
+  it.each([
+    ["un playlistId mal forme", { source: "library", provider: "spotify", playlistId: TRAVERSAL }],
+    ["un playlistId valide", { source: "library", provider: "spotify", playlistId: ` ${SPOTIFY_PLAYLIST} ` }],
+    ["la source playlist", { source: "playlist", provider: "spotify", playlistId: SPOTIFY_PLAYLIST }],
+    ["un top de la semaine", { source: "top_week", provider: "spotify" }],
+    ["un top du mois", { source: "top_month", provider: "spotify" }],
+    ["un top de toujours", { source: "top_all", provider: "spotify" }],
+  ])("ignore %s : aucune requete vers l'API Spotify", async (_label, body) => {
+    mockGetSessionContext.mockResolvedValue(legacySpotifyContext());
+    const req = mockReq({ body: { ...body, count: 10 } });
 
     await gamesController.startSoloGame(req, mockRes());
 
     expect(requestedUrls().filter(isSpotifyApi)).toEqual([]);
-  });
-
-  it("synchronise une playlist a l'id valide, encode dans l'URL", async () => {
-    mockGetSessionContext.mockResolvedValue(spotifyContext());
-    const req = mockReq({
-      body: { source: "library", provider: "spotify", playlistId: ` ${SPOTIFY_PLAYLIST} `, count: 10 },
-    });
-
-    await gamesController.startSoloGame(req, mockRes());
-
-    expect(requestedUrls()).toContain(`https://api.spotify.com/v1/playlists/${SPOTIFY_PLAYLIST}/tracks?limit=100`);
   });
 });
 
@@ -253,23 +254,8 @@ describe("roomsController.startGame, playlistId Spotify", () => {
     round_duration_ms: null,
   };
 
-  it("refuse un playlistId mal forme en 400, avant toute requete", async () => {
-    mockGetSessionContext.mockResolvedValue(spotifyContext());
-    const req = mockReq({ params: { code: "abcdef" }, body: { provider: "spotify", playlistId: TRAVERSAL } });
-    const res = mockRes();
-
-    await roomsController.startGame(req, res);
-
-    expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ success: false, error: expect.objectContaining({ code: "invalid_playlist" }) })
-    );
-    expect(mockQuery).not.toHaveBeenCalled();
-    expect(mockAxiosGet).not.toHaveBeenCalled();
-  });
-
   it("laisse passer un playlistId vide (pas de playlist demandee)", async () => {
-    mockGetSessionContext.mockResolvedValue(spotifyContext());
+    mockGetSessionContext.mockResolvedValue(legacySpotifyContext());
     const req = mockReq({ params: { code: "abcdef" }, body: { provider: "spotify", playlistId: "   " } });
     const res = mockRes();
 
@@ -279,15 +265,25 @@ describe("roomsController.startGame, playlistId Spotify", () => {
     expect(res.status).toHaveBeenCalledWith(404);
   });
 
-  it("synchronise une playlist a l'id valide, encode dans l'URL", async () => {
-    mockGetSessionContext.mockResolvedValue(spotifyContext());
+  it.each([
+    ["un playlistId mal forme", { provider: "spotify", playlistId: TRAVERSAL }],
+    ["un playlistId valide", { provider: "spotify", playlistId: SPOTIFY_PLAYLIST }],
+    ["un top de la semaine", { provider: "spotify", source: "top_week" }],
+  ])("ignore %s : ni requete Spotify, ni lecture des connexions", async (_label, body) => {
+    mockGetSessionContext.mockResolvedValue(legacySpotifyContext());
     mockQuery.mockImplementation(async (sql: unknown) =>
       String(sql).includes("FROM multiplayer_rooms") ? { rows: [room], rowCount: 1 } : { rows: [], rowCount: 0 }
     );
-    const req = mockReq({ params: { code: "abcdef" }, body: { provider: "spotify", playlistId: SPOTIFY_PLAYLIST } });
+    const req = mockReq({ params: { code: "abcdef" }, body });
+    const res = mockRes();
 
-    await roomsController.startGame(req, mockRes());
+    await roomsController.startGame(req, res);
 
-    expect(requestedUrls()).toEqual([`https://api.spotify.com/v1/playlists/${SPOTIFY_PLAYLIST}/tracks?limit=100`]);
+    expect(requestedUrls().filter(isSpotifyApi)).toEqual([]);
+    expect(mockQuery.mock.calls.map(call => String(call[0])).filter(sql => sql.includes("user_connections"))).toEqual([]);
+    const codes = res.json.mock.calls.map(call => (call[0] as { error?: { code?: string } })?.error?.code);
+    expect(codes).not.toContain("invalid_playlist");
+    expect(codes).not.toContain("playlist_provider_invalid");
+    expect(codes).not.toContain("provider_connection_missing");
   });
 });
