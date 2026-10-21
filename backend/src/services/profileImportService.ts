@@ -4,7 +4,7 @@ import { Buffer } from "node:buffer";
 import { logger } from "../utils/logger";
 import { isDeezerId, isSpotifyId } from "../utils/providerIds";
 import { isIsrc } from "./previewMatch";
-import { ShortLinkError, isShortLink, resolveShortLink, type ResolveOptions } from "./shortLinkResolver";
+import { ShortLinkError, normalizeShortLink, resolveShortLink, type ResolveOptions } from "./shortLinkResolver";
 
 // ---------------------------------------------------------------------------
 // URL Parsing
@@ -83,14 +83,16 @@ export interface ResolvedProfileLink {
  */
 export async function parseProfileLink(raw: string, options?: ResolveOptions): Promise<ResolvedProfileLink | null> {
   const trimmed = raw.trim();
-  if (!isShortLink(trimmed)) {
+  // Lien court, au besoin passe en https (normalizeShortLink).
+  const short = normalizeShortLink(trimmed);
+  if (short === null) {
     const parsed = parseProfileUrl(trimmed);
     return parsed ? { parsed, url: trimmed } : null;
   }
-  const arrival = await resolveShortLink(trimmed, options);
+  const arrival = await resolveShortLink(short, options);
   const parsed = parseProfileUrl(arrival);
   if (!parsed) throw new ShortLinkError("not_a_playlist");
-  logger.info("short_link_resolved", { from: new URL(trimmed).hostname, provider: parsed.provider, type: parsed.type });
+  logger.info("short_link_resolved", { from: new URL(short).hostname, provider: parsed.provider, type: parsed.type });
   // La requete de l'arrivee ne porte que des parametres de partage (si= rattache
   // a celui qui partage, utm_*, _branch_match_id, host=...) : on ne les garde pas.
   const kept = new URL(arrival);

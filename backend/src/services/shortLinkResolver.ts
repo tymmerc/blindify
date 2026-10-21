@@ -99,9 +99,27 @@ function parseUrl(raw: string, base?: URL): URL | null {
   }
 }
 
+/**
+ * Le lien court en https, ou null. Les ecrans /import, /play et /chrono
+ * envoient le texte colle tel quel : un lien sans schema (« spotify.link/x »)
+ * recoit https://, un lien en http passe en https. Ensuite les memes controles
+ * que tout le reste (hote de la liste, port par defaut, pas d'identifiants).
+ */
+export function normalizeShortLink(raw: string): string | null {
+  const trimmed = raw.trim();
+  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  const url = parseUrl(withScheme);
+  if (!url) return null;
+  if (url.protocol === "http:") {
+    // Un port explicite en http (:8080) reste refuse : il survit au passage en https.
+    if (url.port !== "") return null;
+    url.protocol = "https:";
+  }
+  return allowedUrl(url, SHORT_LINK_HOSTS) ? url.toString() : null;
+}
+
 export function isShortLink(raw: string): boolean {
-  const url = parseUrl(raw.trim());
-  return url !== null && allowedUrl(url, SHORT_LINK_HOSTS);
+  return normalizeShortLink(raw) !== null;
 }
 
 let inFlight = 0;
@@ -166,8 +184,9 @@ async function inClientTurn<T>(key: string | undefined, fn: () => Promise<T>): P
  * ou open.spotify.com) et la rend telle quelle. Leve une ShortLinkError sinon.
  */
 export async function resolveShortLink(raw: string, options: ResolveOptions = {}): Promise<string> {
-  const start = parseUrl(raw.trim());
-  if (!start || !allowedUrl(start, SHORT_LINK_HOSTS)) throw new ShortLinkError("not_short_link");
+  const normalized = normalizeShortLink(raw);
+  const start = normalized === null ? null : parseUrl(normalized);
+  if (!start) throw new ShortLinkError("not_short_link");
   const key = start.toString();
   const hit = cached(key);
   if (hit) return hit;

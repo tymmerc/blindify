@@ -11,6 +11,7 @@ import {
   clearShortLinkCache,
   isPublicAddress,
   isShortLink,
+  normalizeShortLink,
   outboundUrl,
   resolveShortLink,
   safeLookup,
@@ -54,12 +55,26 @@ describe("isShortLink", () => {
     "  https://spotify.link/aBcD3fGh1Jb  ",
     "https://SPOTIFY.LINK/aBcD3fGh1Jb",
     "https://spotify.link:443/aBcD3fGh1Jb",
+    "http://spotify.link/aBcD3fGh1Jb",
+    "spotify.link/aBcD3fGh1Jb",
+    "link.deezer.com/s/30ZnBD9L4b4a1R5V6NWDu",
+    "HTTP://link.deezer.com/s/30ZnBD9L4b4a1R5V6NWDu",
   ])("lien court accepte : %s", raw => {
     expect(isShortLink(raw)).toBe(true);
   });
 
   it.each([
-    ["schema http", "http://spotify.link/aBcD3fGh1Jb"],
+    ["spotify.link/aBcD3fGh1Jb", "https://spotify.link/aBcD3fGh1Jb"],
+    ["http://link.deezer.com/s/abc?x=1", "https://link.deezer.com/s/abc?x=1"],
+    ["  https://SPOTIFY.LINK/aBcD3fGh1Jb  ", "https://spotify.link/aBcD3fGh1Jb"],
+  ])("normalise en https : %s", (raw, expected) => {
+    expect(normalizeShortLink(raw)).toBe(expected);
+  });
+
+  it.each([
+    ["http sur un port exotique", "http://spotify.link:8080/aBcD3fGh1Jb"],
+    ["sans schema, port exotique", "spotify.link:8443/aBcD3fGh1Jb"],
+    ["sans schema, identifiants", "moi@spotify.link/aBcD3fGh1Jb"],
     ["schema ftp", "ftp://spotify.link/aBcD3fGh1Jb"],
     ["schema javascript", "javascript://spotify.link/%0aalert(1)"],
     ["schema file", "file:///etc/passwd"],
@@ -112,9 +127,15 @@ describe("resolveShortLink", () => {
     expect(calls).toEqual(["https://link.deezer.com/s/abc", "https://link.deezer.com/s/abc?d=1"]);
   });
 
+  it("lien court sans schema : resolu en https", async () => {
+    const { hop, calls } = fakeHop({ "https://spotify.link/x": { status: 307, location: "https://open.spotify.com/user/a" } });
+    await expect(resolveShortLink("spotify.link/x", { hop })).resolves.toBe("https://open.spotify.com/user/a");
+    expect(calls).toEqual(["https://spotify.link/x"]);
+  });
+
   it.each([
     "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M",
-    "http://spotify.link/x",
+    "ftp://spotify.link/x",
     "https://spotify.link:8443/x",
     "https://127.0.0.1/x",
     "https://localhost/x",

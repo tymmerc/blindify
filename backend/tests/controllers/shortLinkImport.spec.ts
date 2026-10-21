@@ -133,6 +133,16 @@ describe("import par lien court", () => {
   });
 });
 
+describe("lien court sans schema ou en http (/import, /play, /chrono envoient le texte brut)", () => {
+  it.each(["link.deezer.com/s/deezerCourt", "http://link.deezer.com/s/deezerCourt"])("%s : importe", async raw => {
+    fetchPlaylists.mockResolvedValue([{ id: "42", name: "Soiree", trackCount: 12, cover: null }]);
+    const res = fakeRes();
+    await importController.playlists(req({ url: raw }), res);
+    expect(res.statusCode).toBe(200);
+    expect(stubCalls).toEqual(["/link.deezer.com/s/deezerCourt"]);
+  });
+});
+
 describe("partie rapide par lien court", () => {
   it("Spotify : la playlist d'arrivee est celle qu'on lit", async () => {
     fetchPlaylists.mockResolvedValue([]);

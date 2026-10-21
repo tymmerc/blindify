@@ -78,6 +78,19 @@ const ana = await guest("AnaCourt")
     : bad(`partie rapide : ${r.status} ${JSON.stringify(r.error ?? Object.keys(r.data ?? {}))}, appels ${calls.length}`)
 }
 
+{
+  // /import, /play et /chrono envoient le texte colle tel quel.
+  const { result: r, calls } = await shortLinkCalls(() =>
+    api("/api/import/playlists", { method: "POST", token: ana.token, body: { url: `link.deezer.com/s/pl${n + 4}` } }))
+  r.status === 200 && r.data?.playlists?.[0]?.id === String(n + 4) && calls.length === 1
+    ? ok("lien court colle sans https:// : import fait")
+    : bad(`lien court sans schema : ${r.status} ${JSON.stringify(r.error ?? r.data)}, appels ${calls.length}`)
+  const q = await api("/api/quick-play", { method: "POST", body: { url: `http://link.deezer.com/s/pl${n + 5}`, count: 5 } })
+  q.status === 200 && (q.data?.tracks ?? []).length >= 5
+    ? ok("lien court en http (partie rapide) : passe en https, partie prete")
+    : bad(`lien court en http : ${q.status} ${JSON.stringify(q.error)}`)
+}
+
 /* ---------- 2. Ce qui doit etre refuse ---------- */
 say("\n== 2. Refus ==")
 const refus = [
@@ -85,7 +98,6 @@ const refus = [
   { label: "boucle de redirections (5 sauts au plus)", url: "https://link.deezer.com/s/boucle", hops: 5 },
   { label: "lien perime (page 404 de Deezer)", url: "https://link.deezer.com/s/perime", hops: 1 },
   { label: "adresse locale collee directement", url: "https://127.0.0.1:3098/api/health", hops: 0 },
-  { label: "lien court en http", url: "http://spotify.link/ailleurs", hops: 0 },
   { label: "lien court sur un port exotique", url: "https://link.deezer.com:8443/s/pl1", hops: 0 },
 ]
 for (const c of refus) {
