@@ -4,7 +4,6 @@ import type {
   MultiplayerRoom,
   MultiplayerGameState,
   FriendEntry,
-  ProviderConnectionSummary,
   RoomInvitation,
   RoomSelfPreference,
   SoloGameResponse,
@@ -14,7 +13,6 @@ import type {
 
 export type CurrentUserPayload = {
   user: UserSummary
-  providerConnection: ProviderConnectionSummary | null
 }
 
 export const api = {
@@ -55,9 +53,7 @@ export const api = {
   async startSoloGame(params: {
     difficulty?: "easy" | "normal" | "hard"
     source?: string
-    playlistId?: string
     count?: number
-    provider?: string
   } = {}): Promise<SoloGameResponse> {
     return clientApi.startSoloGame(params)
   },
@@ -134,9 +130,6 @@ export const api = {
       gameState?: MultiplayerGameState | null
     }>
   },
-  async setRoomPreference(code: string, payload: { source: string; playlistId?: string | null }) {
-    return clientApi.setRoomPreference(code, payload)
-  },
   async roomRounds(code: string) {
     return clientApi.roomRounds(code)
   },
@@ -145,7 +138,7 @@ export const api = {
   },
   async startMultiplayerGame(
     code: string,
-    payload?: { provider?: string; source?: string; playlistId?: string; autoAdvance?: boolean }
+    payload?: { provider?: string; source?: string; autoAdvance?: boolean }
   ): Promise<{
     session: {
       id: number

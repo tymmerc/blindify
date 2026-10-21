@@ -19,21 +19,11 @@ function normalizeDifficulty(value: string | null): "easy" | "normal" | "hard" {
   return value === "easy" || value === "hard" ? value : "normal"
 }
 
-function normalizeSource(
-  value: string | null
-): "library" | "top" | "recent" | "liked" | "playlist" | "top_week" | "top_month" | "top_all" | "quickplay" {
-  if (
-    value === "top" ||
-    value === "recent" ||
-    value === "liked" ||
-    value === "playlist" ||
-    value === "top_week" ||
-    value === "top_month" ||
-    value === "top_all" ||
-    value === "quickplay"
-  )
-    return value
-  return "library"
+// Bibliotheque ou partie rapide sur un lien colle. Les tops, likes et playlists
+// du compte demandaient la connexion Spotify, retiree (T15) : ils jouent la
+// bibliotheque.
+function normalizeSource(value: string | null): "library" | "quickplay" {
+  return value === "quickplay" ? "quickplay" : "library"
 }
 
 export default function GameClient() {
@@ -47,7 +37,6 @@ export default function GameClient() {
 
   const difficulty = normalizeDifficulty(searchParams.get("difficulty"))
   const source = normalizeSource(searchParams.get("source"))
-  const playlistId = searchParams.get("playlistId")
   const quickUrl = searchParams.get("quickUrl")
   const progressive = searchParams.get("progressive") === "true"
   const isQuickPlay = source === "quickplay" && Boolean(quickUrl)
@@ -80,7 +69,6 @@ export default function GameClient() {
           const username = readStored(NICKNAME_KEY) || DEFAULT_PLAYER_NAME
           setUserPayload({
             user: { id: 0, provider: "guest", provider_id: "quick", username, email: null, avatar: null },
-            providerConnection: null,
           })
           setSessionInfo(result.session as SoloGameResponse["session"])
           setTracks(result.tracks as SoloTrack[])
@@ -99,7 +87,6 @@ export default function GameClient() {
           difficulty,
           source,
           count: roundsCount,
-          playlistId: playlistId ?? undefined,
         })
 
         if (!active) return
@@ -119,7 +106,7 @@ export default function GameClient() {
     return () => {
       active = false
     }
-  }, [router, difficulty, source, playlistId, quickUrl, isQuickPlay, roundsCount])
+  }, [router, difficulty, source, quickUrl, isQuickPlay, roundsCount])
 
   const hasTracks = useMemo(() => tracks.length > 0, [tracks])
 

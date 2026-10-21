@@ -5,7 +5,6 @@ import type {
   GameSessionSummary,
   MultiplayerParticipant,
   MultiplayerRoom,
-  ProviderConnectionSummary,
   RoomInvitation,
   RoomSelfPreference,
   SoloGameResponse,
@@ -155,9 +154,9 @@ export const clientApi = {
       body: JSON.stringify({ username, password }),
     })
   },
-  async currentUser(opts?: { signal?: AbortSignal }): Promise<{ user: UserSummary; providerConnection: ProviderConnectionSummary | null } | null> {
+  async currentUser(opts?: { signal?: AbortSignal }): Promise<{ user: UserSummary } | null> {
     try {
-      return await request<{ user: UserSummary; providerConnection: ProviderConnectionSummary | null }>(
+      return await request<{ user: UserSummary }>(
         "/api/auth/me",
         { cache: "no-store", signal: opts?.signal }
       )
@@ -191,9 +190,7 @@ export const clientApi = {
   async startSoloGame(options: {
     difficulty?: "easy" | "normal" | "hard"
     source?: string
-    playlistId?: string
     count?: number
-    provider?: string
   } = {}): Promise<SoloGameResponse> {
     return request<SoloGameResponse>("/api/games/solo", {
       method: "POST",
@@ -204,8 +201,6 @@ export const clientApi = {
         difficulty: options.difficulty ?? "normal",
         source: options.source ?? "library",
         count: options.count ?? 10,
-        playlistId: options.playlistId,
-        provider: options.provider,
       }),
     })
   },
@@ -276,16 +271,9 @@ export const clientApi = {
   }> {
     return request(`/api/rooms/${code}/state`, { method: "GET" })
   },
-  async setRoomPreference(code: string, payload: { source: string; playlistId?: string | null }) {
-    return request(`/api/rooms/${code}/preferences`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    })
-  },
   async startMultiplayerGame(
     code: string,
-    payload: { provider?: string; source?: string; playlistId?: string; autoAdvance?: boolean } = {}
+    payload: { provider?: string; source?: string; autoAdvance?: boolean } = {}
   ): Promise<{
     session: {
       id: number

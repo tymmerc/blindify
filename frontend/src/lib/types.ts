@@ -20,13 +20,6 @@ export type UserSummary = {
   avatar: string | null
 }
 
-export type ProviderConnectionSummary = {
-  id: number
-  provider: MusicProvider
-  expires_at: string | null
-  scope: string[] | null
-}
-
 export type SoloTrack = {
   round: number
   audioSourceId: string

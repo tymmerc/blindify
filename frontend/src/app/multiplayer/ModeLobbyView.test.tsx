@@ -111,7 +111,6 @@ const ROOM = { room_code: "ABC123", host_user_id: 1, status: "waiting", mode: "e
 // Chaque lecture de session renvoie un NOUVEL objet, comme le vrai client.
 const guestSession = () => ({
   user: { id: 7, username: "Lea", provider: "guest" },
-  providerConnection: null,
 })
 
 // Requete qui ne repond jamais, sauf pour signaler son abandon (comme fetch).

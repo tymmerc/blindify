@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic"
 
 function SoloPageInner() {
   const searchParams = useSearchParams()
-  const hasConfig = Boolean(searchParams.get("source") || searchParams.get("playlistId"))
+  const hasConfig = Boolean(searchParams.get("source"))
 
   if (!hasConfig) {
     return <SoloSelector />

@@ -78,11 +78,6 @@ type ActiveFriend = {
   updatedAt: number
 }
 
-type PendingAction =
-  | { type: "host" }
-  | { type: "join"; code: string }
-  | { type: "invite"; invitationId: number }
-
 type ModeLobbyViewProps = {
   mode: GameMode
   modeConfig: GameModeConfig
@@ -139,8 +134,6 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   const enteredRef = useRef(false)
   const [lobby, dispatchLobby] = useReducer(lobbyReducer, initialLobbyContext)
   const [flowStarted, setFlowStarted] = useState<boolean>(Boolean(initialJoinCode || autojoin))
-  const [requireSpotify, setRequireSpotify] = useState(false)
-  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null)
   const [hasPendingAuthRestore, setHasPendingAuthRestore] = useState<boolean>(() => {
     if (typeof window === "undefined") return false
     try {
@@ -275,7 +268,6 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     activeParticipants.length >= modeConfig.lobby.minPlayers &&
     !starting &&
     !importing
-  const hasSpotify = Boolean(userPayload?.providerConnection?.provider === "spotify")
 
   useEffect(() => {
     if (initialJoinCode) setJoinCode(initialJoinCode.toUpperCase())
@@ -602,45 +594,12 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     return () => clearInterval(interval)
   }, [room?.room_code, view, socketConnected, refreshParticipants])
 
-  const storePostAuthRedirect = useCallback(
-    (action?: PendingAction | null) => {
-      if (typeof window === "undefined") return
-      const params = new URLSearchParams()
-      params.set("mode", mode)
-      const effectiveAction = action ?? pendingAction ?? null
-      if (effectiveAction?.type === "host") {
-        params.set("intent", "host")
-      } else {
-        const targetCode = effectiveAction?.type === "join" ? effectiveAction.code : joinCode
-        if (targetCode) params.set("code", targetCode.toUpperCase())
-      }
-      const target = `/multiplayer?${params.toString()}`
-      try {
-        window.localStorage.setItem(PENDING_AUTH_REDIRECT_KEY, target)
-      } catch {
-        // ignore storage failures
-      }
-    },
-    [mode, pendingAction, joinCode]
-  )
-
-  const ensureSpotify = useCallback(
-    async (_next: PendingAction): Promise<boolean> => {
-      // Host display-only: no enforced Spotify; server will gate start if no connected players.
-      return true
-    },
-    []
-  )
-
   const requireSession = useCallback(
-    (action?: PendingAction): boolean => {
+    (): boolean => {
       if (loading) return false
-      if (userPayload) return true
-      // Guest-first : pas encore de session invite (creation en cours / retry).
-      // On memorise l'action et on laisse le bootstrap fournir l'invite, sans
-      // jamais rediriger vers le login.
-      if (action) setPendingAction(action)
-      return false
+      // Guest-first : pas encore de session invite (creation en cours / retry),
+      // le bootstrap la fournit. On ne redirige jamais vers le login.
+      return Boolean(userPayload)
     },
     [loading, userPayload]
   )
@@ -987,13 +946,8 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   )
 
   const handleCreateRoom = useCallback(
-    async (skipSpotify?: boolean, hostPlays?: boolean) => {
-      if (!requireSession({ type: "host" })) return
-      if (!skipSpotify) {
-        const ok = await ensureSpotify({ type: "host" })
-        if (!ok) return
-      }
-      setRequireSpotify(false)
+    async (hostPlays?: boolean) => {
+      if (!requireSession()) return
       if (!canHostNow && lobby.status !== "waiting") return
       if (lobby.status === "creating") return
       try {
@@ -1026,7 +980,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         setFlowStarted(false)
       }
     },
-    [attachSocketListeners, syncParticipants, mode, canHostNow, lobby.status, ensureSpotify, requireSession]
+    [attachSocketListeners, syncParticipants, mode, canHostNow, lobby.status, requireSession]
   )
 
   useEffect(() => {
@@ -1054,17 +1008,12 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   }, [modeConfig.lobby.autoStart, view, room, handleCreateRoom, lobby.status, flowStarted, autojoin])
 
   const joinRoomCode = useCallback(
-    async (code: string, skipSpotify?: boolean) => {
+    async (code: string) => {
       const normalizedCode = code.toUpperCase().replace(/[^A-Z0-9]/g, "")
-      if (!requireSession({ type: "join", code: normalizedCode })) {
+      if (!requireSession()) {
         setJoinCode(normalizedCode)
         return
       }
-      if (!skipSpotify) {
-        const ok = await ensureSpotify({ type: "join", code })
-        if (!ok) return
-      }
-      setRequireSpotify(false)
       if (joining || lobby.status === "joining") return
       if (!normalizedCode) {
         const message = friendlyError(mode, "join")
@@ -1147,7 +1096,6 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       lobby.status,
       syncParticipants,
       mode,
-      ensureSpotify,
       requireSession,
       resolveViewFromState,
       stickyResults,
@@ -1174,7 +1122,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   )
 
   const handleAcceptInvite = useCallback(
-    async (_invitationId: number, _skipSpotify?: boolean) => {
+    async (_invitationId: number) => {
       // Invitations désactivées : tout passe par un code.
       setError("Les invitations sont désactivées. Rejoins avec un code.")
       dispatchLobby({ type: "error", message: "Les invitations sont désactivées. Rejoins avec un code." })
@@ -1184,15 +1132,11 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   )
 
   const handleStartGame = useCallback(
-    async (skipSpotify?: boolean, opts?: { restart?: boolean }) => {
+    async (opts?: { restart?: boolean }) => {
       if (!room) return
       // "Rejouer" depuis l'ecran de fin : le lobby est en status playing/results,
       // canStartGame est faux, mais le backend accepte le restart quand la partie est finie.
       if (!opts?.restart && !canStartGame) return
-      if (!skipSpotify) {
-        const ok = await ensureSpotify({ type: "host" })
-        if (!ok) return
-      }
       try {
         setStarting(true)
         setError(null)
@@ -1267,25 +1211,8 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         setStarting(false)
       }
     },
-    [room, canStartGame, mode, ensureSpotify, resolveViewFromState, viewToLobbyAction, streamerMode, soloSource]
+    [room, canStartGame, mode, resolveViewFromState, viewToLobbyAction, streamerMode, soloSource]
   )
-
-  const handleSpotifyConnect = useCallback(() => {
-    storePostAuthRedirect()
-    const codeToPersist = pendingAction?.type === "join" ? pendingAction.code : joinCode
-    if (codeToPersist) {
-      try {
-        window.localStorage.setItem(PENDING_EVENT_CODE_KEY, codeToPersist.toUpperCase())
-      } catch {
-        // ignore
-      }
-    }
-    if (typeof window !== "undefined") {
-      // publicPath : le site est a la racine sur blindz.app, /blindify en dur cassait
-      // ce lien en prod. returnTo sans basePath, que le routeur rajoute lui-meme.
-      window.location.href = `${publicPath("/auth/login/")}?returnTo=${encodeURIComponent(currentReturnTo())}`
-    }
-  }, [joinCode, pendingAction, storePostAuthRedirect])
 
   useEffect(() => {
     if (abortFlowRef.current) return
@@ -1307,34 +1234,8 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     return Promise.resolve()
   }, [])
 
-  const runPendingAction = useCallback(
-    (action: PendingAction) => {
-      switch (action.type) {
-        case "host":
-          handleCreateRoom(true)
-          break
-        case "join":
-          joinRoomCode(action.code, true)
-          break
-        case "invite":
-          // Invitations désactivées : pas d’action.
-          break
-        default:
-          break
-      }
-    },
-    [handleCreateRoom, joinRoomCode]
-  )
-
-  useEffect(() => {
-    if (!pendingAction) return
-    if (!hasSpotify) return
-    runPendingAction(pendingAction)
-    setPendingAction(null)
-    setRequireSpotify(false)
-  }, [pendingAction, hasSpotify, runPendingAction])
-
-  // Effect to resume flow after Spotify auth return
+  // Reprise apres l'ancien retour de connexion Spotify (retiree, T15) : plus
+  // rien n'ecrit ces cles, l'effet ne fait que vider celles d'un vieux navigateur.
   useEffect(() => {
     if (room) {
       setHasPendingAuthRestore(false)
@@ -1362,13 +1263,13 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
           if (pendingIntent === "host") {
             // User was trying to host before auth
             setFlowStarted(true)
-            handleCreateRoom(true)
+            handleCreateRoom()
             return
           } else if (pendingJoinCode) {
             // User was trying to join with a code
             setJoinCode(pendingJoinCode.toUpperCase())
             setFlowStarted(true)
-            joinRoomCode(pendingJoinCode, true)
+            joinRoomCode(pendingJoinCode)
             return
           }
         }
@@ -1377,7 +1278,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         if (pendingCode) {
           setJoinCode(pendingCode.toUpperCase())
           setFlowStarted(true)
-          joinRoomCode(pendingCode, true)
+          joinRoomCode(pendingCode)
           return
         }
       }
@@ -1522,7 +1423,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     if (room) return
     const code = initialJoinCode ?? autojoin
     if (!code) return
-    if (!requireSession({ type: "join", code })) {
+    if (!requireSession()) {
       setJoinCode(code.toUpperCase())
       return
     }
@@ -1534,7 +1435,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     autoJoinedCodesRef.current.add(normalized)
     // Plus d'obligation Spotify : la musique vient de l'import par lien de profil.
     joinRoomCode(code)
-  }, [initialJoinCode, autojoin, room, joinRoomCode, hasSpotify, mode, requireSession])
+  }, [initialJoinCode, autojoin, room, joinRoomCode, mode, requireSession])
 
   const dataAttrs = modeDataAttrs(mode)
   const headerCopy = HEADER_COPY[mode]
@@ -1573,7 +1474,6 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   const isPendingIntent =
     ((intent === "host" || Boolean(initialJoinCode) || Boolean(autojoin) || hasPendingAuthRestore) &&
     !room &&
-    !requireSpotify &&
     lobby.status !== "error" &&
     (lobby.status === "creating" || lobby.status === "joining" || flowStarted || hasPendingAuthRestore))
 
@@ -1610,7 +1510,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     joinCode,
     setJoinCode,
     joining,
-    onHost: (hostPlays?: boolean) => handleCreateRoom(undefined, hostPlays),
+    onHost: (hostPlays?: boolean) => handleCreateRoom(hostPlays),
     onJoinSubmit: handleJoinRoom,
     room,
     participants: activeParticipants,
@@ -1680,12 +1580,6 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   const stage: "entry" | "lobby" | "game" | "results" =
     view === "playing" ? "game" : view === "results" ? "results" : view === "landing" ? "entry" : "lobby"
 
-  // Connexion OAuth Spotify retiree : la musique vient de l'import par lien de profil
-  // (l'API Spotify limite trop l'usage public). Plus aucun prompt "Connecter Spotify".
-  const spotifyPrompt = null
-
-  // Guest mode no longer supported - all users must use Spotify
-  const guestNotice = null
 
   const loadingGame =
     view === "playing" && room && !gameState ? (
@@ -1873,9 +1767,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
             <button type="button" onClick={() => setSocketNotice(null)} className="shrink-0 text-xs font-bold uppercase tracking-[0.14em] underline">Fermer</button>
           </div>
         ) : null}
-        {guestNotice}
         {content}
-        {spotifyPrompt}
       </div>
 
       {/* Raccourci "j'ai changé d'avis" : l'ajout de musique se fait normalement a
