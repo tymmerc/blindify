@@ -304,10 +304,16 @@ export function safeLookup(hostname: string, options: dns.LookupOptions, callbac
  * Pile de test (tools/test-stack) : faux hebergeur de liens courts sur la
  * boucle locale, comme DEEZER_API_BASE pour le faux Deezer. Ignoree si elle ne
  * vise pas 127.0.0.1, ::1 ou localhost : elle ne peut pas servir de relais.
+ * En production, ignoree aussi, sauf sous le garde-fou de la pile
+ * (tools/test-stack/no-egress.cjs, precharge par stack.sh, qui pose la marque
+ * blindz.noEgress) : la pile tourne en NODE_ENV=production pour ressembler a la
+ * prod, mais une variable egaree dans le .env de prod resterait sans effet.
  */
 export function shortLinkTestBase(): URL | null {
   const raw = process.env.SHORT_LINK_TEST_BASE;
   if (!raw) return null;
+  const underStackGuard = (globalThis as Record<symbol, unknown>)[Symbol.for("blindz.noEgress")] === true;
+  if (process.env.NODE_ENV === "production" && !underStackGuard) return null;
   const base = parseUrl(raw);
   if (!base || (base.protocol !== "http:" && base.protocol !== "https:")) return null;
   return ["127.0.0.1", "[::1]", "localhost"].includes(base.hostname) ? base : null;

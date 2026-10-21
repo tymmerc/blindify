@@ -429,6 +429,28 @@ describe("pile de test (SHORT_LINK_TEST_BASE)", () => {
     expect(shortLinkTestBase()).toBeNull();
   });
 
+  describe("en production", () => {
+    const savedEnv = process.env.NODE_ENV;
+    const marker = Symbol.for("blindz.noEgress");
+    afterEach(() => {
+      process.env.NODE_ENV = savedEnv;
+      delete (globalThis as Record<symbol, unknown>)[marker];
+    });
+
+    it("ignoree : un .env de prod egare n'a aucun effet", () => {
+      process.env.NODE_ENV = "production";
+      process.env.SHORT_LINK_TEST_BASE = "http://127.0.0.1:3180/short-link-stub";
+      expect(shortLinkTestBase()).toBeNull();
+    });
+
+    it("suivie seulement sous le garde-fou de la pile (no-egress.cjs)", () => {
+      process.env.NODE_ENV = "production";
+      process.env.SHORT_LINK_TEST_BASE = "http://127.0.0.1:3180/short-link-stub";
+      (globalThis as Record<symbol, unknown>)[marker] = true;
+      expect(shortLinkTestBase()?.toString()).toBe("http://127.0.0.1:3180/short-link-stub");
+    });
+  });
+
   it("suit la redirection du faux hebergeur, en GET", async () => {
     const seen: Array<{ method?: string; url?: string }> = [];
     server = http.createServer((req, res) => {
