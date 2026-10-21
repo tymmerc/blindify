@@ -310,8 +310,8 @@ export const gamesController = {
     const count = Number.isFinite(Number(req.body?.count)) ? Math.min(Math.max(Number(req.body.count), 5), 25) : 10;
     // T15 : plus de connexion au compte Spotify. Les sources qui la demandaient
     // (likes, playlist du compte, tops) sont retirees : source, provider et
-    // playlistId du body sont ignores, la partie se tire dans la bibliotheque
-    // du joueur et le fonds commun (ce que faisait deja un joueur sans connexion).
+    // playlistId du body sont ignores : le chemin invite, celui de tout joueur
+    // sans connexion depuis mars 2026 (sa bibliotheque, puis le tirage global).
     const provider: MusicProvider = "guest";
 
     const context = await getSessionContext(req, res);
