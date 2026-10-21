@@ -408,7 +408,7 @@ describe("pile de test (SHORT_LINK_TEST_BASE)", () => {
     expect(shortLinkTestBase()).toBeNull();
   });
 
-  it("suit la redirection du faux hebergeur, en GET, sans lire le corps", async () => {
+  it("suit la redirection du faux hebergeur, en GET", async () => {
     const seen: Array<{ method?: string; url?: string }> = [];
     server = http.createServer((req, res) => {
       seen.push({ method: req.method, url: req.url });
@@ -421,6 +421,26 @@ describe("pile de test (SHORT_LINK_TEST_BASE)", () => {
 
     await expect(resolveShortLink("https://link.deezer.com/s/abc?x=1")).resolves.toBe("https://www.deezer.com/fr/playlist/42");
     expect(seen).toEqual([{ method: "GET", url: "/short-link-stub/link.deezer.com/s/abc?x=1" }]);
+  });
+
+  it("coupe la connexion des les en-tetes, sans lire le corps", async () => {
+    let closedAt = 0;
+    let sent = 0;
+    server = http.createServer((req, res) => {
+      res.writeHead(302, { Location: "https://open.spotify.com/user/corps" });
+      // Un corps sans fin : seul un client qui coupe ferme la socket.
+      const timer = setInterval(() => { res.write("x".repeat(16 * 1024)); sent += 1; }, 5);
+      req.socket.on("close", () => { clearInterval(timer); closedAt = Date.now(); });
+    });
+    await new Promise<void>(r => server?.listen(0, "127.0.0.1", r));
+    process.env.SHORT_LINK_TEST_BASE = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+
+    const started = Date.now();
+    await expect(resolveShortLink("https://spotify.link/corps", { timeoutMs: 3000 })).resolves.toBe("https://open.spotify.com/user/corps");
+    for (let i = 0; i < 50 && !closedAt; i += 1) await new Promise(r => setTimeout(r, 10));
+    expect(closedAt).toBeGreaterThan(0);
+    expect(closedAt - started).toBeLessThan(500);
+    expect(sent).toBeLessThan(50);
   });
 
   it("un hebergeur muet coupe au bout du delai", async () => {
