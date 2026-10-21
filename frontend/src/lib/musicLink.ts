@@ -7,7 +7,7 @@
  * L'adresse rendue (url) est celle que le serveur accepte : https ajoute s'il
  * manque, segment /intl-xx/ des liens Spotify partages depuis un ordinateur
  * retire. Les liens courts du bouton Partager des applis (link.deezer.com,
- * deezer.page.link, spotify.link, spotify.app.link) sont acceptes : le serveur
+ * spotify.link, spotify.app.link) sont acceptes : le serveur
  * suit lui-meme leur redirection, sous bonne garde
  * (backend/src/services/shortLinkResolver.ts). On les envoie en https, sur le
  * port par defaut et sans identifiants, seule forme qu'il accepte.
@@ -22,7 +22,6 @@ export type MusicLinkRecognition =
 
 const SHORT_HOSTS: Record<string, MusicLinkProvider> = {
   "link.deezer.com": "deezer",
-  "deezer.page.link": "deezer",
   "spotify.link": "spotify",
   "spotify.app.link": "spotify",
 }

@@ -209,7 +209,7 @@ async function discordStub(req, res) {
  * Comme le vrai, on ne repond que par une redirection (et un corps a jeter) :
  *   link.deezer.com/s/pl<N>   -> www.deezer.com/fr/playlist/<N> (playlist N du faux Deezer)
  *   link.deezer.com/s/pr<N>   -> www.deezer.com/fr/profile/<N>
- *   deezer.page.link/pl<N>    -> link.deezer.com/s/pl<N> (deux sauts)
+ *   link.deezer.com/s/hop<N>  -> /s/pl<N>, redirection relative (deux sauts)
  *   spotify.link/ailleurs     -> l'adresse des metadonnees du nuage (doit etre refusee)
  *   link.deezer.com/s/boucle  -> elle-meme (doit s'arreter a 5 sauts)
  *   le reste                  -> la page 404 de Deezer, comme le vrai pour un lien perime
@@ -222,7 +222,7 @@ function shortLinkStub(req, res) {
   let m
   if ((m = p.match(/^\/link\.deezer\.com\/s\/pl(\d+)$/))) return go(`https://www.deezer.com/fr/playlist/${m[1]}?host=0&utm_source=deezer`)
   if ((m = p.match(/^\/link\.deezer\.com\/s\/pr(\d+)$/))) return go(`https://www.deezer.com/fr/profile/${m[1]}`)
-  if ((m = p.match(/^\/deezer\.page\.link\/pl(\d+)$/))) return go(`https://link.deezer.com/s/pl${m[1]}`)
+  if ((m = p.match(/^\/link\.deezer\.com\/s\/hop(\d+)$/))) return go(`/s/pl${m[1]}`)
   if (p === "/spotify.link/ailleurs") return go("https://169.254.169.254/latest/meta-data/")
   if (p === "/link.deezer.com/s/boucle") return go("https://link.deezer.com/s/boucle")
   return go("https://www.deezer.com/deezer-links-404")

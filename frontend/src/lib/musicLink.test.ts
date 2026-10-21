@@ -26,7 +26,6 @@ describe("recognizeMusicLink", () => {
 
   it.each([
     ["https://link.deezer.com/s/30ZnBD9L4b4a1R5V6NWDu", "deezer", "https://link.deezer.com/s/30ZnBD9L4b4a1R5V6NWDu"],
-    ["https://deezer.page.link/abcd1234", "deezer", "https://deezer.page.link/abcd1234"],
     ["https://spotify.link/aBcD3fGh1Jb", "spotify", "https://spotify.link/aBcD3fGh1Jb"],
     ["https://spotify.app.link/aBcD3fGh1Jb?_p=1", "spotify", "https://spotify.app.link/aBcD3fGh1Jb?_p=1"],
     ["spotify.link/aBcD3fGh1Jb", "spotify", "https://spotify.link/aBcD3fGh1Jb"],
@@ -39,6 +38,7 @@ describe("recognizeMusicLink", () => {
     "https://spotify.link:8443/aBcD3fGh1Jb",
     "https://moi@link.deezer.com/s/30ZnBD9L4b4a1R5V6NWDu",
     "https://spotify.link.evil.com/aBcD3fGh1Jb",
+    "https://deezer.page.link/abcd1234",
   ])("lien court suspect, que le serveur refuserait : %s", raw => {
     expect(recognizeMusicLink(raw)).toEqual({ kind: "unknown" })
   })

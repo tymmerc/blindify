@@ -64,9 +64,9 @@ const ana = await guest("AnaCourt")
 }
 {
   const { result: r, calls } = await shortLinkCalls(() =>
-    api("/api/import/playlists", { method: "POST", token: ana.token, body: { url: `https://deezer.page.link/pl${n + 1}` } }))
+    api("/api/import/playlists", { method: "POST", token: ana.token, body: { url: `https://link.deezer.com/s/hop${n + 1}` } }))
   r.status === 200 && r.data?.playlists?.[0]?.id === String(n + 1) && calls.length === 2
-    ? ok("deezer.page.link -> link.deezer.com -> deezer.com : deux sauts, import fait")
+    ? ok("redirection relative sur link.deezer.com puis deezer.com : deux sauts, import fait")
     : bad(`deux sauts : ${r.status} ${JSON.stringify(r.error ?? r.data)}, appels ${calls.join(" | ")}`)
 }
 {

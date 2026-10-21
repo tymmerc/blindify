@@ -40,7 +40,6 @@ async function codeOf(promise: Promise<unknown>): Promise<string> {
 describe("isShortLink", () => {
   it.each([
     "https://link.deezer.com/s/30ZnBD9L4b4a1R5V6NWDu",
-    "https://deezer.page.link/abc123",
     "https://spotify.link/aBcD3fGh1Jb",
     "https://spotify.app.link/aBcD3fGh1Jb",
     "  https://spotify.link/aBcD3fGh1Jb  ",
@@ -69,6 +68,7 @@ describe("isShortLink", () => {
     ["lien long", "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M"],
     ["texte", "rien du tout"],
     ["vide", ""],
+    ["Firebase Dynamic Links, ferme depuis aout 2025", "https://deezer.page.link/abc123"],
   ])("refuse (%s)", (_cas, raw) => {
     expect(isShortLink(raw)).toBe(false);
   });
@@ -96,11 +96,11 @@ describe("resolveShortLink", () => {
 
   it("une redirection relative reste sur l'hote courant", async () => {
     const { hop, calls } = fakeHop({
-      "https://deezer.page.link/abc": { status: 302, location: "/abc?d=1" },
-      "https://deezer.page.link/abc?d=1": { status: 302, location: "https://deezer.com/playlist/42" },
+      "https://link.deezer.com/s/abc": { status: 302, location: "/s/abc?d=1" },
+      "https://link.deezer.com/s/abc?d=1": { status: 302, location: "https://deezer.com/playlist/42" },
     });
-    await expect(resolveShortLink("https://deezer.page.link/abc", { hop })).resolves.toBe("https://deezer.com/playlist/42");
-    expect(calls).toEqual(["https://deezer.page.link/abc", "https://deezer.page.link/abc?d=1"]);
+    await expect(resolveShortLink("https://link.deezer.com/s/abc", { hop })).resolves.toBe("https://deezer.com/playlist/42");
+    expect(calls).toEqual(["https://link.deezer.com/s/abc", "https://link.deezer.com/s/abc?d=1"]);
   });
 
   it.each([

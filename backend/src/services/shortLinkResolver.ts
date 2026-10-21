@@ -21,12 +21,12 @@ import net from "node:net";
  *     normalise l'analyseur WHATWG, et le chemin repart tel quel.
  *
  * Hotes verifies le 17/10/2026 (link.deezer.com : 302 vers www.deezer.com ;
- * spotify.link : 307 vers open.spotify.com). deezer.page.link et
- * spotify.app.link sont les anciens domaines (Firebase, Branch) des memes liens.
+ * spotify.link : 307 vers open.spotify.com) et le 21/10 (spotify.app.link,
+ * domaine Branch des memes liens : 307 vers open.spotify.com). deezer.page.link
+ * est retire : Firebase Dynamic Links est ferme depuis aout 2025 (404).
  */
 export const SHORT_LINK_HOSTS: ReadonlySet<string> = new Set([
   "link.deezer.com",
-  "deezer.page.link",
   "spotify.link",
   "spotify.app.link",
 ]);
