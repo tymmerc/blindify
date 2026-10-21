@@ -6,10 +6,7 @@ import { ok, fail } from "../utils/response";
 const router = Router();
 
 router.post("/", async (req, res) => {
-  const context = await getSessionContext(req, res, {
-    autoExtend: true,
-    requireConnection: false,
-  });
+  const context = await getSessionContext(req, res, { autoExtend: true });
   if (!context) return;
 
   const sourceId =

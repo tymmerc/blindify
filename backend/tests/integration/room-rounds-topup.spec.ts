@@ -477,8 +477,12 @@ describe("verrou du lancement", () => {
   });
 });
 
-describe("le complement suit les choix du joueur", () => {
-  it("un joueur qui a choisi une playlist ne joue que des titres de cette playlist", async () => {
+// T15 : les choix « playlist du compte », « tops » et « likes » demandaient un
+// compte Spotify connecte. Ils sont retires : un vieux choix reste en base
+// (room_participants.source_pref) ou une vieille connexion (user_connections)
+// ne filtrent plus rien, le joueur joue toute sa bibliotheque.
+describe("choix de source retires avec la connexion Spotify", () => {
+  it("un vieux choix « playlist » et une vieille connexion ne filtrent plus la bibliotheque", async () => {
     const hote = await newGuest("hote_pref");
     const spot = await newGuest("spot");
     await giveLibrary(hote, 30, 12);
@@ -498,12 +502,28 @@ describe("le complement suit les choix du joueur", () => {
     const started = await startRoom(code, hote);
 
     expect(started.status).toBe(200);
+    expect(started.tracks).toHaveLength(20);
     const fromSpot = started.tracks.filter(t => t.owner === spot);
-    expect(fromSpot.length).toBeGreaterThan(0);
-    expect(fromSpot.every(t => t.playlistId === "PLX")).toBe(true);
-    // 12 de l'hote, 5 de la playlist choisie : la partie est plus courte, et le dit.
-    expect(started.tracks).toHaveLength(17);
-    expect(started.session.shortReason).toBe("library");
+    expect(fromSpot.some(t => t.playlistId !== "PLX")).toBe(true);
+    expect(started.session.shortReason ?? null).toBeNull();
+  });
+
+  it("un vieux choix « top » ou « likes » ne saute plus le joueur", async () => {
+    const hote = await newGuest("hote_top");
+    const fan = await newGuest("fan_top");
+    await giveLibrary(hote, 10, 10);
+    await giveLibrary(fan, 10, 10);
+    const code = await newRoom([hote, fan], 10);
+    await pool.query(
+      `UPDATE room_participants SET source_pref = 'top_week'
+       WHERE user_id = $1 AND room_id = (SELECT id FROM multiplayer_rooms WHERE room_code = $2)`,
+      [fan, code],
+    );
+
+    const started = await startRoom(code, hote);
+
+    expect(started.status).toBe(200);
+    expect(started.tracks.filter(t => t.owner === fan).length).toBeGreaterThan(0);
   });
 });
 

@@ -294,7 +294,8 @@ describe('gamesController', () => {
       expect(res.status).toHaveBeenCalledWith(200);
     });
 
-    it('should handle "liked" source type', async () => {
+    // T15 : « likes » demandait un compte Spotify connecte ; retire, il joue la bibliotheque.
+    it('should treat the removed "liked" source as the library', async () => {
       const sources = Array.from({ length: 10 }, (_, i) =>
         makeAudioSource({ id: `uuid-${i}`, external_id: `ext-${i}` })
       );
@@ -308,9 +309,12 @@ describe('gamesController', () => {
       await gamesController.startSoloGame(req, res);
 
       expect(res.status).toHaveBeenCalledWith(200);
+      const sqls = mockQuery.mock.calls.map(call => String(call[0]));
+      expect(sqls.filter(sql => sql.includes('JOIN likes'))).toEqual([]);
     });
 
-    it('should handle "top_week" source type (short_term)', async () => {
+    // T15 : les tops lisaient /v1/me/top/tracks avec le jeton du joueur ; retires.
+    it('should ignore the removed "top_week" source without calling Spotify', async () => {
       const sources = Array.from({ length: 10 }, (_, i) =>
         makeAudioSource({ id: `uuid-${i}`, external_id: `ext-${i}` })
       );
@@ -325,9 +329,13 @@ describe('gamesController', () => {
       await gamesController.startSoloGame(req, res);
 
       expect(res.status).toHaveBeenCalledWith(200);
+      expect(mockAxiosGet).not.toHaveBeenCalled();
+      const sqls = mockQuery.mock.calls.map(call => String(call[0]));
+      expect(sqls.filter(sql => sql.includes('time_range'))).toEqual([]);
     });
 
-    it('should handle "top_month" source type (medium_term)', async () => {
+    // T15 : les tops lisaient /v1/me/top/tracks avec le jeton du joueur ; retires.
+    it('should ignore the removed "top_month" source without calling Spotify', async () => {
       const sources = Array.from({ length: 10 }, (_, i) =>
         makeAudioSource({ id: `uuid-${i}`, external_id: `ext-${i}` })
       );
@@ -342,9 +350,13 @@ describe('gamesController', () => {
       await gamesController.startSoloGame(req, res);
 
       expect(res.status).toHaveBeenCalledWith(200);
+      expect(mockAxiosGet).not.toHaveBeenCalled();
+      const sqls = mockQuery.mock.calls.map(call => String(call[0]));
+      expect(sqls.filter(sql => sql.includes('time_range'))).toEqual([]);
     });
 
-    it('should handle "top_all" source type (long_term)', async () => {
+    // T15 : les tops lisaient /v1/me/top/tracks avec le jeton du joueur ; retires.
+    it('should ignore the removed "top_all" source without calling Spotify', async () => {
       const sources = Array.from({ length: 10 }, (_, i) =>
         makeAudioSource({ id: `uuid-${i}`, external_id: `ext-${i}` })
       );
@@ -359,6 +371,9 @@ describe('gamesController', () => {
       await gamesController.startSoloGame(req, res);
 
       expect(res.status).toHaveBeenCalledWith(200);
+      expect(mockAxiosGet).not.toHaveBeenCalled();
+      const sqls = mockQuery.mock.calls.map(call => String(call[0]));
+      expect(sqls.filter(sql => sql.includes('time_range'))).toEqual([]);
     });
 
     it('should return 400 when fewer than 5 playable tracks are available', async () => {

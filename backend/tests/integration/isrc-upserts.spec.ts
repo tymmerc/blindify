@@ -2,8 +2,9 @@
  * L'ISRC dans audio_sources.metadata, contre une vraie base de test :
  * - l'import par lien (importController) ajoute l'ISRC sans effacer les autres
  *   cles, et un reimport sans ISRC ne l'efface pas ;
- * - la synchro du compte Spotify connecte (spotifySync), qui remplace metadata
- *   a chaque passage, garde un ISRC deja connu quand Spotify n'en renvoie pas.
+ * - METADATA_KEEPING_ISRC garde un ISRC deja connu quand la nouvelle metadata
+ *   n'en a pas. (La synchro du compte Spotify connecte qui l'utilisait est
+ *   retiree avec la connexion, T15.)
  *
  * Base : TEST_DATABASE_URL (voir tests/testDatabase.ts), jamais la prod.
  */
@@ -14,15 +15,11 @@ jest.mock("../../src/services/trackResolution", () => ({
   ...jest.requireActual("../../src/services/trackResolution"),
   hydratePreviewUrl: jest.fn().mockResolvedValue(null),
 }));
-jest.mock("../../src/config/spotify", () => ({ makeSpotify: jest.fn() }));
 
 import { resolveTestDatabaseUrl } from "../testDatabase";
 import { pool, seedUsers, cleanupUsers, closePool, type TestUser } from "./helpers/socket-test-harness";
 import { upsertTrack } from "../../src/controllers/importController";
-import { syncSpotifyLibrary } from "../../src/services/providers/spotifySync";
-import { makeSpotify } from "../../src/config/spotify";
 import type { ImportedTrack } from "../../src/services/profileImportService";
-import type { UserConnection } from "../../src/types/user";
 import { METADATA_KEEPING_ISRC } from "../../src/services/isrcMetadata";
 
 resolveTestDatabaseUrl(process.env.TEST_DATABASE_URL);
@@ -66,34 +63,7 @@ describe("import par lien : upsertTrack", () => {
   });
 });
 
-describe("compte Spotify connecte : syncSpotifyLibrary", () => {
-  const connection = {
-    id: 1, user_id: 0, provider: "spotify", access_token: "jeton", refresh_token: null,
-    expires_at: new Date(Date.now() + 3_600_000).toISOString(), scope: null,
-  } as unknown as UserConnection;
-  const saved = (externalIds?: { isrc?: string }) => ({
-    body: { items: [{ track: { id: EXT, name: "You Say Run", artists: [{ name: "Yuki Hayashi" }], album: { name: "OST" }, duration_ms: 228746, external_ids: externalIds } }] },
-  });
-
-  it("garde un ISRC connu quand Spotify n'en renvoie pas, et prend le nouveau sinon", async () => {
-    const api = { getMySavedTracks: jest.fn() };
-    (makeSpotify as jest.Mock).mockReturnValue(api);
-
-    api.getMySavedTracks.mockResolvedValueOnce(saved({ isrc: "JPZ921607277" }));
-    await syncSpotifyLibrary(users[0].id, connection, 1);
-    expect((await metadataOf()).isrc).toBe("JPZ921607277");
-
-    api.getMySavedTracks.mockResolvedValueOnce(saved(undefined));
-    await syncSpotifyLibrary(users[0].id, connection, 1);
-    expect(await metadataOf()).toMatchObject({ isrc: "JPZ921607277", album: "OST", provider: "spotify" });
-
-    api.getMySavedTracks.mockResolvedValueOnce(saved({ isrc: "JPZ921600001" }));
-    await syncSpotifyLibrary(users[0].id, connection, 1);
-    expect((await metadataOf()).isrc).toBe("JPZ921600001");
-  });
-});
-
-// L'expression partagee par les 5 upserts du compte Spotify connecte.
+// L'expression qui servait aux upserts du compte Spotify connecte (retires, T15).
 describe("METADATA_KEEPING_ISRC", () => {
   const upsert = (metadata: Record<string, unknown>) => pool.query(
     `INSERT INTO audio_sources (provider, external_id, title, artist, metadata)
