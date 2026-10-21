@@ -9,6 +9,8 @@
 //                             "/blindz -> blindz.app" du portail developpeur)
 //   /discord-stub/*        -> faux Discord : echange du code OAuth2, utilisateur,
 //                             et qui est dans quel salon (pour le harnais)
+//   /short-link-stub/*     -> faux hebergeur des liens courts des applis
+//                             (link.deezer.com, spotify.link...), redirections seules
 //   /discord-harness.html  -> le harnais : la page qui joue le client Discord
 //                             (RPC du SDK par postMessage) autour de l'iframe
 // Aucune dependance : node:http et node:net seulement.
@@ -201,6 +203,31 @@ async function discordStub(req, res) {
   return json({ message: "404: Not Found", code: 0 }, 404)
 }
 
+/* ─── Faux liens courts ─────────────────────────────────────────────────
+ * Le backend de test y est branche via SHORT_LINK_TEST_BASE : une requete pour
+ * https://link.deezer.com/s/X arrive ici en /short-link-stub/link.deezer.com/s/X.
+ * Comme le vrai, on ne repond que par une redirection (et un corps a jeter) :
+ *   link.deezer.com/s/pl<N>   -> www.deezer.com/fr/playlist/<N> (playlist N du faux Deezer)
+ *   link.deezer.com/s/pr<N>   -> www.deezer.com/fr/profile/<N>
+ *   link.deezer.com/s/hop<N>  -> /s/pl<N>, redirection relative (deux sauts)
+ *   spotify.link/ailleurs     -> l'adresse des metadonnees du nuage (doit etre refusee)
+ *   link.deezer.com/s/boucle  -> elle-meme (doit s'arreter a 5 sauts)
+ *   le reste                  -> la page 404 de Deezer, comme le vrai pour un lien perime
+ * Chaque appel est journalise (le parcours compte les sauts). */
+function shortLinkStub(req, res) {
+  const u = new URL(req.url, "http://x")
+  const p = u.pathname.replace(/^\/short-link-stub/, "")
+  if (STUB_LOG) fs.appendFile(STUB_LOG, `${new Date().toISOString()} short-link ${p}${u.search}\n`, () => {})
+  const go = location => { res.writeHead(302, { Location: location, "Content-Type": "text/html" }); res.end("<html>redirection</html>") }
+  let m
+  if ((m = p.match(/^\/link\.deezer\.com\/s\/pl(\d+)$/))) return go(`https://www.deezer.com/fr/playlist/${m[1]}?host=0&utm_source=deezer`)
+  if ((m = p.match(/^\/link\.deezer\.com\/s\/pr(\d+)$/))) return go(`https://www.deezer.com/fr/profile/${m[1]}`)
+  if ((m = p.match(/^\/link\.deezer\.com\/s\/hop(\d+)$/))) return go(`/s/pl${m[1]}`)
+  if (p === "/spotify.link/ailleurs") return go("https://169.254.169.254/latest/meta-data/")
+  if (p === "/link.deezer.com/s/boucle") return go("https://link.deezer.com/s/boucle")
+  return go("https://www.deezer.com/deezer-links-404")
+}
+
 const server = http.createServer((req, res) => {
   try { route(req, res) } catch (e) { console.error(`[proxy] ${req.url} : ${e?.message}`); plain(res, 500, "erreur du serveur local") }
 })
@@ -214,6 +241,7 @@ function route(req, res) {
   if (url.startsWith("/discord-stub/")) { discordStub(req, res).catch(e => plain(res, 500, `faux Discord : ${e.message}`)); return }
   if (url.split("?")[0] === "/discord-harness.html") return sendFile(req, res, path.join(HERE, "discord-harness.html"))
   if (url.startsWith("/deezer-stub/")) return deezerStub(req, res)
+  if (url.startsWith("/short-link-stub/")) return shortLinkStub(req, res)
   if (url.startsWith("/blindify/api/") || url.startsWith("/blindify/socket.io/")) return toBackend(req, res)
   // Depuis l'Activite, l'extrait (sur l'hote de l'API) est demande a travers le proxy : /.proxy/blindz/test-audio/...
   if (url.startsWith("/test-audio/") || url.startsWith("/blindify/test-audio/")) return sendFile(req, res, path.join(AUDIO, path.basename(url.split("?")[0])))

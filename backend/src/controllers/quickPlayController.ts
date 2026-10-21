@@ -1,8 +1,8 @@
 import type { Request, Response } from "express";
 import { ok, fail } from "../utils/response";
 import { logger } from "../utils/logger";
+import { profileLinkOrFail } from "./profileLink";
 import {
-  parseProfileUrl,
   fetchPublicPlaylists,
   fetchPlaylistTracks,
   type ImportedTrack,
@@ -75,11 +75,9 @@ export const quickPlayController = {
 
     const count = Math.min(Math.max(Number(rawCount) || 10, 5), 40);
 
-    const parsed = parseProfileUrl(url.trim());
-    if (!parsed) {
-      fail(res, "unsupported_url", "URL non reconnue. Utilise un lien de profil ou playlist Spotify ou Deezer.");
-      return;
-    }
+    const link = await profileLinkOrFail(req, res, url);
+    if (!link) return;
+    const { parsed } = link;
 
     try {
       // 1. Fetch public playlists

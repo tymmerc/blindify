@@ -4,6 +4,7 @@ import { Buffer } from "node:buffer";
 import { logger } from "../utils/logger";
 import { isDeezerId, isSpotifyId } from "../utils/providerIds";
 import { isIsrc } from "./previewMatch";
+import { ShortLinkError, normalizeShortLink, resolveShortLink, type ResolveOptions } from "./shortLinkResolver";
 
 // ---------------------------------------------------------------------------
 // URL Parsing
@@ -66,6 +67,38 @@ export function parseProfileUrl(raw: string): ParsedUrl | null {
   }
 
   return null;
+}
+
+export interface ResolvedProfileLink {
+  parsed: ParsedUrl;
+  /** L'adresse longue : celle collee, ou l'arrivee du lien court. */
+  url: string;
+}
+
+/**
+ * parseProfileUrl, en ouvrant d'abord un lien court des applis
+ * (link.deezer.com, spotify.link...) : une seule resolution par appel. null
+ * pour un lien non reconnu ; ShortLinkError si le lien court n'aboutit pas a
+ * une playlist ou un profil.
+ */
+export async function parseProfileLink(raw: string, options?: ResolveOptions): Promise<ResolvedProfileLink | null> {
+  const trimmed = raw.trim();
+  // Lien court, au besoin passe en https (normalizeShortLink).
+  const short = normalizeShortLink(trimmed);
+  if (short === null) {
+    const parsed = parseProfileUrl(trimmed);
+    return parsed ? { parsed, url: trimmed } : null;
+  }
+  const arrival = await resolveShortLink(short, options);
+  const parsed = parseProfileUrl(arrival);
+  if (!parsed) throw new ShortLinkError("not_a_playlist");
+  logger.info("short_link_resolved", { from: new URL(short).hostname, provider: parsed.provider, type: parsed.type });
+  // La requete de l'arrivee ne porte que des parametres de partage (si= rattache
+  // a celui qui partage, utm_*, _branch_match_id, host=...) : on ne les garde pas.
+  const kept = new URL(arrival);
+  kept.search = "";
+  kept.hash = "";
+  return { parsed, url: kept.toString() };
 }
 
 // A broken escape ("%E0%A4%A") makes decodeURIComponent throw; callers run
