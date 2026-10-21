@@ -107,6 +107,19 @@ for (const c of refus) {
     ? ok(`${c.label} : refuse (${r.error?.code}), ${calls.length} appel(s)`)
     : bad(`${c.label} : ${r.status} ${r.error?.code}, ${calls.length} appel(s) au lieu de ${c.hops}`)
 }
+{
+  // Sans la cle E2E : la limite propre aux liens courts (10 par minute et par IP).
+  const raw = () => fetch("http://127.0.0.1:3098/api/quick-play", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Origin: "http://blindz-test.localhost:3180" },
+    body: JSON.stringify({ url: `https://link.deezer.com/s/pl${n + 2}`, count: 5 }),
+  }).then(r => r.status)
+  const statuses = []
+  for (let i = 0; i < 11; i++) statuses.push(await raw())
+  statuses.slice(0, 10).every(st => st === 200) && statuses[10] === 429
+    ? ok("limite des liens courts : 10 par minute passent, le 11e recoit 429")
+    : bad(`limite des liens courts : statuts ${statuses.join(",")}`)
+}
 const egress = fs.existsSync("/opt/blindify/.test-stack/logs/egress.log") ? fs.readFileSync("/opt/blindify/.test-stack/logs/egress.log", "utf8").trim() : ""
 egress === "" ? ok("aucune sortie refusee par no-egress") : bad(`sorties refusees : ${egress.split("\n").length}`)
 
