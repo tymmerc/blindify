@@ -111,7 +111,7 @@ export default function Page() {
           blindz.app existe aussi en Activité Discord : la partie se lance dans le salon vocal, et ceux qui sont dans
           l&apos;appel la rejoignent d&apos;un clic. Pas de code à envoyer, et chacun choisit sa musique en entrant.
         </p>
-        <DiscordPlay />
+        <DiscordPlay heading={false} />
       </Section>
 
       <Section tag="Bon à savoir" title="Avant de lancer la première partie" tone="amber">

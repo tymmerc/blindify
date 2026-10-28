@@ -19,10 +19,11 @@ const SR_NEW_TAB = <span className="sr-only"> (s&apos;ouvre dans un nouvel ongle
 function StepList({ tone, compact }: { tone: Tone; compact?: boolean }) {
   const num = tone === "dark" ? "text-[#e0a32e]" : "text-[#c65133]"
   return (
-    <ol className={`m-0 list-none p-0 ${compact ? "space-y-1 text-[13px]" : "space-y-2 text-[0.98rem]"}`}>
+    // compact : la ligne est souvent centree, la liste reste un bloc aligne a gauche au milieu.
+    <ol className={`m-0 list-none p-0 ${compact ? "mx-auto w-fit max-w-full space-y-1 text-left text-[13px]" : "space-y-2 text-[0.98rem]"}`}>
       {DISCORD_STEPS.map((s, i) => (
-        <li key={s} className="flex gap-2.5">
-          <span aria-hidden className={`font-display font-semibold italic ${num}`}>{i + 1}.</span>
+        <li key={s} className="flex gap-2">
+          <span aria-hidden className={`w-5 shrink-0 font-display font-semibold italic ${num}`}>{i + 1}.</span>
           <span>{s}</span>
         </li>
       ))}
@@ -30,7 +31,8 @@ function StepList({ tone, compact }: { tone: Tone; compact?: boolean }) {
   )
 }
 
-export function DiscordPlay({ tone = "light", className = "" }: { tone?: Tone; className?: string }) {
+/** heading=false : la section qui l'accueille pose deja la question (guide). */
+export function DiscordPlay({ tone = "light", heading = true, className = "" }: { tone?: Tone; heading?: boolean; className?: string }) {
   const dark = tone === "dark"
   const box = dark
     ? "border-[rgba(244,236,219,.45)] text-[#f4ecdb]"
@@ -41,11 +43,15 @@ export function DiscordPlay({ tone = "light", className = "" }: { tone?: Tone; c
   const muted = dark ? "text-[#e9dcc0]" : "text-[#6b573f]"
   return (
     <div className={`rounded-md border-2 p-5 sm:p-6 ${box} ${className}`} data-testid="discord-play">
-      <p className={`m-0 font-mono text-[11px] font-bold uppercase tracking-[0.2em] ${muted}`}>En appel sur Discord ?</p>
-      <p className="m-0 mt-2 font-display text-[1.35rem] font-semibold leading-snug">
-        Jouez directement <em className="font-medium italic">dans l&apos;appel</em>, sans code à partager.
-      </p>
-      <div className="mt-4 grid gap-5 sm:grid-cols-[auto_1fr] sm:items-start sm:gap-7">
+      {heading ? (
+        <>
+          <p className={`m-0 font-mono text-[11px] font-bold uppercase tracking-[0.2em] ${muted}`}>En appel sur Discord ?</p>
+          <p className="m-0 mt-2 font-display text-[1.35rem] font-semibold leading-snug">
+            Jouez directement <em className="font-medium italic">dans l&apos;appel</em>, sans code à partager.
+          </p>
+        </>
+      ) : null}
+      <div className={`${heading ? "mt-4" : ""} grid gap-5 sm:grid-cols-[auto_1fr] sm:items-start sm:gap-7`}>
         <a
           href={DISCORD_INSTALL_URL}
           target="_blank"

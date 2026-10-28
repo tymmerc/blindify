@@ -64,7 +64,7 @@ const FAQ: Array<{ q: string; a: string }> = [
     a: "Le mode \"À distance\" : tu crées une partie, tu partages le code à 6 caractères, et chacun joue depuis chez lui sur son écran, avec le chat intégré et un pierre-feuille-ciseaux pour patienter dans le salon. Jusqu'à 12 joueurs.",
   },
   {
-    q: "Peut-on jouer dans Discord ?",
+    q: "Peut-on jouer dans Discord\u00a0?",
     a: "Oui, blindz.app existe en Activité Discord : la partie se lance dans le salon vocal, sans code à partager. Ajoute Blindz à ton serveur ou à ton compte avec le bouton « Jouer sur Discord » (sur l'accueil, ou sur la page Jouer), rejoins un salon vocal, puis clique sur la fusée et sur Blindz. Les potes qui sont dans l'appel cliquent sur l'Activité, sans rien installer, et chacun choisit sa musique en entrant.",
   },
   {

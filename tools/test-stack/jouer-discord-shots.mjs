@@ -112,32 +112,43 @@ async function runView(view) {
     // 5. FAQ
     {
       const { ctx, page } = await open(browser, view, "/faq/")
-      const q = page.getByText("Peut-on jouer dans Discord ?")
+      const q = page.getByText(/Peut-on jouer dans Discord/)
       check(await q.isVisible(), "faq : la question est la")
       await q.click()
       await sleep(500)
       await shotAt(page, q, `${view.tag}-4-faq.png`)
       await ctx.close()
     }
-    // 6. A distance, ecran d'entree puis lobby de l'hote
+    // 6. A distance : le choix Creer / Rejoindre (/friends/), puis le lobby de l'hote
     {
       const { ctx, page } = await open(browser, view, "/jouer/")
       await guest(page, `Hote${view.tag}`)
-      await page.goto(`${APP}/multiplayer/?mode=friends`, { waitUntil: "networkidle", timeout: 60000 })
+      await page.goto(`${APP}/friends/`, { waitUntil: "networkidle", timeout: 60000 })
       await sleep(1500)
+      const create = page.getByRole("button", { name: /créer une partie/i })
+      try {
+        await create.waitFor({ timeout: 20000 })
+      } catch (e) {
+        await page.screenshot({ path: path.join(OUT, `${view.tag}-5-distance-ECHEC.png`) })
+        throw new Error(`/friends/ sans « Creer une partie » : ${(await page.evaluate(() => document.body.innerText)).slice(0, 200)}`)
+      }
       const hint = page.getByTestId("discord-hint")
-      await checkLink(hint.getByRole("link"), "a distance, entree : ligne")
-      check(await page.getByRole("button", { name: /créer une partie/i }).isEnabled(), "a distance, entree : Creer reste actif")
-      await page.screenshot({ path: path.join(OUT, `${view.tag}-5-distance-entree.png`) })
-      await noOverflow(page, "a distance, entree")
+      await checkLink(hint.getByRole("link"), "a distance, choix : ligne")
+      check(await create.isEnabled(), "a distance, choix : Creer reste actif")
+      check(await page.getByRole("button", { name: /rejoindre une partie/i }).isVisible(), "a distance, choix : Rejoindre reste la")
+      await page.screenshot({ path: path.join(OUT, `${view.tag}-5-distance-choix.png`) })
+      await noOverflow(page, "a distance, choix")
 
-      await page.getByRole("button", { name: /créer une partie/i }).click()
+      await create.click()
       await page.locator("[data-code]").first().waitFor({ timeout: 30000 })
       await sleep(2000)
       const lobbyHint = page.getByTestId("lobby-salle").getByTestId("discord-hint")
       await checkLink(lobbyHint.getByRole("link"), "lobby hote : ligne")
       check(await page.locator("[data-code]").first().isVisible(), "lobby hote : le code est toujours la")
       await page.screenshot({ path: path.join(OUT, `${view.tag}-6-lobby-hote.png`) })
+      await lobbyHint.getByText("Comment ça marche ?").click()
+      await sleep(400)
+      await page.screenshot({ path: path.join(OUT, `${view.tag}-6b-lobby-hote-deplie.png`) })
       await noOverflow(page, "lobby hote")
       await ctx.close()
     }

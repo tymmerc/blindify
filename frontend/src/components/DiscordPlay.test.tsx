@@ -31,6 +31,12 @@ describe("DiscordPlay", () => {
     for (const step of DISCORD_STEPS) expect(screen.getByText(step)).toBeInTheDocument()
     expect(screen.getByText(/sans rien installer/i)).toBeInTheDocument()
   })
+
+  it("heading=false : sans en-tete, le bouton reste", () => {
+    render(<DiscordPlay heading={false} />)
+    expect(screen.queryByText(/en appel sur discord/i)).not.toBeInTheDocument()
+    expect(screen.getByRole("link", { name: /jouer sur discord/i })).toHaveAttribute("href", EXPECTED)
+  })
 })
 
 describe("DiscordHint", () => {
