@@ -9,7 +9,10 @@ const logLevel = process.env.LOG_LEVEL || (process.env.NODE_ENV === 'production'
 // Spotify EN CLAIR dans les journaux du conteneur. Constate le 28/09/2026,
 // 27 lignes concernees sur 30 jours. Corriger au niveau du logger couvre
 // tous les appels existants et tous ceux a venir.
-const SECRETS = /^(authorization|cookie|set-cookie|token|password|secret|api[_-]?key|client[_-]?secret)$/i;
+// Toute cle qui finit par « token » (access_token, refreshToken, sessionToken...) :
+// un jeton court (Discord, une trentaine de caracteres) echappe a la regle des
+// 60 caracteres plus bas.
+const SECRETS = /^(authorization|cookie|set-cookie|password|secret|api[_-]?key|client[_-]?secret|.*token)$/i;
 
 function nettoyer(valeur: unknown, profondeur = 0): unknown {
   if (profondeur > 6 || valeur == null) return valeur;

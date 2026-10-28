@@ -405,7 +405,6 @@ describe("authController.me", () => {
 
     const fakeContext = {
       user: { id: 1, username: "Alice", provider: "local" },
-      connection: { provider: "spotify", accessToken: "abc" },
       sessionToken: "tok",
     };
     mockGetSessionContext.mockResolvedValueOnce(fakeContext);
@@ -416,12 +415,28 @@ describe("authController.me", () => {
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({
         success: true,
-        data: expect.objectContaining({
-          user: fakeContext.user,
-          providerConnection: fakeContext.connection,
-        }),
+        data: { user: fakeContext.user },
       })
     );
+  });
+
+  // T15 : plus de connexion Spotify. L'ancienne reponse renvoyait la ligne
+  // user_connections entiere, jetons OAuth compris, au navigateur.
+  it("ne renvoie jamais de connexion ni de jeton de fournisseur", async () => {
+    const req = mockReq();
+    const res = mockRes();
+    mockGetSessionContext.mockResolvedValueOnce({
+      user: { id: 1, username: "Alice", provider: "local" },
+      connection: { provider: "spotify", access_token: "jeton-acces", refresh_token: "jeton-refresh" },
+      sessionToken: "tok",
+    });
+
+    await authController.me(req, res);
+
+    const body = JSON.stringify(res.json.mock.calls[0][0]);
+    expect(body).not.toContain("providerConnection");
+    expect(body).not.toContain("jeton-acces");
+    expect(body).not.toContain("jeton-refresh");
   });
 
   it("should return 401 when not authenticated", async () => {

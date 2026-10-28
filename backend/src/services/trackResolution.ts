@@ -91,7 +91,7 @@ export async function fetchAudioSources(
   userId: number,
   provider: ProviderFilter,
   count: number,
-  opts: { likedOnly?: boolean; playlistId?: string; timeRange?: string; linkIds?: number[]; excludeKeys?: string[] } = {}
+  opts: { linkIds?: number[]; excludeKeys?: string[] } = {}
 ): Promise<AudioSourceRow[]> {
   const extraConds: string[] = [];
   const params: unknown[] = [userId];
@@ -99,26 +99,12 @@ export async function fetchAudioSources(
   // Les morceaux de CE joueur, par ses liens joueur-morceau (user_audio_sources) :
   // jamais le fonds commun, pour une attribution « qui a ajoute » fiable. La
   // ligne rendue porte le joueur et SA carte (un morceau peut etre a plusieurs).
-  // likedOnly : ses titres likes, relies a sa carte s'il les a importes.
-  const from = opts.likedOnly
-    ? `FROM audio_sources s
-       JOIN likes l ON l.audio_source_id = s.id
-       LEFT JOIN user_audio_sources ua ON ua.audio_source_id = s.id AND ua.user_id = l.user_id
-       WHERE l.user_id = $1`
-    : `FROM user_audio_sources ua
+  const from = `FROM user_audio_sources ua
        JOIN audio_sources s ON s.id = ua.audio_source_id
        WHERE ua.user_id = $1`;
   if (provider !== "any") {
     params.push(provider);
     extraConds.push(`s.provider = $${params.length}`);
-  }
-  if (opts.playlistId) {
-    params.push(opts.playlistId);
-    extraConds.push(`s.metadata->>'playlist_id' = $${params.length}`);
-  }
-  if (opts.timeRange) {
-    params.push(opts.timeRange);
-    extraConds.push(`s.metadata->>'time_range' = $${params.length}`);
   }
   // Bibliotheque de liens : ne jouer QUE les titres des cartes cochees.
   if (opts.linkIds) {
@@ -156,9 +142,6 @@ export function shuffle<T>(arr: T[]): T[] {
 }
 
 export type CollectOptions = {
-  likedOnly?: boolean;
-  playlistId?: string;
-  timeRange?: string;
   provider?: ProviderFilter;
   linkIds?: number[];
   excludeKeys?: string[];
@@ -270,9 +253,6 @@ export async function collectPlayableBatch(
   if (candidateLimit <= 0 || desiredCount <= 0) return { playable: [], rejectedKeys: [], drawn: 0, lookups: 0 };
   const providerFilter = opts.provider ?? "any";
   const candidates = await fetchAudioSources(userId, providerFilter, candidateLimit, {
-    likedOnly: opts.likedOnly,
-    playlistId: opts.playlistId,
-    timeRange: opts.timeRange,
     linkIds: opts.linkIds,
     excludeKeys: opts.excludeKeys,
   });

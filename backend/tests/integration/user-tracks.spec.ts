@@ -70,7 +70,6 @@ import { roomsController } from "../../src/controllers/roomsController";
 import { gamesController } from "../../src/controllers/gamesController";
 import { authController } from "../../src/controllers/authController";
 import { audioSourcesController } from "../../src/controllers/audioSourcesController";
-import { fetchAudioSources } from "../../src/services/trackResolution";
 import * as realtimeGame from "../../src/services/realtimeGame";
 import { clearGame } from "../../src/services/realtimeGame";
 import { clearAdvanceTimer, clearRevealTimer } from "../../src/services/realtimeOrchestrator";
@@ -550,25 +549,6 @@ describe("les autres lectures de la bibliotheque", () => {
     expect(mine.sort()).toEqual([...externalIds("101")].sort());
   });
 
-  it("titres likes : le second importeur les joue depuis sa carte", async () => {
-    const first = await newGuest("like_premier");
-    const second = await newGuest("like_second");
-    await importPlaylist(first, "101");
-    const { linkId } = await importPlaylist(second, "101");
-    const { rows } = await pool.query<{ id: string }>(
-      `SELECT id FROM audio_sources WHERE provider = 'deezer' AND external_id = ANY($1::text[]) ORDER BY external_id LIMIT 3`,
-      [externalIds("101")],
-    );
-    for (const row of rows) {
-      await pool.query(`INSERT INTO likes (user_id, audio_source_id) VALUES ($1, $2)`, [second, row.id]);
-    }
-
-    const liked = await fetchAudioSources(second, "deezer", 50, { likedOnly: true, linkIds: [linkId] });
-
-    expect(liked.map(s => s.id).sort()).toEqual(rows.map(r => r.id).sort());
-    expect(liked.every(s => s.user_id === second && s.link_id === linkId)).toBe(true);
-  });
-
   it("le tourniquet range les bibliotheques comme le lobby les compte : cartes cochees seulement", async () => {
     const kim = await newGuest("kim");
     const leo = await newGuest("leo");
@@ -684,36 +664,14 @@ describe("solo par bibliotheque", () => {
     expect(played.every(id => externalIds("101").includes(id))).toBe(true);
   });
 
-  it("sans musique, le solo Deezer pioche dans le fonds commun, jamais un morceau qu'un joueur garde", async () => {
-    const libres = range(300, 12).map(track);
-    for (const t of libres) {
-      await pool.query(
-        `INSERT INTO audio_sources (provider, external_id, title, artist) VALUES ('deezer', $1, $2, $3)`,
-        [t.externalId, t.title, t.artist],
-      );
-    }
-    // Un morceau dont le premier importeur s'est retire (user_id vide) mais
-    // qu'un autre joueur garde : il n'est pas au fonds commun.
-    const garde = await newGuest("garde");
-    const { rows } = await pool.query<{ id: string }>(
-      `INSERT INTO audio_sources (provider, external_id, title, artist) VALUES ('deezer', $1, 'Garde', 'G') RETURNING id`,
-      [`${RUN}-garde`],
-    );
-    await linkTrackToUser(garde, rows[0].id, null);
-    const sansMusique = await newGuest("sans_musique");
-
-    const reply = await call(gamesController.startSoloGame, sansMusique, { body: { source: "library", count: 10 } }, { provider: "deezer" });
-
-    expect(reply.status).toBe(200);
-    const played = field<Array<{ track_id: string }>>(reply, "tracks").map(t => t.track_id);
-    expect(played).toHaveLength(10);
-    const { rows: owned } = await pool.query<{ n: string }>(
-      `SELECT count(*) AS n FROM user_audio_sources ua JOIN audio_sources a ON a.id = ua.audio_source_id
-       WHERE a.external_id = ANY($1::text[])`,
-      [played],
-    );
-    expect(Number(owned[0].n)).toBe(0);
-  });
+  // Pas de test « solo sans musique » ici. Sans connexion (retiree, T15), il
+  // finit par le tirage global, qui pioche dans TOUTE la table audio_sources et
+  // ecrit l'extrait trouve en base. Avec le faux Deezer de ce fichier (un
+  // extrait pour n'importe quel titre), il rendait jouables les titres
+  // « injouables » de room-rounds-topup.spec.ts quand les deux fichiers
+  // tournent en meme temps : CI rouge sur #82, reproduit en local (2 fois sur 3,
+  // 77 titres muets de l'autre fichier avec un extrait d'ici). Le repli global
+  // est couvert par gamesController.spec.ts, base simulee.
 });
 
 // ---- suppression -------------------------------------------------------------

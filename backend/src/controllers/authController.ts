@@ -170,10 +170,7 @@ export const authController = {
   async me(req: Request, res: Response): Promise<void> {
     const context = await getSessionContext(req, res, { autoExtend: true });
     if (!context) return;
-    ok(res, {
-      user: context.user,
-      providerConnection: context.connection,
-    });
+    ok(res, { user: context.user });
   },
 
   async deleteAccount(req: Request, res: Response): Promise<void> {

@@ -1,24 +1,19 @@
 import crypto from "crypto";
 import type { Request, Response } from "express";
 import { pool } from "../config/db";
-import type {
-  AuthenticatedUser,
-  MusicProvider,
-  UserConnection,
-  UserSessionToken,
-} from "../types/user";
+import type { AuthenticatedUser, UserSessionToken } from "../types/user";
 import { fail } from "./response";
 
+// T15 (10/2026) : plus de connexion de fournisseur dans la session. La
+// connexion au compte Spotify (OAuth utilisateur) est retiree ; la musique vient
+// de l'import par lien colle, avec le jeton client de l'appli.
 export interface SessionOptions {
-  provider?: MusicProvider;
-  requireConnection?: boolean;
   autoExtend?: boolean;
   ttlMs?: number;
 }
 
 export interface SessionContext {
   user: AuthenticatedUser;
-  connection: UserConnection | null;
   sessionToken: string | null;
 }
 
@@ -60,29 +55,6 @@ async function querySessionByToken(token: string): Promise<UserSessionToken | nu
      WHERE token=$1
      LIMIT 1`,
     [hashToken(token)]
-  );
-  return rows[0] ?? null;
-}
-
-async function queryConnection(userId: number, provider?: MusicProvider): Promise<UserConnection | null> {
-  if (!provider) {
-    const { rows } = await pool.query<UserConnection>(
-      `SELECT id, user_id, provider, access_token, refresh_token, expires_at, scope, created_at, updated_at
-       FROM user_connections
-       WHERE user_id=$1
-       ORDER BY updated_at DESC
-       LIMIT 1`,
-      [userId]
-    );
-    return rows[0] ?? null;
-  }
-
-  const { rows } = await pool.query<UserConnection>(
-    `SELECT id, user_id, provider, access_token, refresh_token, expires_at, scope, created_at, updated_at
-     FROM user_connections
-     WHERE user_id=$1 AND provider=$2
-     LIMIT 1`,
-    [userId, provider]
   );
   return rows[0] ?? null;
 }
@@ -131,21 +103,12 @@ export async function getSessionContextFromToken(
     return null;
   }
 
-  const desiredProvider: MusicProvider | undefined =
-    options.provider ?? (user.provider as MusicProvider | undefined);
-  const connection = await queryConnection(user.id, desiredProvider);
-
-  if (options.requireConnection && !connection) {
-    return null;
-  }
-
   if (options.autoExtend !== false) {
     await extendSessionToken(token, ttlMs);
   }
 
   return {
     user,
-    connection,
     sessionToken: token,
   };
 }
@@ -202,22 +165,12 @@ export async function getSessionContext(
 
   session.userId = user.id;
 
-  const desiredProvider: MusicProvider | undefined =
-    options.provider ?? (user.provider as MusicProvider | undefined);
-
-  const connection = await queryConnection(user.id, desiredProvider);
-  if (options.requireConnection && !connection) {
-    if (res) fail(res, "provider_required", "Aucune connexion active pour ce fournisseur", 403);
-    return null;
-  }
-
   if (sessionToken && options.autoExtend !== false) {
     await extendSessionToken(sessionToken, ttlMs);
   }
 
   return {
     user,
-    connection,
     sessionToken,
   };
 }

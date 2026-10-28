@@ -103,7 +103,7 @@ describe("clientApi", () => {
 
   describe("currentUser", () => {
     it("should GET /api/auth/me", async () => {
-      const responseData = { user: { id: 1, username: "alice" }, providerConnection: null }
+      const responseData = { user: { id: 1, username: "alice" } }
       mockFetch.mockResolvedValueOnce(okResponse(responseData))
 
       await clientApi.currentUser()
@@ -122,7 +122,7 @@ describe("clientApi", () => {
     })
 
     it("transmet le signal d'abandon a fetch (delai de la lecture de session)", async () => {
-      mockFetch.mockResolvedValueOnce(okResponse({ user: { id: 1, username: "alice" }, providerConnection: null }))
+      mockFetch.mockResolvedValueOnce(okResponse({ user: { id: 1, username: "alice" } }))
       const controller = new AbortController()
 
       await clientApi.currentUser({ signal: controller.signal })
@@ -177,9 +177,8 @@ describe("clientApi", () => {
 
       await clientApi.startSoloGame({
         difficulty: "hard",
-        source: "spotify",
+        source: "quickplay",
         count: 5,
-        provider: "spotify",
       })
 
       const [url, init] = mockFetch.mock.calls[0]
@@ -187,9 +186,11 @@ describe("clientApi", () => {
       expect(init.method).toBe("POST")
       const body = JSON.parse(init.body)
       expect(body.difficulty).toBe("hard")
-      expect(body.source).toBe("spotify")
+      expect(body.source).toBe("quickplay")
       expect(body.count).toBe(5)
-      expect(body.provider).toBe("spotify")
+      // T15 : plus de provider ni de playlist du compte Spotify.
+      expect(body).not.toHaveProperty("provider")
+      expect(body).not.toHaveProperty("playlistId")
     })
 
     it("should pass source, count, provider correctly with defaults", async () => {
@@ -333,7 +334,7 @@ describe("clientApi : jeton de session en Bearer (Activite Discord)", () => {
   })
 
   it("sans jeton pose : aucune en-tete Authorization, les cookies partent comme avant", async () => {
-    mockFetch.mockResolvedValueOnce(okResponse({ user: { id: 1 }, providerConnection: null }))
+    mockFetch.mockResolvedValueOnce(okResponse({ user: { id: 1 } }))
     await clientApi.currentUser()
     const [, init] = mockFetch.mock.calls[0]
     expect((init.headers as Record<string, string>).Authorization).toBeUndefined()
@@ -343,7 +344,7 @@ describe("clientApi : jeton de session en Bearer (Activite Discord)", () => {
   it("avec un jeton pose : Authorization: Bearer sur chaque requete, jusqu'au retrait", async () => {
     const { setApiBearerToken } = await import("@/lib/apiClient")
     setApiBearerToken("sess-42")
-    mockFetch.mockResolvedValue(okResponse({ user: { id: 1 }, providerConnection: null }))
+    mockFetch.mockResolvedValue(okResponse({ user: { id: 1 } }))
 
     await clientApi.currentUser()
     await clientApi.roomDetails("ABC123")
