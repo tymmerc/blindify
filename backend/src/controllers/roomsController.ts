@@ -1,5 +1,4 @@
 import type { Request, Response } from "express";
-import axios from "axios";
 import { pool } from "../config/db";
 import { io } from "../socket";
 import { getSessionContext } from "../utils/session";
@@ -11,11 +10,8 @@ import { bootstrapGameState, getGameState, gameStateSnapshot, revealedRoundCeili
 import { startRoundAndBroadcast } from "../services/realtimeOrchestrator";
 import { GameMode, type RoundTrack } from "../types/game";
 import { initStreamerGame } from "../services/streamerOrchestrator";
-import { isIsrc } from "../services/previewMatch";
-import { METADATA_KEEPING_ISRC } from "../services/isrcMetadata";
 import { activeLinkIds } from "./linksController";
-import { bySmallestLibrary, linkTrackToUser, ownersAmong, PLAYS_TONIGHT } from "../services/userTracks";
-import { isSpotifyId } from "../utils/providerIds";
+import { bySmallestLibrary, ownersAmong, PLAYS_TONIGHT } from "../services/userTracks";
 import {
   hydrateWithinBudget,
   collectPlayableBatch,
@@ -29,8 +25,6 @@ import { LOOKUPS_PER_ROUND, LookupGuard } from "../services/lookupGuard";
 // Code de salle : utils/roomCode.ts (partage avec la salle d'un salon Discord).
 import { generateRoomCode } from "../utils/roomCode";
 export { generateRoomCode };
-
-type SourceChoice = "library" | "liked" | "playlist" | "top_week" | "top_month" | "top_all";
 
 async function ensureRoomParticipantPrefs(): Promise<void> {
   await pool.query(`ALTER TABLE room_participants ADD COLUMN IF NOT EXISTS source_pref TEXT`);
@@ -88,104 +82,6 @@ function publicTrackRows(rows: Array<Record<string, unknown>>, revealedUpTo: num
       },
     };
   });
-}
-
-async function syncPlaylistTracks(userId: number, playlistId: string, accessToken: string): Promise<void> {
-  const url = `https://api.spotify.com/v1/playlists/${encodeURIComponent(playlistId)}/tracks`;
-  let nextUrl: string | null = `${url}?limit=100`;
-  while (nextUrl) {
-    const response = await axios.get(nextUrl, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    const data = response.data as {
-      items?: Array<{
-        track?: {
-          id?: string;
-          name?: string;
-          artists?: { name?: string }[];
-          album?: { images?: { url?: string }[]; name?: string; release_date?: string };
-          duration_ms?: number;
-          external_ids?: { isrc?: string };
-        } | null;
-      }>;
-      next?: string | null;
-    };
-    const items = data.items ?? [];
-    for (const item of items) {
-      const track = item.track;
-      if (!track?.id || !track?.name) continue;
-      const artist = track.artists?.map(a => a?.name).filter(Boolean).join(", ") || "Artiste inconnu";
-      const cover = track.album?.images?.[0]?.url ?? null;
-      const metadata = {
-        album: track.album?.name ?? null,
-        release_date: track.album?.release_date ?? null,
-        playlist_id: playlistId,
-        provider: "spotify" as MusicProvider,
-        isrc: isIsrc(track.external_ids?.isrc) ? track.external_ids.isrc : null,
-      };
-      const { rows } = await pool.query<{ id: string }>(
-        `INSERT INTO audio_sources (provider, external_id, user_id, title, artist, album_cover, duration_ms, metadata)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-         ON CONFLICT (provider, external_id)
-         DO UPDATE SET
-           title=EXCLUDED.title,
-           artist=EXCLUDED.artist,
-           album_cover=EXCLUDED.album_cover,
-           duration_ms=EXCLUDED.duration_ms,
-           ${METADATA_KEEPING_ISRC},
-           user_id=COALESCE(audio_sources.user_id, EXCLUDED.user_id)
-         RETURNING id`,
-        ["spotify", track.id, userId, track.name, artist, cover, track.duration_ms ?? null, metadata]
-      );
-      await linkTrackToUser(userId, rows[0].id, null);
-    }
-    nextUrl = data.next ?? null;
-  }
-}
-
-async function syncTopTracks(
-  userId: number,
-  timeRange: "short_term" | "medium_term" | "long_term",
-  accessToken: string
-): Promise<void> {
-  const url = `https://api.spotify.com/v1/me/top/tracks?limit=50&time_range=${timeRange}`;
-  const { data } = await axios.get(url, { headers: { Authorization: `Bearer ${accessToken}` } });
-  const items: Array<{
-    id?: string;
-    name?: string;
-    artists?: { name?: string }[];
-    album?: { images?: { url?: string }[]; name?: string; release_date?: string };
-    duration_ms?: number;
-    external_ids?: { isrc?: string };
-  }> = data?.items ?? [];
-
-  for (const track of items) {
-    if (!track?.id || !track?.name) continue;
-    const artist = track.artists?.map(a => a?.name).filter(Boolean).join(", ") || "Artiste inconnu";
-    const cover = track.album?.images?.[0]?.url ?? null;
-    const metadata = {
-      album: track.album?.name ?? null,
-      release_date: track.album?.release_date ?? null,
-      time_range: timeRange,
-      provider: "spotify" as MusicProvider,
-      isrc: isIsrc(track.external_ids?.isrc) ? track.external_ids.isrc : null,
-    };
-    const { rows } = await pool.query<{ id: string }>(
-      `INSERT INTO audio_sources (provider, external_id, user_id, title, artist, album_cover, duration_ms, metadata)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-       ON CONFLICT (provider, external_id)
-       DO UPDATE SET
-         title=EXCLUDED.title,
-         artist=EXCLUDED.artist,
-         album_cover=EXCLUDED.album_cover,
-         duration_ms=EXCLUDED.duration_ms,
-         ${METADATA_KEEPING_ISRC},
-         user_id=COALESCE(audio_sources.user_id, EXCLUDED.user_id)
-       RETURNING id`,
-      ["spotify", track.id, userId, track.name, artist, cover, track.duration_ms ?? null, metadata]
-    );
-    await linkTrackToUser(userId, rows[0].id, null);
-  }
 }
 
 /** Un autre lancement a pris la salle pendant le tirage. */
@@ -304,7 +200,7 @@ export const roomsController = {
     // de page, tunnel, appli fermee...). Avant, un simple F5 ejectait le joueur pour
     // toute la soiree. Les nouveaux venus, eux, attendent la prochaine partie.
     if (room.status !== "waiting") {
-      const context = await getSessionContext(req, res, { requireConnection: false });
+      const context = await getSessionContext(req, res);
       if (!context) return;
       const { rows: already } = await pool.query(
         `SELECT 1 FROM room_participants WHERE room_id=$1 AND user_id=$2 LIMIT 1`,
@@ -443,10 +339,11 @@ export const roomsController = {
     }
 
     const source = typeof req.body?.source === "string" ? req.body.source : null;
-    const playlistId = typeof req.body?.playlistId === "string" ? req.body.playlistId.trim() : null;
+    // T15 : seule la bibliotheque reste. Likes, playlist du compte et tops
+    // demandaient un compte Spotify connecte, retire.
+    const playlistId = null;
 
-    const allowedSources = new Set(["library", "liked", "playlist", "top_week", "top_month", "top_all"]);
-    if (!source || !allowedSources.has(source)) {
+    if (source !== "library") {
       fail(res, "invalid_source", "Source invalide", 400);
       return;
     }
@@ -581,7 +478,7 @@ export const roomsController = {
       fail(res, "room_code_missing", "Code de salle requis", 400);
       return;
     }
-    const context = await getSessionContext(req, res, { requireConnection: false });
+    const context = await getSessionContext(req, res);
     if (!context) return;
 
     const { rows: roomRows } = await pool.query<{ id: number; room_code: string; status: string; session_id: number | null }>(
@@ -686,7 +583,7 @@ export const roomsController = {
       fail(res, "room_code_missing", "Code de salle requis", 400);
       return;
     }
-    const context = await getSessionContext(req, res, { requireConnection: false });
+    const context = await getSessionContext(req, res);
     if (!context) return;
 
     const { rows } = await pool.query(
@@ -739,23 +636,9 @@ export const roomsController = {
   async startGameLocked(req: Request, res: Response): Promise<void> {
     const code = typeof req.params?.code === "string" ? req.params.code.toUpperCase() : "";
 
-    const sourceParam = typeof req.body?.source === "string" ? req.body.source : "library";
+    // T15 : source et playlistId du body sont ignores (plus de connexion au
+    // compte Spotify) : chaque joueur joue sa bibliotheque.
     const preferredProvider = req.body?.provider as MusicProvider | undefined;
-    const playlistId = typeof req.body?.playlistId === "string" ? req.body.playlistId.trim() : null;
-    // Id Spotify = 22 caracteres base62 : tout autre format est refuse avant
-    // d'atteindre l'URL de l'API Spotify.
-    if (playlistId && !isSpotifyId(playlistId)) {
-      fail(res, "invalid_playlist", "Playlist invalide", 400);
-      return;
-    }
-    const topRange =
-      sourceParam === "top_week"
-        ? "short_term"
-        : sourceParam === "top_month"
-          ? "medium_term"
-          : sourceParam === "top_all"
-            ? "long_term"
-            : null;
 
     const { rows: roomRows } = await pool.query(
       `SELECT id, room_code, host_user_id, status, max_players, question_count, difficulty, mode, host_plays, auto_advance, session_id, round_duration_ms
@@ -769,11 +652,7 @@ export const roomsController = {
       return;
     }
 
-    const context = await getSessionContext(req, res, {
-      provider: preferredProvider,
-      // Do not force a connection for friends/event: only enforce a minimum connection later.
-      requireConnection: false,
-    });
+    const context = await getSessionContext(req, res);
     if (!context) return;
 
     if (room.host_user_id !== context.user.id) {
@@ -860,9 +739,8 @@ export const roomsController = {
       } // end else (game in progress)
     }
 
-    let provider: MusicProvider =
-      preferredProvider ?? context.connection?.provider ?? context.user.provider ?? "guest";
-    if ((room.mode === GameMode.EVENT || room.mode === GameMode.STREAMER) && provider !== "guest" && !context.connection) {
+    let provider: MusicProvider = preferredProvider ?? context.user.provider ?? "guest";
+    if ((room.mode === GameMode.EVENT || room.mode === GameMode.STREAMER) && provider !== "guest") {
       // Host may be guest; fall back to pooled provider
       provider = "any" as MusicProvider;
     }
@@ -879,34 +757,8 @@ export const roomsController = {
 
     await ensureRoomParticipantPrefs();
 
-    if ((playlistId || topRange) && provider !== "spotify") {
-      fail(res, "playlist_provider_invalid", "Les playlists ou tops nécessitent Spotify.", 400);
-      return;
-    }
-
-    if (topRange && !context.connection?.access_token) {
-      fail(res, "provider_connection_missing", "Connexion Spotify requise pour ce mode", 400);
-      return;
-    }
-
-    if (playlistId && provider === "spotify" && context.connection?.access_token) {
-      try {
-        await syncPlaylistTracks(context.user.id, playlistId, context.connection.access_token);
-      } catch (err) {
-        logger.error("sync_playlist_failed_multi", { playlistId, error: err });
-      }
-    }
-
-    if (topRange && provider === "spotify" && context.connection?.access_token) {
-      try {
-        await syncTopTracks(context.user.id, topRange, context.connection.access_token);
-      } catch (err) {
-        logger.error("sync_top_tracks_failed_multi", { timeRange: topRange, error: err });
-      }
-    }
-
-    const { rows: participantRows } = await pool.query<{ user_id: number; source_pref: string | null; playlist_pref: string | null }>(
-      `SELECT user_id, source_pref, playlist_pref FROM room_participants WHERE room_id=$1`,
+    const { rows: participantRows } = await pool.query<{ user_id: number }>(
+      `SELECT user_id FROM room_participants WHERE room_id=$1`,
       [room.id]
     );
     // Joueurs qui REPONDENT : le presentateur (event sans host_plays) et l'hote streamer sont exclus.
@@ -957,63 +809,6 @@ export const roomsController = {
       }
     };
 
-    // Préférences par joueur
-    const prefMap = new Map<number, { source?: string | null; playlist?: string | null }>();
-    for (const row of participantRows) {
-      prefMap.set(row.user_id, { source: row.source_pref, playlist: row.playlist_pref });
-    }
-
-    const allowedSources: SourceChoice[] = ["library", "liked", "playlist", "top_week", "top_month", "top_all"];
-    const normalizeSource = (val?: string | null): SourceChoice => {
-      if (!val) return sourceParam;
-      const lower = val.toLowerCase();
-      if (allowedSources.includes(lower as SourceChoice)) return lower as SourceChoice;
-      return sourceParam;
-    };
-
-    // Charger les connexions Spotify des joueurs (hors hôte streamer/événement) pour synchroniser au besoin
-    const connectionUserIds = Array.from(new Set(musicContributorIds)) as number[];
-    const { rows: connRows } = await pool.query<{
-      id: number;
-      user_id: number;
-      provider: string;
-      access_token: string | null;
-      refresh_token: string | null;
-      expires_at: string | null;
-      scope: string[] | null;
-      created_at: string | null;
-      updated_at: string | null;
-    }>(
-      `SELECT id, user_id, provider, access_token, refresh_token, expires_at, scope, created_at, updated_at
-       FROM user_connections
-       WHERE user_id = ANY($1::int[])`,
-      [connectionUserIds]
-    );
-    const connectionMap = new Map<number, {
-      id: number;
-      user_id: number;
-      provider: MusicProvider;
-      access_token: string | null;
-      refresh_token: string | null;
-      expires_at: string | null;
-      scope: string[] | null;
-      created_at: string;
-      updated_at: string;
-    }>();
-    for (const row of connRows) {
-      connectionMap.set(row.user_id, {
-        id: row.id,
-        user_id: row.user_id,
-        provider: row.provider as MusicProvider,
-        access_token: row.access_token,
-        refresh_token: row.refresh_token,
-        expires_at: row.expires_at,
-        scope: row.scope,
-        created_at: row.created_at ?? new Date().toISOString(),
-        updated_at: row.updated_at ?? new Date().toISOString(),
-      });
-    }
-
     // Prélever un quota par joueur pour garantir la diversité
     const perUserCount = Math.max(1, Math.ceil(room.question_count / Math.max(1, musicContributorIds.length)));
     // Bibliotheque de liens : chaque joueur ne joue que ses cartes cochees.
@@ -1041,26 +836,6 @@ export const roomsController = {
       batch.rejectedKeys.forEach(key => rejectedKeys.add(key));
       return batch.playable;
     };
-    // Ce que chaque joueur a choisi de jouer : sa bibliotheque, ses titres
-    // likes, une playlist ou un top. Tous les complements le respectent, comme
-    // le premier tirage. Un choix qui demande Spotify sans connexion ne peut
-    // pas s'appliquer : le premier tirage saute ce joueur, les complements
-    // prennent sa bibliotheque (comme avant).
-    const choiceOf = (pid: number) => {
-      const pref = prefMap.get(pid);
-      const choice = normalizeSource(pref?.source ?? sourceParam);
-      const likedOnly = choice === "liked";
-      const playlist = choice === "playlist" ? pref?.playlist ?? playlistId ?? undefined : undefined;
-      const timeRange = choice === "top_week" ? "short_term" : choice === "top_month" ? "medium_term" : choice === "top_all" ? "long_term" : undefined;
-      const userConn = connectionMap.get(pid);
-      const needsSpotify = likedOnly || choice === "playlist" || Boolean(timeRange);
-      const applicable = !needsSpotify || (userConn?.provider === "spotify" && Boolean(userConn.access_token));
-      return { likedOnly, playlistId: playlist, timeRange, applicable };
-    };
-    const rulesFor = (pid: number): Pick<CollectOptions, "likedOnly" | "playlistId" | "timeRange"> => {
-      const c = choiceOf(pid);
-      return c.applicable ? { likedOnly: c.likedOnly, playlistId: c.playlistId, timeRange: c.timeRange } : {};
-    };
     const contribution = new Map<number, number>();
     // Un morceau peut etre a plusieurs joueurs : chacun ne tire que ce qui
     // n'est pas deja pris (excludeKeys), et les plus petites bibliotheques
@@ -1068,20 +843,10 @@ export const roomsController = {
     // se faisait prendre ses morceaux et n'avait pas sa part du tourniquet.
     const quotaOrder = await bySmallestLibrary(musicContributorIds);
     for (const pid of quotaOrder) {
-      const { likedOnly: likedChoice, playlistId: playlistChoice, timeRange: timeChoice, applicable } = choiceOf(pid);
-
-      // Si la source nécessite Spotify mais que le joueur n'a pas de connexion, on saute
-      if (!applicable) {
-        continue;
-      }
-
       // 1) D'abord les titres que CE joueur possede vraiment -> attribution "qui a ajoute" fiable.
       // On passe par collect pour HYDRATER les previews Deezer : les titres
       // importes ont audio_url NULL au depart et seraient sinon jetes par le filtre playable.
       const owned = await collect(pid, perUserCount, {
-        likedOnly: likedChoice,
-        playlistId: playlistChoice,
-        timeRange: timeChoice,
         provider: poolProvider,
         excludeKeys: [...seen],
         ...linkOpts(pid),
@@ -1097,9 +862,6 @@ export const roomsController = {
       if (need > 0) {
         const slice = await collect(pid, need, {
           provider: poolProvider,
-          likedOnly: likedChoice,
-          playlistId: playlistChoice,
-          timeRange: timeChoice,
           excludeKeys: [...seen],
           ...linkOpts(pid),
         });
@@ -1115,7 +877,6 @@ export const roomsController = {
       for (const pid of musicContributorIds) {
         if (collected.length >= room.question_count) break;
         const fill = await collect(pid, room.question_count - collected.length, {
-          ...rulesFor(pid),
           provider: poolProvider,
           excludeKeys: [...seen],
           ...linkOpts(pid),
@@ -1132,7 +893,6 @@ export const roomsController = {
       for (const pid of musicContributorIds) {
         if (sources.length >= room.question_count) break;
         const fallback = await collect(pid, room.question_count - sources.length, {
-          ...rulesFor(pid),
           provider: "any",
           excludeKeys: [...existingKeys],
           ...linkOpts(pid),
@@ -1155,7 +915,7 @@ export const roomsController = {
       // collect (et pas fetchAudioSources brut) : il rafraichit les
       // extraits et jette ceux sans audio. Sinon on pouvait injecter ici un titre
       // muet et la table restait 10 secondes dans le silence.
-      const personalPool = await collect(pid, 3, { ...rulesFor(pid), provider: poolProvider, excludeKeys: [...existingKeys], ...linkOpts(pid) });
+      const personalPool = await collect(pid, 3, { provider: poolProvider, excludeKeys: [...existingKeys], ...linkOpts(pid) });
       for (const candidate of personalPool) {
         const key = candidate.external_id ?? String(candidate.id);
         if (existingKeys.has(key)) continue;
@@ -1197,7 +957,6 @@ export const roomsController = {
         rejectedKeys,
         draw: (pid, drawLimit, excludeKeys, wanted) =>
           collectPlayableBatch(pid, wanted, {
-            ...rulesFor(pid),
             provider: "any",
             excludeKeys,
             drawLimit,

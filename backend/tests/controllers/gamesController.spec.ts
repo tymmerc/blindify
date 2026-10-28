@@ -294,7 +294,8 @@ describe('gamesController', () => {
       expect(res.status).toHaveBeenCalledWith(200);
     });
 
-    it('should handle "liked" source type', async () => {
+    // T15 : « likes » demandait un compte Spotify connecte ; retire, il joue la bibliotheque.
+    it('should treat the removed "liked" source as the library', async () => {
       const sources = Array.from({ length: 10 }, (_, i) =>
         makeAudioSource({ id: `uuid-${i}`, external_id: `ext-${i}` })
       );
@@ -308,9 +309,12 @@ describe('gamesController', () => {
       await gamesController.startSoloGame(req, res);
 
       expect(res.status).toHaveBeenCalledWith(200);
+      const sqls = mockQuery.mock.calls.map(call => String(call[0]));
+      expect(sqls.filter(sql => sql.includes('JOIN likes'))).toEqual([]);
     });
 
-    it('should handle "top_week" source type (short_term)', async () => {
+    // T15 : les tops lisaient /v1/me/top/tracks avec le jeton du joueur ; retires.
+    it('should ignore the removed "top_week" source without calling Spotify', async () => {
       const sources = Array.from({ length: 10 }, (_, i) =>
         makeAudioSource({ id: `uuid-${i}`, external_id: `ext-${i}` })
       );
@@ -325,9 +329,13 @@ describe('gamesController', () => {
       await gamesController.startSoloGame(req, res);
 
       expect(res.status).toHaveBeenCalledWith(200);
+      expect(mockAxiosGet).not.toHaveBeenCalled();
+      const sqls = mockQuery.mock.calls.map(call => String(call[0]));
+      expect(sqls.filter(sql => sql.includes('time_range'))).toEqual([]);
     });
 
-    it('should handle "top_month" source type (medium_term)', async () => {
+    // T15 : les tops lisaient /v1/me/top/tracks avec le jeton du joueur ; retires.
+    it('should ignore the removed "top_month" source without calling Spotify', async () => {
       const sources = Array.from({ length: 10 }, (_, i) =>
         makeAudioSource({ id: `uuid-${i}`, external_id: `ext-${i}` })
       );
@@ -342,9 +350,13 @@ describe('gamesController', () => {
       await gamesController.startSoloGame(req, res);
 
       expect(res.status).toHaveBeenCalledWith(200);
+      expect(mockAxiosGet).not.toHaveBeenCalled();
+      const sqls = mockQuery.mock.calls.map(call => String(call[0]));
+      expect(sqls.filter(sql => sql.includes('time_range'))).toEqual([]);
     });
 
-    it('should handle "top_all" source type (long_term)', async () => {
+    // T15 : les tops lisaient /v1/me/top/tracks avec le jeton du joueur ; retires.
+    it('should ignore the removed "top_all" source without calling Spotify', async () => {
       const sources = Array.from({ length: 10 }, (_, i) =>
         makeAudioSource({ id: `uuid-${i}`, external_id: `ext-${i}` })
       );
@@ -359,6 +371,9 @@ describe('gamesController', () => {
       await gamesController.startSoloGame(req, res);
 
       expect(res.status).toHaveBeenCalledWith(200);
+      expect(mockAxiosGet).not.toHaveBeenCalled();
+      const sqls = mockQuery.mock.calls.map(call => String(call[0]));
+      expect(sqls.filter(sql => sql.includes('time_range'))).toEqual([]);
     });
 
     it('should return 400 when fewer than 5 playable tracks are available', async () => {
@@ -462,6 +477,51 @@ describe('gamesController', () => {
           audio_url: expect.any(String),
         })
       );
+    });
+
+    // Relecture de #82, M1 : un titre tire d'une autre bibliotheque (repli
+    // global) portait la playlist, la source d'import et l'ISRC de son premier
+    // importeur jusqu'au navigateur. L'ecran solo n'affiche que l'album et l'annee.
+    it('should only send album and release_date in track metadata', async () => {
+      const sources = Array.from({ length: 5 }, (_, i) =>
+        makeAudioSource({
+          id: `uuid-${i}`,
+          external_id: `ext-${i}`,
+          metadata: {
+            album: `Album ${i}`,
+            release_date: '1999-01-01',
+            playlist_id: '37i9dQZF1DXcBWIGoYBM5M',
+            import_source: 'profile',
+            isrc: 'FRZ039800212',
+            provider: 'spotify',
+          },
+        })
+      );
+      mockGetSessionContext.mockResolvedValue(makeSessionContext());
+      setupStartGameQueries(sources, { total_rounds: 5 });
+
+      const res = mockRes();
+      await gamesController.startSoloGame(mockReq({ body: { source: 'library', count: 5 } }), res);
+
+      const tracks = (res.json as jest.Mock).mock.calls[0][0].data.tracks as Array<{ metadata: unknown }>;
+      expect(tracks).toHaveLength(5);
+      for (const track of tracks) {
+        expect(track.metadata).toEqual({ album: expect.stringMatching(/^Album /), release_date: '1999-01-01' });
+      }
+    });
+
+    it('should send empty metadata when the source has none', async () => {
+      const sources = Array.from({ length: 5 }, (_, i) =>
+        makeAudioSource({ id: `uuid-${i}`, external_id: `ext-${i}`, metadata: null })
+      );
+      mockGetSessionContext.mockResolvedValue(makeSessionContext());
+      setupStartGameQueries(sources, { total_rounds: 5 });
+
+      const res = mockRes();
+      await gamesController.startSoloGame(mockReq({ body: { source: 'library', count: 5 } }), res);
+
+      const tracks = (res.json as jest.Mock).mock.calls[0][0].data.tracks as Array<{ metadata: unknown }>;
+      expect(tracks[0].metadata).toEqual({});
     });
 
     it('should handle database error during session creation gracefully', async () => {

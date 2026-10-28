@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 import Link from "next/link"
+import { DiscordPlay } from "@/components/DiscordPlay"
 import { AMBER, BLUE, FaqList, GuideShell, Li, Section, faqJsonLd, webPageJsonLd } from "@/components/home/Guide"
 
 // Guide "blind test en ligne gratuit" : la requete generique sur laquelle les
@@ -10,7 +11,7 @@ const URL = "https://blindz.app/blind-test-en-ligne-gratuit/"
 const TITLE = "Blind test en ligne gratuit, sans inscription : comment jouer"
 const DESC =
   "Blind test en ligne gratuit, sans compte ni appli, sur les playlists Spotify ou Deezer des joueurs : à table, sur un seul tel ou à distance, 12 par salle."
-const UPDATED = "2026-09-08"
+const UPDATED = "2026-10-28"
 
 export const metadata: Metadata = {
   title: "Blind test en ligne gratuit, sans inscription",
@@ -45,7 +46,7 @@ export default function Page() {
       tagColor={AMBER}
       title={<>Un blind test en ligne <em className="font-medium italic text-[#cc4830]">gratuit</em>, sans inscription</>}
       intro="Il n'y a ni compte à créer, ni application à installer, ni carte bancaire à sortir. Il faut un navigateur, les téléphones des joueurs, et le lien d'une playlist publique Spotify ou Deezer. Voilà comment ça se passe."
-      updated="8 septembre 2026"
+      updated="28 octobre 2026"
       currentHref="/blind-test-en-ligne-gratuit/"
       jsonLd={[webPageJsonLd(URL, TITLE, DESC, UPDATED), faqJsonLd(FAQ)]}
     >
@@ -103,6 +104,14 @@ export default function Page() {
           Le détail de chaque mode, avec les réglages et les pièges à éviter, est dans le guide{" "}
           <Link href="/blind-test-soiree/">organiser un blind test en soirée</Link>.
         </p>
+      </Section>
+
+      <Section tag="Sur Discord" title="Vous êtes déjà en appel Discord ?">
+        <p>
+          blindz.app existe aussi en Activité Discord : la partie se lance dans le salon vocal, et ceux qui sont dans
+          l&apos;appel la rejoignent d&apos;un clic. Pas de code à envoyer, et chacun choisit sa musique en entrant.
+        </p>
+        <DiscordPlay heading={false} />
       </Section>
 
       <Section tag="Bon à savoir" title="Avant de lancer la première partie" tone="amber">

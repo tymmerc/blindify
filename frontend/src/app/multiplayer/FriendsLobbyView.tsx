@@ -6,6 +6,7 @@ import { Loader2 } from "lucide-react"
 import { MusicLibrary } from "@/components/import/MusicLibrary"
 import { ProfileImportBlock } from "@/components/import/ProfileImportBlock"
 import { publicPath } from "@/lib/publicPath"
+import { DiscordHint } from "@/components/DiscordPlay"
 import { GAME_MODES } from "@/lib/gameModes"
 import type { LobbyRendererProps } from "./lobbyTypes"
 import { LobbyDock } from "./LobbyDock"
@@ -69,6 +70,7 @@ function FriendsEntry({
           </form>
         </div>
       </Panel>
+      <DiscordHint className="text-center" />
       <p className="text-center">
         <Link href="/friends" className="text-xs text-[#6b573f] underline hover:text-[#2e2014]">Retour</Link>
       </p>
@@ -122,6 +124,9 @@ function FriendsLobby(props: LobbyRendererProps) {
               Envoie le lien, ou donne le code à taper sur {shortUrl}
             </p>
             <ShareButtons code={code} link={link} />
+            {/* Discret, sous le partage : l'hote en appel Discord peut basculer
+                sur l'Activite, le parcours par code reste le meme. */}
+            {isHost ? <DiscordHint tone="dark" className="mt-4 text-center" /> : null}
           </div>
         )}
         <div className="min-w-0 border-t-2 border-dashed border-[#6b573f] pt-4 lg:border-l-2 lg:border-t-0 lg:pl-8 lg:pt-0">

@@ -5,6 +5,7 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react"
 import { ArrowLeft, ArrowRight, Users, LogIn, Music } from "lucide-react"
 import { useMode } from "@/contexts/ModeContext"
 import { api } from "@/lib/api"
+import { DiscordHint } from "@/components/DiscordPlay"
 
 type Intent = "create" | "join" | null
 type Step = "nickname" | "music" | "intent" | "code"
@@ -339,6 +340,8 @@ function FriendsEntryContent() {
             <ArrowRight size={16} className="text-[#8a7558] transition group-hover:text-[#2e2014]" />
           </button>
         </div>
+        {/* Discret, sous les deux choix : en appel Discord, l'Activite evite le code. */}
+        <DiscordHint className="mt-6 text-center" />
       </StepShell>
     )
   }

@@ -6,6 +6,7 @@ import { ArrowLeft, ArrowRight, Plus, LogIn, Check, ExternalLink, Loader2 } from
 import { api } from "@/lib/api"
 import { recognizeMusicLink } from "@/lib/musicLink"
 import { publicPath } from "@/lib/publicPath"
+import { DiscordHint } from "@/components/DiscordPlay"
 
 const NAME_KEY = "blindify_nickname"
 const URL_KEY = "blindify_profile_url"
@@ -233,6 +234,8 @@ export default function EntryWizard() {
             Continuer
             <ArrowRight size={15} />
           </button>
+          {/* Pas pour un QR scanne : ce joueur rejoint une partie deja lancee. */}
+          {joinParam ? null : <DiscordHint className="pt-2 text-center" />}
         </div>
       </Shell>
     )

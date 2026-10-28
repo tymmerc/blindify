@@ -56,4 +56,17 @@ describe("jeton client Spotify", () => {
     await fresh.getSpotifyClientToken();
     expect(freshAxios.post.mock.calls[0][2]).toMatchObject({ timeout: 10_000 });
   });
+
+  // T15 : l'import par lien n'a besoin d'aucun compte Spotify connecte.
+  it("est un jeton de l'appli (client credentials), jamais celui d'un joueur", async () => {
+    jest.resetModules();
+    const fresh = jest.requireActual("../../src/services/profileImportService") as typeof import("../../src/services/profileImportService");
+    const freshAxios = (jest.requireMock("axios") as { default: { post: jest.Mock } }).default;
+    freshAxios.post.mockResolvedValue({ data: { access_token: "jeton", expires_in: 3600 } });
+    await fresh.getSpotifyClientToken();
+    const [url, body] = freshAxios.post.mock.calls[0];
+    expect(url).toBe("https://accounts.spotify.com/api/token");
+    expect(new URLSearchParams(body).get("grant_type")).toBe("client_credentials");
+    expect(new URLSearchParams(body).has("refresh_token")).toBe(false);
+  });
 });

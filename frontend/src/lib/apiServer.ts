@@ -3,7 +3,6 @@ import "server-only"
 import { cookies } from "next/headers"
 import { API_BASE_URL } from "./config"
 import type {
-  ProviderConnectionSummary,
   SoloGameResponse,
   UserSummary,
 } from "./types"
@@ -78,9 +77,9 @@ export function getServerApi() {
     getLoginUrl() {
       return buildUrl("/auth/login")
     },
-    async currentUser(): Promise<{ user: UserSummary; providerConnection: ProviderConnectionSummary | null } | null> {
+    async currentUser(): Promise<{ user: UserSummary } | null> {
       try {
-        const payload = await request<ApiEnvelope<{ user: UserSummary; providerConnection: ProviderConnectionSummary | null }>>(
+        const payload = await request<ApiEnvelope<{ user: UserSummary }>>(
           "/api/auth/me"
         )
         if (!payload.success) {
@@ -94,7 +93,7 @@ export function getServerApi() {
         throw err
       }
     },
-    async requireUser(): Promise<{ user: UserSummary; providerConnection: ProviderConnectionSummary | null }> {
+    async requireUser(): Promise<{ user: UserSummary }> {
       const data = await this.currentUser()
       if (!data) {
         throw new ApiError(401, "Unauthorized")
