@@ -304,6 +304,17 @@ async function collectPlayableSources(
   return shuffle(Array.from(unique.values()));
 }
 
+// Ce que l'ecran solo affiche (album, annee), rien d'autre. Un titre tire d'une
+// autre bibliotheque (repli global) portait jusqu'au navigateur la playlist,
+// la source d'import et l'ISRC de son premier importeur (relecture de #82, M1).
+function publicSoloMetadata(metadata: AudioSourceRow["metadata"]): Record<string, unknown> {
+  const meta = (metadata ?? {}) as Record<string, unknown>;
+  const kept: Record<string, unknown> = {};
+  if (meta.album != null) kept.album = meta.album;
+  if (meta.release_date != null) kept.release_date = meta.release_date;
+  return kept;
+}
+
 export const gamesController = {
   async startSoloGame(req: Request, res: Response): Promise<void> {
     const difficulty = typeof req.body?.difficulty === "string" ? req.body.difficulty : "normal";
@@ -417,7 +428,7 @@ export const gamesController = {
         artist: source.artist,
         album_cover: source.album_cover,
         audio_url: source.audio_url,
-        metadata: source.metadata ?? {},
+        metadata: publicSoloMetadata(source.metadata),
       };
     });
 
