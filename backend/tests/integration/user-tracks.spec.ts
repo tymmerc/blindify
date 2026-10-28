@@ -664,28 +664,14 @@ describe("solo par bibliotheque", () => {
     expect(played.every(id => externalIds("101").includes(id))).toBe(true);
   });
 
-  // T15 : ce test simulait une connexion Deezer pour tirer dans le fonds commun
-  // Deezer (morceaux que personne ne garde). Aucune connexion de ce genre n'a
-  // existe en prod, et les connexions sont retirees : un joueur sans musique
-  // suit le chemin invite (le meme pour tous depuis mars 2026), qui finit par
-  // le tirage global. Ce tirage peut servir un morceau qu'un joueur garde :
-  // ecart signale au compte rendu de T15, a traiter a part.
-  it("sans musique, le solo se lance quand meme sur 10 titres", async () => {
-    const libres = range(300, 12).map(track);
-    for (const t of libres) {
-      await pool.query(
-        `INSERT INTO audio_sources (provider, external_id, title, artist) VALUES ('deezer', $1, $2, $3)`,
-        [t.externalId, t.title, t.artist],
-      );
-    }
-    const sansMusique = await newGuest("sans_musique");
-
-    const reply = await call(gamesController.startSoloGame, sansMusique, { body: { source: "library", count: 10 } });
-
-    expect(reply.status).toBe(200);
-    const played = field<Array<{ track_id: string }>>(reply, "tracks").map(t => t.track_id);
-    expect(played).toHaveLength(10);
-  });
+  // Pas de test « solo sans musique » ici. Sans connexion (retiree, T15), il
+  // finit par le tirage global, qui pioche dans TOUTE la table audio_sources et
+  // ecrit l'extrait trouve en base. Avec le faux Deezer de ce fichier (un
+  // extrait pour n'importe quel titre), il rendait jouables les titres
+  // « injouables » de room-rounds-topup.spec.ts quand les deux fichiers
+  // tournent en meme temps : CI rouge sur #82, reproduit en local (2 fois sur 3,
+  // 77 titres muets de l'autre fichier avec un extrait d'ici). Le repli global
+  // est couvert par gamesController.spec.ts, base simulee.
 });
 
 // ---- suppression -------------------------------------------------------------
