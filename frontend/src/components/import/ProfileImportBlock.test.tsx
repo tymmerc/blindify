@@ -41,11 +41,14 @@ describe("ProfileImportBlock", () => {
     expect(importButton()).toBeEnabled()
   })
 
-  it("lien court d'une appli : explique quoi faire, sans envoyer", () => {
+  it("lien court d'une appli : accepte, le serveur l'ouvre a l'import", async () => {
     render(<ProfileImportBlock hideHeader />)
     fireEvent.change(field(), { target: { value: "https://link.deezer.com/s/30ZnBD9L4b4a1R5V6NWDu" } })
-    expect(screen.getByText(/lien court/i)).toBeInTheDocument()
-    expect(importButton()).toBeDisabled()
+    expect(screen.getByText(/lien court deezer/i)).toBeInTheDocument()
+    expect(field()).toHaveAttribute("aria-invalid", "false")
+    expect(importButton()).toBeEnabled()
+    fireEvent.click(importButton())
+    await waitFor(() => expect(mocks.importPlaylists).toHaveBeenCalledWith("https://link.deezer.com/s/30ZnBD9L4b4a1R5V6NWDu"))
   })
 
   it("lien inconnu : le dit, sans envoyer", () => {
@@ -82,7 +85,7 @@ describe("ProfileImportBlock", () => {
   it("« Où trouver ton lien ? » : les etapes pour Spotify et Deezer", () => {
     render(<ProfileImportBlock hideHeader />)
     fireEvent.click(screen.getByText(/où trouver ton lien/i))
-    expect(screen.getByText(/copier le lien/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/copier le lien/i)).toHaveLength(2)
     expect(screen.getByRole("link", { name: /ouvrir spotify/i })).toBeInTheDocument()
     expect(screen.getByRole("link", { name: /ouvrir deezer/i })).toBeInTheDocument()
   })

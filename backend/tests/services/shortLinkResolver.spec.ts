@@ -1,0 +1,505 @@
+import { describe, it, expect, afterEach, beforeEach, jest } from "@jest/globals";
+import dns from "node:dns";
+import http from "node:http";
+import type { AddressInfo } from "node:net";
+import {
+  MAX_REDIRECTS,
+  SHORT_LINK_HOSTS,
+  SHORT_LINK_CACHE_MAX,
+  SHORT_LINK_CACHE_TTL_MS,
+  ShortLinkError,
+  clearShortLinkCache,
+  isPublicAddress,
+  isShortLink,
+  normalizeShortLink,
+  outboundUrl,
+  resolveShortLink,
+  safeLookup,
+  shortLinkTestBase,
+  type Hop,
+} from "../../src/services/shortLinkResolver";
+import { parseProfileLink } from "../../src/services/profileImportService";
+
+beforeEach(() => clearShortLinkCache());
+
+// Redirections simulees : aucun test de ce fichier ne sort de la machine. Le
+// seul serveur ouvert ecoute sur 127.0.0.1 (faux hebergeur de liens courts).
+
+/** Un faux reseau : une reponse par adresse demandee, et le journal des appels. */
+function fakeHop(routes: Record<string, { status: number; location?: string } | Error>) {
+  const calls: string[] = [];
+  const hop: Hop = async url => {
+    calls.push(url.toString());
+    const route = routes[url.toString()];
+    if (!route) throw new Error(`appel inattendu : ${url}`);
+    if (route instanceof Error) throw route;
+    return { status: route.status, location: route.location ?? null };
+  };
+  return { hop, calls };
+}
+
+async function codeOf(promise: Promise<unknown>): Promise<string> {
+  try {
+    await promise;
+    return "aucune erreur";
+  } catch (err) {
+    return err instanceof ShortLinkError ? err.code : `autre erreur : ${String(err)}`;
+  }
+}
+
+describe("isShortLink", () => {
+  it.each([
+    "https://link.deezer.com/s/30ZnBD9L4b4a1R5V6NWDu",
+    "https://spotify.link/aBcD3fGh1Jb",
+    "https://spotify.app.link/aBcD3fGh1Jb",
+    "  https://spotify.link/aBcD3fGh1Jb  ",
+    "https://SPOTIFY.LINK/aBcD3fGh1Jb",
+    "https://spotify.link:443/aBcD3fGh1Jb",
+    "http://spotify.link/aBcD3fGh1Jb",
+    "spotify.link/aBcD3fGh1Jb",
+    "link.deezer.com/s/30ZnBD9L4b4a1R5V6NWDu",
+    "HTTP://link.deezer.com/s/30ZnBD9L4b4a1R5V6NWDu",
+  ])("lien court accepte : %s", raw => {
+    expect(isShortLink(raw)).toBe(true);
+  });
+
+  it.each([
+    ["spotify.link/aBcD3fGh1Jb", "https://spotify.link/aBcD3fGh1Jb"],
+    ["http://link.deezer.com/s/abc?x=1", "https://link.deezer.com/s/abc?x=1"],
+    ["  https://SPOTIFY.LINK/aBcD3fGh1Jb  ", "https://spotify.link/aBcD3fGh1Jb"],
+  ])("normalise en https : %s", (raw, expected) => {
+    expect(normalizeShortLink(raw)).toBe(expected);
+  });
+
+  it.each([
+    ["http sur un port exotique", "http://spotify.link:8080/aBcD3fGh1Jb"],
+    ["sans schema, port exotique", "spotify.link:8443/aBcD3fGh1Jb"],
+    ["sans schema, identifiants", "moi@spotify.link/aBcD3fGh1Jb"],
+    ["chemin hors forme", "https://link.deezer.com/autre/30ZnBD9L4b4a1R5V6NWDu"],
+    ["jeton encode", "https://spotify.link/a%2F..%2Fb"],
+    ["schema ftp", "ftp://spotify.link/aBcD3fGh1Jb"],
+    ["schema javascript", "javascript://spotify.link/%0aalert(1)"],
+    ["schema file", "file:///etc/passwd"],
+    ["port exotique", "https://spotify.link:8443/aBcD3fGh1Jb"],
+    ["identifiants", "https://user:pass@spotify.link/aBcD3fGh1Jb"],
+    ["sous-domaine pirate", "https://spotify.link.evil.com/x"],
+    ["hote dans le chemin", "https://evil.com/spotify.link/x"],
+    ["point final", "https://spotify.link./aBcD3fGh1Jb"],
+    ["localhost", "https://localhost/x"],
+    ["boucle IPv4", "https://127.0.0.1/x"],
+    ["boucle IPv4 en decimal", "https://2130706433/x"],
+    ["boucle IPv6", "https://[::1]/x"],
+    ["IP privee", "https://10.0.0.1/x"],
+    ["metadonnees du nuage", "https://169.254.169.254/latest/meta-data"],
+    ["lien long", "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M"],
+    ["texte", "rien du tout"],
+    ["vide", ""],
+    ["Firebase Dynamic Links, ferme depuis aout 2025", "https://deezer.page.link/abc123"],
+  ])("refuse (%s)", (_cas, raw) => {
+    expect(isShortLink(raw)).toBe(false);
+  });
+});
+
+describe("resolveShortLink", () => {
+  it("Deezer : un saut, l'adresse d'arrivee n'est jamais appelee", async () => {
+    const { hop, calls } = fakeHop({
+      "https://link.deezer.com/s/30ZnBD9L4b4a1R5V6NWDu": { status: 302, location: "https://www.deezer.com/fr/playlist/1479458365?host=0&utm_source=share" },
+    });
+    await expect(resolveShortLink("https://link.deezer.com/s/30ZnBD9L4b4a1R5V6NWDu", { hop }))
+      .resolves.toBe("https://www.deezer.com/fr/playlist/1479458365?host=0&utm_source=share");
+    expect(calls).toEqual(["https://link.deezer.com/s/30ZnBD9L4b4a1R5V6NWDu"]);
+  });
+
+  it("Spotify : chaine entre hotes de depart, puis open.spotify.com", async () => {
+    const { hop, calls } = fakeHop({
+      "https://spotify.link/aBcD3fGh1Jb": { status: 307, location: "https://spotify.app.link/aBcD3fGh1Jb?_p=1" },
+      "https://spotify.app.link/aBcD3fGh1Jb?_p=1": { status: 301, location: "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M?si=abc" },
+    });
+    await expect(resolveShortLink("https://spotify.link/aBcD3fGh1Jb", { hop }))
+      .resolves.toBe("https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M?si=abc");
+    expect(calls).toHaveLength(2);
+  });
+
+  it("une redirection relative reste sur l'hote courant", async () => {
+    const { hop, calls } = fakeHop({
+      "https://link.deezer.com/s/abc": { status: 302, location: "/s/abc?d=1" },
+      "https://link.deezer.com/s/abc?d=1": { status: 302, location: "https://deezer.com/playlist/42" },
+    });
+    await expect(resolveShortLink("https://link.deezer.com/s/abc", { hop })).resolves.toBe("https://deezer.com/playlist/42");
+    expect(calls).toEqual(["https://link.deezer.com/s/abc", "https://link.deezer.com/s/abc?d=1"]);
+  });
+
+  it("lien court sans schema : resolu en https", async () => {
+    const { hop, calls } = fakeHop({ "https://spotify.link/x": { status: 307, location: "https://open.spotify.com/user/a" } });
+    await expect(resolveShortLink("spotify.link/x", { hop })).resolves.toBe("https://open.spotify.com/user/a");
+    expect(calls).toEqual(["https://spotify.link/x"]);
+  });
+
+  it.each([
+    "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M",
+    "ftp://spotify.link/x",
+    "https://spotify.link:8443/x",
+    "https://127.0.0.1/x",
+    "https://localhost/x",
+    "https://[::1]/x",
+    "https://192.168.1.1/x",
+    "file:///etc/passwd",
+  ])("depart hors liste, aucun appel : %s", async raw => {
+    const { hop, calls } = fakeHop({});
+    expect(await codeOf(resolveShortLink(raw, { hop }))).toBe("not_short_link");
+    expect(calls).toHaveLength(0);
+  });
+
+  it.each([
+    ["hote hors liste", "https://evil.com/playlist/1"],
+    ["sous-domaine pirate", "https://open.spotify.com.evil.com/playlist/1"],
+    ["http", "http://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M"],
+    ["port exotique", "https://open.spotify.com:8443/playlist/37i9dQZF1DXcBWIGoYBM5M"],
+    ["identifiants", "https://user@open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M"],
+    ["hote encode dans les identifiants", "https://open.spotify.com%2F@evil.com/"],
+    ["antislash", "https://evil.com\\@open.spotify.com/"],
+    ["IP de boucle", "https://127.0.0.1/"],
+    ["IP privee", "https://10.1.2.3/"],
+    ["metadonnees du nuage", "https://169.254.169.254/latest/meta-data"],
+    ["IPv6 locale", "https://[::1]/"],
+    ["localhost", "https://localhost:3000/"],
+    ["schema data", "data:text/html,<script>alert(1)</script>"],
+    ["schema javascript", "javascript:alert(1)"],
+    ["schema file", "file:///etc/passwd"],
+    ["sans schema vers un autre hote", "//evil.com/x"],
+  ])("redirection refusee net (%s), sans saut de plus", async (_cas, location) => {
+    const { hop, calls } = fakeHop({ "https://spotify.link/x": { status: 302, location } });
+    expect(await codeOf(resolveShortLink("https://spotify.link/x", { hop }))).toBe("redirect_refused");
+    expect(calls).toEqual(["https://spotify.link/x"]);
+  });
+
+  it("ne decode pas l'adresse : un %2F reste un %2F", async () => {
+    const encoded = "https://open.spotify.com/playlist/%2e%2e%2f%2e%2e%2fapi%2ftoken";
+    const { hop } = fakeHop({ "https://spotify.link/x": { status: 302, location: encoded } });
+    await expect(resolveShortLink("https://spotify.link/x", { hop })).resolves.toBe(encoded);
+  });
+
+  it("une adresse encodee relative ne quitte pas l'hote, et sort de la forme : refusee", async () => {
+    const { hop, calls } = fakeHop({ "https://spotify.link/x": { status: 302, location: "https%3A%2F%2Fevil.com%2F" } });
+    expect(await codeOf(resolveShortLink("https://spotify.link/x", { hop }))).toBe("redirect_refused");
+    expect(calls).toEqual(["https://spotify.link/x"]);
+  });
+
+  it(`au plus ${MAX_REDIRECTS} redirections`, async () => {
+    const routes: Record<string, { status: number; location: string }> = {};
+    for (let i = 0; i < 10; i += 1) routes[`https://spotify.link/${i}`] = { status: 302, location: `/${i + 1}` };
+    const { hop, calls } = fakeHop(routes);
+    expect(await codeOf(resolveShortLink("https://spotify.link/0", { hop }))).toBe("too_many_redirects");
+    expect(calls).toHaveLength(MAX_REDIRECTS);
+  });
+
+  it.each([
+    ["page sans redirection", { status: 200 }],
+    ["introuvable", { status: 404 }],
+    ["302 sans Location", { status: 302 }],
+    ["304", { status: 304, location: "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M" }],
+  ])("%s : no_redirect", async (_cas, route) => {
+    const { hop } = fakeHop({ "https://spotify.link/x": route });
+    expect(await codeOf(resolveShortLink("https://spotify.link/x", { hop }))).toBe("no_redirect");
+  });
+
+  it("une erreur reseau devient unreachable", async () => {
+    const { hop } = fakeHop({ "https://spotify.link/x": new Error("ECONNRESET") });
+    expect(await codeOf(resolveShortLink("https://spotify.link/x", { hop }))).toBe("unreachable");
+  });
+
+  it("borne le nombre de resolutions simultanees", async () => {
+    const pending: Array<() => void> = [];
+    const hop: Hop = () => new Promise(resolve => {
+      pending.push(() => resolve({ status: 302, location: "https://open.spotify.com/user/abc" }));
+    });
+    const running = Array.from({ length: 5 }, () => resolveShortLink("https://spotify.link/x", { hop }));
+    expect(await codeOf(resolveShortLink("https://spotify.link/x", { hop }))).toBe("busy");
+    pending.forEach(release => release());
+    await expect(Promise.all(running)).resolves.toHaveLength(5);
+    // Les places se liberent : une nouvelle resolution passe.
+    const instant: Hop = async () => ({ status: 302, location: "https://open.spotify.com/user/abc" });
+    await expect(resolveShortLink("https://spotify.link/x", { hop: instant })).resolves.toBe("https://open.spotify.com/user/abc");
+  });
+});
+
+describe("parseProfileLink : l'adresse gardee", () => {
+  it.each([
+    ["https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M?si=abc123&utm_source=copy-link&_branch_match_id=9", "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M"],
+    ["https://www.deezer.com/fr/playlist/42?host=0&deferredFl=1&utm_campaign=x#frag", "https://www.deezer.com/fr/playlist/42"],
+  ])("arrivee d'un lien court sans parametres de partage : %s", async (arrival, kept) => {
+    const hop: Hop = async () => ({ status: 302, location: arrival });
+    const link = await parseProfileLink("https://spotify.link/partage", { hop });
+    expect(link?.url).toBe(kept);
+  });
+
+  it("un lien long colle reste tel quel (comme avant)", async () => {
+    const pasted = "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M?si=abc";
+    await expect(parseProfileLink(pasted)).resolves.toMatchObject({ url: pasted });
+  });
+});
+
+describe("cache des resolutions reussies", () => {
+  const ok302 = (location: string): Hop => async () => ({ status: 302, location });
+
+  it("le meme lien recolle ne repart pas sur le reseau", async () => {
+    const { hop, calls } = fakeHop({ "https://spotify.link/x": { status: 307, location: "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M" } });
+    await resolveShortLink("https://spotify.link/x", { hop });
+    await expect(resolveShortLink(" https://spotify.link/x ", { hop })).resolves.toBe("https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M");
+    expect(calls).toHaveLength(1);
+  });
+
+  it("un echec n'est pas garde", async () => {
+    const { hop, calls } = fakeHop({ "https://spotify.link/x": { status: 404 } });
+    await resolveShortLink("https://spotify.link/x", { hop }).catch(() => null);
+    await resolveShortLink("https://spotify.link/x", { hop }).catch(() => null);
+    expect(calls).toHaveLength(2);
+  });
+
+  it("expire apres sa duree de vie", async () => {
+    const now = jest.spyOn(Date, "now");
+    now.mockReturnValue(1_000_000);
+    const { hop, calls } = fakeHop({ "https://spotify.link/x": { status: 307, location: "https://open.spotify.com/user/a" } });
+    await resolveShortLink("https://spotify.link/x", { hop });
+    now.mockReturnValue(1_000_000 + SHORT_LINK_CACHE_TTL_MS + 1);
+    await resolveShortLink("https://spotify.link/x", { hop });
+    expect(calls).toHaveLength(2);
+    now.mockRestore();
+  });
+
+  it(`taille bornee a ${SHORT_LINK_CACHE_MAX} entrees : la plus ancienne part`, async () => {
+    for (let i = 0; i <= SHORT_LINK_CACHE_MAX; i += 1) {
+      await resolveShortLink(`https://spotify.link/${i}`, { hop: ok302(`https://open.spotify.com/user/u${i}`) });
+    }
+    const { hop, calls } = fakeHop({
+      "https://spotify.link/0": { status: 307, location: "https://open.spotify.com/user/u0" },
+      [`https://spotify.link/${SHORT_LINK_CACHE_MAX}`]: { status: 307, location: "x" },
+    });
+    await resolveShortLink("https://spotify.link/0", { hop });
+    await resolveShortLink(`https://spotify.link/${SHORT_LINK_CACHE_MAX}`, { hop });
+    expect(calls).toEqual(["https://spotify.link/0"]);
+  });
+});
+
+describe("une resolution a la fois par adresse IP", () => {
+  /** Un faux reseau qui ne repond que quand on le libere. */
+  function heldHop() {
+    const waiting: Array<() => void> = [];
+    let active = 0;
+    let maxActive = 0;
+    const hop: Hop = () => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      return new Promise(resolve => waiting.push(() => { active -= 1; resolve({ status: 302, location: "https://open.spotify.com/user/a" }); }));
+    };
+    const releaseAll = async () => {
+      while (waiting.length) { waiting.shift()?.(); await new Promise(r => setImmediate(r)); }
+    };
+    return { hop, waiting, releaseAll, maxActive: () => maxActive };
+  }
+
+  it("les liens d'une meme IP passent l'un apres l'autre", async () => {
+    const net = heldHop();
+    const runs = [1, 2, 3].map(i => resolveShortLink(`https://spotify.link/${i}`, { hop: net.hop, clientKey: "1.2.3.4" }));
+    await new Promise(r => setImmediate(r));
+    expect(net.waiting).toHaveLength(1);
+    await net.releaseAll();
+    await expect(Promise.all(runs)).resolves.toHaveLength(3);
+    expect(net.maxActive()).toBe(1);
+  });
+
+  it("au-dela de 3 en attente pour une IP : rate_limited", async () => {
+    const net = heldHop();
+    const runs = [1, 2, 3].map(i => resolveShortLink(`https://spotify.link/${i}`, { hop: net.hop, clientKey: "1.2.3.4" }));
+    expect(await codeOf(resolveShortLink("https://spotify.link/4", { hop: net.hop, clientKey: "1.2.3.4" }))).toBe("rate_limited");
+    await net.releaseAll();
+    await Promise.all(runs);
+  });
+
+  it("3 IP qui collent en boucle n'empechent pas une 4e de resoudre", async () => {
+    const net = heldHop();
+    const flood = ["10.0.0.1", "10.0.0.2", "10.0.0.3"].flatMap(ip =>
+      Array.from({ length: 6 }, (_, i) => resolveShortLink(`https://spotify.link/${ip.replace(/\./g, "_")}-${i}`, { hop: net.hop, clientKey: ip }).catch(e => e)));
+    await new Promise(r => setImmediate(r));
+    expect(net.waiting).toHaveLength(3);
+    const instant: Hop = async () => ({ status: 302, location: "https://open.spotify.com/user/d" });
+    await expect(resolveShortLink("https://spotify.link/d", { hop: instant, clientKey: "10.0.0.4" })).resolves.toBe("https://open.spotify.com/user/d");
+    await net.releaseAll();
+    const outcomes = await Promise.all(flood);
+    // Par IP : 3 places (1 en cours, 2 en attente), les 3 autres envois refuses.
+    expect(outcomes.filter(o => o instanceof ShortLinkError && o.code === "rate_limited")).toHaveLength(9);
+    expect(outcomes.filter(o => o === "https://open.spotify.com/user/a")).toHaveLength(9);
+    expect(net.maxActive()).toBe(3);
+  });
+});
+
+describe("outboundUrl : l'adresse appelee repart d'une origine constante", () => {
+  it.each([
+    ["https://link.deezer.com/s/abc?x=1", "https://link.deezer.com/s/abc?x=1"],
+    ["https://spotify.link/aBcD3fGh1Jb", "https://spotify.link/aBcD3fGh1Jb"],
+    ["https://spotify.app.link/aBcD3fGh1Jb?_p=1", "https://spotify.app.link/aBcD3fGh1Jb?_p=1"],
+  ])("%s", (raw, expected) => {
+    const out = outboundUrl(new URL(raw));
+    expect(out).toBe(expected);
+    expect(new URL(out ?? "http://x").hostname).toBe(new URL(raw).hostname);
+  });
+
+  it("chaque hote de depart a son origine constante", () => {
+    for (const host of SHORT_LINK_HOSTS) {
+      const path = host === "link.deezer.com" ? "/s/x" : "/x";
+      expect(outboundUrl(new URL(`https://${host}${path}`))).toBe(`https://${host}${path}`);
+    }
+  });
+
+  it.each([
+    "https://open.spotify.com/playlist/1", "https://evil.com/x", "https://127.0.0.1/x",
+    // Hors de la forme du chemin de chaque hote (/s/<jeton> chez Deezer, /<jeton> chez Spotify).
+    "https://spotify.link//evil.com/x", "https://spotify.link/a/b", "https://spotify.link/a%2Fb",
+    "https://spotify.link/a.b", "https://link.deezer.com/autre/x", "https://link.deezer.com/s/", "https://link.deezer.com/s/a/b",
+    `https://spotify.link/${"a".repeat(65)}`,
+  ])("hors table : %s", raw => {
+    expect(outboundUrl(new URL(raw))).toBeNull();
+  });
+});
+
+describe("isPublicAddress", () => {
+  it.each([
+    "127.0.0.1", "127.1.2.3", "10.0.0.1", "172.16.0.1", "172.31.255.255", "192.168.0.1",
+    "169.254.169.254", "100.64.0.1", "0.0.0.0", "224.0.0.1", "255.255.255.255", "198.18.0.1",
+    "::1", "::", "fe80::1", "fc00::1", "fd12:3456::1", "ff02::1", "::ffff:127.0.0.1", "::ffff:10.0.0.1",
+    "::7f00:1", "::a00:1", "2002:7f00:1::1", "2002:a00:1::", "2001:0:4136:e378::1", "64:ff9b:1::1",
+    "fec0::1", "192.88.99.1",
+    "pas une ip",
+  ])("refuse %s", ip => {
+    expect(isPublicAddress(ip)).toBe(false);
+  });
+
+  it.each(["151.101.2.1", "35.186.224.25", "2600:1901:0:1::1", "::ffff:151.101.2.1", "2001:4860:4860::8888", "2a00:1450:4007::1"])("accepte %s", ip => {
+    expect(isPublicAddress(ip)).toBe(true);
+  });
+});
+
+describe("safeLookup", () => {
+  it("refuse un nom qui resout vers la boucle locale", async () => {
+    const err = await new Promise<NodeJS.ErrnoException | null>(resolve => {
+      safeLookup("localhost", { all: true }, e => resolve(e));
+    });
+    expect(err?.code).toBe("EBLOCKEDADDRESS");
+  });
+});
+
+describe("controle DNS sur le vrai chemin (sans SHORT_LINK_TEST_BASE)", () => {
+  const saved = process.env.SHORT_LINK_TEST_BASE;
+  afterEach(() => {
+    jest.restoreAllMocks();
+    if (saved === undefined) delete process.env.SHORT_LINK_TEST_BASE;
+    else process.env.SHORT_LINK_TEST_BASE = saved;
+  });
+
+  // Un DNS piege : link.deezer.com donne la boucle locale. La connexion doit
+  // etre refusee avant d'etre ouverte (rien ne sort, rien n'est contacte).
+  it.each([
+    [[{ address: "127.0.0.1", family: 4 }]],
+    [[{ address: "151.101.2.1", family: 4 }, { address: "10.0.0.7", family: 4 }]],
+    [[{ address: "::1", family: 6 }]],
+  ])("refuse un hote de la liste qui resout vers %j", async addresses => {
+    delete process.env.SHORT_LINK_TEST_BASE;
+    jest.spyOn(dns, "lookup").mockImplementation(((_h: string, _o: unknown, cb: (e: null, a: unknown) => void) =>
+      cb(null, addresses)) as unknown as typeof dns.lookup);
+    const err = await resolveShortLink("https://link.deezer.com/s/x", { timeoutMs: 2000 }).catch(e => e);
+    expect(err).toBeInstanceOf(ShortLinkError);
+    expect(err.code).toBe("unreachable");
+    expect(err.message).toMatch(/non publique/);
+  });
+});
+
+describe("pile de test (SHORT_LINK_TEST_BASE)", () => {
+  const saved = process.env.SHORT_LINK_TEST_BASE;
+  let server: http.Server | null = null;
+
+  afterEach(async () => {
+    if (saved === undefined) delete process.env.SHORT_LINK_TEST_BASE;
+    else process.env.SHORT_LINK_TEST_BASE = saved;
+    server?.closeAllConnections();
+    if (server) await new Promise(r => server?.close(r));
+    server = null;
+  });
+
+  it.each([
+    "http://example.com/stub",
+    "https://10.0.0.1/stub",
+    "http://127.0.0.1.evil.com/stub",
+    "pas une adresse",
+  ])("ignoree si elle ne vise pas la boucle locale : %s", base => {
+    process.env.SHORT_LINK_TEST_BASE = base;
+    expect(shortLinkTestBase()).toBeNull();
+  });
+
+  describe("en production", () => {
+    const savedEnv = process.env.NODE_ENV;
+    const marker = Symbol.for("blindz.noEgress");
+    afterEach(() => {
+      process.env.NODE_ENV = savedEnv;
+      delete (globalThis as Record<symbol, unknown>)[marker];
+    });
+
+    it("ignoree : un .env de prod egare n'a aucun effet", () => {
+      process.env.NODE_ENV = "production";
+      process.env.SHORT_LINK_TEST_BASE = "http://127.0.0.1:3180/short-link-stub";
+      expect(shortLinkTestBase()).toBeNull();
+    });
+
+    it("suivie seulement sous le garde-fou de la pile (no-egress.cjs)", () => {
+      process.env.NODE_ENV = "production";
+      process.env.SHORT_LINK_TEST_BASE = "http://127.0.0.1:3180/short-link-stub";
+      (globalThis as Record<symbol, unknown>)[marker] = true;
+      expect(shortLinkTestBase()?.toString()).toBe("http://127.0.0.1:3180/short-link-stub");
+    });
+  });
+
+  it("suit la redirection du faux hebergeur, en GET", async () => {
+    const seen: Array<{ method?: string; url?: string }> = [];
+    server = http.createServer((req, res) => {
+      seen.push({ method: req.method, url: req.url });
+      res.writeHead(302, { Location: "https://www.deezer.com/fr/playlist/42" });
+      res.end("x".repeat(64 * 1024));
+    });
+    await new Promise<void>(r => server?.listen(0, "127.0.0.1", r));
+    const { port } = server.address() as AddressInfo;
+    process.env.SHORT_LINK_TEST_BASE = `http://127.0.0.1:${port}/short-link-stub`;
+
+    await expect(resolveShortLink("https://link.deezer.com/s/abc?x=1")).resolves.toBe("https://www.deezer.com/fr/playlist/42");
+    expect(seen).toEqual([{ method: "GET", url: "/short-link-stub/link.deezer.com/s/abc?x=1" }]);
+  });
+
+  it("coupe la connexion des les en-tetes, sans lire le corps", async () => {
+    let closedAt = 0;
+    let sent = 0;
+    server = http.createServer((req, res) => {
+      res.writeHead(302, { Location: "https://open.spotify.com/user/corps" });
+      // Un corps sans fin : seul un client qui coupe ferme la socket.
+      const timer = setInterval(() => { res.write("x".repeat(16 * 1024)); sent += 1; }, 5);
+      req.socket.on("close", () => { clearInterval(timer); closedAt = Date.now(); });
+    });
+    await new Promise<void>(r => server?.listen(0, "127.0.0.1", r));
+    process.env.SHORT_LINK_TEST_BASE = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+
+    const started = Date.now();
+    await expect(resolveShortLink("https://spotify.link/corps", { timeoutMs: 3000 })).resolves.toBe("https://open.spotify.com/user/corps");
+    for (let i = 0; i < 50 && !closedAt; i += 1) await new Promise(r => setTimeout(r, 10));
+    expect(closedAt).toBeGreaterThan(0);
+    expect(closedAt - started).toBeLessThan(500);
+    expect(sent).toBeLessThan(50);
+  });
+
+  it("un hebergeur muet coupe au bout du delai", async () => {
+    server = http.createServer(() => { /* ne repond jamais */ });
+    await new Promise<void>(r => server?.listen(0, "127.0.0.1", r));
+    const { port } = server.address() as AddressInfo;
+    process.env.SHORT_LINK_TEST_BASE = `http://127.0.0.1:${port}`;
+
+    const started = Date.now();
+    expect(await codeOf(resolveShortLink("https://spotify.link/x", { timeoutMs: 200 }))).toBe("unreachable");
+    expect(Date.now() - started).toBeLessThan(2000);
+  });
+});

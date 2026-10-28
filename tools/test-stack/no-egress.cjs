@@ -14,6 +14,10 @@
 const net = require("net")
 const fs = require("fs")
 
+// Marque lue par le backend (shortLinkResolver.shortLinkTestBase) : sous ce
+// garde-fou seulement, il suit SHORT_LINK_TEST_BASE meme en NODE_ENV=production.
+globalThis[Symbol.for("blindz.noEgress")] = true
+
 const LOG = process.env.NO_EGRESS_LOG || "/tmp/no-egress.log"
 const ALLOW_PORTS = new Set(
   String(process.env.NO_EGRESS_ALLOW_PORTS || "").split(",").map(s => Number(s.trim())).filter(n => Number.isInteger(n) && n > 0),

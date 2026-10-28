@@ -18,7 +18,8 @@
 #             (dotenv le lit dans le dossier courant) et il peut contenir un
 #             fichier a moitie edite. Garde-fou no-egress.cjs : boucle locale
 #             seulement, et seulement vers la base de test et le serveur local.
-#   serveur   127.0.0.1:3180 : front de test, API, websocket, extraits, faux Deezer
+#   serveur   127.0.0.1:3180 : front de test, API, websocket, extraits, faux Deezer,
+#             faux hebergeur des liens courts des applis
 #   adresse   http://blindz-test.localhost:3180/blindify/ (Chrome resout
 #             *.localhost en boucle locale ; il faut un nom a point pour que
 #             le cookie de session soit accepte)
@@ -112,6 +113,7 @@ E2E_BYPASS_KEY=$(cat "$ROOT/.e2e-bypass-key")
 NO_EGRESS_LOG=$RUN/logs/egress.log
 NO_EGRESS_ALLOW_PORTS=$PGPORT,$PROXY_PORT,$BACKEND_PORT
 DEEZER_API_BASE=http://127.0.0.1:$PROXY_PORT/deezer-stub
+SHORT_LINK_TEST_BASE=http://127.0.0.1:$PROXY_PORT/short-link-stub
 DISCORD_CLIENT_ID=100000000000000001
 DISCORD_CLIENT_SECRET=secret-de-la-pile-de-test
 DISCORD_API_BASE=http://127.0.0.1:$PROXY_PORT/discord-stub

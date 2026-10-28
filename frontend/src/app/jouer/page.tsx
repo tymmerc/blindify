@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { ArrowLeft, ArrowRight, Plus, LogIn, Check, ExternalLink, Loader2 } from "lucide-react"
 import { api } from "@/lib/api"
+import { recognizeMusicLink } from "@/lib/musicLink"
 import { publicPath } from "@/lib/publicPath"
 import { DiscordHint } from "@/components/DiscordPlay"
 
@@ -116,7 +117,9 @@ export default function EntryWizard() {
 
   // Importe la musique puis affiche la confirmation. Le meme bouton sert ensuite a continuer.
   const doImport = async () => {
-    const link = url.trim()
+    // Le lien normalise quand on le reconnait (https, lien court des applis compris), sinon tel quel.
+    const found = recognizeMusicLink(url)
+    const link = found.kind === "ok" || found.kind === "short" ? found.url : url.trim()
     if (!link) { setStep("action"); return }
     setImporting(true)
     setImportError(null)
@@ -242,7 +245,9 @@ export default function EntryWizard() {
   if (step === "musique") {
     const trimmedUrl = url.trim()
     const hasContent = trimmedUrl.length > 0
-    const linkValid = /^https?:\/\/(open\.spotify\.com\/(playlist|user)\/|(www\.)?deezer\.com\/(\w\w\/)?(playlist|profile)\/)/i.test(trimmedUrl)
+    // Memes formes que le serveur, liens courts des applis compris (lib/musicLink).
+    const recognized = recognizeMusicLink(trimmedUrl).kind
+    const linkValid = recognized === "ok" || recognized === "short"
     // Tout texte non vide doit etre un lien valide. Champ vide = on peut continuer sans musique.
     const formatError = hasContent && !linkValid
     const needsImport = linkValid && synced === null

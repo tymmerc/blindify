@@ -80,8 +80,8 @@ export default function Page() {
         </ul>
         <p>
           Les liens vers un morceau, un album ou un artiste ne sont pas des playlists et ne s'importent pas. Si tu veux
-          jouer sur un album, mets ses titres dans une playlist publique. Et si Partager te donne un lien court du type
-          link.deezer.com, ouvre-le dans le navigateur et copie l'adresse qui commence par deezer.com.
+          jouer sur un album, mets ses titres dans une playlist publique. Depuis l'appli, Partager donne un lien court du
+          type link.deezer.com : colle-le tel quel, il passe.
         </p>
       </Section>
 

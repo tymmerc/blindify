@@ -49,7 +49,7 @@ const FAQ: Array<{ q: string; a: string }> = [
   },
   {
     q: "Mon lien de playlist n'est pas accepté, qu'est-ce qui cloche ?",
-    a: "Deux causes dans presque tous les cas. Soit la playlist est privée : passe-la en publique dans Spotify ou Deezer, ça prend trente secondes. Soit tu as collé un lien court du bouton Partager (spotify.link, link.deezer.com), qui n'est pas reconnu : ouvre-le dans ton navigateur et copie l'adresse complète, celle qui commence par open.spotify.com ou www.deezer.com.",
+    a: "Deux causes dans presque tous les cas. Soit la playlist est privée : passe-la en publique dans Spotify ou Deezer, ça prend trente secondes. Soit le lien mène à un morceau, un album ou un artiste, et ça, ce n'est pas une playlist. Les liens courts du bouton Partager des applis (spotify.link, link.deezer.com) passent sans souci. Si l'un d'eux bloque quand même, ouvre-le dans ton navigateur et copie l'adresse complète, celle qui commence par open.spotify.com ou www.deezer.com.",
   },
   {
     q: "Comment organiser un blind test en soirée, autour d'une table ?",
