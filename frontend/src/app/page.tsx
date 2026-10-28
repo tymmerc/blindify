@@ -6,6 +6,7 @@ import { ModesStage } from "@/components/home/ModesStage"
 import { SiteHeader, SiteFooter } from "@/components/home/SiteChrome"
 import { FaqAccordion } from "@/components/home/FaqAccordion"
 import { RotatingEnd } from "@/components/home/RotatingEnd"
+import { DiscordPlay } from "@/components/DiscordPlay"
 
 // Landing de blindz.app. Composant SERVEUR : tout le texte est dans le HTML
 // pre-rendu (export statique), c'est ce que lisent Google, Bing, Brave et
@@ -242,6 +243,8 @@ export default function HomePage() {
                   {m.title}
                 </h3>
                 <p className="mt-4 max-w-[32rem] text-[1.05rem] leading-relaxed">{m.body}</p>
+                {/* En appel Discord, l'Activite evite meme le code a partager. */}
+                {m.key === "distance" ? <DiscordPlay className="mt-8 max-w-[36rem]" /> : null}
               </article>
             ))}
           </ModesStage>
