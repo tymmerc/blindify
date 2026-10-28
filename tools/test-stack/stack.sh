@@ -104,7 +104,6 @@ LOG_LEVEL=info
 PORT=$BACKEND_PORT
 DATABASE_URL=postgres://blindify:test@127.0.0.1:$PGPORT/blindify_test
 FRONTEND_URL=http://$HOST:$PROXY_PORT
-PUBLIC_BACKEND_URL=http://$HOST:$PROXY_PORT/blindify
 COOKIE_DOMAIN=$HOST
 COOKIE_SECURE=false
 SESSION_SECRET=$(openssl rand -hex 32)
