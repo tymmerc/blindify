@@ -58,6 +58,18 @@ describe("CSP de blindz.app (deploy/nginx-blindz.app.conf)", () => {
     expect(csp).not.toMatch(/api\.spotify\.com/)
   })
 
+  it("ne relaie plus l'ancienne connexion OAuth (/auth/spotify/login)", () => {
+    expect(conf).not.toMatch(/location[^\n]*auth\/spotify/)
+  })
+
+  // Le miroir avait diverge du fichier en place (pas de proxy_protocol) : une
+  // copie aurait fait tomber le site. Il suit maintenant le fichier en place.
+  it("suit le fichier en place : proxy_protocol sur le 443 et journal dedie", () => {
+    expect(conf).toMatch(/listen 127\.0\.0\.1:8443 ssl proxy_protocol;/)
+    expect(conf).toMatch(/access_log \/var\/log\/nginx\/blindz-access\.log/)
+    expect(conf).toMatch(/NE JAMAIS COPIER/)
+  })
+
   it("garde les extraits Deezer et l'encadrement par blindz.app", () => {
     expect(csp).toMatch(/media-src[^;]*https:\/\/\*\.dzcdn\.net/)
     expect(csp).toMatch(/frame-ancestors 'self' https:\/\/blindz\.app/)

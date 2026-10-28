@@ -19,7 +19,8 @@
 #      n'est pas celui compte ;
 #   4. affiche le compte apres (attendu : 0).
 # Aucun jeton n'est affiche. La sauvegarde, elle, contient les jetons : a
-# supprimer une fois la mise en prod validee (voir la PR).
+# supprimer le jour meme, une fois la mise en prod validee (decision de Tym du
+# 28/10 ; les jetons sont morts, le retour arriere ne servirait plus a rien).
 #
 # Retour arriere (si vraiment necessaire) :
 #   docker exec -i blindify-postgres psql -U blindify -d blindify \

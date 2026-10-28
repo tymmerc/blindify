@@ -50,6 +50,8 @@ describe("routes OAuth Spotify retirees", () => {
 
   const routes: Array<["GET" | "POST", string]> = [
     ["GET", "/api/auth/spotify"],
+    // Adresse encore relayee par nginx avant T15 (13-blindz.conf, 10-main.conf).
+    ["GET", "/auth/spotify/login"],
     ["GET", "/api/auth/login"],
     ["GET", "/api/auth/callback"],
     ["GET", "/auth/callback"],
