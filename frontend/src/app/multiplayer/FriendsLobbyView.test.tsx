@@ -46,4 +46,33 @@ describe("FriendsLobbyView, variante Discord", () => {
     render(<FriendsLobbyView {...props({ view: "hosting", surface: "web" })} />)
     expect(screen.getByText("Import par lien")).toBeInTheDocument()
   })
+
+  it("dans l'Activite : aucun renvoi vers « Jouer sur Discord », on y est deja", () => {
+    const { rerender } = render(<FriendsLobbyView {...props({ view: "hosting" })} />)
+    expect(screen.queryByTestId("discord-hint")).not.toBeInTheDocument()
+    rerender(<FriendsLobbyView {...props({ view: "landing" })} />)
+    expect(screen.queryByTestId("discord-hint")).not.toBeInTheDocument()
+  })
+})
+
+describe("FriendsLobbyView, renvoi vers l'Activite sur le site", () => {
+  const INSTALL = "https://discord.com/oauth2/authorize?client_id=1559906854111420416"
+
+  it("l'hote voit la ligne discrete sous le partage, le code reste la", () => {
+    render(<FriendsLobbyView {...props({ view: "hosting", surface: "web" })} />)
+    expect(screen.getByTestId("discord-hint")).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: /jouez directement dans l'appel/i })).toHaveAttribute("href", INSTALL)
+  })
+
+  it("un invite ne la voit pas", () => {
+    render(<FriendsLobbyView {...props({ view: "waiting", surface: "web", isHost: false, currentUserId: 13 })} />)
+    expect(screen.queryByTestId("discord-hint")).not.toBeInTheDocument()
+  })
+
+  it("l'ecran d'entree la propose sans bloquer Creer ni Rejoindre", () => {
+    render(<FriendsLobbyView {...props({ view: "landing", surface: "web" })} />)
+    expect(screen.getByTestId("discord-hint")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /créer une partie/i })).toBeEnabled()
+    expect(screen.getByLabelText(/code de la salle/i)).toBeInTheDocument()
+  })
 })
