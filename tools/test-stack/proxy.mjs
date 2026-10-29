@@ -11,6 +11,9 @@
 //                             et qui est dans quel salon (pour le harnais)
 //   /short-link-stub/*     -> faux hebergeur des liens courts des applis
 //                             (link.deezer.com, spotify.link...), redirections seules
+//   /resend-stub           -> faux Resend : le mail de debut de partie (T18) y
+//                             arrive au lieu de partir ; GET /resend-stub/mails
+//                             rend ceux recus, DELETE les oublie
 //   /discord-harness.html  -> le harnais : la page qui joue le client Discord
 //                             (RPC du SDK par postMessage) autour de l'iframe
 // Aucune dependance : node:http et node:net seulement.
@@ -228,6 +231,29 @@ function shortLinkStub(req, res) {
   return go("https://www.deezer.com/deezer-links-404")
 }
 
+/* ─── Faux Resend ───────────────────────────────────────────────────────
+ * Le backend de test y est branche via NOTIF_PARTIE_TEST_BASE (suivie sous le
+ * garde-fou no-egress seulement). POST : un mail recu, garde en memoire et
+ * journalise (objet seul). GET /resend-stub/mails : la liste ; DELETE : vide. */
+const MAILS = []
+function resendStub(req, res) {
+  const json = (obj, status = 200) => { res.writeHead(status, { "Content-Type": "application/json" }); res.end(JSON.stringify(obj)) }
+  const u = new URL(req.url, "http://x")
+  if (req.method === "GET" && u.pathname === "/resend-stub/mails") return json(MAILS)
+  if (req.method === "DELETE" && u.pathname === "/resend-stub/mails") { MAILS.length = 0; return json({ ok: true }) }
+  if (req.method !== "POST") return json({ message: "methode" }, 405)
+  let body = ""
+  req.on("data", c => { body += c; if (body.length > 64_000) req.destroy() })
+  req.on("end", () => {
+    let mail
+    try { mail = JSON.parse(body) } catch { return json({ name: "validation_error", message: "JSON invalide" }, 422) }
+    if (!String(req.headers.authorization || "").startsWith("Bearer ")) return json({ name: "missing_api_key", message: "cle absente" }, 401)
+    MAILS.push({ at: new Date().toISOString(), subject: mail.subject, text: mail.text, from: mail.from, to: mail.to })
+    if (STUB_LOG) fs.appendFile(STUB_LOG, `${new Date().toISOString()} resend ${String(mail.subject).slice(0, 120)}\n`, () => {})
+    json({ id: `stub-${MAILS.length}` })
+  })
+}
+
 const server = http.createServer((req, res) => {
   try { route(req, res) } catch (e) { console.error(`[proxy] ${req.url} : ${e?.message}`); plain(res, 500, "erreur du serveur local") }
 })
@@ -242,6 +268,7 @@ function route(req, res) {
   if (url.split("?")[0] === "/discord-harness.html") return sendFile(req, res, path.join(HERE, "discord-harness.html"))
   if (url.startsWith("/deezer-stub/")) return deezerStub(req, res)
   if (url.startsWith("/short-link-stub/")) return shortLinkStub(req, res)
+  if (url === "/resend-stub" || url.startsWith("/resend-stub/")) return resendStub(req, res)
   if (url.startsWith("/blindify/api/") || url.startsWith("/blindify/socket.io/")) return toBackend(req, res)
   // Depuis l'Activite, l'extrait (sur l'hote de l'API) est demande a travers le proxy : /.proxy/blindz/test-audio/...
   if (url.startsWith("/test-audio/") || url.startsWith("/blindify/test-audio/")) return sendFile(req, res, path.join(AUDIO, path.basename(url.split("?")[0])))

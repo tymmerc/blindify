@@ -54,6 +54,15 @@ import { publicStreamerState } from "./services/streamerGame";
 import { GameMode } from "./types/game";
 import { relayDiscordHost } from "./services/hostRelay";
 import { logger } from "./utils/logger";
+import {
+  SPECTATORS_EVENT,
+  attachSpectator,
+  authorizeSpectator,
+  handshakeIp,
+  readSpectatorHandshake,
+  spectatorCountPayload,
+  spectatorOf,
+} from "./services/spectators";
 
 // ---------------------------------------------------------------------------
 // Anti-flood par socket
@@ -251,6 +260,18 @@ export async function pushFriendPresenceSnapshot(io: Server, userId: number, soc
 export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number, string | null>): void {
   io.use(async (socket, next) => {
     try {
+      // Lien spectateur (T18) : jeton du lien verifie a chaque connexion, sans
+      // session. Refus net si le jeton est expire, falsifie ou vise une autre salle.
+      const spectatorRequest = readSpectatorHandshake(socket);
+      if (spectatorRequest) {
+        const result = await authorizeSpectator({ ...spectatorRequest, ip: handshakeIp(socket) });
+        if (!result.ok) {
+          logger.info("spectateur_refuse", { code: result.code });
+          return next(new Error(result.code));
+        }
+        (socket.data as { spectator?: unknown }).spectator = result.data;
+        return next();
+      }
       const token = extractSessionToken(socket);
       if (!token) {
         logger.debug(`socket middleware: no token for ${socket.id}`);
@@ -271,6 +292,12 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
 
   io.on("connection", socket => {
     logger.debug(`socket connected: ${socket.id}`);
+    // Spectateur : il regarde, rien d'autre. Aucun gestionnaire de joueur.
+    const spectator = spectatorOf(socket);
+    if (spectator) {
+      attachSpectator(io, socket, spectator);
+      return;
+    }
     const auth = (socket.data as { auth?: SessionContext }).auth;
     if (!auth?.user) {
       logger.debug(`socket ${socket.id} rejected: no auth`);
@@ -391,6 +418,8 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
         serverTimestamp: Date.now(),
       });
       sendStateToSocket(roomCode);
+      // « 👀 1 spectateur » : le joueur qui arrive (ou revient) sait tout de suite.
+      socket.emit(SPECTATORS_EVENT, spectatorCountPayload(io, roomCode));
 
       setPresence(currentUser.id, { online: true, activity: "playing", context: { type: "room", id: roomCode } });
       broadcastFriendPresence(currentUser.id, currentUser.username ?? null).catch(() => {});
@@ -671,6 +700,15 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
       if (snapshot) {
         socket.emit("game:state", snapshot);
       }
+    });
+
+    // Compteur de spectateurs (T18), redemande par le client a l'abonnement.
+    // Seulement pour un socket deja dans la salle (room:join a verifie l'acces).
+    socket.on("room:spectators:get", (payload: { roomCode?: unknown }) => {
+      const roomCode = validRoomCode(payload?.roomCode);
+      if (!roomCode || !socket.rooms.has(roomCode)) return;
+      if (!allowEvent(socket.id, "spectators", 4, 10_000)) return;
+      socket.emit(SPECTATORS_EVENT, spectatorCountPayload(io, roomCode));
     });
 
     // Chat messages

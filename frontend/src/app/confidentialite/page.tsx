@@ -102,6 +102,15 @@ export default function ConfidentialitePage() {
             </p>
           </Section>
 
+          <Section title="Parties regardées en direct" accent="#e0a32e">
+            <p>
+              L'éditeur de Blindz peut regarder une partie à plusieurs en direct, pour améliorer le jeu.
+              Il ne joue pas et ne voit que ce que voient les joueurs. Les joueurs le voient à l'écran
+              (« 👀 1 spectateur »), et rien n'est enregistré. Pour être prévenu, il reçoit un mail interne
+              avec le mode, l'heure et les pseudos de la salle, rien de plus.
+            </p>
+          </Section>
+
           <Section title="Cookies" accent="#c65133">
             <p>
               Blindz pose un seul cookie : un cookie de session, en httpOnly et secure, qui sert à te

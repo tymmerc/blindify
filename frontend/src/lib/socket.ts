@@ -23,18 +23,24 @@ export function resetSocketConfig(): void {
   config = {}
 }
 
+/** Ou joindre le serveur socket.io : origine de la page et chemin du deploiement. */
+export function socketEndpoint(): { origin: string; path: string } {
+  const origin =
+    config.origin ??
+    (typeof window !== "undefined"
+      ? window.location.origin
+      : API_BASE_URL.replace(/\/blindify$/, ""))
+  const path =
+    config.path ??
+    (API_BASE_URL.includes("/blindify") || (typeof window !== "undefined" && window.location.pathname.startsWith("/blindify"))
+      ? "/blindify/socket.io"
+      : "/socket.io")
+  return { origin, path }
+}
+
 export function getSocket(): Socket {
   if (!socket) {
-    const origin =
-      config.origin ??
-      (typeof window !== "undefined"
-        ? window.location.origin
-        : API_BASE_URL.replace(/\/blindify$/, ""))
-    const path =
-      config.path ??
-      (API_BASE_URL.includes("/blindify") || (typeof window !== "undefined" && window.location.pathname.startsWith("/blindify"))
-        ? "/blindify/socket.io"
-        : "/socket.io")
+    const { origin, path } = socketEndpoint()
     socket = io(origin, {
       withCredentials: true,
       path,

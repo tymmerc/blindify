@@ -45,6 +45,7 @@ import {
 } from "./services/presence";
 import { expireOldInvitations, getAcceptedFriendIds, type ExpiredInvitation } from "./services/social";
 import { registerSocketHandlers, broadcastFriendPresence } from "./socketHandlers";
+import { reportGameStartNotifStatus } from "./services/gameStartAnnounce";
 import { logger } from "./utils/logger";
 import { buildAllowedOrigins, matchesAllowedOrigin } from "./utils/origins";
 
@@ -458,6 +459,7 @@ process.on("unhandledRejection", (reason) => {
 await userTracksReady;
 server.listen(PORT, "0.0.0.0", () => {
     logger.info(`🚀 Blindify API listening on port ${PORT}`);
+    reportGameStartNotifStatus();
   });
 }
 

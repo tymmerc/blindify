@@ -11,6 +11,7 @@ import { useWakeLock } from "@/lib/useWakeLock"
 import { shortGameNotice } from "@/lib/roundCount"
 import { ConfettiBurst } from "./ConfettiBurst"
 import { TheaterGameView } from "./TheaterGameView"
+import { SpectatorBadge } from "./SpectatorBadge"
 import { DeezerCredit, SpotifyTrackLink } from "./SourceCredits"
 
 const VINYL_GROOVES = "repeating-radial-gradient(circle at 50% 50%, #241a10 0 2.5px, #3a2a1a 2.5px 5px)"
@@ -127,6 +128,8 @@ type Props = {
   answerRejectSignal?: number
   /** Pause / reprise (hote uniquement) : emis vers le serveur par le parent. */
   onPauseToggle?: () => void
+  /** Spectateurs de la salle (T18) : « 👀 1 spectateur » dans l'en-tete. */
+  spectators?: number
 }
 
 type Phase = "guessing" | "locked" | "reveal"
@@ -147,6 +150,7 @@ export function MultiplayerGameClient({
   chatMessages = [],
   onSendChat,
   answerRejectSignal,
+  spectators = 0,
 }: Props) {
   const resolvedConfig = modeConfig ?? GAME_MODES[mode] ?? GAME_MODES.friends
   const accent = accentColor ?? (resolvedConfig as { theme?: { accent?: string } }).theme?.accent ?? "#c65133"
@@ -765,6 +769,7 @@ export function MultiplayerGameClient({
         onRematch={onRematch}
         onExit={onExit}
         chatMessages={chatMessages}
+        spectators={spectators}
         chatInput={chatInput}
         setChatInput={setChatInput}
         onSendChat={onSendChat}
@@ -857,6 +862,7 @@ export function MultiplayerGameClient({
             </motion.div>
 
             <div className="flex items-center gap-2">
+              <SpectatorBadge count={spectators} />
               <div className="hidden items-center gap-1.5 text-xs text-[var(--muted)] md:flex">
                 <Users className="h-3.5 w-3.5" />
                 <span>{playerCount}</span>

@@ -84,10 +84,20 @@ services:
       DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}
       DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:-}
       SENTRY_DSN: ${SENTRY_DSN:-}
+      # Mail a Tym au debut d'une vraie partie (T18), meme config que la sonde
+      # de prod. La cle Resend reste dans son fichier : il est monte en lecture
+      # seule ci-dessous. Sans ces variables, le backend demarre sans mail
+      # (journal : notif_partie_desactivee).
+      ALERTE_DESTINATAIRE: ${ALERTE_DESTINATAIRE:-}
+      ALERTE_EXPEDITEUR: ${ALERTE_EXPEDITEUR:-}
+      RESEND_CLE_FICHIER: ${RESEND_CLE_FICHIER:+/run/blindz/resend.env}
+      # Lien spectateur signe (T18) : `openssl rand -hex 32`. Sans lui, pas de lien.
+      SPECTATEUR_SECRET: ${SPECTATEUR_SECRET:-}
     ports:
       - "127.0.0.1:3000:3000"
     volumes:
       - ./backend/logs:/app/logs
+      - ${RESEND_CLE_FICHIER:-/dev/null}:/run/blindz/resend.env:ro
     networks:
       - blindify-network
     healthcheck:

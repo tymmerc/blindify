@@ -14,6 +14,8 @@ import type { MultiplayerGameState, MultiplayerParticipant, MultiplayerRoom, Sol
 import { StreamerGameClient } from "@/components/game/StreamerGameClient"
 import { MultiplayerGameClient } from "@/components/game/MultiplayerGameClient"
 import { useRoomChat } from "./hooks/useRoomChat"
+import { useSpectatorCount } from "./hooks/useSpectatorCount"
+import { SpectatorBadge } from "@/components/game/SpectatorBadge"
 import { useLobbyRps } from "./hooks/useLobbyRps"
 import { ProfileImportBlock } from "@/components/import/ProfileImportBlock"
 import { Button } from "@/components/ui/button"
@@ -204,6 +206,11 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
 
   // Room chat (listener + send). Hook attaches when socket+roomCode ready.
   const { messages: chatMessages, sendChat } = useRoomChat(
+    socketConnected ? socketRef.current : null,
+    room?.room_code ?? null
+  )
+  // « 👀 1 spectateur » : l'editeur regarde la partie (T18).
+  const spectators = useSpectatorCount(
     socketConnected ? socketRef.current : null,
     room?.room_code ?? null
   )
@@ -1687,6 +1694,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
             }
           }) : undefined}
           chatMessages={chatMessages}
+          spectators={spectators}
           onSendChat={sendChat}
         />
       )
@@ -1749,6 +1757,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       subtitle={headerCopy.subtitle}
       onLeave={handleLeaveRoom}
       hideHeader={view === "results" || view === "playing"}
+      aside={<SpectatorBadge count={spectators} />}
       error={error || lobby.message}
       errorAction={error ? errorAction : null}
       dataAttrs={dataAttrs}
