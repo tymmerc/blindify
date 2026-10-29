@@ -137,11 +137,13 @@ function Scoreboard({ players, phase }: { players: MultiplayerPlayerState[]; pha
 function Podium({ players }: { players: MultiplayerPlayerState[] }) {
   const top = players.slice(0, 3)
   const colors = [GOLD, "#a8b8c8", TERRA]
+  // 2e, 1er, 3e : le premier au centre. Seulement les marches occupees, pour
+  // qu'un podium a deux ne laisse pas une colonne vide.
+  const order = [1, 0, 2].filter(rank => top[rank])
   return (
-    <div className="grid grid-cols-3 items-end gap-3">
-      {[1, 0, 2].map(rank => {
+    <div className="mx-auto grid w-full max-w-xl items-end gap-3" style={{ gridTemplateColumns: `repeat(${order.length}, minmax(0, 1fr))` }}>
+      {order.map(rank => {
         const p = top[rank]
-        if (!p) return <div key={rank} />
         return (
           <div key={p.userId} className="flex flex-col items-center gap-2 text-center">
             <span className="max-w-full truncate font-display text-base font-semibold">{name(p)}</span>
