@@ -17,6 +17,7 @@
  * - A l'expiration du lien, le socket est coupe.
  */
 import type { Server, Socket } from "socket.io";
+import ipaddr from "ipaddr.js";
 import { pool } from "../config/db";
 import { logger } from "../utils/logger";
 import { ipRateLimitKey } from "../utils/rateLimitKey";
@@ -61,16 +62,26 @@ setInterval(() => {
 }, SPECTATOR_WINDOW_MS).unref?.();
 
 /**
- * Adresse du client. Le backend n'ecoute qu'en boucle locale derriere nginx,
- * qui pose X-Real-IP (ecrase toute valeur du client) : on ne la croit que si
- * la connexion vient elle-meme de la boucle locale.
+ * Adresse du client. Le backend n'est joignable que par nginx (port publie sur
+ * 127.0.0.1), qui pose X-Real-IP en ecrasant toute valeur du client. Dans le
+ * conteneur, la connexion arrive de la passerelle Docker (adresse privee), pas
+ * de 127.0.0.1 : on croit X-Real-IP si la connexion vient d'une adresse locale
+ * ou privee, jamais sinon.
  */
 export function handshakeIp(socket: Pick<Socket, "handshake">): string | undefined {
   const address = socket.handshake.address;
-  const loopback = address === "127.0.0.1" || address === "::1" || address === "::ffff:127.0.0.1";
   const real = socket.handshake.headers["x-real-ip"];
-  if (loopback && typeof real === "string" && real.trim()) return real.trim();
+  if (typeof real === "string" && real.trim() && isLocalPeer(address)) return real.trim();
   return address;
+}
+
+function isLocalPeer(address: string | undefined): boolean {
+  if (!address) return false;
+  try {
+    return ["loopback", "private", "uniqueLocal"].includes(ipaddr.process(address).range());
+  } catch {
+    return false;
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -56,7 +56,7 @@ function signLink(code) {
 async function botsMail() {
   console.log("1. Mails des parties jouees par des bots")
   await clearMails()
-  const real = await runRoom({ label: "vrais", mode: "friends", players: [{ name: "Ana", plan: plan("juste") }, { name: "Bob", plan: plan("faux") }], rounds: 2, seconds: 5, seed: 18 })
+  const real = await runRoom({ label: "vrais", mode: "friends", players: [{ name: "Ana", plan: plan("juste") }, { name: "Bob", plan: plan("faux") }], rounds: 3, seconds: 10, seed: 18 })
   if (!real.ok) bad(`salle Ana/Bob : ${real.problems.join(" ; ")}`)
   let list = await waitMails(1)
   await sleep(800)
@@ -73,7 +73,7 @@ async function botsMail() {
 
   for (const [label, names] of [["comptes de test", ["Lea", "Max"]], ["Tym dans la salle", ["Tym", "Ana"]]]) {
     await clearMails()
-    const r = await runRoom({ label, mode: "friends", players: names.map(n => ({ name: n, plan: plan("juste") })), rounds: 1, seconds: 5, seed: 19 })
+    const r = await runRoom({ label, mode: "friends", players: names.map(n => ({ name: n, plan: plan("juste") })), rounds: 3, seconds: 10, seed: 19 })
     if (!r.ok) bad(`salle ${label} : ${r.problems.join(" ; ")}`)
     await sleep(1500)
     const got = await mails()
@@ -83,7 +83,7 @@ async function botsMail() {
 
   await clearMails()
   const table = await runRoom({
-    label: "table", mode: "event", hostPlays: false, rounds: 1, seconds: 5, seed: 20,
+    label: "table", mode: "event", hostPlays: false, rounds: 3, seconds: 10, seed: 20,
     players: [{ name: "Cleo", plan: plan("muet") }, { name: "Dora", plan: plan("juste") }, { name: "Eli", plan: plan("faux") }],
   })
   if (!table.ok) bad(`salle autour d'une table : ${table.problems.join(" ; ")}`)
@@ -105,10 +105,10 @@ async function browserSpectator() {
     const player = await newPage(browser, { viewport: { width: 1280, height: 860 } }, "joueur", problems)
     await host.enter()
     seedUser(host.id, Array.from({ length: 8 }, (_, t) => t))
-    const created = await api("/api/rooms/create", { method: "POST", token: host.token, body: { mode: "friends", questionCount: 2, nickname: host.name } })
+    const created = await api("/api/rooms/create", { method: "POST", token: host.token, body: { mode: "friends", questionCount: 3, nickname: host.name } })
     const code = created.data?.room?.room_code
     if (!code) throw new Error(`creation refusee (${created.status})`)
-    await api(`/api/rooms/${code}/config`, { method: "POST", token: host.token, body: { questionCount: 2, roundSeconds: 8 } })
+    await api(`/api/rooms/${code}/config`, { method: "POST", token: host.token, body: { questionCount: 3, roundSeconds: 8 } })
     host.code = code
     await host.connect()
     host.socket.emit("room:join", { roomCode: code })
@@ -136,7 +136,7 @@ async function browserSpectator() {
     await s.getByText("Salle d'attente").waitFor({ timeout: 20000 })
     for (const who of ["Gus", "Fanny"]) if (!(await s.getByText(who).first().isVisible().catch(() => false))) bad(`le spectateur ne voit pas ${who} au lobby`)
     await badge(p).waitFor({ timeout: 10000 }).then(() => ok("lobby : le joueur voit « 👀 1 spectateur »")).catch(() => bad("lobby : pas de badge spectateur chez le joueur"))
-    if (!/1 spectateur/.test(await badge(p).innerText().catch(() => ""))) bad("badge : texte inattendu")
+    if (!/1 spectateur/i.test(await badge(p).innerText().catch(() => ""))) bad("badge : texte inattendu")
     await p.screenshot({ path: path.join(OUT, "1-joueur-lobby-badge.png") })
     await s.screenshot({ path: path.join(OUT, "2-spectateur-lobby.png") })
 
@@ -148,7 +148,7 @@ async function browserSpectator() {
     if (list.length !== 1 || !link) bad(`partie Gus/Fanny : ${list.length} mail(s), lien ${link ? "present" : "absent"}`)
     else ok("partie lancee : 1 mail avec le lien spectateur")
 
-    await s.getByText(/Manche 1 \/ 2/).waitFor({ timeout: 20000 }).then(() => ok("le spectateur voit la manche 1 / 2")).catch(() => bad("le spectateur ne voit pas la manche"))
+    await s.getByText(/Manche 1 \/ 3/).waitFor({ timeout: 20000 }).then(() => ok("le spectateur voit la manche 1 / 3")).catch(() => bad("le spectateur ne voit pas la manche"))
     await badge(p).waitFor({ timeout: 10000 }).then(() => ok("en partie : le joueur voit « 👀 1 spectateur »")).catch(() => bad("en partie : pas de badge chez le joueur"))
     await sleep(2500)
     await p.screenshot({ path: path.join(OUT, "3-joueur-manche-badge.png") })
@@ -163,7 +163,7 @@ async function browserSpectator() {
     if (link) {
       const second = await newPage(browser, { viewport: { width: 900, height: 800 } }, "lien du mail", problems)
       await second.page.goto(link, { waitUntil: "networkidle", timeout: 60000 })
-      await second.page.getByText(/Manche \d \/ 2/).waitFor({ timeout: 20000 }).then(() => ok("le lien du mail ouvre la vue spectateur")).catch(() => bad("le lien du mail n'ouvre pas la vue"))
+      await second.page.getByText(/Manche \d \/ 3/).waitFor({ timeout: 20000 }).then(() => ok("le lien du mail ouvre la vue spectateur")).catch(() => bad("le lien du mail n'ouvre pas la vue"))
       await p.getByText("2 spectateurs").waitFor({ timeout: 8000 }).then(() => ok("deux onglets : « 2 spectateurs »")).catch(() => bad("pas de « 2 spectateurs » chez le joueur"))
       await second.ctx.close()
       await p.getByText("1 spectateur").waitFor({ timeout: 8000 }).catch(() => bad("le compteur ne redescend pas a 1"))
@@ -172,11 +172,13 @@ async function browserSpectator() {
     await s.getByText("Révélation").waitFor({ timeout: 30000 })
     await sleep(800)
     await s.screenshot({ path: path.join(OUT, "5-spectateur-revelation.png") })
-    if (truth?.title && !(await s.getByText(truth.title).first().isVisible().catch(() => false))) bad("revelation : le titre n'apparait pas chez le spectateur")
-    else ok("revelation : le spectateur voit le titre")
+    const shownRound = Number((await s.getByText(/Manche \d+ \/ 3/).first().textContent().catch(() => ""))?.match(/Manche (\d+)/)?.[1])
+    const shownTitle = oracle(code, shownRound)?.title
+    if (!shownTitle || !(await s.getByText(shownTitle).first().isVisible().catch(() => false))) bad(`revelation de la manche ${shownRound} : le titre n'apparait pas chez le spectateur`)
+    else ok(`revelation de la manche ${shownRound} : le spectateur voit le titre`)
 
     // Trames du spectateur : aucune ne porte le titre d'une manche avant son reveal.
-    for (const r of [1, 2]) {
+    for (const r of [1, 2, 3]) {
       const t = oracle(code, r)?.title
       if (!t) continue
       const revealIdx = frames.findIndex(f => f.data.includes("game:round:reveal") && f.data.includes(`"round":${r}`))
