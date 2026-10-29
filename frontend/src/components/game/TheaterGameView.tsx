@@ -6,6 +6,7 @@ import { Pause, Play, Trophy, Volume2, VolumeX, X } from "lucide-react"
 import type { MultiplayerGameState, UserSummary } from "@/lib/types"
 import { shortGameNotice } from "@/lib/roundCount"
 import { DeezerCredit, SpotifyTrackLink } from "./SourceCredits"
+import { SpectatorBadge } from "./SpectatorBadge"
 
 type ChatMessage = {
   userId: number
@@ -81,6 +82,8 @@ type Props = {
   setChatInput: (s: string) => void
   onSendChat?: (s: string) => void
   chatScrollRef: RefObject<HTMLDivElement | null>
+  /** Spectateurs de la salle (T18) : « 👀 1 spectateur » en haut. */
+  spectators?: number
 }
 
 const TERRA = "#c65133"
@@ -106,6 +109,7 @@ export function TheaterGameView(props: Props) {
     currentTrack, trackOwnerUsername, player, revealCountdown,
     onReady, onRematch, onExit,
     chatMessages, chatInput, setChatInput, onSendChat, chatScrollRef,
+    spectators = 0,
   } = props
 
   const currentRound = state?.currentRound ?? 0
@@ -183,6 +187,7 @@ export function TheaterGameView(props: Props) {
           {/* Sur telephone, Pause et Quitter passent en icones carrees comme le
               bouton du son ; leur nom accessible ne change pas (aria-label). */}
           <div className="theater-controls flex items-center justify-end gap-2">
+            <SpectatorBadge count={spectators} />
             <button className="theater-vol" onClick={onToggleMute} title={muted ? "Activer le son" : "Couper le son"}>
               {muted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
             </button>

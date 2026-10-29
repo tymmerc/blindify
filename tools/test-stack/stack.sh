@@ -118,7 +118,15 @@ DISCORD_CLIENT_ID=100000000000000001
 DISCORD_CLIENT_SECRET=secret-de-la-pile-de-test
 DISCORD_API_BASE=http://127.0.0.1:$PROXY_PORT/discord-stub
 ALLOWED_ORIGINS=http://$DISCORD_HOST:$PROXY_PORT
+ALERTE_DESTINATAIRE=tym@$HOST
+ALERTE_EXPEDITEUR="Blindz test <alerte@$HOST>"
+RESEND_CLE_FICHIER=$RUN/run/resend-test.env
+NOTIF_PARTIE_TEST_BASE=http://127.0.0.1:$PROXY_PORT/resend-stub
+SPECTATEUR_SECRET=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
+SPECTATEUR_BASE_URL=http://$HOST:$PROXY_PORT/blindify
 EOF
+  # Faux Resend (T18) : une cle factice, le mail part au serveur local.
+  echo "RESEND_API_KEY=re_pile_de_test_factice" >"$RUN/run/resend-test.env"
   printf 'X-E2E-Key: %s\nContent-Type: application/json\nOrigin: http://%s:%s\n' "$(cat "$ROOT/.e2e-bypass-key")" "$HOST" "$PROXY_PORT" >"$RUN/run/headers"
   umask 022
   : >"$RUN/logs/egress.log"
@@ -170,7 +178,7 @@ stop() {
     [ "$pid" = "$$" ] || stop_pid "$pid"
   done
   docker rm -f "$PG" >/dev/null 2>&1 || true
-  rm -f "$RUN/run/backend.env" "$RUN/run/headers" # contiennent la cle E2E
+  rm -f "$RUN/run/backend.env" "$RUN/run/headers" "$RUN/run/resend-test.env" # cle E2E, secret spectateur
   log "pile arretee, base jetee"
 }
 

@@ -24,6 +24,7 @@ import { LOOKUPS_PER_ROUND, LookupGuard } from "../services/lookupGuard";
 
 // Code de salle : utils/roomCode.ts (partage avec la salle d'un salon Discord).
 import { generateRoomCode } from "../utils/roomCode";
+import { announceGameStart } from "../services/gameStartAnnounce";
 export { generateRoomCode };
 
 async function ensureRoomParticipantPrefs(): Promise<void> {
@@ -1244,6 +1245,18 @@ export const roomsController = {
     // et l'audio partent donc ensemble, a la fin du decompte.
     startRoundAndBroadcast(io, room.room_code, {
       startAt: Date.now() + FIRST_ROUND_PREROLL_MS,
+    });
+
+    // Mail a Tym si c'est une vraie partie a plusieurs (T18). Rend la main
+    // tout de suite : rien ne ralentit ni ne bloque le lancement.
+    const e2eKey = process.env.E2E_BYPASS_KEY;
+    announceGameStart({
+      roomId: room.id,
+      roomCode: room.room_code,
+      mode: room.mode,
+      players: participantRows.map(p => ({ id: p.user_id, username: usernameMap.get(p.user_id) ?? null })),
+      providers: normalizedTracks.map(t => t.type),
+      e2e: Boolean(e2eKey) && req.headers["x-e2e-key"] === e2eKey,
     });
 
     ok(res, {
