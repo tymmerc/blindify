@@ -1,5 +1,7 @@
 import type { Metadata } from "next"
+import type { ReactNode } from "react"
 import Link from "next/link"
+import { CONTACT_EMAIL, CONTACT_MAILTO, DISCORD_SUPPORT_URL } from "@/lib/contact"
 import { SiteFooter, SiteHeader } from "@/components/home/SiteChrome"
 import { Tag, VERMILION, faqJsonLd, webPageJsonLd } from "@/components/home/Guide"
 import { FaqAccordion } from "@/components/home/FaqAccordion"
@@ -17,7 +19,7 @@ const URL = "https://blindz.app/faq/"
 const TITLE = "FAQ · Blind test avec vos playlists, entre amis"
 const DESC =
   "Comment faire un blind test avec ses propres playlists Spotify ou Deezer, sans compte, sur téléphone, entre amis ou avec un seul tel. Toutes les réponses."
-const UPDATED = "2026-10-28"
+const UPDATED = "2026-10-29"
 
 export const metadata: Metadata = {
   title: TITLE,
@@ -26,7 +28,24 @@ export const metadata: Metadata = {
   openGraph: { title: TITLE, description: DESC, url: URL, type: "website", locale: "fr_FR" },
 }
 
-const FAQ: Array<{ q: string; a: string }> = [
+const MORE_LINK =
+  "border-b-2 border-[#2e2014] pb-0.5 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-[#2e2014] transition hover:border-[#cc4830] hover:text-[#cc4830]"
+
+const SUPPORT_LINKS = (
+  <p className="flex flex-wrap gap-x-6 gap-y-3">
+    <a href={DISCORD_SUPPORT_URL} target="_blank" rel="noopener noreferrer" className={MORE_LINK}>
+      Le serveur Blindz<span className="sr-only"> (s&apos;ouvre dans un nouvel onglet)</span>
+    </a>
+    <a href={CONTACT_MAILTO} className={MORE_LINK}>
+      {CONTACT_EMAIL}
+    </a>
+    <Link href="/conditions/" className={MORE_LINK}>
+      Conditions d&apos;utilisation
+    </Link>
+  </p>
+)
+
+const FAQ: Array<{ q: string; a: string; more?: ReactNode }> = [
   {
     q: "Comment faire un blind test avec mes propres playlists, pas des playlists imposées ?",
     a: "C'est exactement le principe de blindz.app : chaque joueur colle le lien de son profil Spotify ou Deezer (ou d'une playlist publique), et la partie est générée uniquement à partir de VOS musiques. Pas de playlists toutes faites \"années 80\" ou \"hits du moment\" : vous jouez sur les morceaux que vous écoutez vraiment, et une partie du jeu consiste à deviner qui a ramené quel titre.",
@@ -74,6 +93,11 @@ const FAQ: Array<{ q: string; a: string }> = [
   {
     q: "blindz.app, c'est le retour de l'ancien site Blindz qui a fermé en 2021 ?",
     a: "Non. Blindz (blindz.fr) est un autre site, plus ancien, où l'on crée et personnalise des blind tests entre amis ; il avait été hors ligne un long moment après l'incendie du datacenter OVH de Strasbourg en 2021. blindz.app est un projet indépendant, lancé en 2026, sans aucun lien avec cette équipe. Le principe est différent aussi : ici il n'y a rien à créer ni à personnaliser, la partie est générée automatiquement à partir des playlists Spotify ou Deezer des joueurs, et on devine qui a ramené chaque morceau.",
+  },
+  {
+    q: "Un bug, une idée\u00a0?",
+    a: `Passe sur le serveur Discord de Blindz (${DISCORD_SUPPORT_URL.replace("https://", "")})\u00a0: on y répond aux questions, on y lit les idées et on y annonce les nouveautés. Tu préfères le mail\u00a0? Écris à ${CONTACT_EMAIL}. Pour un bug en pleine partie, le plus rapide reste «\u00a0Signaler un bug\u00a0», dans le menu du compte en haut à droite. Et les règles du jeu (écoute privée, comportement, âge) sont dans les conditions d'utilisation.`,
+    more: SUPPORT_LINKS,
   },
   {
     q: "Pourquoi blindz.app est marqué « bêta » ?",
