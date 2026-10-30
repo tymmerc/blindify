@@ -251,7 +251,7 @@ async function table(browser) {
     else bad("table : l'ecran central n'annonce pas l'arrivee")
     await shot(s, "table-1-ecran-annonce")
     // Pendant son attente, les compteurs restent sur les 3 joueurs.
-    if (!(await s.evaluate(() => /\b\d+ ?\/ ?3\b/.test((document.body.textContent ?? "").replace(/\s+/g, " ")))))
+    if (!(await s.evaluate(() => /(?<!\d)\d+ ?\/ ?3(?!\d)/.test((document.body.textContent ?? "").replace(/\s+/g, " ")))))
       bad("table : pendant l'attente, les compteurs de l'ecran central ne sont plus sur 3 joueurs")
     if (/spectateur/i.test(await s.evaluate(() => document.body.innerText))) bad("table : l'ecran central compte le retardataire comme spectateur")
     await sleep(800)
@@ -262,7 +262,7 @@ async function table(browser) {
     // L'ecran central l'a ajoute aux joueurs : ses compteurs passent de /3 a
     // /4 (« N/4 prets », « N / 4 reponses »). Le classement du bas n'affiche
     // que le podium, et lui part de 0 : il n'y est pas forcement visible.
-    const counted = await s.evaluate(() => /\b\d+ ?\/ ?4\b/.test((document.body.textContent ?? "").replace(/\s+/g, " ")))
+    const counted = await s.evaluate(() => /(?<!\d)\d+ ?\/ ?4(?!\d)/.test((document.body.textContent ?? "").replace(/\s+/g, " ")))
     if (counted) ok(`table : l'ecran central le compte parmi les joueurs a la manche ${watched + 1}`)
     else bad(`table : l'ecran central ne le compte pas a la manche ${watched + 1}`)
     await shot(s, "table-4-ecran-manche-suivante")
