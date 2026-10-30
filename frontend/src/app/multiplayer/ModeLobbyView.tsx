@@ -35,6 +35,9 @@ import { ENTRY_ROUTE, HEADER_COPY } from "./lobbyCopy"
 import type { LobbyRendererProps, LobbySurface, LobbyViewState } from "./lobbyTypes"
 import { initialLobbyContext, lobbyReducer } from "./lobbyMachine"
 import { RequestTimeoutError, withTimeoutRetry } from "@/lib/withTimeoutRetry"
+import { LateJoinerView } from "@/components/game/LateJoinerView"
+import { arrivalNotice, isLateJoiner } from "@/lib/lateJoin"
+import { useLateArrivals } from "./hooks/useLateArrivals"
 
 // Entree dans un salon : un essai sans reponse au bout de 8 s est abandonne et
 // relance, trois essais en tout. Rejouer le join est sans risque (le backend
@@ -174,14 +177,18 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   const [importing, setImporting] = useState(false)
   // Bandeau d'erreur transitoire (room:error socket, resync...) - auto-efface.
   const [socketNotice, setSocketNotice] = useState<string | null>(null)
+  // Ton du bandeau : "alert" pour un refus ou une erreur, "info" pour une
+  // simple nouvelle (quelqu'un arrive en pleine partie).
+  const [noticeTone, setNoticeTone] = useState<"alert" | "info">("alert")
   // Signal incrementiel : un refus serveur d'une reponse doit sortir l'UI de
   // l'etat optimiste "Envoyee" (sinon le joueur croit avoir repondu).
   const [answerRejectSignal, setAnswerRejectSignal] = useState(0)
   // Bootstrap rate-limite (429) : message au lieu d'un spinner infini.
   const [rateLimited, setRateLimited] = useState(false)
   const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const showNotice = useCallback((msg: string, isAnswerReject = false) => {
+  const showNotice = useCallback((msg: string, isAnswerReject = false, tone: "alert" | "info" = "alert") => {
     setSocketNotice(msg)
+    setNoticeTone(tone)
     if (isAnswerReject) setAnswerRejectSignal(x => x + 1)
     if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current)
     noticeTimerRef.current = setTimeout(() => setSocketNotice(null), 6000)
@@ -249,6 +256,13 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
 
   const [joinCode, setJoinCode] = useState(initialJoinCode?.toUpperCase() ?? "")
   const serverNow = useServerTime(socketRef.current)
+  // Quelqu'un arrive en pleine partie (T19) : les autres le voient arriver.
+  useLateArrivals(
+    socketConnected ? socketRef.current : null,
+    room?.room_code ?? null,
+    userPayload?.user.id ?? null,
+    arrival => showNotice(arrivalNotice(arrival.username, gameStateRef.current as MultiplayerGameState | null), false, "info")
+  )
   const autoHostTriggered = useRef(false)
   const autoStartGameRef = useRef(false)
   // « Revanche » et « Rejouer » : un double clic ne relance pas deux fois.
@@ -1108,8 +1122,10 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     ]
   )
 
-  // Retardataire : on retente le join en douceur. Quand la partie se termine,
-  // il entre tout seul, sans avoir a marteler un bouton.
+  // Retardataire face a un ANCIEN backend (avant T19, qui refusait en pleine
+  // partie avec room_in_progress) : on retente le join en douceur. Le backend
+  // actuel ne renvoie plus ce code ; garde tant que front et backend peuvent
+  // partir en prod a des moments differents.
   useEffect(() => {
     if (errorCode !== "room_in_progress" || room) return
     const code = joinCode.trim().toUpperCase()
@@ -1622,6 +1638,19 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
           onExit={handleLeaveRoom}
           accent={accentColor}
         />
+      ) : isLateJoiner(gameState as MultiplayerGameState, userPayload.user.id) ? (
+        // Arrive en cours de partie (T19) : il regarde, puis joue a la manche
+        // suivante. L'ecran de jeu prend la place tout seul, sans rechargement.
+        <LateJoinerView
+          state={gameState as MultiplayerGameState}
+          currentUserId={userPayload.user.id}
+          serverNow={serverNow}
+          chatMessages={chatMessages}
+          onSendChat={sendChat}
+          onExit={handleLeaveRoom}
+          onRejoin={() => socketRef.current?.emit("room:join", { roomCode: room.room_code })}
+          accentColor={accentColor}
+        />
       ) : (
         <MultiplayerGameClient
           user={userPayload.user}
@@ -1767,8 +1796,10 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       <div className="flex flex-col gap-4">
         {socketNotice ? (
           <div
-            role="alert"
-            className="flex items-center justify-between gap-3 rounded-md border-2 border-[#9c2f1d] bg-[#efe5d0] px-4 py-3 text-sm font-semibold text-[#9c2f1d] shadow-[4px_4px_0_rgba(46,32,20,.18)]"
+            role={noticeTone === "alert" ? "alert" : "status"}
+            className={`flex items-center justify-between gap-3 rounded-md border-2 bg-[#efe5d0] px-4 py-3 text-sm font-semibold shadow-[4px_4px_0_rgba(46,32,20,.18)] ${
+              noticeTone === "alert" ? "border-[#9c2f1d] text-[#9c2f1d]" : "border-[#2e2014] text-[#2e2014]"
+            }`}
           >
             <span>{socketNotice}</span>
             <button type="button" onClick={() => setSocketNotice(null)} className="shrink-0 text-xs font-bold uppercase tracking-[0.14em] underline">Fermer</button>

@@ -199,27 +199,19 @@ export const roomsController = {
 
     // Partie en cours : on laisse revenir ceux qui en font DEJA partie (rechargement
     // de page, tunnel, appli fermee...). Avant, un simple F5 ejectait le joueur pour
-    // toute la soiree. Les nouveaux venus, eux, attendent la prochaine partie.
+    // toute la soiree.
+    // Un nouveau venu entre aussi (T19, decision de Tym du 29/10/2026) : pendant
+    // une manche, il regarde et joue a partir de la suivante (admitToGame, au
+    // room:join). La reponse le dit (lateJoin) pour que le front affiche la vue
+    // d'attente. Entre deux parties (etat FINISHED, ou pas d'etat en memoire), il
+    // entre comme avant et sera de la prochaine partie.
+    let lateJoin = false;
     if (room.status !== "waiting") {
-      const context = await getSessionContext(req, res);
-      if (!context) return;
       const { rows: already } = await pool.query(
         `SELECT 1 FROM room_participants WHERE room_id=$1 AND user_id=$2 LIMIT 1`,
-        [room.id, context.user.id]
+        [room.id, user.id]
       );
-      if (!already.length) {
-        // La room reste "in_progress" en base entre deux parties (elle ne repasse
-        // a "waiting" qu'au rejouer). Sans ce test, un retardataire ne pouvait
-        // JAMAIS rejoindre une soiree, meme pendant l'ecran des resultats.
-        const live = getGameState(room.room_code);
-        const betweenGames = !live || live.phase === "FINISHED";
-        if (!betweenGames) {
-          fail(res, "room_in_progress", "La partie est en cours. Tu pourras rejoindre la prochaine.", 409);
-          return;
-        }
-        // Manche finie : accueil normal (flux de join classique plus bas),
-        // il sera dans la prochaine partie.
-      } else {
+      if (already.length) {
         const { rows: fullRoom } = await pool.query(
           `SELECT id, room_code, host_user_id, status, max_players, question_count, difficulty,
                   session_id, auto_advance, mode, host_plays, round_duration_ms
@@ -229,6 +221,8 @@ export const roomsController = {
         ok(res, { room: fullRoom[0], rejoined: true });
         return;
       }
+      const live = getGameState(room.room_code);
+      lateJoin = Boolean(live) && (live?.phase === "GUESSING" || live?.phase === "REVEAL");
     }
 
     // Un joueur deja inscrit n'est jamais refuse pour "salle pleine" : il
@@ -267,7 +261,7 @@ export const roomsController = {
       roomCode: room.room_code,
     });
 
-    ok(res, { room });
+    ok(res, lateJoin ? { room, lateJoin: true } : { room });
   },
 
   async details(req: Request, res: Response): Promise<void> {

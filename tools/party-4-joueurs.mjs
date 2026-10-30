@@ -186,9 +186,10 @@ if (CHAOS) {
     await zoe.getByRole("button", { name: /rejoindre la partie/i }).click().catch(() => {})
     await sleep(10000)
     const txt = await zoe.evaluate(() => document.body.innerText)
-    if (!/partie est en cours/i.test(txt)) bad("Zoe ne recoit pas le message 'partie en cours'")
+    // T19 : elle entre et regarde, puis jouerait des la manche suivante.
+    if (!/tu joues dès la prochaine manche|tu joues la prochaine partie/i.test(txt)) bad("Zoe ne voit pas la vue d'attente de l'arrivee en cours de partie")
     if (joins > 5) bad(`Zoe a envoye ${joins} requetes /join (boucle de retry)`)
-    else say(`  [chaos] Zoe: message correct, ${joins} requete(s) /join`)
+    else say(`  [chaos] Zoe: vue d'attente correcte, ${joins} requete(s) /join`)
     await zoe.screenshot({ path: `${SHOTS}/chaos-zoe.png` })
     await ctx.close()
   })())

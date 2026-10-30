@@ -72,7 +72,11 @@ const FAQ: Array<{ q: string; a: string; more?: ReactNode }> = [
   },
   {
     q: "Comment organiser un blind test en soirée, autour d'une table ?",
-    a: "Le mode \"Autour d'une table\" est fait pour ça : un écran central (le téléphone de l'organisateur, ou un PC branché sur la télé) diffuse la musique et affiche les scores, et chacun répond depuis son propre téléphone en scannant un QR code. L'organisateur peut jouer aussi ou seulement présenter. Les retardataires rejoignent automatiquement entre deux parties.",
+    a: "Le mode \"Autour d'une table\" est fait pour ça : un écran central (le téléphone de l'organisateur, ou un PC branché sur la télé) diffuse la musique et affiche les scores, et chacun répond depuis son propre téléphone en scannant un QR code. L'organisateur peut jouer aussi ou seulement présenter. Un retardataire peut entrer en pleine partie : il suit la manche en cours et joue dès la suivante.",
+  },
+  {
+    q: "Peut-on rejoindre une partie déjà commencée ?",
+    a: "Oui. Celui qui arrive en retard entre avec le même code ou le même QR code, à distance, autour d'une table ou dans Discord. Il voit la manche en cours sans pouvoir y répondre, puis il joue dès la manche suivante en partant de 0 point. Sa musique n'entre pas dans la partie déjà lancée, puisque les morceaux sont tirés au départ : elle comptera pour la suivante.",
   },
   {
     q: "Peut-on faire un blind test avec un seul téléphone ?",

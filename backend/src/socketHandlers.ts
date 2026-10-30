@@ -7,7 +7,6 @@ import {
   markReady as markReadyState,
   recordAnswer,
   removePlayer,
-  upsertPlayer,
   setHostConnected,
   pauseGame,
   resumeGame,
@@ -17,6 +16,9 @@ import {
   startReconnectGrace,
   getGameMode,
   setHostUser,
+  admitToGame,
+  dropWaiting,
+  isWaitingPlayer,
 } from "./services/realtimeGame";
 import { markMultiplayerRoomFinished } from "./services/gamePersistence";
 import * as lobbyRps from "./services/lobbyRps";
@@ -396,11 +398,23 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
         access.room.mode === "event" && access.room.host_plays !== true && access.room.host_user_id === currentUser.id;
       if (access.isHost) setHostConnected(roomCode, true);
       if (!isEventPresenterOnly) {
-        upsertPlayer(roomCode, {
+        // Pendant une manche, un nouveau venu attend la suivante (T19) ; un
+        // joueur deja dans la partie garde sa place et son score.
+        const admission = admitToGame(roomCode, {
           userId: currentUser.id,
           username: currentUser.username ?? null,
-          avatar: (currentUser as any).avatar ?? null,
+          avatar: (currentUser as { avatar?: string | null }).avatar ?? null,
         });
+        if (admission === "arrived") {
+          // Tout le monde le voit arriver ; l'etat diffuse ensuite le range dans `waiting`.
+          io.to(roomCode).emit("game:waiting", {
+            roomCode,
+            userId: currentUser.id,
+            username: currentUser.username ?? null,
+            serverTimestamp: Date.now(),
+          });
+          broadcastState(io, roomCode);
+        }
       }
       io.to(roomCode).emit("room:presence", {
         type: "joined",
@@ -432,6 +446,8 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
       if (!access) return;
       // Meme regle que game:leave : partir en pleine partie ne doit pas effacer
       // ses points du podium. Deconnecte pendant le jeu, supprime hors jeu.
+      // Un retardataire qui repart ne sera pas promu a la manche suivante.
+      dropWaiting(roomCode, currentUser.id);
       const liveRoomState = getRealtimeState(roomCode);
       if (liveRoomState && (liveRoomState.phase === "GUESSING" || liveRoomState.phase === "REVEAL")) {
         markDisconnected(roomCode, currentUser.id);
@@ -522,6 +538,12 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
           logger.debug(`game:answer DENIED - no game state for room ${roomCode}`);
           emitRoomError(socket, roomCode, "Partie introuvable pour cette salle.");
           ack?.({ ok: false, reason: "no_game" });
+          return;
+        }
+        // Arrive en cours de partie : il regarde la manche en cours (ou son
+        // reveal), il joue la suivante. Toujours la meme raison, quelle que soit la phase.
+        if (isWaitingPlayer(roomCode, currentUser.id)) {
+          ack?.({ ok: false, reason: "waiting" });
           return;
         }
         // Reponse perimee : le client a vise une manche qui n'est plus celle en
@@ -853,6 +875,7 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
       socket.leave(roomCode);
       const liveState = getRealtimeState(roomCode);
       if (liveState?.hostUserId === currentUser.id) setHostConnected(roomCode, false);
+      dropWaiting(roomCode, currentUser.id);
       // En pleine partie, on ne SUPPRIME pas le joueur : quelqu'un qui part a la
       // manche 8/10 garde ses points au podium final. Marque deconnecte, il sort
       // des compteurs "X/Y" mais reste au classement. Hors partie, on libere le slot.

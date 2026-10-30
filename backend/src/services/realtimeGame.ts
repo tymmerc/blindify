@@ -1,4 +1,14 @@
 import { isOwnerGuess, ownerChoices } from "./roundOwners";
+import { evaluateGuessDetail, type GuessDetail } from "./guessMatching";
+import {
+  promoteWaiting,
+  publicWaiting,
+  withWaiting,
+  withWaitingConnection,
+  withoutWaiting,
+  type PublicWaitingPlayer,
+  type WaitingPlayer,
+} from "./lateJoiners";
 
 export type Verdict = "correct" | "close" | "wrong";
 
@@ -68,6 +78,11 @@ export type GameState = {
     revealAt: number | null;
   };
   players: Record<number, PlayerState>;
+  /**
+   * Arrives en cours de partie (T19) : ils regardent et jouent a partir de la
+   * manche suivante. Jamais dans `players` tant qu'ils attendent.
+   */
+  waiting?: PublicWaitingPlayer[];
   /** Partie mise en pause par l'hote (timers geles cote serveur). */
   paused?: boolean;
   config: { autoAdvance: boolean; roundDurationMs: number };
@@ -83,6 +98,13 @@ type GameContext = {
   reconnectGraceMs: number;
   /** Fin de grace (ms) des joueurs coupes pendant la manche en cours, par userId. */
   graceUntil: Readonly<Record<number, number>>;
+  /** Retardataires en attente de la manche suivante (voir lateJoiners.ts). */
+  waiting: readonly WaitingPlayer[];
+  /**
+   * Joueurs du lancement : seuls candidats du « qui a mis ce morceau ? ». Un
+   * retardataire n'a mis aucun morceau dans cette partie.
+   */
+  launchPlayerIds: ReadonlySet<number>;
 };
 
 const DEFAULT_LISTENING_MS = 20_000;
@@ -155,6 +177,7 @@ export function bootstrapGameState(params: {
       revealAt: null,
     },
     players: initialPlayers,
+    waiting: [],
     config: {
       autoAdvance: params.config?.autoAdvance ?? false,
       roundDurationMs: params.config?.roundDurationMs ?? DEFAULT_LISTENING_MS,
@@ -171,6 +194,8 @@ export function bootstrapGameState(params: {
     pausedAt: null,
     reconnectGraceMs: graceMsOrDefault(params.reconnectGraceMs),
     graceUntil: {},
+    waiting: [],
+    launchPlayerIds: new Set(Object.keys(initialPlayers).map(Number)),
   });
   return state;
 }
@@ -271,7 +296,10 @@ export function markDisconnected(roomCode: string, userId: number): GameState | 
   const ctx = games.get(roomCode);
   if (!ctx) return undefined;
   const player = ctx.state.players[userId];
-  if (!player) return ctx.state;
+  if (!player) {
+    if (ctx.waiting.some(w => w.userId === userId)) setWaiting(ctx, withWaitingConnection(ctx.waiting, userId, false));
+    return ctx.state;
+  }
   player.disconnected = true;
   return ctx.state;
 }
@@ -280,7 +308,10 @@ export function markReconnected(roomCode: string, userId: number): GameState | u
   const ctx = games.get(roomCode);
   if (!ctx) return undefined;
   const player = ctx.state.players[userId];
-  if (!player) return ctx.state;
+  if (!player) {
+    if (ctx.waiting.some(w => w.userId === userId)) setWaiting(ctx, withWaitingConnection(ctx.waiting, userId, true));
+    return ctx.state;
+  }
   player.disconnected = false;
   // Revenu : sa grace est consommee. Une nouvelle coupure en ouvrira une neuve,
   // un depart par "Quitter" n'en aura pas.
@@ -374,9 +405,15 @@ export function startNextRound(roomCode: string, opts?: { forceRound?: number; s
   ctx.state.currentTrack = track;
   ctx.state.timing = { startAt, revealAt };
 
+  // Les retardataires jouent a partir de cette manche (T19).
+  promoteWaitingPlayers(ctx, nextRound - 1);
+
   // Picker "qui a ajoute ?" : on propose 3 candidats (le bon + 2 leurres) plutot
-  // que tous les joueurs. Calcule une fois par round, identique pour tout le monde.
-  track.ownerChoices = ownerChoices(track.metadata, Object.keys(ctx.state.players).map(Number));
+  // que tous les joueurs. Calcule une fois par round, identique pour tout le
+  // monde. Seulement parmi les joueurs du lancement : un retardataire n'a mis
+  // aucun morceau dans cette partie, il n'est jamais propose.
+  const candidates = Object.keys(ctx.state.players).map(Number).filter(id => ctx.launchPlayerIds.has(id));
+  track.ownerChoices = ownerChoices(track.metadata, candidates);
 
   Object.values(ctx.state.players).forEach(player => {
     player.hasAnswered = false;
@@ -439,6 +476,61 @@ export function markReady(roomCode: string, userId: number): GameState | undefin
     return advanced;
   }
   return ctx.state;
+}
+
+function setWaiting(ctx: GameContext, waiting: readonly WaitingPlayer[]): void {
+  ctx.waiting = waiting;
+  ctx.state.waiting = publicWaiting(waiting);
+}
+
+function promoteWaitingPlayers(ctx: GameContext, missedRounds: number): void {
+  if (ctx.waiting.length === 0) return;
+  const { promoted, stillWaiting } = promoteWaiting(ctx.waiting, missedRounds, ctx.roundDurationMs);
+  for (const player of promoted) ctx.state.players[player.userId] = player;
+  setWaiting(ctx, stillWaiting);
+}
+
+export type Admission = "none" | "player" | "waiting" | "arrived";
+
+/**
+ * Entree d'un membre de la salle dans la partie en memoire (room:join).
+ * - deja joueur (reconnexion, rechargement) : il le reste, score garde ;
+ * - pendant une manche ou un reveal : il attend la manche suivante
+ *   ("arrived" a la premiere arrivee, "waiting" s'il recharge pendant l'attente) ;
+ * - hors manche (lobby, fin de partie) : comme avant T19, il rejoint les joueurs.
+ */
+export function admitToGame(
+  roomCode: string,
+  payload: { userId: number; username: string | null; avatar?: string | null },
+): Admission {
+  const ctx = games.get(roomCode);
+  if (!ctx) return "none";
+  const inRound = ctx.state.phase === "GUESSING" || ctx.state.phase === "REVEAL";
+  if (ctx.state.players[payload.userId] || !inRound) {
+    upsertPlayer(roomCode, payload);
+    // Resté en attente jusqu'a la fin puis revenu sur les resultats : il n'est
+    // plus a la fois joueur et en attente.
+    if (ctx.waiting.some(w => w.userId === payload.userId)) setWaiting(ctx, withoutWaiting(ctx.waiting, payload.userId));
+    return "player";
+  }
+  const { waiting, added } = withWaiting(ctx.waiting, {
+    userId: payload.userId,
+    username: payload.username,
+    avatar: payload.avatar ?? null,
+  });
+  setWaiting(ctx, waiting);
+  return added ? "arrived" : "waiting";
+}
+
+/** Le retardataire repart (Quitter) : il ne sera pas promu. */
+export function dropWaiting(roomCode: string, userId: number): void {
+  const ctx = games.get(roomCode);
+  if (!ctx || !ctx.waiting.some(w => w.userId === userId)) return;
+  setWaiting(ctx, withoutWaiting(ctx.waiting, userId));
+}
+
+export function isWaitingPlayer(roomCode: string, userId: number): boolean {
+  return games.get(roomCode)?.waiting.some(w => w.userId === userId) ?? false;
 }
 
 export function upsertPlayer(
@@ -607,169 +699,9 @@ export function clearGameIfFinished(roomCode: string): void {
   if (ctx && ctx.state.phase === "FINISHED") games.delete(roomCode);
 }
 
-// --- string matching helpers ---
-const NORMALIZE_SUBS: Record<string, string> = {
-  $: "s",
-  "@": "a",
-  "\u20ac": "e",
-  "&": "and",
-};
-
-function normalize(text: string): string {
-  const folded = text
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-  const replaced = folded.replace(/[@$€&]/g, char => NORMALIZE_SUBS[char] ?? " ");
-  return replaced.replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
-}
-
-const STOP_WORDS = new Set(["feat", "featuring", "feat.", "ft", "ft.", "with", "and", "x", "feat,", "featuring,"]);
-
-function tokenize(text: string): string[] {
-  return normalize(text)
-    .split(" ")
-    .filter(Boolean)
-    .filter(word => !STOP_WORDS.has(word));
-}
-
-function levenshteinDistance(a: string, b: string): number {
-  if (a === b) return 0;
-  if (!a.length) return b.length;
-  if (!b.length) return a.length;
-  const dp = Array.from({ length: a.length + 1 }, () => new Array<number>(b.length + 1).fill(0));
-  for (let i = 0; i <= a.length; i++) dp[i][0] = i;
-  for (let j = 0; j <= b.length; j++) dp[0][j] = j;
-  for (let i = 1; i <= a.length; i++) {
-    for (let j = 1; j <= b.length; j++) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
-    }
-  }
-  return dp[a.length][b.length];
-}
-
-function isWordMatch(word: string, candidates: string[]): boolean {
-  if (candidates.includes(word)) return true;
-  const tolerance = word.length <= 4 ? 1 : 2;
-  return candidates.some(candidate => {
-    if (Math.abs(candidate.length - word.length) > tolerance) return false;
-    return levenshteinDistance(word, candidate) <= tolerance;
-  });
-}
-
-
-/**
- * Variantes acceptees d'un TITRE : le titre complet, et le titre "de base"
- * sans les parentheses/crochets ni les suffixes " - Radio Edit" & co.
- * "Chocolat (feat. Awa Imani)" -> taper "chocolat" suffit.
- */
-function titleVariants(title: string): string[] {
-  const variants = [title];
-  const stripped = title
-    .replace(/\(.*?\)|\[.*?\]/g, " ")
-    .split(" - ")[0]
-    .trim();
-  if (stripped && stripped.toLowerCase() !== title.toLowerCase()) variants.push(stripped);
-  return variants;
-}
-
-/**
- * Variantes acceptees d'un ARTISTE : la liste complete, et chaque artiste seul.
- * "Naza, Awa Imani" -> "naza" valide, "awa imani" aussi (le feat compte).
- */
-function artistVariants(artist: string): string[] {
-  const variants = [artist];
-  const parts = artist
-    .split(/,|;|\/|&|\bfeat\.?\b|\bft\.?\b|\bfeaturing\b|\bavec\b|\bwith\b|\bvs\.?\b|\bx\b|×/i)
-    .map(p => p.trim())
-    .filter(p => p.length > 1);
-  for (const p of parts) {
-    if (p.toLowerCase() !== artist.toLowerCase()) variants.push(p);
-  }
-  return variants;
-}
-
-function evaluateGuessDetail(
-  guess: string,
-  track: RoundTrack,
-  separateTitle?: string | null,
-  separateArtist?: string | null,
-): {
-  verdict: Verdict;
-  matchedTitle: boolean;
-  matchedArtist: boolean;
-  guessProvided: boolean;
-} {
-  const hasSeparateFields = (separateTitle && separateTitle.trim().length > 0) || (separateArtist && separateArtist.trim().length > 0);
-
-  if (hasSeparateFields) {
-    // Structured matching, CROSS-FIELD : chaque champ est teste contre le titre
-    // ET l'artiste. Taper "damso" dans le champ titre doit valider l'artiste -
-    // c'est un comportement humain courant (vu en test reel avec des joueurs).
-    const titleInput = separateTitle?.trim() ?? "";
-    const artistInput = separateArtist?.trim() ?? "";
-    const guessProvided = titleInput.length > 0 || artistInput.length > 0;
-
-    const titleVars = titleVariants(track.title);
-    const artistVars = artistVariants(track.artist);
-
-    const matchesAnyVariant = (input: string, variants: string[]): boolean => {
-      if (!input) return false;
-      const inputTokens = tokenize(input);
-      return variants.some(variant => {
-        const variantTokens = tokenize(variant);
-        return (
-          normalize(variant) === normalize(input) ||
-          (inputTokens.length > 0 && variantTokens.length > 0 && variantTokens.every(tok => isWordMatch(tok, inputTokens)))
-        );
-      });
-    };
-
-    const titleByTitle = matchesAnyVariant(titleInput, titleVars);
-    const titleByArtistField = matchesAnyVariant(artistInput, titleVars);
-    const artistByArtist = matchesAnyVariant(artistInput, artistVars);
-    const artistByTitleField = matchesAnyVariant(titleInput, artistVars);
-
-    // Chaque champ ne credite qu'un seul element (pas de double comptage si
-    // l'utilisateur tape la meme chose dans les deux champs).
-    const matchedTitle = titleByTitle || (titleByArtistField && !artistByArtist);
-    const matchedArtist = artistByArtist || (artistByTitleField && !titleByTitle);
-
-    let verdict: Verdict = "wrong";
-    if (matchedTitle && matchedArtist) verdict = "correct";
-    else if (matchedTitle || matchedArtist) verdict = "close";
-
-    return { verdict, matchedTitle, matchedArtist, guessProvided };
-  }
-
-  // Legacy: single combined guess string
-  const normalizedGuess = normalize(guess);
-  const guessProvided = normalizedGuess.length > 0;
-
-  const guessTokens = tokenize(guess);
-  const anyVariant = (variants: string[]): boolean =>
-    variants.some(variant => {
-      const variantTokens = tokenize(variant);
-      return (
-        (guessProvided && normalize(variant) === normalizedGuess) ||
-        (guessTokens.length > 0 && variantTokens.length > 0 && variantTokens.every(tok => isWordMatch(tok, guessTokens)))
-      );
-    });
-
-  const matchedTitle = anyVariant(titleVariants(track.title));
-  const matchedArtist = anyVariant(artistVariants(track.artist));
-
-  let verdict: Verdict = "wrong";
-  if (matchedTitle && matchedArtist) verdict = "correct";
-  else if (matchedTitle || matchedArtist) verdict = "close";
-
-  return { verdict, matchedTitle, matchedArtist, guessProvided };
-}
-
 function computeScore(params: {
   previous: PlayerState;
-  detail: ReturnType<typeof evaluateGuessDetail>;
+  detail: GuessDetail;
   answerAt: number | null | undefined;
   startAt: number | null;
   maxDuration?: number | null;
