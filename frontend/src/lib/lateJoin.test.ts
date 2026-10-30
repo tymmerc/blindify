@@ -53,6 +53,6 @@ describe("textes", () => {
     expect(arrivalNotice("  ", null)).toBe("Quelqu'un arrive et joue dès la prochaine manche.")
     expect(arrivalNotice("Zoe", { currentRound: 5, totalRounds: 5 })).toBe("Zoe arrive et jouera la prochaine partie.")
     const all = [arrivalNotice("Zoe", base), lateJoinBanner(base).title, lateJoinBanner(base).body].join(" ")
-    expect(all).not.toContain("—")
+    expect(all).not.toContain("\u2014")
   })
 })

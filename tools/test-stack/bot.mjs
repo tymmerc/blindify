@@ -149,6 +149,8 @@ export class Bot {
 
   /** Manche en cours vue dans l'etat, pour le retardataire (watchFromState). */
   adoptRound(p) {
+    // Deja promu dans cette trame : c'est une manche qu'il joue (onRound suit).
+    if (p?.players?.[this.id]) return
     const round = p?.currentRound
     if (!this.watchFromState || p?.phase !== "GUESSING" || !round || this.rounds.has(round)) return
     if (this.current?.round === round) return

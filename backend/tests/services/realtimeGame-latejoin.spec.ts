@@ -132,6 +132,11 @@ describe("arrivee pendant la derniere manche", () => {
     expect(state.phase).toBe("FINISHED");
     expect(state.players[LATE.userId]).toBeUndefined();
     expect(state.waiting).toEqual([{ userId: 9, username: "Retard" }]);
+
+    // Il recharge sa page sur les resultats : comme avant T19, il rejoint les
+    // joueurs de l'etat fini, et quitte la liste d'attente.
+    expect(admitToGame(ROOM, LATE)).toBe("player");
+    expect(getGameState(ROOM)!.waiting).toEqual([]);
   });
 });
 

@@ -1122,8 +1122,10 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     ]
   )
 
-  // Retardataire : on retente le join en douceur. Quand la partie se termine,
-  // il entre tout seul, sans avoir a marteler un bouton.
+  // Retardataire face a un ANCIEN backend (avant T19, qui refusait en pleine
+  // partie avec room_in_progress) : on retente le join en douceur. Le backend
+  // actuel ne renvoie plus ce code ; garde tant que front et backend peuvent
+  // partir en prod a des moments differents.
   useEffect(() => {
     if (errorCode !== "room_in_progress" || room) return
     const code = joinCode.trim().toUpperCase()
@@ -1646,6 +1648,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
           chatMessages={chatMessages}
           onSendChat={sendChat}
           onExit={handleLeaveRoom}
+          onRejoin={() => socketRef.current?.emit("room:join", { roomCode: room.room_code })}
           accentColor={accentColor}
         />
       ) : (

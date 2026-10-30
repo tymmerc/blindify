@@ -297,7 +297,7 @@ export function markDisconnected(roomCode: string, userId: number): GameState | 
   if (!ctx) return undefined;
   const player = ctx.state.players[userId];
   if (!player) {
-    setWaiting(ctx, withWaitingConnection(ctx.waiting, userId, false));
+    if (ctx.waiting.some(w => w.userId === userId)) setWaiting(ctx, withWaitingConnection(ctx.waiting, userId, false));
     return ctx.state;
   }
   player.disconnected = true;
@@ -309,7 +309,7 @@ export function markReconnected(roomCode: string, userId: number): GameState | u
   if (!ctx) return undefined;
   const player = ctx.state.players[userId];
   if (!player) {
-    setWaiting(ctx, withWaitingConnection(ctx.waiting, userId, true));
+    if (ctx.waiting.some(w => w.userId === userId)) setWaiting(ctx, withWaitingConnection(ctx.waiting, userId, true));
     return ctx.state;
   }
   player.disconnected = false;
@@ -508,6 +508,9 @@ export function admitToGame(
   const inRound = ctx.state.phase === "GUESSING" || ctx.state.phase === "REVEAL";
   if (ctx.state.players[payload.userId] || !inRound) {
     upsertPlayer(roomCode, payload);
+    // Resté en attente jusqu'a la fin puis revenu sur les resultats : il n'est
+    // plus a la fois joueur et en attente.
+    if (ctx.waiting.some(w => w.userId === payload.userId)) setWaiting(ctx, withoutWaiting(ctx.waiting, payload.userId));
     return "player";
   }
   const { waiting, added } = withWaiting(ctx.waiting, {

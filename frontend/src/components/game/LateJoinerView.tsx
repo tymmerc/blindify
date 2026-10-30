@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Hourglass, LogOut, Volume2, VolumeX } from "lucide-react"
 import { Label, Panel } from "@/app/multiplayer/lobbyKit"
 import { LobbyChat } from "@/app/multiplayer/LobbyChat"
@@ -22,7 +22,28 @@ export interface LateJoinerViewProps {
   chatMessages: ChatMessage[]
   onSendChat: (message: string) => void
   onExit: () => void
+  /** Renvoie room:join : le serveur ne m'a pas (encore) mis en attente. */
+  onRejoin: () => void
   accentColor?: string
+}
+
+const REJOIN_AFTER_MS = 3_000
+
+/**
+ * Filet : si le serveur ne me compte ni parmi les joueurs ni en attente (join
+ * arrive pendant le lancement, avant que la partie existe en memoire), je ne
+ * serais jamais promu. On redemande l'entree, une fois par manche.
+ */
+function useRejoinIfUnknown(state: MultiplayerGameState, userId: number, onRejoin: () => void): void {
+  const known = (state.waiting ?? []).some(w => w.userId === userId)
+  const round = state.currentRound
+  const callback = useRef(onRejoin)
+  callback.current = onRejoin
+  useEffect(() => {
+    if (known) return
+    const t = setTimeout(() => callback.current(), REJOIN_AFTER_MS)
+    return () => clearTimeout(t)
+  }, [known, round])
 }
 
 /**
@@ -51,8 +72,9 @@ function useWaitingPreview(state: MultiplayerGameState, enabled: boolean, server
  * passage a l'ecran de jeu se fait tout seul, quand le serveur le range dans
  * les joueurs au debut de la manche suivante.
  */
-export function LateJoinerView({ state, currentUserId, serverNow, chatMessages, onSendChat, onExit, accentColor }: LateJoinerViewProps) {
+export function LateJoinerView({ state, currentUserId, serverNow, chatMessages, onSendChat, onExit, onRejoin, accentColor }: LateJoinerViewProps) {
   const [sound, setSound] = useState(false)
+  useRejoinIfUnknown(state, currentUserId, onRejoin)
   const withSound = state.mode !== "event"
   useWaitingPreview(state, withSound && sound, serverNow)
   const banner = lateJoinBanner(state)

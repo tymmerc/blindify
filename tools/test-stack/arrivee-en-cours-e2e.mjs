@@ -29,7 +29,9 @@ const ok = m => say(`  [ok] ${m}`)
 const bad = m => { problems.push(m); say(`  !! ${m}`) }
 const shots = []
 const shot = async (page, name) => { const f = path.join(OUT, `${name}.png`); await page.screenshot({ path: f }); shots.push(f) }
-const ROUNDS = 5 // un choix du lobby (5, 10, 15, 20)
+// Un choix du lobby (5, 10, 15, 20). 10 : le navigateur peut mettre 15 s a
+// entrer, l'arrivee ne doit jamais tomber sur la derniere manche.
+const ROUNDS = 10
 
 async function wizard(page, name, code) {
   await page.goto(`${APP}/jouer/?join=${code}`, { waitUntil: "networkidle", timeout: 60000 })
@@ -110,8 +112,11 @@ async function lateJoinerPlays({ page, code, lead, tag }) {
   const banner = await page.getByTestId("late-joiner-title").innerText()
   if (!/tu joues dès la prochaine manche/i.test(banner)) bad(`${tag} : bandeau inattendu « ${banner} »`)
   if (await page.getByLabel("Titre du morceau").isVisible().catch(() => false)) bad(`${tag} : un champ de reponse est visible pendant l'attente`)
-  // Sa manche d'arrivee se joue sans lui : revelee avant la fin du chrono.
-  const watched = lead.current.round
+  // Sa manche d'arrivee, lue sur SON ecran (le bot meneur a pu avancer depuis
+  // le clic) : elle se joue sans lui, revelee avant la fin du chrono.
+  const label = (await page.getByText(/Manche \d+ \/ \d+/).first().textContent()) ?? ""
+  const watched = Number(/Manche (\d+)/i.exec(label)?.[1])
+  if (!watched) throw new Error(`${tag} : manche affichee illisible (« ${label} »)`)
   const until = Date.now() + 30000
   while (Date.now() < until && !lead.reveals.has(watched)) await sleep(200)
   const t = lead.timeline[watched]
@@ -236,10 +241,20 @@ async function table(browser) {
     const watched = await lateJoinerPlays({ page: p, code, lead, tag: "table" })
     await sleep(1500)
     await shot(p, "table-3-telephone-en-jeu")
-    const inRanking = await s.getByText("Retard").first().isVisible().catch(() => false)
-    if (inRanking) ok(`table : l'ecran central l'affiche a la manche ${watched + 1}`)
+    // Le classement existe en deux exemplaires selon la largeur (colonne ou
+    // liste du bas) : on juge le texte reellement affiche (innerText ignore ce
+    // qui est cache), puis on fait defiler jusqu'a lui pour la capture.
+    const shown = await s.evaluate(() => [...document.querySelectorAll("*")].some(el =>
+      el.childElementCount === 0 && el.textContent?.trim() === "Retard" && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== "hidden"))
+    if (shown) ok(`table : l'ecran central l'affiche au classement a la manche ${watched + 1}`)
     else bad(`table : l'ecran central ne l'affiche pas a la manche ${watched + 1}`)
     await shot(s, "table-4-ecran-manche-suivante")
+    await s.evaluate(() => {
+      const el = [...document.querySelectorAll("*")].find(n => n.childElementCount === 0 && n.textContent?.trim() === "Retard" && n.getClientRects().length > 0)
+      el?.scrollIntoView({ block: "center" })
+    })
+    await sleep(500)
+    await shot(s, "table-5-ecran-classement")
     const until = Date.now() + 120000
     while (Date.now() < until && !bots.every(b => b.over)) await sleep(500)
     if (!bots.every(b => b.over)) bad("table : la partie ne s'est pas terminee")

@@ -392,6 +392,14 @@ describe("ModeLobbyView : arriver pendant une partie", () => {
     expect(mocks.socket!.emit).not.toHaveBeenCalledWith("room:leave", expect.anything())
   })
 
+  it("inconnu du serveur (join pendant le lancement), il redemande l'entree", async () => {
+    mocks.api.roomState.mockResolvedValue({ room: LIVE_ROOM, tracks: [], gameState: { ...round2, waiting: [] } })
+    renderLobby()
+    expect(await screen.findByTestId("late-joiner-view")).toBeInTheDocument()
+    await act(async () => { mocks.socket!.accept("sock-1") })
+    await waitFor(() => expect(mocks.socket!.emit).toHaveBeenCalledWith("room:join", { roomCode: "ABC123" }), { timeout: 5000 })
+  })
+
   it("pendant la derniere manche, il attend la prochaine partie", async () => {
     mocks.api.roomState.mockResolvedValue({ room: LIVE_ROOM, tracks: [], gameState: { ...round2, currentRound: 3 } })
     renderLobby()
