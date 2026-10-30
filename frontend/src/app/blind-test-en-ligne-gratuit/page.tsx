@@ -91,7 +91,7 @@ export default function Page() {
       <Section tag="Les modes" title="Trois façons de jouer" tone="blue">
         <ul>
           <Li color="#f4ecdb">
-            <span><strong>Autour d'une table</strong> : un écran au milieu (télé, PC, ou le téléphone de l'organisateur) diffuse la musique et les scores, chacun scanne un QR code et répond depuis son téléphone. Ceux qui arrivent en retard entrent tout seuls entre deux parties.</span>
+            <span><strong>Autour d'une table</strong> : un écran au milieu (télé, PC, ou le téléphone de l'organisateur) diffuse la musique et les scores, chacun scanne un QR code et répond depuis son téléphone. Ceux qui arrivent en retard entrent en pleine partie et jouent dès la manche suivante.</span>
           </Li>
           <Li color="#f4ecdb">
             <span><strong>Un seul téléphone</strong> : tout le monde pose un doigt sur l'écran, la musique démarre quand toutes les zones sont tenues, le premier qui lâche prend le téléphone et tape sa réponse. Jusqu'à 5 joueurs.</span>

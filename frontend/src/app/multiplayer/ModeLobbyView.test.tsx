@@ -100,7 +100,7 @@ vi.mock("./EventLobbyView", () => ({
 vi.mock("./FriendsLobbyView", () => ({ FriendsLobbyView: () => null }))
 vi.mock("./StreamerLobbyView", () => ({ StreamerLobbyView: () => null }))
 vi.mock("./LobbyViews", () => ({ ResultsView: () => null }))
-vi.mock("@/components/game/MultiplayerGameClient", () => ({ MultiplayerGameClient: () => null }))
+vi.mock("@/components/game/MultiplayerGameClient", () => ({ MultiplayerGameClient: () => <p>Écran de jeu</p> }))
 vi.mock("@/components/game/StreamerGameClient", () => ({ StreamerGameClient: () => null }))
 vi.mock("@/components/import/ProfileImportBlock", () => ({ ProfileImportBlock: () => null }))
 
@@ -345,5 +345,67 @@ describe("ModeLobbyView : un invite entre par le lien du QR", () => {
       expect(mocks.api.ensureUserSession).toHaveBeenCalledTimes(1)
       expect(mocks.api.joinRoom).not.toHaveBeenCalled()
     })
+  })
+})
+
+// Arrivee en cours de partie (T19, decision de Tym du 29/10/2026) : le joueur
+// regarde, puis passe tout seul a l'ecran de jeu au debut de la manche suivante.
+describe("ModeLobbyView : arriver pendant une partie", () => {
+  const LIVE_ROOM = { ...ROOM, status: "in_progress" }
+  const track = { round: 2, trackId: "hidden", title: "", artist: "", previewUrl: null, ownerChoices: [2, 3] }
+  const player = (userId: number, username: string) => ({
+    userId, username, score: 0, accuracy: 0, rounds: 1, correct: 0, streak: 0, bestStreak: 0, hasAnswered: false, isReady: false,
+  })
+  const round2 = {
+    roomCode: "ABC123", hostUserId: 1, hostPlays: false, mode: "event", phase: "GUESSING", currentRound: 2, totalRounds: 3,
+    currentTrack: track, timing: { startAt: Date.now(), revealAt: Date.now() + 20_000 },
+    players: { 2: player(2, "Max"), 3: player(3, "Zoe") }, waiting: [{ userId: 7, username: "Lea" }],
+    config: { autoAdvance: false, roundDurationMs: 20_000 },
+  }
+  const round3 = {
+    ...round2, currentRound: 3, currentTrack: { ...track, round: 3 }, waiting: [],
+    players: { ...round2.players, 7: { ...player(7, "Lea"), rounds: 0 } },
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.socket = makeSocket()
+    mocks.api.checkAuth.mockImplementation(async () => guestSession())
+    mocks.api.joinRoom.mockResolvedValue({ room: LIVE_ROOM, lateJoin: true })
+    mocks.api.roomDetails.mockResolvedValue({ room: LIVE_ROOM, participants: [{ user_id: 7, username: "Lea" }], selfPreference: null })
+    mocks.api.roomState.mockResolvedValue({ room: LIVE_ROOM, tracks: [], gameState: round2 })
+  })
+
+  it("montre la vue d'attente, puis l'ecran de jeu a la manche suivante, sans rien recharger", async () => {
+    renderLobby()
+    expect(await screen.findByTestId("late-joiner-view")).toBeInTheDocument()
+    expect(screen.getByText("Partie en cours : tu joues dès la prochaine manche")).toBeInTheDocument()
+    expect(screen.queryByText("Écran de jeu")).not.toBeInTheDocument()
+
+    await act(async () => { mocks.socket!.accept("sock-1") })
+    await act(async () => { mocks.socket!.emitServer("game:state", round3) })
+
+    expect(await screen.findByText("Écran de jeu")).toBeInTheDocument()
+    expect(screen.queryByTestId("late-joiner-view")).not.toBeInTheDocument()
+    // Tout s'est fait en place : un seul join, pas de nouvelle entree.
+    expect(mocks.api.joinRoom).toHaveBeenCalledTimes(1)
+    expect(mocks.socket!.emit).not.toHaveBeenCalledWith("room:leave", expect.anything())
+  })
+
+  it("pendant la derniere manche, il attend la prochaine partie", async () => {
+    mocks.api.roomState.mockResolvedValue({ room: LIVE_ROOM, tracks: [], gameState: { ...round2, currentRound: 3 } })
+    renderLobby()
+    expect(await screen.findByText("Dernière manche en cours : tu joues la prochaine partie")).toBeInTheDocument()
+  })
+
+  it("un joueur deja en jeu voit les autres arriver", async () => {
+    mocks.api.roomState.mockResolvedValue({ room: LIVE_ROOM, tracks: [], gameState: round3 })
+    renderLobby()
+    expect(await screen.findByText("Écran de jeu")).toBeInTheDocument()
+    await act(async () => { mocks.socket!.accept("sock-1") })
+    await act(async () => {
+      mocks.socket!.emitServer("game:waiting", { roomCode: "ABC123", userId: 9, username: "Nora" })
+    })
+    expect(await screen.findByText("Nora arrive et jouera la prochaine partie.")).toBeInTheDocument()
   })
 })

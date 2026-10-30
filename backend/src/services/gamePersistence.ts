@@ -189,10 +189,13 @@ export async function persistGameResults(state: GameState, sessionId: number | u
   }));
   try {
     for (const player of players) {
+      // Upsert : un joueur arrive en cours de partie (T19) n'a pas de ligne
+      // posee au lancement. Avec un simple UPDATE, son score etait perdu sans bruit.
       await pool.query(
-        `UPDATE game_participants
-         SET score = $3, accuracy = $4, best_streak = $5
-         WHERE session_id = $1 AND user_id = $2`,
+        `INSERT INTO game_participants (session_id, user_id, score, accuracy, best_streak)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (session_id, user_id) DO UPDATE
+         SET score = EXCLUDED.score, accuracy = EXCLUDED.accuracy, best_streak = EXCLUDED.best_streak`,
         [sessionId, player.userId, player.score, player.accuracy, player.bestStreak],
       );
       // XP gratifiant : avec le scoring 1pt, le score brut (0-N) ferait stagner

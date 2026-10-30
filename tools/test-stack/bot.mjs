@@ -54,8 +54,12 @@ export function rng(seed) {
 }
 
 export class Bot {
-  constructor({ name, plan, random, isPresenter = false }) {
+  constructor({ name, plan, random, isPresenter = false, watchFromState = false }) {
     this.name = name
+    // Retardataire (T19) : il entre en pleine manche, sans game:round:start. Il
+    // prend la manche en cours depuis l'etat recu, pour que l'inspection
+    // anti-triche juge aussi les trames de son attente. Il n'y repond pas.
+    this.watchFromState = watchFromState
     this.plan = plan            // (round) => { action, deco?, quitte? }
     this.random = random
     this.isPresenter = isPresenter
@@ -98,7 +102,16 @@ export class Bot {
     if (r.status >= 400) return { ok: false, status: r.status, code: r.error?.code || r.error }
     if (!this.socket) await this.connect()
     this.socket.emit("room:join", { roomCode: code })
-    return { ok: true }
+    return { ok: true, lateJoin: r.data?.lateJoin === true, rejoined: r.data?.rejoined === true }
+  }
+
+  /** Une reponse envoyee tout de suite (retardataire : elle doit etre refusee). */
+  answerNow(round) {
+    return new Promise(resolve => {
+      this.socket.timeout(5000).emit("game:answer",
+        { roomCode: this.code, guessTitle: "personne", guessArtist: "inconnu", round },
+        (err, res) => resolve(err ? { ok: false, reason: "timeout" } : res))
+    })
   }
 
   /** Anti-triche : pendant une manche, la bonne reponse ne doit circuler dans
@@ -124,7 +137,7 @@ export class Bot {
   }
 
   wire(s) {
-    s.on("game:state", p => this.inspect("game:state", p))
+    s.on("game:state", p => { this.adoptRound(p); this.inspect("game:state", p) })
     // onRound pose this.current (et la verite de la NOUVELLE manche) avant son
     // premier await : l'inspection qui suit juge donc la bonne manche. Avant,
     // elle passait en premier et comparait a la manche deja revelee.
@@ -132,6 +145,15 @@ export class Bot {
     s.on("game:round:reveal", p => this.onReveal(p))
     s.on("game:over", () => { this.over = true })
     s.on("room:error", e => this.errors.push(`room:error ${JSON.stringify(e).slice(0, 120)}`))
+  }
+
+  /** Manche en cours vue dans l'etat, pour le retardataire (watchFromState). */
+  adoptRound(p) {
+    const round = p?.currentRound
+    if (!this.watchFromState || p?.phase !== "GUESSING" || !round || this.rounds.has(round)) return
+    if (this.current?.round === round) return
+    this.watched = (this.watched ?? new Set()).add(round)
+    this.current = { round, truth: oracle(this.code, round), startedAt: Date.now(), revealAt: p?.timing?.revealAt }
   }
 
   async onRound(p) {

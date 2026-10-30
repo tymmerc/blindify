@@ -6,7 +6,7 @@ import { FaqList, GuideShell, Li, Section, Steps, VERMILION, faqJsonLd, webPageJ
 // part aurait dit la meme chose). Chiffres verifies dans le code : manches de
 // 10/15/20/30 s (20 par defaut), parties de 5/10/15/20 manches, 12 places par
 // salle hote compris, 5 sur un seul telephone (multi-touch iPhone), ecran de
-// l'hote maintenu allume (wake lock), retardataires qui entrent entre deux parties.
+// l'hote maintenu allume (wake lock), retardataires qui entrent en pleine partie et jouent a la manche suivante.
 
 const URL = "https://blindz.app/blind-test-soiree/"
 const TITLE = "Organiser un blind test en soirée ou à l'apéro entre potes : écran central, QR code ou un seul téléphone"
@@ -43,7 +43,7 @@ const TABLE_STEPS = [
 const FAQ = [
   {
     q: "Quelqu'un arrive en retard, il peut rejoindre ?",
-    a: "Oui. S'il scanne le QR code pendant une partie, il voit un écran d'attente et entre tout seul dès que la partie en cours se termine, sans que l'organisateur ait quoi que ce soit à faire.",
+    a: "Oui. S'il scanne le QR code pendant une partie, il suit la manche en cours sur son téléphone et joue dès la suivante, en partant de 0 point. L'organisateur n'a rien à faire.",
   },
   {
     q: "L'écran de l'organisateur s'éteint au bout d'un moment ?",
