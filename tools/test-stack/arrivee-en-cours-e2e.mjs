@@ -132,6 +132,23 @@ async function lateJoinerPlays({ page, code, lead, tag }) {
   return watched
 }
 
+/** Le retardataire, devenu joueur, repond a chaque manche jusqu'a la fin. */
+async function playToTheEnd({ page, code, bots, from }) {
+  const [lead] = bots
+  const answered = new Set([from])
+  const until = Date.now() + ROUNDS * 30000
+  while (Date.now() < until && !bots.every(b => b.over)) {
+    const cur = lead.current?.round
+    const musicAt = lead.timeline[cur]?.startAt ?? lead.timeline[cur]?.received ?? 0
+    if (cur && !answered.has(cur) && !lead.reveals.has(cur) && Date.now() - musicAt > 1500) {
+      answered.add(cur)
+      await answer(page, oracle(code, cur)).catch(() => {})
+    }
+    await sleep(300)
+  }
+  return bots.every(b => b.over)
+}
+
 function judgeDb(code, uid, watched, tag) {
   const own = psql(`SELECT count(*) FILTER (WHERE gr.round_index <= ${watched}), count(*) FILTER (WHERE r.verdict = 'correct')
     FROM round_responses r JOIN game_rounds gr ON gr.id = r.round_id JOIN multiplayer_rooms m ON m.session_id = gr.session_id
@@ -176,9 +193,7 @@ async function remote(browser) {
     const watched = await lateJoinerPlays({ page: p, code, lead: host, tag: "a distance" })
     await sleep(1500)
     await shot(p, "distance-2-en-jeu-bureau")
-    const until = Date.now() + 120000
-    while (Date.now() < until && !bots.every(b => b.over)) await sleep(500)
-    if (!bots.every(b => b.over)) bad("a distance : la partie ne s'est pas terminee")
+    if (!(await playToTheEnd({ page: p, code, bots, from: watched + 1 }))) bad("a distance : la partie ne s'est pas terminee")
     await sleep(2500)
     judgeDb(code, p.__uid, watched, "a distance")
     const l = leaks(frames, code)
@@ -235,29 +250,23 @@ async function table(browser) {
     if (told) ok("table : l'ecran central annonce l'arrivee")
     else bad("table : l'ecran central n'annonce pas l'arrivee")
     await shot(s, "table-1-ecran-annonce")
+    // Pendant son attente, les compteurs restent sur les 3 joueurs.
+    if (!(await s.evaluate(() => /\b\d+ ?\/ ?3\b/.test((document.body.textContent ?? "").replace(/\s+/g, " ")))))
+      bad("table : pendant l'attente, les compteurs de l'ecran central ne sont plus sur 3 joueurs")
     if (/spectateur/i.test(await s.evaluate(() => document.body.innerText))) bad("table : l'ecran central compte le retardataire comme spectateur")
     await sleep(800)
     await shot(p, "table-2-attente-telephone")
     const watched = await lateJoinerPlays({ page: p, code, lead, tag: "table" })
     await sleep(1500)
     await shot(p, "table-3-telephone-en-jeu")
-    // Le classement existe en deux exemplaires selon la largeur (colonne ou
-    // liste du bas) : on juge le texte reellement affiche (innerText ignore ce
-    // qui est cache), puis on fait defiler jusqu'a lui pour la capture.
-    const shown = await s.evaluate(() => [...document.querySelectorAll("*")].some(el =>
-      el.childElementCount === 0 && el.textContent?.trim() === "Retard" && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== "hidden"))
-    if (shown) ok(`table : l'ecran central l'affiche au classement a la manche ${watched + 1}`)
-    else bad(`table : l'ecran central ne l'affiche pas a la manche ${watched + 1}`)
+    // L'ecran central l'a ajoute aux joueurs : ses compteurs passent de /3 a
+    // /4 (« N/4 prets », « N / 4 reponses »). Le classement du bas n'affiche
+    // que le podium, et lui part de 0 : il n'y est pas forcement visible.
+    const counted = await s.evaluate(() => /\b\d+ ?\/ ?4\b/.test((document.body.textContent ?? "").replace(/\s+/g, " ")))
+    if (counted) ok(`table : l'ecran central le compte parmi les joueurs a la manche ${watched + 1}`)
+    else bad(`table : l'ecran central ne le compte pas a la manche ${watched + 1}`)
     await shot(s, "table-4-ecran-manche-suivante")
-    await s.evaluate(() => {
-      const el = [...document.querySelectorAll("*")].find(n => n.childElementCount === 0 && n.textContent?.trim() === "Retard" && n.getClientRects().length > 0)
-      el?.scrollIntoView({ block: "center" })
-    })
-    await sleep(500)
-    await shot(s, "table-5-ecran-classement")
-    const until = Date.now() + 120000
-    while (Date.now() < until && !bots.every(b => b.over)) await sleep(500)
-    if (!bots.every(b => b.over)) bad("table : la partie ne s'est pas terminee")
+    if (!(await playToTheEnd({ page: p, code, bots, from: watched + 1 }))) bad("table : la partie ne s'est pas terminee")
     await sleep(2500)
     judgeDb(code, p.__uid, watched, "table")
     const l = leaks(frames, code)
