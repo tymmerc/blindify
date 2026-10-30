@@ -184,12 +184,24 @@ if (CHAOS) {
     await zoe.locator("input").first().fill("Zoe")
     await zoe.getByRole("button", { name: /continuer/i }).click()
     await zoe.getByRole("button", { name: /rejoindre la partie/i }).click().catch(() => {})
-    await sleep(10000)
-    const txt = await zoe.evaluate(() => document.body.innerText)
-    // T19 : elle entre et regarde, puis jouerait des la manche suivante.
-    if (!/tu joues dès la prochaine manche|tu joues la prochaine partie/i.test(txt)) bad("Zoe ne voit pas la vue d'attente de l'arrivee en cours de partie")
+    // T19 : elle entre et regarde, puis joue des la manche suivante. En prod
+    // les bots repondent vite (reveal anticipe) : la vue d'attente peut ne
+    // durer que quelques secondes. On la guette des l'arrivee, puis on
+    // verifie qu'elle passe bien en jeu (ou reste en attente si c'etait la
+    // derniere manche).
+    const ATTENTE = /tu joues dès la prochaine manche|tu joues la prochaine partie/i
+    const EN_JEU = /je sais pas, passer|valider/i
+    let vueAttente = false, enJeu = false
+    for (let i = 0; i < 40 && !(vueAttente && enJeu); i++) {
+      const txt = await zoe.evaluate(() => document.body.innerText).catch(() => "")
+      if (ATTENTE.test(txt)) vueAttente = true
+      else if (vueAttente && EN_JEU.test(txt)) enJeu = true
+      await sleep(500)
+    }
+    if (!vueAttente) bad("Zoe ne voit pas la vue d'attente de l'arrivee en cours de partie")
+    else say(`  [chaos] Zoe: vue d'attente vue${enJeu ? ", puis en jeu a la manche suivante" : " (derniere manche, ou bascule apres 20 s)"}`)
     if (joins > 5) bad(`Zoe a envoye ${joins} requetes /join (boucle de retry)`)
-    else say(`  [chaos] Zoe: vue d'attente correcte, ${joins} requete(s) /join`)
+    else say(`  [chaos] Zoe: ${joins} requete(s) /join`)
     await zoe.screenshot({ path: `${SHOTS}/chaos-zoe.png` })
     await ctx.close()
   })())
