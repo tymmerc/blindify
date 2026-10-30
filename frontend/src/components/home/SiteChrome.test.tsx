@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, within } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { BUG_REPORT_EVENT } from "@/components/BugReportDialog"
 import { SiteFooter, SiteHeader } from "./SiteChrome"
@@ -31,6 +31,12 @@ describe("SiteChrome : mention beta", () => {
       window.removeEventListener(BUG_REPORT_EVENT, opened)
     }
     expect(opened).toHaveBeenCalledTimes(1)
+  })
+
+  it("le pied de page renvoie vers les conditions d'utilisation (T17a)", () => {
+    render(<SiteFooter />)
+    const nav = screen.getByRole("navigation", { name: "Pied de page" })
+    expect(within(nav).getByRole("link", { name: "Conditions" })).toHaveAttribute("href", expect.stringMatching(/^\/conditions\/?$/))
   })
 
   it("n'a aucun tiret cadratin", () => {

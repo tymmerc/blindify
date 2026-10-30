@@ -1,9 +1,11 @@
 import { ExternalLink } from "lucide-react"
 import { DISCORD_FRIENDS_NOTE, DISCORD_INSTALL_URL, DISCORD_STEPS } from "@/lib/discord/install"
+import { DISCORD_SUPPORT_URL } from "@/lib/contact"
 
 // « Jouer sur Discord » : renvoie vers l'installation de l'Activite, dans un
 // nouvel onglet. Deux formes :
-//  - DiscordPlay : le bouton et les 3 etapes (accueil, guide a distance) ;
+//  - DiscordPlay : le bouton et les 3 etapes (accueil, guide a distance), avec
+//    sous le bouton un lien discret vers le serveur Discord de support ;
 //  - DiscordHint : une ligne discrete, les etapes repliees (wizard, lobby).
 // Aucun etat React : <details> replie les etapes, le composant reste rendu
 // cote serveur sur les pages statiques. Jamais affiche dans l'Activite.
@@ -41,6 +43,9 @@ export function DiscordPlay({ tone = "light", heading = true, className = "" }: 
     ? "border-[#f4ecdb] bg-[#f4ecdb] text-[#2e2014] shadow-[3px_3px_0_rgba(0,0,0,.35)] hover:bg-[#ece1c8] hover:text-[#2e2014]"
     : "border-[#2e2014] bg-[#2e2014] text-[#f4ecdb] shadow-[3px_3px_0_rgba(46,32,20,.3)] hover:bg-[#46331f] hover:text-[#f4ecdb]"
   const muted = dark ? "text-[#e9dcc0]" : "text-[#6b573f]"
+  const supportLink = dark
+    ? "text-[#e9dcc0] decoration-[rgba(244,236,219,.5)] hover:text-[#f4ecdb]"
+    : "text-[#6b573f] decoration-[rgba(46,32,20,.35)] hover:text-[#2e2014]"
   return (
     <div className={`rounded-md border-2 p-5 sm:p-6 ${box} ${className}`} data-testid="discord-play">
       {heading ? (
@@ -52,16 +57,28 @@ export function DiscordPlay({ tone = "light", heading = true, className = "" }: 
         </>
       ) : null}
       <div className={`${heading ? "mt-4" : ""} grid gap-5 sm:grid-cols-[auto_1fr] sm:items-start sm:gap-7`}>
-        <a
-          href={DISCORD_INSTALL_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={`inline-flex items-center justify-center gap-2 self-start justify-self-start rounded-md border-2 px-5 py-3 font-display text-lg font-bold no-underline transition hover:translate-x-[1px] hover:translate-y-[1px] ${button}`}
-        >
-          Jouer sur Discord
-          <ExternalLink aria-hidden className="h-4 w-4" />
-          {SR_NEW_TAB}
-        </a>
+        <div className="flex flex-col items-start gap-3">
+          <a
+            href={DISCORD_INSTALL_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`inline-flex items-center justify-center gap-2 rounded-md border-2 px-5 py-3 font-display text-lg font-bold no-underline transition hover:translate-x-[1px] hover:translate-y-[1px] ${button}`}
+          >
+            Jouer sur Discord
+            <ExternalLink aria-hidden className="h-4 w-4" />
+            {SR_NEW_TAB}
+          </a>
+          <a
+            href={DISCORD_SUPPORT_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`text-[13px] font-semibold underline decoration-[1.5px] underline-offset-2 ${supportLink}`}
+            data-testid="discord-support"
+          >
+            Le serveur Blindz
+            {SR_NEW_TAB}
+          </a>
+        </div>
         <div>
           <StepList tone={tone} />
           <p className={`m-0 mt-3 text-[0.92rem] leading-relaxed ${muted}`}>{DISCORD_FRIENDS_NOTE}</p>
