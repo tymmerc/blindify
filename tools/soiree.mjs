@@ -7,6 +7,8 @@ import fs from "fs"
 import { execSync } from "child_process"
 // Ensemencement partage : vrais identifiants Deezer, donc extraits rafraichissables.
 import { seedLibrary, cleanupSeeded } from "./seed-library.mjs"
+// retenirSalle : la salle est fermee a la sortie, meme sur un echec.
+import { retenirSalle } from "./salles-de-test.mjs"
 
 const B = process.argv[2] === "prod" ? "https://blindz.app" : "https://dev.tymmerc.eu/blindify"
 const KEY = fs.readFileSync("/opt/blindify/.e2e-bypass-key", "utf8").trim()
@@ -63,7 +65,7 @@ await host.getByText("Je présente seulement").click()
 await host.getByText("CODE DE LA SALLE").waitFor({ timeout: 40000 })
 await host.getByRole("button", { name: "5", exact: true }).click()
 await host.getByRole("button", { name: "10s", exact: true }).click()
-const code = await host.locator("[data-code]").first().getAttribute("data-code")
+const code = retenirSalle(await host.locator("[data-code]").first().getAttribute("data-code"), hostId)
 say(`soiree ${code} sur ${B}`)
 if (!host.url().includes(`code=${code}`)) bad("le code de la salle n'est pas dans l'URL de l'hote apres creation")
 
@@ -172,6 +174,12 @@ if (await replay.isVisible().catch(() => false)) {
   say("  [test] l'hote relance une partie")
   await replay.click()
   await sleep(12000)
+  // La partie 2 tourne encore quand le script s'arrete : c'est elle qui
+  // restait en 'in_progress'. Relance dans la meme salle aujourd'hui ; si un
+  // jour elle en cree une autre, son code est dans l'URL de l'hote.
+  let code2 = null
+  try { code2 = new URL(host.url()).searchParams.get("code") } catch { bad(`adresse de l'hote illisible apres la relance (${host.url()})`) }
+  if (code2 && code2 !== code) retenirSalle(code2, hostId)
   const zs = await probe(zoe)
   if (zs.input || zs.round) say(`  [ok] Zoe joue la partie 2 (manche ${zs.round})`)
   else bad(`Zoe n'est pas dans la partie 2 (${zs.txt})`)
