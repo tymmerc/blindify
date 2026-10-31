@@ -156,7 +156,7 @@ export function StreamerGameClient({ state, serverNow, viewerCount, answers, onH
   const viewers = viewerCount ?? state.viewerCount ?? 0
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-5 text-[#2e2014]" data-testid="streamer-host">
+    <div className="mx-auto w-full max-w-6xl space-y-5 px-4 pb-10 pt-6 text-[#2e2014] sm:px-6" data-testid="streamer-host">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b-2 border-[#2e2014] pb-3">
         <div>
           <Label dot={SAGE}>{over ? "Partie terminée" : `Manche ${Math.max(1, state.currentRound)} / ${state.totalRounds}`} · {format?.title}</Label>

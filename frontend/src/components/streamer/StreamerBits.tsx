@@ -23,8 +23,8 @@ export interface LeaderboardProps {
 
 /** « Face B · Classement » : rang, pseudo, pointilles, points. */
 export function Leaderboard({ entries, meId, emptyLabel = "Personne n'a encore marqué.", size = "md" }: LeaderboardProps) {
-  if (!entries.length) return <p className="m-0 text-sm text-[#6b573f]">{emptyLabel}</p>
   const text = size === "lg" ? "text-xl" : "text-sm"
+  if (!entries.length) return <p className={`m-0 text-[#6b573f] ${text}`}>{emptyLabel}</p>
   return (
     <ol className="m-0 flex list-none flex-col gap-1.5 p-0" data-testid="streamer-leaderboard">
       {entries.map((e, i) => (
@@ -83,22 +83,23 @@ export function StreamerPodium({ entries, size = "md" }: { entries: StreamerLead
   const top = entries.slice(0, 3)
   if (!top.length) return <p className="m-0 text-center text-sm text-[#6b573f]">Personne n&apos;a marqué cette fois.</p>
   const colors = [GOLD, "#a8b8c8", TERRA]
-  const scale = size === "lg" ? 1.6 : 1
+  const lg = size === "lg"
+  const scale = lg ? 1.6 : 1
   const order = [1, 0, 2].filter(rank => top[rank])
   return (
-    <div className="mx-auto grid w-full max-w-xl items-end gap-3" style={{ gridTemplateColumns: `repeat(${order.length}, minmax(0, 1fr))` }} data-testid="streamer-podium">
+    <div className={`mx-auto grid w-full items-end gap-3 ${lg ? "max-w-3xl" : "max-w-xl"}`} style={{ gridTemplateColumns: `repeat(${order.length}, minmax(0, 1fr))` }} data-testid="streamer-podium">
       {order.map(rank => {
         const e = top[rank]
         return (
           <div key={e.id} className="flex flex-col items-center gap-2 text-center">
-            <span className={`max-w-full truncate font-display font-semibold ${size === "lg" ? "text-2xl" : "text-base"}`}>{e.pseudo}</span>
+            <span className={`max-w-full truncate font-display font-semibold ${lg ? "text-3xl" : "text-base"}`}>{e.pseudo}</span>
             <div
-              className="flex w-full items-start justify-center rounded-t-md border-2 border-b-0 border-[#2e2014] pt-2 font-display text-2xl font-bold"
+              className={`flex w-full items-start justify-center rounded-t-md border-2 border-b-0 border-[#2e2014] pt-2 font-display font-bold ${lg ? "text-5xl" : "text-2xl"}`}
               style={{ height: (rank === 0 ? 112 : rank === 1 ? 84 : 64) * scale, background: colors[rank] }}
             >
               {rank + 1}
             </div>
-            <span className="text-xs font-bold tabular-nums text-[#6b573f]">{e.score} pts</span>
+            <span className={`font-bold tabular-nums text-[#6b573f] ${lg ? "text-2xl" : "text-xs"}`}>{e.score} pts</span>
           </div>
         )
       })}
