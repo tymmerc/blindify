@@ -48,7 +48,11 @@ salles() {
 
 if [ "${1:-}" = --une-fois ]; then
   n="$(en_cours)"
-  [ "$n" = 0 ] && exit 0
+  if [ "$n" = 0 ]; then
+    # Sur la prod : silencieux, comme avant (les scripts de go-prod lisent le code).
+    [ "${GO_PROD_CIBLE:-prod}" = prod ] || echo "aucune partie en cours sur la base ${BASE}. Ce n'est PAS la prod."
+    exit 0
+  fi
   echo "  $n partie(s) en cours sur la base ${BASE} ($(date -u +%H:%M) UTC) :"
   salles
   exit 1

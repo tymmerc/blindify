@@ -70,6 +70,14 @@ export const psql = sql => execFileSync(
   { maxBuffer: 16 * 1024 * 1024 },
 ).toString().trim()
 
+// La meme, bornee dans le temps : pour les requetes courtes lancees a la
+// sortie d'un outil (salles-de-test.mjs), ou un docker bloque ne doit pas
+// figer le processus.
+export const psqlBorne = (sql, timeout = 10_000) => execFileSync(
+  "docker", ["exec", SEED_PG.container, "psql", "-U", SEED_PG.user, "-d", SEED_PG.db, "-qAt", "-c", sql],
+  { maxBuffer: 16 * 1024 * 1024, timeout, killSignal: "SIGKILL" },
+).toString().trim()
+
 // Litteral SQL : apostrophes doublees (standard_conforming_strings actif).
 const sq = v => "'" + String(v ?? "").replace(/'/g, "''") + "'"
 
@@ -98,6 +106,9 @@ export const codeSalle = c => {
 // il est seulement ignore (rien a supprimer pour lui).
 // `lire` execute une requete et rend ses lignes (psql en vrai, une fausse base
 // dans tools/seed-library.test.mjs). Rend les ids retenus, en texte.
+/** Refus definitif : l'utilisateur existe mais n'est pas un joueur de test (vrai joueur, ou trop ancien). */
+export class PasJoueurDeTest extends Error {}
+
 export function verifierJoueursDeTest(userIds, lire = psql, { exiger = false, heures = 1 } = {}) {
   const ids = userIds.filter(Boolean).map(id => String(entier(id)))
   const fenetre = Number(entier(heures))
@@ -117,7 +128,7 @@ export function verifierJoueursDeTest(userIds, lire = psql, { exiger = false, he
       continue
     }
     if (u.provider !== "guest" || !u.recent) {
-      throw new Error(`seed-library : l'utilisateur ${id} de la ${ou} n'est pas un joueur de test (invite cree il y a moins de ${fenetre} h). Arret, rien n'est ecrit.`)
+      throw new PasJoueurDeTest(`seed-library : l'utilisateur ${id} de la ${ou} n'est pas un joueur de test (invite cree il y a moins de ${fenetre} h). Arret, rien n'est ecrit.`)
     }
     retenus.push(id)
   }
