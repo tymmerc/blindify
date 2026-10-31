@@ -93,6 +93,14 @@ services:
       RESEND_CLE_FICHIER: ${RESEND_CLE_FICHIER:+/run/blindz/resend.env}
       # Lien spectateur signe (T18) : `openssl rand -hex 32`. Sans lui, pas de lien.
       SPECTATEUR_SECRET: ${SPECTATEUR_SECRET:-}
+      # Mode streamer (T5) : lien d'overlay OBS signe, `openssl rand -hex 32`.
+      # Sans lui, le lobby dit que le lien d'overlay n'est pas configure.
+      OVERLAY_SECRET: ${OVERLAY_SECRET:-}
+      # Interrupteur : vide = ouvert, off = coupe (parties en cours comprises).
+      STREAMER_MODE: ${STREAMER_MODE:-}
+      STREAMER_MAX_GAMES: ${STREAMER_MAX_GAMES:-}
+      STREAMER_MAX_VIEWERS: ${STREAMER_MAX_VIEWERS:-}
+      STREAMER_MAX_VIEWERS_PER_IP: ${STREAMER_MAX_VIEWERS_PER_IP:-}
     ports:
       - "127.0.0.1:3000:3000"
     volumes:
