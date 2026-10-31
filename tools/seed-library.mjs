@@ -57,7 +57,7 @@ export function cibleSeed(argv = process.argv, env = process.env) {
   }
   return cible
 }
-const SEED_PG = cibleSeed()
+export const SEED_PG = cibleSeed()
 
 // Arguments separes, SANS shell : les titres viennent de Deezer (donnees
 // tierces) et finissent dans une commande lancee en root. Avec l'ancien
@@ -68,6 +68,14 @@ const SEED_PG = cibleSeed()
 export const psql = sql => execFileSync(
   "docker", ["exec", SEED_PG.container, "psql", "-U", SEED_PG.user, "-d", SEED_PG.db, "-qAt", "-c", sql],
   { maxBuffer: 16 * 1024 * 1024 },
+).toString().trim()
+
+// La meme, bornee dans le temps : pour les requetes courtes lancees a la
+// sortie d'un outil (salles-de-test.mjs), ou un docker bloque ne doit pas
+// figer le processus.
+export const psqlBorne = (sql, timeout = 10_000) => execFileSync(
+  "docker", ["exec", SEED_PG.container, "psql", "-U", SEED_PG.user, "-d", SEED_PG.db, "-qAt", "-c", sql],
+  { maxBuffer: 16 * 1024 * 1024, timeout, killSignal: "SIGKILL" },
 ).toString().trim()
 
 // Litteral SQL : apostrophes doublees (standard_conforming_strings actif).
@@ -91,18 +99,23 @@ export const codeSalle = c => {
 }
 
 // Un joueur de test, c'est un invite cree il y a moins d'une heure dans la base
-// visee : c'est ce que font tous les outils juste avant d'ensemencer. Un vrai
+// visee : c'est ce que font tous les outils juste avant d'ensemencer. `heures`
+// elargit la fenetre (fermeture des salles, salles-de-test.mjs : 4 h). Un vrai
 // joueur (compte ancien, compte avec mot de passe) arrete tout, avant la
 // moindre ecriture. Un id absent arrete l'ensemencement (`exiger`) ; au menage,
 // il est seulement ignore (rien a supprimer pour lui).
 // `lire` execute une requete et rend ses lignes (psql en vrai, une fausse base
 // dans tools/seed-library.test.mjs). Rend les ids retenus, en texte.
-export function verifierJoueursDeTest(userIds, lire = psql, { exiger = false } = {}) {
+/** Refus definitif : l'utilisateur existe mais n'est pas un joueur de test (vrai joueur, ou trop ancien). */
+export class PasJoueurDeTest extends Error {}
+
+export function verifierJoueursDeTest(userIds, lire = psql, { exiger = false, heures = 1 } = {}) {
   const ids = userIds.filter(Boolean).map(id => String(entier(id)))
+  const fenetre = Number(entier(heures))
   if (!ids.length) return []
   const trouves = new Map()
   // CASE explicite : un booleen colle par || sort en "true", pas en "t".
-  for (const l of lire(`SELECT id||'|'||provider||'|'||CASE WHEN created_at > NOW() - INTERVAL '1 hour' THEN 't' ELSE 'f' END
+  for (const l of lire(`SELECT id||'|'||provider||'|'||CASE WHEN created_at > NOW() - INTERVAL '${fenetre} hour' THEN 't' ELSE 'f' END
                         FROM users WHERE id IN (${ids.join(",")})`).split("\n")) {
     const [id, provider, recent] = l.split("|"); if (id) trouves.set(id, { provider, recent: recent === "t" })
   }
@@ -115,7 +128,7 @@ export function verifierJoueursDeTest(userIds, lire = psql, { exiger = false } =
       continue
     }
     if (u.provider !== "guest" || !u.recent) {
-      throw new Error(`seed-library : l'utilisateur ${id} de la ${ou} n'est pas un joueur de test (invite cree il y a moins d'une heure). Arret, rien n'est ecrit.`)
+      throw new PasJoueurDeTest(`seed-library : l'utilisateur ${id} de la ${ou} n'est pas un joueur de test (invite cree il y a moins de ${fenetre} h). Arret, rien n'est ecrit.`)
     }
     retenus.push(id)
   }

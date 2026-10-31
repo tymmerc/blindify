@@ -171,10 +171,12 @@ jobs:
         run: bash tools/stats.test.sh
       # Cible et gardes de l'ensemencement des outils E2E (tools/seed-library.mjs) :
       # base de prod en mode prod seulement, ids verifies dans la base visee.
+      # Fermeture de leurs salles (tools/salles-de-test.mjs), crochet de sortie
+      # essaye dans de vrais processus avec un faux docker.
       # Sans base : la lecture SQL est simulee.
       - name: Tester la cible de l'ensemencement des outils E2E
         if: matrix.node == 22
-        run: node --test tools/seed-library.test.mjs
+        run: node --test tools/seed-library.test.mjs tools/salles-de-test.test.mjs
       # Filtre du rapport de visites (infra/visites/anonymiser.py) : adresses
       # tronquees avant GoAccess, VPS retire. python3 seulement, pas de base.
       - name: Tester l'anonymisation du rapport de visites
