@@ -1190,7 +1190,8 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         }
         if (mode === "streamer") {
           payload.subMode = streamerMode
-          if (twitchChannel.trim()) payload.twitchChannel = twitchChannel.trim()
+          // En « Toi tout seul », le public ne repond pas : pas de chat a lire.
+          if (twitchChannel.trim() && streamerMode !== "solo") payload.twitchChannel = twitchChannel.trim()
         }
         const { tracks: generatedTracks, gameState: initialState } = await api.startMultiplayerGame(room.room_code, payload)
         setTracks(generatedTracks)
