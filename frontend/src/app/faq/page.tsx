@@ -64,7 +64,12 @@ const FAQ: Array<{ q: string; a: string; more?: ReactNode }> = [
   },
   {
     q: "D'où viennent les extraits, et peut-on les diffuser en public ?",
-    a: "Les extraits de 30 secondes sont fournis par Deezer, quelle que soit la source de ta playlist : Spotify ne sert qu'à lire la liste des morceaux, et un lien « Écouter sur Spotify » s'affiche à la révélation des titres venus de Spotify. Leur écoute est réservée à un usage privé, entre amis ou en famille : pas de diffusion dans un bar, un commerce ou une entreprise, ni en direct sur Twitch ou YouTube.",
+    a: "Les extraits de 30 secondes sont fournis par Deezer, quelle que soit la source de ta playlist : Spotify ne sert qu'à lire la liste des morceaux, et un lien « Écouter sur Spotify » s'affiche à la révélation des titres venus de Spotify. Leur écoute est réservée à un usage privé, entre amis ou en famille : pas de diffusion dans un bar, un commerce ou une entreprise. Le direct sur Twitch ou ailleurs passe uniquement par le mode streamer, et tu y restes responsable des droits sur ta plateforme.",
+  },
+  // T5 (31/10/2026) : reponse du mode streamer, a valider par Tym.
+  {
+    q: "Je peux faire un blind test en live avec mon chat ?",
+    a: "Oui, avec le mode « Avec ta communauté ». Tu ajoutes l'overlay dans OBS, il joue la musique dans ton stream et affiche le code, et tes viewers répondent sur blindz.app/live depuis leur téléphone, avec un classement en direct. Les extraits viennent de Deezer et Blindz ne te donne aucune licence : tu restes responsable des droits sur ta plateforme, et sur Twitch une VOD coupée ou des clips supprimés restent possibles. On te conseille de garder la musique hors de ta VOD, le guide OBS est sur la page du mode.",
   },
   {
     q: "Mon lien de playlist n'est pas accepté, qu'est-ce qui cloche ?",

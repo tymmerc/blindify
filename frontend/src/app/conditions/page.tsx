@@ -68,9 +68,17 @@ export default function ConditionsPage() {
             </p>
             <p className="mt-3">
               L&apos;écoute des extraits est réservée à un usage privé, entre amis ou en famille. Tu ne peux
-              pas t&apos;en servir pour une diffusion en public (bar, commerce, entreprise, soirée payante) ni
-              en direct sur Twitch, YouTube ou ailleurs. N&apos;enregistre pas les extraits pour les
-              réutiliser.
+              pas t&apos;en servir pour une diffusion en public (bar, commerce, entreprise, soirée payante).
+              N&apos;enregistre pas les extraits pour les réutiliser.
+            </p>
+            {/* T5 (31/10/2026) : paragraphe du mode streamer, a valider par Tym. */}
+            <p className="mt-3">
+              Le direct n&apos;est possible qu&apos;avec le mode streamer (« Avec ta communauté »), pensé pour
+              jouer avec ton public sur Twitch ou une autre plateforme. Dans ce cas, c&apos;est toi qui diffuses
+              et tu restes responsable des droits sur ta plateforme : Blindz ne te donne aucune licence
+              musicale, et une VOD coupée, des clips supprimés ou une sanction restent possibles si un ayant
+              droit se plaint. On te recommande de garder la musique hors de ta VOD (le guide est sur la page
+              du mode). Même avec ce mode, pas de diffusion dans un lieu public.
             </p>
           </Section>
 

@@ -30,15 +30,25 @@ export function readSpectatorSecret(env: NodeJS.ProcessEnv | Record<string, stri
   return value && value.length >= MIN_SECRET_LENGTH ? value : null;
 }
 
-function signature({ roomCode, roomId, expiresAt }: SpectatorTokenInput, secret: string): string {
+/**
+ * Usage du jeton, mele a la signature : un jeton spectateur ne vaut rien comme
+ * jeton d'overlay (T5), et inversement, meme avec le meme secret.
+ */
+export type RoomTokenPurpose = "spectateur" | "overlay";
+
+function signature(purpose: RoomTokenPurpose, { roomCode, roomId, expiresAt }: SpectatorTokenInput, secret: string): string {
   return crypto
     .createHmac("sha256", secret)
-    .update(`blindz-spectateur:v1:${roomCode}:${roomId}:${expiresAt}`)
+    .update(`blindz-${purpose}:v1:${roomCode}:${roomId}:${expiresAt}`)
     .digest("base64url");
 }
 
+export function signRoomToken(purpose: RoomTokenPurpose, input: SpectatorTokenInput, secret: string): string {
+  return `${input.expiresAt}.${signature(purpose, input, secret)}`;
+}
+
 export function signSpectatorToken(input: SpectatorTokenInput, secret: string): string {
-  return `${input.expiresAt}.${signature(input, secret)}`;
+  return signRoomToken("spectateur", input, secret);
 }
 
 /**
@@ -46,6 +56,16 @@ export function signSpectatorToken(input: SpectatorTokenInput, secret: string): 
  * inattendue est un refus "malformed".
  */
 export function verifySpectatorToken(
+  args: { roomCode: string; roomId: number; token: unknown; now?: number },
+  secret: string,
+): SpectatorTokenCheck {
+  return verifyRoomToken("spectateur", SPECTATOR_TTL_MS, args, secret);
+}
+
+/** Verification commune aux jetons de salle (spectateur, overlay). */
+export function verifyRoomToken(
+  purpose: RoomTokenPurpose,
+  ttlMs: number,
   { roomCode, roomId, token, now = Date.now() }: { roomCode: string; roomId: number; token: unknown; now?: number },
   secret: string,
 ): SpectatorTokenCheck {
@@ -53,7 +73,7 @@ export function verifySpectatorToken(
   const match = TOKEN_FORMAT.exec(token);
   if (!match) return { ok: false, reason: "malformed" };
   const expiresAt = Number(match[1]);
-  const expected = Buffer.from(signature({ roomCode, roomId, expiresAt }, secret));
+  const expected = Buffer.from(signature(purpose, { roomCode, roomId, expiresAt }, secret));
   const given = Buffer.from(match[2]);
   // Longueurs egales garanties par TOKEN_FORMAT (43 caracteres) : comparaison
   // a temps constant.
@@ -61,7 +81,7 @@ export function verifySpectatorToken(
     return { ok: false, reason: "bad_signature" };
   }
   if (expiresAt <= now) return { ok: false, reason: "expired" };
-  if (expiresAt - now > SPECTATOR_TTL_MS + CLOCK_SLACK_MS) return { ok: false, reason: "too_long" };
+  if (expiresAt - now > ttlMs + CLOCK_SLACK_MS) return { ok: false, reason: "too_long" };
   return { ok: true, expiresAt };
 }
 

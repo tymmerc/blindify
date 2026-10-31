@@ -285,6 +285,16 @@ export type StreamerRound = {
   provider?: string | null
 }
 
+/** D'ou vient un viewer du classement : la page /live, ou le chat Twitch. */
+export type ViewerSource = "page" | "chat"
+
+export type StreamerLeaderEntry = {
+  id: string
+  pseudo: string
+  score: number
+  source: ViewerSource
+}
+
 export type StreamerState = {
   roomCode: string
   hostUserId: number
@@ -303,6 +313,9 @@ export type StreamerState = {
   streamerWins: number
   chatWins: number
   chatSnapshot?: { total: number; correct: number; percentCorrect: number } | null
+  viewerCount?: number
+  answersCount?: number
+  leaderboard?: StreamerLeaderEntry[]
 }
 
 export type ImportedLink = {

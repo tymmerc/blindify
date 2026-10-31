@@ -37,6 +37,25 @@ export async function markMultiplayerRoomFinished(roomCode: string): Promise<voi
 }
 
 /**
+ * Fin d'une partie streamer (T5) : la ligne game_sessions de la partie est
+ * close (etat, fin, manches jouees). Le classement des viewers reste en
+ * memoire : il n'a pas de table, et en creer une demande une migration.
+ */
+export async function markStreamerSessionFinished(sessionId: number | null | undefined, playedRounds: number): Promise<void> {
+  if (!sessionId) return;
+  try {
+    await pool.query(
+      `UPDATE game_sessions
+       SET state = 'finished', ended_at = COALESCE(ended_at, NOW()), current_round = $2
+       WHERE id = $1 AND state <> 'finished'`,
+      [sessionId, playedRounds],
+    );
+  } catch (err) {
+    logger.error("streamer_session_finish_failed", { sessionId, error: err });
+  }
+}
+
+/**
  * Colonnes ajoutees le 28/09/2026 a round_responses, idempotent au boot comme
  * ensureLinksSchema. Avant, le serveur SAVAIT a la revelation le verdict fin
  * (correct / proche / faux) et si le joueur avait devine qui a mis le morceau,

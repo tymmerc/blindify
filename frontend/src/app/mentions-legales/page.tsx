@@ -85,7 +85,9 @@ export default function MentionsLegalesPage() {
               Les extraits audio de 30 secondes joués pendant les parties sont fournis par Deezer, y
               compris pour les playlists importées depuis Spotify. Leur écoute est réservée à un usage
               privé, entre amis ou en famille : ils ne doivent pas être diffusés en public (bar,
-              commerce, entreprise) ni en direct sur une plateforme de streaming.
+              commerce, entreprise). Le direct sur une plateforme de streaming passe uniquement par le
+              mode streamer, sous la responsabilité de celui qui diffuse (voir les conditions
+              d&apos;utilisation).
             </p>
             <p className="mt-3">
               Les titres importés depuis Spotify renvoient vers le morceau sur Spotify au moment de leur
