@@ -16,6 +16,7 @@ import {
   clearAllStreamerGamesForTests,
   endStreamerGame,
   getStreamerState,
+  kickViewer,
   recordViewerAnswer,
   startNextStreamerRound,
 } from "../../src/services/streamerGame";
@@ -26,7 +27,7 @@ import type { ReaderOptions } from "../../src/services/twitchReader";
 
 const ROOM = "TWCH01";
 const chain = () => ({ to: () => chain(), except: () => chain(), emit: () => true });
-const io = { to: () => chain() } as unknown as IOServer;
+const io = { to: () => chain(), in: () => ({ disconnectSockets: () => undefined }) } as unknown as IOServer;
 
 const track: StreamerRound = {
   round: 1,
@@ -104,6 +105,18 @@ describe("reponses du chat dans la partie", () => {
     say("lena", "!b chocolat - naza", t0);
     const lenas = rankedViewers(ROOM).filter(v => v.pseudo.toLowerCase() === "lena");
     expect(lenas.map(v => v.source).sort()).toEqual(["chat", "page"]);
+  });
+
+  it("un viewer du chat exclu par le streamer n'est plus lu", () => {
+    const t0 = openChat();
+    say("vilain", "!b chocolat - naza", t0);
+    const v = byPseudo("vilain");
+    if (!v) throw new Error("viewer");
+    expect(kickViewer(io, ROOM, v.id)).toBe(true);
+    expect(getStreamerState(ROOM)?.answersCount).toBe(0);
+    say("vilain", "!b chocolat - naza", t0 + 10);
+    expect(byPseudo("vilain")).toBeUndefined();
+    expect(getStreamerState(ROOM)?.answersCount).toBe(0);
   });
 
   it("le classement marque la source « chat »", () => {
