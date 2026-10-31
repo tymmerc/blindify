@@ -216,8 +216,10 @@ async function main() {
         { channel: CHANNEL, login: "chatteur1", displayName: "Chatteur1", text: `!b ${t1.title} - ${t1.artist}` },
         { channel: CHANNEL, login: "bavard", text: `${t1.title} c'est facile` },
         { channel: CHANNEL, login: "chatteur1", text: "!b autre - reponse" },
+        // Login insultant : sa bonne reponse ne doit jamais arriver sur l'overlay.
+        { channel: CHANNEL, login: "connard77", displayName: "Connard77", text: `!b ${t1.title} - ${t1.artist}` },
       ])
-      if (r.delivered !== 3) bad(`faux chat : ${r.delivered} message(s) remis sur 3`)
+      if (r.delivered !== 4) bad(`faux chat : ${r.delivered} message(s) remis sur 4`)
       await sleep(3000)
       await chat({ channel: CHANNEL, login: "copieur", displayName: "Copieur", text: `!b ${t1.title} - ${t1.artist}` })
     }
@@ -268,6 +270,8 @@ async function main() {
       const board = await overlay.page.getByTestId("streamer-leaderboard").textContent()
       const lines = (await overlay.page.getByTestId("streamer-leaderboard").locator("li").allTextContents()).map(t => t.replace(/\s+/g, " "))
       const pts = name => Number((lines.find(l => l.includes(name)) ?? "").match(/(\d+)\s*$/)?.[1] ?? NaN)
+      if (/Connard77/i.test(board)) bad("chat : un login insultant est au classement")
+      else ok("chat : le login insultant est ignore, malgre sa bonne reponse")
       if (!/Chatteur1/.test(board) || !/chat/.test(board)) bad(`overlay : Chatteur1 absent du classement ou sans la marque chat (${board})`)
       else ok("overlay : le chat est au classement, avec sa marque")
       const lena = pts("Lena"), c1 = pts("Chatteur1"), cp = pts("Copieur")

@@ -11,11 +11,11 @@
  * (le serveur ne l'envoie pas).
  */
 import { useEffect, useState, type FormEvent } from "react"
-import { Flag, LogOut, Play, Radio, RotateCcw, Volume2, VolumeX } from "lucide-react"
+import { Flag, LogOut, MessageSquare, Play, Radio, RotateCcw, Volume2, VolumeX } from "lucide-react"
 import { audioManager, DEFAULT_AUDIO_VOLUME } from "@/lib/audioManager"
 import type { StreamerState } from "@/lib/types"
 import { shortGameNotice } from "@/lib/roundCount"
-import { REVEALED_PHASES, elapsedRatio, secondsLeft } from "@/lib/streamerLive"
+import { REVEALED_PHASES, TWITCH_STATUS_TEXT, elapsedRatio, secondsLeft, type TwitchStatus } from "@/lib/streamerLive"
 import { Label, Panel } from "@/app/multiplayer/lobbyKit"
 import { STREAMER_FORMATS } from "@/app/multiplayer/StreamerLobbyView"
 import { KickButton, Leaderboard, RevealCard, SAGE, StreamerPodium, TimerBar } from "@/components/streamer/StreamerBits"
@@ -29,6 +29,8 @@ type Props = {
   serverNow: number
   viewerCount?: number
   answers?: StreamerAnswers
+  /** Chat Twitch (T5b) : etat de la lecture du chat. */
+  twitch?: { channel: string; status: TwitchStatus } | null
   onHostGuess: (guess: { title: string; artist: string }) => void
   onHostStart: () => void
   onHostEnd: () => void
@@ -152,7 +154,7 @@ function PhasePanel({ state, now, answers, onHostGuess, onKick }: { state: Strea
   }
 }
 
-export function StreamerGameClient({ state, serverNow, viewerCount, answers, onHostGuess, onHostStart, onHostEnd, onKick, onReplay, onExit }: Props) {
+export function StreamerGameClient({ state, serverNow, viewerCount, answers, twitch, onHostGuess, onHostStart, onHostEnd, onKick, onReplay, onExit }: Props) {
   const [listening, setListening] = useState(false)
   useLocalListening(state, listening)
   if (!state) return null
@@ -167,7 +169,12 @@ export function StreamerGameClient({ state, serverNow, viewerCount, answers, onH
       <header className="flex flex-wrap items-center justify-between gap-3 border-b-2 border-[#2e2014] pb-3">
         <div>
           <Label dot={SAGE}>{over ? "Partie terminée" : `Manche ${Math.max(1, state.currentRound)} / ${state.totalRounds}`} · {format?.title}</Label>
-          <p className="m-0 mt-1 flex items-center gap-2 text-sm text-[#6b573f]"><Radio aria-hidden className="h-4 w-4" /> {viewers} viewer{viewers > 1 ? "s" : ""} sur la page</p>
+          <p className="m-0 mt-1 flex items-center gap-2 text-sm text-[#6b573f]"><Radio aria-hidden className="h-4 w-4" /> {viewers} viewer{viewers > 1 ? "s" : ""}</p>
+          {state.twitchChannel ? (
+            <p className="m-0 mt-0.5 flex items-center gap-2 text-sm text-[#6b573f]" data-testid="streamer-twitch">
+              <MessageSquare aria-hidden className="h-4 w-4" /> Chat #{state.twitchChannel} : {TWITCH_STATUS_TEXT[twitch?.channel === state.twitchChannel ? twitch.status : "connexion"]}
+            </p>
+          ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button type="button" onClick={() => setListening(l => !l)} aria-pressed={listening} className={`${BUTTON} bg-[#ece1c8]`}>

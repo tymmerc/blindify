@@ -101,6 +101,9 @@ services:
       STREAMER_MAX_GAMES: ${STREAMER_MAX_GAMES:-}
       STREAMER_MAX_VIEWERS: ${STREAMER_MAX_VIEWERS:-}
       STREAMER_MAX_VIEWERS_PER_IP: ${STREAMER_MAX_VIEWERS_PER_IP:-}
+      # Chat Twitch (T5b) : vide = le vrai chat (wss://irc-ws.chat.twitch.tv:443).
+      # Ne sert qu'aux tests (faux serveur IRC de la pile isolee).
+      TWITCH_IRC_URL: ${TWITCH_IRC_URL:-}
     ports:
       - "127.0.0.1:3000:3000"
     volumes:

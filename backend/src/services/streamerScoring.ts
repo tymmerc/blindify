@@ -68,3 +68,19 @@ export function scoreViewerAnswer(
     reactionMs: Math.max(0, answer.at - window.startAt),
   };
 }
+
+/**
+ * Chat Twitch (T5b) : moitie du bareme, et anti-spoiler. Une bonne reponse
+ * dans le chat est visible par tous : apres la premiere, les points du chat
+ * fondent en quelques secondes (jusqu'a un plancher), pour que recopier ne
+ * rapporte presque rien. La page viewer garde son bareme plein.
+ */
+export const CHAT_FACTOR = 0.5;
+export const CHAT_SPOILER_DECAY_MS = 4_000;
+const CHAT_SPOILER_FLOOR = 0.1;
+
+export function chatFactor(at: number, firstHitAt: number | null): number {
+  if (firstHitAt === null || at <= firstHitAt) return CHAT_FACTOR;
+  const left = 1 - (at - firstHitAt) / CHAT_SPOILER_DECAY_MS;
+  return CHAT_FACTOR * Math.max(CHAT_SPOILER_FLOOR, left);
+}

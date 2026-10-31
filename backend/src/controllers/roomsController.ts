@@ -12,6 +12,8 @@ import { GameMode, type RoundTrack } from "../types/game";
 import { initStreamerGame } from "../services/streamerOrchestrator";
 import { maxStreamerGames, streamerModeEnabled } from "../services/streamerConfig";
 import { activeStreamerGames, hostStreamerState } from "../services/streamerGame";
+import { startTwitch } from "../services/streamerTwitch";
+import { cleanChannel } from "../services/twitchChat";
 import { streamerStartRefusal } from "./streamerController";
 import { activeLinkIds } from "./linksController";
 import { bySmallestLibrary, ownersAmong, PLAYS_TONIGHT } from "../services/userTracks";
@@ -678,10 +680,18 @@ export const roomsController = {
       return;
     }
 
+    // Chat Twitch (T5b) : facultatif, mais un nom donne doit etre valable.
+    // Verifie avant tout tirage, pour ne rien laisser a moitie lance.
+    const rawChannel = typeof req.body?.twitchChannel === "string" ? req.body.twitchChannel.trim() : "";
+    const twitchChannel = rawChannel ? cleanChannel(rawChannel) : null;
     if (room.mode === GameMode.STREAMER) {
       const refusal = streamerStartRefusal(room.room_code);
       if (refusal) {
         fail(res, refusal.code, refusal.message, refusal.status);
+        return;
+      }
+      if (rawChannel && !twitchChannel) {
+        fail(res, "chaine_invalide", "Ce nom de chaîne Twitch n'est pas valable (3 à 25 lettres, chiffres ou _).", 400);
         return;
       }
     }
@@ -1218,6 +1228,8 @@ export const roomsController = {
         trackSource: "streamer" as const,
         provider: t.type ?? null,
       }));
+      // En « Toi tout seul », le public ne repond pas : pas de chat a lire.
+      const chatChannel = subMode === "solo" ? null : twitchChannel;
       const state = initStreamerGame(io, {
         roomCode: room.room_code,
         hostUserId: room.host_user_id,
@@ -1228,7 +1240,16 @@ export const roomsController = {
         sessionId: session.id,
         // « Temps pour repondre » du lobby : la phase du public.
         timings: { chatMs: roundDurationMs },
+        twitchChannel: chatChannel,
       });
+      if (chatChannel) {
+        try {
+          startTwitch(io, room.room_code, chatChannel);
+        } catch (err) {
+          // Le jeu tourne sans le chat : la page /live reste ouverte.
+          logger.error("twitch_lecture_impossible", { roomCode: room.room_code, error: err });
+        }
+      }
       ok(res, {
         session: {
           id: session.id,

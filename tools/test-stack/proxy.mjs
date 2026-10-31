@@ -14,6 +14,9 @@
 //   /resend-stub           -> faux Resend : le mail de debut de partie (T18) y
 //                             arrive au lieu de partir ; GET /resend-stub/mails
 //                             rend ceux recus, DELETE les oublie
+//   /twitch-irc-stub       -> faux chat Twitch (T5b) : IRC sur WebSocket, et
+//                             POST /twitch-irc-stub/say pour faire parler le chat
+//                             (fake-irc.mjs)
 //   /discord-harness.html  -> le harnais : la page qui joue le client Discord
 //                             (RPC du SDK par postMessage) autour de l'iframe
 // Aucune dependance : node:http et node:net seulement.
@@ -23,6 +26,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { pipeline } from "node:stream"
+import { handleIrcUpgrade, ircStub } from "./fake-irc.mjs"
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 
@@ -269,6 +273,7 @@ function route(req, res) {
   if (url.startsWith("/deezer-stub/")) return deezerStub(req, res)
   if (url.startsWith("/short-link-stub/")) return shortLinkStub(req, res)
   if (url === "/resend-stub" || url.startsWith("/resend-stub/")) return resendStub(req, res)
+  if (url.startsWith("/twitch-irc-stub/")) { ircStub(req, res); return }
   if (url.startsWith("/blindify/api/") || url.startsWith("/blindify/socket.io/")) return toBackend(req, res)
   // Depuis l'Activite, l'extrait (sur l'hote de l'API) est demande a travers le proxy : /.proxy/blindz/test-audio/...
   if (url.startsWith("/test-audio/") || url.startsWith("/blindify/test-audio/")) return sendFile(req, res, path.join(AUDIO, path.basename(url.split("?")[0])))
@@ -284,6 +289,7 @@ function route(req, res) {
 // Websocket : on rejoue la requete d'upgrade vers le backend et on branche les
 // deux sockets l'un sur l'autre.
 server.on("upgrade", (req, socket, head) => {
+  if ((req.url || "").split("?")[0] === "/twitch-irc-stub") { handleIrcUpgrade(req, socket); return }
   const up = net.connect(BACKEND.port, BACKEND.host, () => {
     const lines = [`${req.method} ${unproxy(req.url).replace(/^\/blindify/, "")} HTTP/1.1`]
     for (let i = 0; i < req.rawHeaders.length; i += 2) lines.push(`${req.rawHeaders[i]}: ${req.rawHeaders[i + 1]}`)

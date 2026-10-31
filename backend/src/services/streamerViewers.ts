@@ -189,21 +189,29 @@ export function joinViewer(
 }
 
 /**
- * Viewer du chat Twitch (T5b), retrouve ou cree par son pseudo Twitch. Pas de
- * cle : il n'a pas de page a rouvrir. Null si le plafond est atteint.
+ * Viewer du chat Twitch (T5b), retrouve ou cree par son login Twitch. Pas de
+ * cle : il n'a pas de page a rouvrir. Null si le plafond est atteint (le chat
+ * a son propre plafond, egal a celui de la page).
  */
-export function chatViewer(roomCode: string, login: string, displayName: string, now = Date.now()): Viewer | null {
+export function chatViewer(
+  roomCode: string,
+  login: string,
+  displayName: string,
+  now = Date.now(),
+): { viewer: Viewer; created: boolean } | null {
   const room = roomOf(roomCode, now);
   const handle = nameKey("chat", login);
   if (room.banned.has(handle)) return null;
+  // Le pseudo s'affiche dans le top 5 de l'overlay : meme filtre que la page.
+  if (isBlockedPseudo(login) || isBlockedPseudo(displayName)) return null;
   const existingId = room.byName.get(handle);
   const existing = existingId ? room.viewers.get(existingId) : undefined;
-  if (existing) return existing;
-  if (room.viewers.size >= maxStreamerViewers() * 2) return null;
+  if (existing) return { viewer: existing, created: false };
+  if (room.viewers.size - pageViewerCount(roomCode) >= maxStreamerViewers()) return null;
   const viewer = newViewer(displayName, "chat", now, handle);
   room.viewers.set(viewer.id, viewer);
   room.byName.set(handle, viewer.id);
-  return viewer;
+  return { viewer, created: true };
 }
 
 export function getViewer(roomCode: string, id: string): Viewer | undefined {

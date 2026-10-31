@@ -12,7 +12,7 @@ import { MusicLibrary } from "@/components/import/MusicLibrary"
 import { ProfileImportBlock } from "@/components/import/ProfileImportBlock"
 import { api } from "@/lib/api"
 import { ApiError } from "@/lib/apiClient"
-import { liveLabel } from "@/lib/streamerLive"
+import { cleanTwitchChannel, liveLabel } from "@/lib/streamerLive"
 import type { StreamerSubMode } from "@/lib/types"
 import type { LobbyRendererProps } from "./lobbyTypes"
 import { BLOCK, Label, LaunchButton, Panel, RoomCode, RoundSettings } from "./lobbyKit"
@@ -156,6 +156,36 @@ function StreamerMusic() {
   )
 }
 
+/** Chat Twitch (T5b), facultatif : le nom de la chaine dont on lit le chat. */
+function TwitchField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const cleaned = cleanTwitchChannel(value)
+  return (
+    <div>
+      <label htmlFor="twitch-channel" className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.18em] text-[#6b573f]">
+        Ta chaîne Twitch (facultatif)
+      </label>
+      <input
+        id="twitch-channel"
+        value={value}
+        onChange={e => onChange(e.target.value.slice(0, 60))}
+        placeholder="ta_chaine"
+        autoComplete="off"
+        className="w-full rounded-md border-2 border-[#2e2014] bg-[#efe5d0] px-3 py-2.5 text-sm outline-none placeholder:text-[#b3a182] focus:border-[#7d9471]"
+      />
+      {cleaned === null ? (
+        <p role="alert" className="m-0 mt-1 text-xs font-semibold text-[#9c2f1d]">Le nom d&apos;une chaîne fait 3 à 25 caractères : lettres, chiffres ou _.</p>
+      ) : cleaned ? (
+        <p className="m-0 mt-1 text-xs text-[#6b573f]">
+          Ton chat pourra aussi répondre avec <b className="text-[#2e2014]">!b titre - artiste</b>. Moitié moins de points que sur la page, et
+          ça baisse vite après la première bonne réponse, visible par tous.
+        </p>
+      ) : (
+        <p className="m-0 mt-1 text-xs text-[#8a7558]">Sans chaîne, ton public répond seulement sur {liveLabel()}.</p>
+      )}
+    </div>
+  )
+}
+
 function StreamerLobby(props: LobbyRendererProps) {
   const code = (props.room?.room_code ?? props.joinCode ?? "").toUpperCase()
   const link = useOverlayLink(code || null, props.isHost)
@@ -180,10 +210,13 @@ function StreamerLobby(props: LobbyRendererProps) {
         <Panel label="La partie" dot={ACCENT}>
           <div className="space-y-4">
             <FormatPicker value={props.streamer?.subMode ?? "viewers_only"} onPick={v => props.streamer?.setSubMode(v)} />
+            {props.streamer?.subMode !== "solo" ? (
+              <TwitchField value={props.streamer?.twitchChannel ?? ""} onChange={v => props.streamer?.setTwitchChannel(v)} />
+            ) : null}
             <RoundSettings room={props.room} accent={ACCENT} accentText="#2e2014" />
             <LaunchButton
               onStart={props.onStart}
-              canStart={props.canStart}
+              canStart={props.canStart && cleanTwitchChannel(props.streamer?.twitchChannel ?? "") !== null}
               starting={props.starting}
               importing={props.importing}
               hint={viewers === 0 ? "Tu peux lancer sans attendre : le chat peut arriver en cours de partie." : null}

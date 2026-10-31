@@ -45,8 +45,8 @@ export default function StreamerEntryPage() {
               Un blind test en live avec ton <em className="font-medium italic" style={{ color: ACCENT }}>chat</em>
             </h1>
             <p className="max-w-2xl text-base text-[#6b573f]">
-              Tu joues ta musique, l&apos;overlay l&apos;envoie dans le stream, et ton public répond depuis son téléphone sur {liveLabel()}.
-              Classement en direct, podium à la fin.
+              Tu joues ta musique, l&apos;overlay l&apos;envoie dans le stream, et ton public répond depuis son téléphone sur {liveLabel()},
+              ou directement dans ton chat Twitch avec <b>!b titre - artiste</b>. Classement en direct, podium à la fin.
             </p>
           </div>
           <Link href="/modes" className="rounded-full border-[1.5px] border-[#2e2014] bg-[#ece1c8] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]">

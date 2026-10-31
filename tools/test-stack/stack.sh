@@ -125,6 +125,7 @@ NOTIF_PARTIE_TEST_BASE=http://127.0.0.1:$PROXY_PORT/resend-stub
 SPECTATEUR_SECRET=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
 SPECTATEUR_BASE_URL=http://$HOST:$PROXY_PORT/blindify
 OVERLAY_SECRET=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
+TWITCH_IRC_URL=ws://127.0.0.1:$PROXY_PORT/twitch-irc-stub
 EOF
   # Faux Resend (T18) : une cle factice, le mail part au serveur local.
   echo "RESEND_API_KEY=re_pile_de_test_factice" >"$RUN/run/resend-test.env"
