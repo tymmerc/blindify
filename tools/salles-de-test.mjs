@@ -23,8 +23,14 @@
 // Ce qui sort d'un journal : une salle fermee (ou deja finie), une salle dont
 // l'hote est absent de la base visee, une salle dont l'hote est prouve trop
 // ancien ou n'est pas un joueur de test. Une panne de docker ou de psql la
-// laisse dans le journal, pour le prochain essai. Chaque abandon est ecrit sur
-// stderr.
+// laisse dans le journal, pour le prochain essai. Un journal de plus de 4 h
+// est supprime sans fermer (attendre-parties.sh ne compte plus ces salles).
+// Chaque abandon est ecrit sur stderr.
+//
+// Le rattrapage est borne : 30 s en tout, et arret a la premiere panne ; le
+// reste attend l'outil suivant. Un journal deja present au pid de l'outil qui
+// demarre vient d'un ancien outil tue (pid recycle) : il est traite comme
+// celui d'un mort, puis l'outil repart d'un fichier neuf.
 //
 // Gardes, partout : jamais une salle qu'on n'a pas creee. La requete exige le
 // code ET host_user_id, et l'hote doit etre un joueur de test (invite cree
@@ -38,6 +44,13 @@ import { psqlBorne, codeSalle, entier, verifierJoueursDeTest, PasJoueurDeTest, S
 
 // Plus que les 3 h que surveille attendre-parties.sh.
 export const FENETRE_HEURES = 4
+// Rattrapage au demarrage d'un outil : docker bloque ne doit pas le retenir
+// des minutes (jusqu'a 2 requetes de 10 s par salle).
+export const BUDGET_RATTRAPAGE_MS = 30_000
+// Journal d'un processus mort plus vieux que ca : supprime sans fermer.
+// attendre-parties.sh ne compte plus ces salles (3 h), et une panne qui dure
+// ne doit pas faire retenter une entree pour toujours.
+export const PEREMPTION_MS = FENETRE_HEURES * 3600 * 1000
 // Code de sortie par signal (128 + numero du signal).
 const SIGNAUX = { SIGINT: 130, SIGTERM: 143, SIGHUP: 129 }
 
@@ -47,6 +60,7 @@ const enRegex = s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 export const journalDe = (pid, dossier) => path.join(dossier, `${prefixe()}${pid}.txt`)
 
 const salles = new Map() // code -> hote, pour CE processus
+let heritees = [] // salles d'un ancien outil au meme pid, en panne a la reprise
 let monJournal = null
 let crochetsPoses = false
 let enSortie = false
@@ -140,25 +154,62 @@ export function fermerUne(code, hote, lire = psqlBorne) {
   }
 }
 
-/** Ferme un lot, salle par salle. `aGarder` : les entrees en panne passagere. */
-export function fermerLot(entrees, lire = psqlBorne) {
+/**
+ * Ferme un lot, salle par salle. `aGarder` : les entrees en panne passagere,
+ * et celles qu'on n'a pas eu le temps de traiter. Options du rattrapage :
+ * `jusqua` (heure limite, selon `horloge`) et `arreterSurErreur` (docker en
+ * panne : inutile d'attendre 10 s de plus par salle). `interrompu` : on s'est
+ * arrete avant la fin.
+ */
+export function fermerLot(entrees, lire = psqlBorne, { jusqua = Infinity, horloge = Date.now, arreterSurErreur = false } = {}) {
   const fermees = []
   const aGarder = []
+  let interrompu = false
   for (const entree of entrees) {
+    if (interrompu || horloge() >= jusqua) {
+      interrompu = true
+      aGarder.push(entree)
+      continue
+    }
     const sort = fermerUne(entree.code, entree.hote, lire)
     if (sort === "fermee") fermees.push(entree.code)
-    else if (sort === "erreur") aGarder.push(entree)
+    else if (sort === "erreur") {
+      aGarder.push(entree)
+      if (arreterSurErreur) interrompu = true
+    }
   }
-  return { fermees, aGarder }
+  return { fermees, aGarder, interrompu }
+}
+
+/**
+ * Traite le journal d'un processus qui n'est plus la (mort, ou pid recycle).
+ * Plus vieux que PEREMPTION_MS : supprime sans rien fermer, avec un message
+ * (attendre-parties.sh ne compte plus ces salles). Sinon : fermerLot, borne.
+ */
+function traiterJournalMort(fichier, { lire, jusqua, horloge }) {
+  const st = fs.lstatSync(fichier)
+  if (!aNous(st)) throw new Error("pas un fichier a nous")
+  const entrees = lireJournal(fichier)
+  if (horloge() - st.mtimeMs > PEREMPTION_MS) {
+    console.error(`!! journal ${path.basename(fichier)} perime (plus de ${FENETRE_HEURES} h) : supprime, salle(s) ${entrees.map(e => e.code).join(", ") || "aucune"} non fermee(s)`)
+    return { fermees: [], aGarder: [], interrompu: false }
+  }
+  return fermerLot(entrees, lire, { jusqua, horloge, arreterSurErreur: true })
 }
 
 /**
  * Rattrape les salles laissees par des outils morts sans fermer (SIGKILL) :
- * les fichiers des processus morts, jamais des vivants. Ne leve jamais : un
- * rattrapage rate ne doit pas arreter l'outil qui demarre. Rend les codes fermes.
+ * les fichiers des processus morts, jamais des vivants. Borne : budgetMs au
+ * total, et arret a la premiere panne ; le reste attend le prochain outil.
+ * Ne leve jamais : un rattrapage rate ne doit pas arreter l'outil qui demarre.
+ * Rend les codes fermes.
  */
-export function rattraperSalles({ lire = psqlBorne, dossier = dossierParDefaut(), vivant = pidVivant } = {}) {
+export function rattraperSalles({
+  lire = psqlBorne, dossier = dossierParDefaut(), vivant = pidVivant,
+  horloge = Date.now, budgetMs = BUDGET_RATTRAPAGE_MS, jusqua = horloge() + budgetMs,
+} = {}) {
   const fermees = []
+  let interrompu = false
   try {
     const sur = dossierSur(dossier)
     if (!sur) return fermees
@@ -166,10 +217,12 @@ export function rattraperSalles({ lire = psqlBorne, dossier = dossierParDefaut()
     for (const nom of fs.readdirSync(sur)) {
       const pid = Number(nom.match(motif)?.[1])
       if (!pid || pid === process.pid || vivant(pid)) continue
+      if (interrompu) continue // reste tel quel pour le prochain outil
       const fichier = path.join(sur, nom)
       try {
-        const lot = fermerLot(lireJournal(fichier), lire)
+        const lot = traiterJournalMort(fichier, { lire, jusqua, horloge })
         fermees.push(...lot.fermees)
+        interrompu = lot.interrompu
         try {
           reecrire(fichier, lot.aGarder)
         } catch (e) {
@@ -182,15 +235,43 @@ export function rattraperSalles({ lire = psqlBorne, dossier = dossierParDefaut()
   } catch (e) {
     console.error(`!! rattrapage des salles impossible (${premiereLigne(e)})`)
   }
+  if (interrompu) console.error(`!! rattrapage arrete (panne, ou budget de ${Math.round(budgetMs / 1000)} s ecoule) : le reste attend le prochain outil`)
   if (fermees.length) console.log(`salle(s) laissee(s) par un outil arrete brutalement, fermee(s) : ${fermees.join(", ")}`)
   return fermees
+}
+
+/**
+ * Ouvre le journal de CE processus. S'il existe deja, il vient d'un ancien
+ * outil tue qui avait le meme pid (pid recycle) : ses salles sont traitees
+ * comme celles d'un mort, puis on repart d'un fichier neuf (O_EXCL). Rend
+ * { fichier, heritees } : le journal (null si impossible, avec un message) et
+ * les salles heritees en panne, a refermer a la sortie de ce processus.
+ */
+export function ouvrirMonJournal(fichier, { lire = psqlBorne, horloge = Date.now, jusqua = horloge() + BUDGET_RATTRAPAGE_MS } = {}) {
+  let heritees = []
+  try {
+    let existe = true
+    try { fs.lstatSync(fichier) } catch (e) { if (e.code === "ENOENT") existe = false; else throw e }
+    if (existe) {
+      const lot = traiterJournalMort(fichier, { lire, jusqua, horloge })
+      heritees = lot.aGarder
+      if (lot.fermees.length) console.log(`salle(s) d'un ancien outil au meme pid, fermee(s) : ${lot.fermees.join(", ")}`)
+      fs.unlinkSync(fichier)
+    }
+    ecrire(fichier, heritees.map(e => `${e.code}:${e.hote}\n`).join(""), fs.constants.O_EXCL)
+    return { fichier, heritees }
+  } catch (e) {
+    console.error(`!! journal ${fichier} impossible (${premiereLigne(e)}) : un SIGKILL laisserait la salle ouverte`)
+    return { fichier: null, heritees }
+  }
 }
 
 function poserCrochets() {
   crochetsPoses = true
   process.on("exit", () => {
-    const entrees = [...salles].map(([code, hote]) => ({ code, hote }))
+    const entrees = [...[...salles].map(([code, hote]) => ({ code, hote })), ...heritees]
     salles.clear()
+    heritees = []
     const { fermees, aGarder } = fermerLot(entrees)
     if (fermees.length) console.log(`salle(s) de test fermee(s) : ${fermees.join(", ")}`)
     if (!monJournal) return
@@ -228,8 +309,13 @@ export function retenirSalle(code, hoteId, { dossier = dossierParDefaut() } = {}
   }
   if (!crochetsPoses) {
     const sur = dossierSur(dossier)
-    monJournal = sur ? journalDe(process.pid, sur) : null
-    if (sur) rattraperSalles({ dossier: sur })
+    if (sur) {
+      const jusqua = Date.now() + BUDGET_RATTRAPAGE_MS // un seul budget pour les deux
+      rattraperSalles({ dossier: sur, jusqua })
+      const ouvert = ouvrirMonJournal(journalDe(process.pid, sur), { jusqua })
+      monJournal = ouvert.fichier
+      heritees = ouvert.heritees
+    }
     poserCrochets()
   }
   salles.set(c, String(h))

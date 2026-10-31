@@ -15,7 +15,7 @@ import os from "os"
 import path from "path"
 import { spawn } from "child_process"
 import { fileURLToPath } from "url"
-import { fermerUne, fermerLot, rattraperSalles, lireJournal, retenirSalle, dossierSur, journalDe } from "./salles-de-test.mjs"
+import { fermerUne, fermerLot, rattraperSalles, lireJournal, retenirSalle, dossierSur, journalDe, ouvrirMonJournal } from "./salles-de-test.mjs"
 
 const ICI = path.dirname(fileURLToPath(import.meta.url))
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "salles-"))
@@ -89,7 +89,7 @@ test("fermerLot : un lot mixte, le recent est ferme, le perime est ecarte avec u
   const { erreurs } = silence(t)
   const { lire, updates } = fausseBase(dev)
   const lot = fermerLot([{ code: "VIEUXA", hote: "7" }, { code: "RECENT", hote: "5" }], lire)
-  assert.deepEqual(lot, { fermees: ["RECENT"], aGarder: [] })
+  assert.deepEqual(lot, { fermees: ["RECENT"], aGarder: [], interrompu: false })
   assert.equal(updates.length, 1)
   assert.match(updates[0], /room_code='RECENT' AND host_user_id=5\s/)
   assert.match(messages(erreurs), /VIEUXA non fermee : .*moins de 4 h/)
@@ -99,7 +99,7 @@ test("fermerLot : une panne psql garde l'entree, les autres sont fermees", (t) =
   silence(t)
   const { lire } = fausseBase(dev, sql => sql.includes("PANNEA"))
   const lot = fermerLot([{ code: "PANNEA", hote: "5" }, { code: "BONNEA", hote: "6" }], lire)
-  assert.deepEqual(lot, { fermees: ["BONNEA"], aGarder: [{ code: "PANNEA", hote: "5" }] })
+  assert.deepEqual(lot, { fermees: ["BONNEA"], aGarder: [{ code: "PANNEA", hote: "5" }], interrompu: false })
 })
 
 // ---- rattraperSalles ----
@@ -120,7 +120,7 @@ test("rattraperSalles : sur une panne psql, l'entree reste dans le journal", (t)
   silence(t)
   const dossier = tmp()
   const mort = journalDe(111, dossier)
-  fs.writeFileSync(mort, "PANNEA:5\nBONNEA:6\n")
+  fs.writeFileSync(mort, "BONNEA:6\nPANNEA:5\n")
   const { lire } = fausseBase(dev, sql => sql.includes("PANNEA"))
   assert.deepEqual(rattraperSalles({ lire, dossier, vivant: () => false }), ["BONNEA"])
   assert.deepEqual(lireJournal(mort), [{ code: "PANNEA", hote: "5" }])
@@ -147,6 +147,72 @@ test("rattraperSalles : un dossier illisible ne leve pas", (t) => {
   fs.writeFileSync(fichier, "")
   assert.deepEqual(rattraperSalles({ lire: fausseBase(dev).lire, dossier: fichier, vivant: () => false }), [])
   assert.match(messages(erreurs), /journal des salles refuse/)
+})
+
+// Troisieme relecture : rattrapage borne, journaux perimes, pid recycle.
+
+test("rattraperSalles : budget depasse, on s'arrete et le reste attend le prochain outil", (t) => {
+  const { erreurs } = silence(t)
+  const dossier = tmp()
+  fs.writeFileSync(journalDe(111, dossier), "AAAAAA:5\nBBBBBB:5\nCCCCCC:5\n")
+  fs.writeFileSync(journalDe(112, dossier), "DDDDDD:5\n")
+  let maintenant = 0
+  const base = fausseBase(dev)
+  const lire = sql => { maintenant += 20_000; return base.lire(sql) } // docker tres lent : 20 s par requete
+  const fermees = rattraperSalles({ lire, dossier, vivant: () => false, horloge: () => maintenant, budgetMs: 30_000 })
+  assert.deepEqual(fermees, ["AAAAAA"]) // SELECT + UPDATE = 40 s : budget epuise apres la premiere
+  assert.equal(base.updates.length, 1)
+  assert.deepEqual(lireJournal(journalDe(111, dossier)).map(e => e.code), ["BBBBBB", "CCCCCC"])
+  assert.deepEqual(lireJournal(journalDe(112, dossier)).map(e => e.code), ["DDDDDD"])
+  assert.match(messages(erreurs), /rattrapage arrete \(panne, ou budget de 30 s ecoule\)/)
+})
+
+test("rattraperSalles : a la premiere panne, on s'arrete sans retenter les autres", (t) => {
+  silence(t)
+  const dossier = tmp()
+  fs.writeFileSync(journalDe(111, dossier), "PANNEA:5\nAUTREA:5\n")
+  let appels = 0
+  const base = fausseBase(dev, () => true)
+  const lire = sql => { appels += 1; return base.lire(sql) }
+  assert.deepEqual(rattraperSalles({ lire, dossier, vivant: () => false }), [])
+  assert.equal(appels, 1) // une seule requete, pas une par salle
+  assert.deepEqual(lireJournal(journalDe(111, dossier)).map(e => e.code), ["PANNEA", "AUTREA"])
+})
+
+test("rattraperSalles : un journal de plus de 4 h est supprime sans rien fermer, avec un message", (t) => {
+  const { erreurs } = silence(t)
+  const dossier = tmp()
+  const vieux = journalDe(111, dossier)
+  fs.writeFileSync(vieux, "VIEUXJ:5\n")
+  const ilYa5h = (Date.now() - 5 * 3600 * 1000) / 1000
+  fs.utimesSync(vieux, ilYa5h, ilYa5h)
+  let appels = 0
+  const base = fausseBase(dev)
+  assert.deepEqual(rattraperSalles({ lire: sql => { appels += 1; return base.lire(sql) }, dossier, vivant: () => false }), [])
+  assert.equal(appels, 0)
+  assert.equal(fs.existsSync(vieux), false)
+  assert.match(messages(erreurs), /perime \(plus de 4 h\) : supprime, salle\(s\) VIEUXJ non fermee\(s\)/)
+})
+
+test("ouvrirMonJournal : un fichier deja la au pid courant (pid recycle) est rattrape, puis repart a neuf", (t) => {
+  silence(t)
+  const dossier = tmp()
+  const mien = journalDe(process.pid, dossier)
+  fs.writeFileSync(mien, "ORPHEA:5\nPANNEB:6\n")
+  const { lire, updates } = fausseBase(dev, sql => sql.includes("PANNEB"))
+  const ouvert = ouvrirMonJournal(mien, { lire })
+  assert.equal(ouvert.fichier, mien)
+  assert.match(updates[0], /room_code='ORPHEA' AND host_user_id=5\s/) // l'orpheline est fermee
+  assert.deepEqual(ouvert.heritees, [{ code: "PANNEB", hote: "6" }]) // la panne est reprise par ce processus
+  assert.deepEqual(lireJournal(mien), [{ code: "PANNEB", hote: "6" }])
+  assert.doesNotMatch(fs.readFileSync(mien, "utf8"), /ORPHEA/) // fichier neuf, pas l'ancien complete
+})
+
+test("ouvrirMonJournal : sans ancien fichier, cree un journal vide en 0600", () => {
+  const mien = journalDe(process.pid, tmp())
+  assert.deepEqual(ouvrirMonJournal(mien, { lire: () => { throw new Error("pas de requete attendue") } }), { fichier: mien, heritees: [] })
+  assert.equal(fs.statSync(mien).mode & 0o777, 0o600)
+  assert.equal(fs.readFileSync(mien, "utf8"), "")
 })
 
 // ---- dossierSur ----
