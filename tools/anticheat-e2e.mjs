@@ -14,7 +14,8 @@ import { createRequire } from "module"
 const requireFront = createRequire("/opt/blindify/frontend/package.json")
 // Ensemencement partage : vrais identifiants Deezer, donc extraits rafraichissables.
 // psql (sans shell) et la garde du code de salle, lu dans le DOM, viennent aussi de la.
-import { seedLibrary, cleanupSeeded, psql, codeSalle } from "./seed-library.mjs"
+// retenirSalle : la salle est fermee a la sortie, meme sur un echec.
+import { seedLibrary, cleanupSeeded, psql, retenirSalle } from "./seed-library.mjs"
 const { io } = requireFront("socket.io-client")
 
 const IS_PROD = process.argv[2] === "prod"
@@ -62,7 +63,7 @@ for (const n of ["5", "10"]) {
 }
 await host.getByRole("button", { name: "10s", exact: true }).click().catch(() => {})
 // Garde SQL : ce code finit colle dans les requetes psql plus bas.
-const code = codeSalle(await host.locator("[data-code]").first().getAttribute("data-code"))
+const code = retenirSalle(await host.locator("[data-code]").first().getAttribute("data-code"), hostId)
 say(`room ${code}, hote guest ${hostId}`)
 
 // ── Deux joueuses ──

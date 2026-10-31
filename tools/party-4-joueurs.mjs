@@ -2,7 +2,8 @@ import { chromium, devices } from "@playwright/test"
 import fs from "fs"
 import { execSync } from "child_process"
 // Ensemencement partage : vrais identifiants Deezer, donc extraits rafraichissables.
-import { seedLibrary, cleanupSeeded } from "./seed-library.mjs"
+// retenirSalle : la salle est fermee a la sortie, meme sur un echec.
+import { seedLibrary, cleanupSeeded, retenirSalle } from "./seed-library.mjs"
 
 // "prod" vise blindz.app, comme soiree.mjs ; sans argument, le dev. Avant le
 // 01/10 le script visait toujours le dev, meme avec "prod".
@@ -88,7 +89,7 @@ await host.getByText("Je présente seulement").click()
 await host.getByText("CODE DE LA SALLE").waitFor({ timeout: 40000 })
 await host.getByRole("button", { name: String(ROUNDS), exact: true }).click()
 await host.getByRole("button", { name: "10s", exact: true }).click()
-const code = await host.locator("[data-code]").first().getAttribute("data-code")
+const code = retenirSalle(await host.locator("[data-code]").first().getAttribute("data-code"), hostId)
 say(`\n=== partie ${code} · hote presentateur + 3 joueurs · ${ROUNDS} manches${CHAOS ? " · AVEC CHAOS" : ""} ===`)
 
 const players = []

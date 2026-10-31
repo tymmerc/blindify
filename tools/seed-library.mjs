@@ -122,6 +122,62 @@ export function verifierJoueursDeTest(userIds, lire = psql, { exiger = false } =
   return retenus
 }
 
+// Salles creees par l'outil : code -> id de son hote (le joueur de test).
+// Une salle laissee en 'in_progress' (partie 2 coupee par la fin du script,
+// script plante en route) passe pour une vraie partie aupres de
+// scripts/attendre-parties.sh pendant 3 h et bloque les mises en prod
+// (VLKAH9 le 31/10/2026, MAS2L3 le 30/10). Elles sont donc fermees a la sortie
+// du processus, quelle qu'elle soit.
+const salles = new Map()
+let fermetureALaSortie = false
+
+/**
+ * Retient une salle que CE script vient de creer, pour la fermer a la sortie
+ * (fin normale, process.exit, exception, Ctrl+C). Rend le code, verifie par
+ * codeSalle : il finit dans une requete.
+ */
+export function retenirSalle(code, hoteId) {
+  const c = codeSalle(code)
+  const h = entier(hoteId)
+  if (!c || !h) return c
+  salles.set(c, String(h))
+  if (!fermetureALaSortie) {
+    fermetureALaSortie = true
+    // psql est synchrone (execFileSync) : il peut tourner dans 'exit'.
+    process.on("exit", () => {
+      try {
+        const fermees = fermerSalles()
+        if (fermees.length) console.log(`salle(s) de test fermee(s) : ${fermees.join(", ")}`)
+      } catch (e) {
+        console.error(`!! salle(s) de test NON fermee(s) (${[...salles.keys()].join(", ")}) : ${e.message}`)
+      }
+    })
+    // Ctrl+C, arret par heavy ou systemd : sortir proprement, donc par 'exit'.
+    for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) process.once(signal, () => process.exit(130))
+  }
+  return c
+}
+
+/**
+ * Passe en 'finished' les salles retenues qui ne le sont pas deja. Jamais une
+ * salle qu'on n'a pas creee : le code ET l'hote doivent correspondre, et
+ * l'hote doit etre un joueur de test (verifierJoueursDeTest). Rend les codes
+ * fermes. `lire` : psql en vrai, une fausse base dans les tests.
+ */
+export function fermerSalles(lire = psql, liste = salles) {
+  const hotes = verifierJoueursDeTest([...new Set(liste.values())], lire)
+  const fermees = []
+  for (const [code, hote] of liste) {
+    if (!hotes.includes(hote)) continue // hote absent de cette base : rien a lui
+    const sortie = lire(`UPDATE multiplayer_rooms SET status='finished', completed_at=COALESCE(completed_at, NOW())
+                         WHERE room_code='${codeSalle(code)}' AND host_user_id=${entier(hote)}
+                           AND status IS DISTINCT FROM 'finished' RETURNING room_code`)
+    if (sortie) fermees.push(...sortie.split("\n").filter(Boolean))
+  }
+  liste.clear()
+  return fermees
+}
+
 const MOTS = [
   "rock", "pop francaise", "rap francais", "jazz", "electro", "chanson francaise",
   "soul", "reggae", "metal", "disco", "funk", "classique",

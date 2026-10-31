@@ -11,12 +11,16 @@
 #   git -C /opt/blindify fetch -q origin && git -C /opt/blindify show origin/main:scripts/attendre-parties.sh | bash
 #
 # GO_PROD_CIBLE=pile : la base de la pile isolee (essais), jamais la prod.
+# GO_PROD_CIBLE=dev : la base du site de dev (blindify_dev), pour verifier
+# qu'un outil E2E joue sur dev n'y laisse pas de salle ouverte.
 # ATTENTE_MAX_S : duree maximale de l'attente (10 800 s par defaut).
 # Lecture seule : docker exec sans -i, le script peut arriver par un pipe.
 set -euo pipefail
 ATTENTE_MAX_S="${ATTENTE_MAX_S:-10800}"
 if [ "${GO_PROD_CIBLE:-prod}" = pile ]; then
   lire() { docker exec blindz-test-postgres psql -U blindify -d blindify_test -qAt -c "$1"; }
+elif [ "${GO_PROD_CIBLE:-prod}" = dev ]; then
+  lire() { docker exec blindz-dev-postgres psql -U blindz_dev -d blindify_dev -qAt -c "$1"; }
 else
   lire() { docker exec blindify-postgres psql -U blindify -d blindify -qAt -c "$1"; }
 fi
