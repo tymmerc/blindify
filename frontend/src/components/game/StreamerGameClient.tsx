@@ -131,7 +131,8 @@ function PhasePanel({ state, now, answers, onHostGuess }: { state: StreamerState
       return (
         <div className="space-y-4">
           <RevealCard track={state.currentTrack} size="lg" />
-          <DeezerCredit />
+          {/* Sans la mention « ecoute privee » : ici, le son part dans un live. */}
+          <DeezerCredit notice={false} />
           {state.subMode !== "solo" && state.chatSnapshot ? (
             <p className="m-0 text-base">
               {state.chatSnapshot.correct} sur {state.chatSnapshot.total} ont trouvé ({state.chatSnapshot.percentCorrect} %).
