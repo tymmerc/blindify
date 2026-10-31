@@ -21,6 +21,7 @@ import {
   getStreamerState,
   hostBack,
   hostLeft,
+  kickViewer,
   recordStreamerGuess,
   recordViewerAnswer,
   startNextStreamerRound,
@@ -44,7 +45,7 @@ function fakeIo() {
       return true;
     },
   });
-  const io = { to: (r: string) => chain([r], []) } as unknown as IOServer;
+  const io = { to: (r: string) => chain([r], []), in: () => ({ disconnectSockets: () => undefined }) } as unknown as IOServer;
   return { io, sent };
 }
 
@@ -110,11 +111,17 @@ describe("phases", () => {
     expect(state.chatWins).toBe(0);
   });
 
-  it("duo : sans reponse du streamer, la manche va au chat", () => {
+  it("duo : le streamer rate, la manche va au chat seulement si le chat a trouve", () => {
     const { io } = setup("duo", 2);
     startNextStreamerRound(io, ROOM);
     jest.advanceTimersByTime(START_COUNTDOWN_MS + CHAT_GUESS_DURATION + STREAMER_GUESS_DURATION);
-    expect(getStreamerState(ROOM)?.chatWins).toBe(1);
+    expect(getStreamerState(ROOM)).toMatchObject({ chatWins: 0, streamerWins: 0 });
+    const v = viewer("Lena");
+    startNextStreamerRound(io, ROOM);
+    jest.advanceTimersByTime(START_COUNTDOWN_MS);
+    recordViewerAnswer(io, ROOM, v, { title: "chanson 2" });
+    jest.advanceTimersByTime(CHAT_GUESS_DURATION + STREAMER_GUESS_DURATION);
+    expect(getStreamerState(ROOM)).toMatchObject({ chatWins: 1, streamerWins: 0 });
   });
 
   it("solo : pas de phase du public, et un viewer ne peut pas repondre", () => {
@@ -260,7 +267,7 @@ describe("reponses et classement des viewers", () => {
     const answers = sent.filter(s => s.event === "streamer:answers");
     expect(answers).toHaveLength(1);
     expect(answers[0].to).toEqual([mediaRoom(ROOM)]);
-    expect(answers[0].payload).toEqual({ roomCode: ROOM, round: 1, count: 1, names: ["Lena"] });
+    expect(answers[0].payload).toEqual({ roomCode: ROOM, round: 1, count: 1, names: ["Lena"], viewers: [{ id: v, pseudo: "Lena" }] });
     expect(JSON.stringify(answers[0].payload)).not.toContain("secret");
   });
 
@@ -272,6 +279,27 @@ describe("reponses et classement des viewers", () => {
     expect(getViewer(ROOM, v)?.score).toBeGreaterThan(0);
     bootstrapStreamerGame({ roomCode: ROOM, hostUserId: HOST, rounds: [track(1)], subMode: "viewers_only" });
     expect(getViewer(ROOM, v)?.score).toBe(0);
+  });
+});
+
+describe("exclure un viewer", () => {
+  it("il quitte la manche et le classement, son socket est coupe, il ne revient pas", () => {
+    const { io, sent } = setup("viewers_only", 2);
+    const bad = joinViewer(ROOM, { pseudo: "Vilain" });
+    const good = viewer("Lena");
+    if (!bad.ok) throw new Error("join");
+    startNextStreamerRound(io, ROOM);
+    jest.advanceTimersByTime(START_COUNTDOWN_MS);
+    recordViewerAnswer(io, ROOM, bad.viewer.id, { title: "chanson 1", artist: "les testeurs" });
+    recordViewerAnswer(io, ROOM, good, { title: "chanson 1", artist: "les testeurs" });
+    expect(kickViewer(io, ROOM, bad.viewer.id)).toBe(true);
+    expect(getStreamerState(ROOM)?.answersCount).toBe(1);
+    expect(sent.some(f => f.event === "live:error" && f.to[0] === `stream:viewer:${ROOM}:${bad.viewer.id}`)).toBe(true);
+    jest.advanceTimersByTime(CHAT_GUESS_DURATION);
+    expect(getStreamerState(ROOM)?.leaderboard?.map(e => e.pseudo)).toEqual(["Lena"]);
+    expect(joinViewer(ROOM, { pseudo: "x", key: bad.viewer.key })).toEqual({ ok: false, code: "exclu" });
+    expect(joinViewer(ROOM, { pseudo: "Vilain" })).toEqual({ ok: false, code: "exclu" });
+    expect(kickViewer(io, ROOM, "inconnu")).toBe(false);
   });
 });
 

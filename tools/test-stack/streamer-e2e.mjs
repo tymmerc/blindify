@@ -17,10 +17,13 @@
 //  6. (T5b) le chat Twitch, par le faux serveur IRC : les reponses `!b` sont
 //     lues pendant la manche, le chat gagne moitie moins, le copieur presque
 //     rien, et la lecture reprend apres une coupure du chat.
+//  7. l'overlay se reconnecte 30 fois de suite sans etre bloque ; l'hote
+//     exclut un pseudo : il quitte la manche, sa page le dit, il ne revient pas.
 // Code 0 si tout passe, 1 sinon.
 import fs from "node:fs"
 import path from "node:path"
 import { chromium } from "@playwright/test"
+import { io as ioClient } from "socket.io-client"
 import { oracle, seedUser } from "./testdb.mjs"
 import { Bot, api } from "./bot.mjs"
 import { catalog } from "./catalog.mjs"
@@ -167,10 +170,31 @@ async function main() {
     if (refus.status === 403 && refus.error?.code === "streamer_viewer") ok("un compte qui tente d'entrer dans la salle est renvoye vers /live")
     else bad(`entree dans la salle streamer non refusee (${refus.status} ${JSON.stringify(refus.error)})`)
 
+    // Un overlay qui se reconnecte souvent (wifi du streamer, OBS qui recharge)
+    // ne doit jamais etre bloque par la limite de debit.
+    const u = new URL(overlayLink)
+    let reconnects = 0
+    for (let i = 0; i < 30; i++) {
+      const s = ioClient("http://blindz-test.localhost:3180", {
+        path: "/blindify/socket.io", transports: ["websocket"], reconnection: false, forceNew: true,
+        auth: { overlay: { salle: u.searchParams.get("salle"), jeton: u.searchParams.get("jeton") } },
+      })
+      const okConnect = await new Promise(resolve => {
+        s.on("connect", () => resolve(true))
+        s.on("connect_error", () => resolve(false))
+        setTimeout(() => resolve(false), 5000)
+      })
+      s.close()
+      if (okConnect) reconnects++
+    }
+    if (reconnects === 30) ok("overlay : 30 reconnexions de suite, aucune bloquee")
+    else bad(`overlay : ${30 - reconnects} reconnexion(s) refusee(s) sur 30`)
+
     console.log("2. Trois viewers sur /live")
     for (const pseudo of ["Lena", "Malik", "Zoe"]) viewers.push(await openViewer(browser, code, pseudo))
     await host.page.getByText("3 viewers prêts").waitFor({ timeout: 10000 }).then(() => ok("le lobby compte 3 viewers"), () => bad("le lobby ne compte pas 3 viewers"))
     await shot(viewers[0].page, "viewer-1-attente")
+    const vilain = await openViewer(browser, code, "Vilain")
     await composite(browser, overlayLink, "#18181b", "overlay-1-lobby-fond-sombre")
     await composite(browser, overlayLink, "#f2f2f2", "overlay-1-lobby-fond-clair")
 
@@ -200,6 +224,18 @@ async function main() {
     await answer(viewers[0], t1.title, t1.artist)
     await answer(viewers[1], t1.title, "")
     await answer(viewers[2], "pas du tout", "personne")
+    // L'hote exclut « Vilain » depuis les reponses qui arrivent (deux clics).
+    await answer(vilain, t1.title, t1.artist)
+    await host.page.getByRole("button", { name: "Exclure Vilain" }).first().click({ timeout: 5000 })
+    await host.page.getByRole("button", { name: "Confirmer : exclure Vilain" }).click({ timeout: 5000 })
+    await vilain.page.getByText("Le streamer t'a retiré de cette partie.").waitFor({ timeout: 8000 })
+      .then(() => ok("exclure : la page du viewer exclu le dit"), () => bad("exclure : la page du viewer exclu ne change pas"))
+    await shot(vilain.page, "viewer-exclu")
+    await vilain.page.goto(`${APP}/live/?code=${code}`, { waitUntil: "networkidle", timeout: 60000 })
+    await vilain.page.getByLabel("Ton pseudo").fill("Vilain")
+    await vilain.page.getByRole("button", { name: "Rejoindre le live" }).click()
+    await vilain.page.getByText("Le streamer t'a retiré de cette partie.").waitFor({ timeout: 8000 })
+      .then(() => ok("exclure : il ne revient pas, meme en rouvrant la page"), () => bad("exclure : le viewer exclu est revenu"))
     await shot(viewers[0].page, "viewer-3-envoye")
     await host.page.getByTestId("streamer-arrivals").getByText(withChat ? "5 réponses" : "3 réponses").waitFor({ timeout: 6000 }).then(() => ok(`le streamer voit ${withChat ? 5 : 3} réponses`), () => bad("le streamer ne voit pas toutes les réponses"))
     const hostText = await host.page.textContent("body")
@@ -212,6 +248,9 @@ async function main() {
     await host.page.getByRole("button", { name: "Valider" }).click()
     await host.page.getByTestId("streamer-next").waitFor({ timeout: 10000 })
     const reveals = [{ round: 1, title: t1.title, at: Date.now() }]
+    const boardAfterKick = await overlay.page.getByTestId("streamer-leaderboard").textContent()
+    if (boardAfterKick.includes("Vilain")) bad("exclure : Vilain est encore au classement de l'overlay")
+    else ok("exclure : Vilain n'apparait pas au classement, malgre sa bonne reponse")
     await viewers[0].page.getByTestId("live-result").waitFor({ timeout: 8000 })
     const r0 = await viewers[0].page.getByTestId("live-result").textContent()
     const r1 = await viewers[1].page.getByTestId("live-result").textContent()

@@ -13,6 +13,8 @@ class FakeSocket {
   handlers = new Map<string, Handler[]>()
   emit = vi.fn()
   close = vi.fn()
+  connect = vi.fn()
+  active = false
   io = { on: vi.fn() }
   opts: { auth?: unknown; withCredentials?: boolean }
   constructor(opts: { auth?: unknown; withCredentials?: boolean }) {
@@ -138,6 +140,25 @@ describe("overlay OBS", () => {
     render(<OverlayClient />)
     act(() => sockets[0].fire("connect_error", { message: "overlay_expire" }))
     expect(screen.getByRole("alert")).toHaveTextContent("Ce lien d'overlay a expiré")
+  })
+
+  it("refus temporaire (limite) : l'overlay retente seul, de plus en plus lentement", () => {
+    vi.useFakeTimers()
+    try {
+      render(<OverlayClient />)
+      act(() => sockets[0].fire("connect_error", { message: "live_limite" }))
+      expect(sockets[0].close).not.toHaveBeenCalled()
+      expect(screen.queryByRole("alert")).toBeNull()
+      act(() => { vi.advanceTimersByTime(2_000) })
+      expect(sockets[0].connect).toHaveBeenCalledTimes(1)
+      act(() => sockets[0].fire("connect_error", { message: "live_limite" }))
+      act(() => { vi.advanceTimersByTime(3_999) })
+      expect(sockets[0].connect).toHaveBeenCalledTimes(1)
+      act(() => { vi.advanceTimersByTime(1) })
+      expect(sockets[0].connect).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it("lien incomplet", () => {

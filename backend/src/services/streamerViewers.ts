@@ -12,11 +12,12 @@
  */
 import crypto from "crypto";
 import type { StreamerLeaderEntry, ViewerSource } from "../types/streamer";
-import { maxStreamerViewers } from "./streamerConfig";
+import { maxStreamerViewers, maxStreamerViewersPerIp } from "./streamerConfig";
+import { isBlockedPseudo } from "./pseudoFilter";
 
 export const LEADERBOARD_SIZE = 5;
 /** Un viewer parti sans marquer libere sa place apres ce delai (plafond par partie). */
-export const STALE_VIEWER_MS = 10 * 60_000;
+export const STALE_VIEWER_MS = 2 * 60_000;
 /** Un registre sans aucune activite depuis ce delai est oublie (salle abandonnee). */
 const ROOM_IDLE_MS = 6 * 60 * 60_000;
 const PSEUDO_MIN = 2;
@@ -40,6 +41,10 @@ export interface Viewer {
   /** Sockets ouverts de ce viewer, et derniere fois qu'on l'a vu. */
   online: number;
   lastSeen: number;
+  /** Cle du pseudo dans la salle (« page:lena », « chat:lena ») : sert a l'exclusion. */
+  handle: string;
+  /** Adresse d'inscription (ou /64 en IPv6), pour le plafond par adresse. Vide pour le chat. */
+  ipKey: string;
 }
 
 interface ViewerRoom {
@@ -47,9 +52,11 @@ interface ViewerRoom {
   viewers: Map<string, Viewer>;
   byKey: Map<string, string>;
   byName: Map<string, string>;
+  /** Cles de reprise et pseudos exclus par le streamer : ils ne reviennent pas. */
+  banned: Set<string>;
 }
 
-export type ViewerJoinRefusal = "pseudo_invalide" | "pseudo_pris" | "live_complet";
+export type ViewerJoinRefusal = "pseudo_invalide" | "pseudo_refuse" | "pseudo_pris" | "live_complet" | "ip_pleine" | "exclu";
 export type ViewerJoinResult = { ok: true; viewer: Viewer; resumed: boolean } | { ok: false; code: ViewerJoinRefusal };
 
 const rooms = new Map<string, ViewerRoom>();
@@ -73,12 +80,12 @@ function roomOf(roomCode: string, now = Date.now()): ViewerRoom {
     existing.touchedAt = now;
     return existing;
   }
-  const created: ViewerRoom = { touchedAt: now, viewers: new Map(), byKey: new Map(), byName: new Map() };
+  const created: ViewerRoom = { touchedAt: now, viewers: new Map(), byKey: new Map(), byName: new Map(), banned: new Set() };
   rooms.set(roomCode, created);
   return created;
 }
 
-function newViewer(pseudo: string, source: ViewerSource, now: number): Viewer {
+function newViewer(pseudo: string, source: ViewerSource, now: number, handle: string, ipKey = ""): Viewer {
   return {
     id: crypto.randomBytes(6).toString("base64url"),
     key: crypto.randomBytes(24).toString("base64url"),
@@ -91,6 +98,8 @@ function newViewer(pseudo: string, source: ViewerSource, now: number): Viewer {
     answeredRound: 0,
     online: 0,
     lastSeen: now,
+    handle,
+    ipKey,
   };
 }
 
@@ -105,8 +114,35 @@ function releaseStaleViewers(room: ViewerRoom, now: number): void {
     if (v.source !== "page" || v.online > 0 || v.score > 0 || now - v.lastSeen < STALE_VIEWER_MS) continue;
     room.viewers.delete(id);
     room.byKey.delete(v.key);
-    room.byName.delete(nameKey("page", v.pseudo));
+    room.byName.delete(v.handle);
   }
+}
+
+function forget(room: ViewerRoom, v: Viewer): void {
+  room.viewers.delete(v.id);
+  room.byKey.delete(v.key);
+  room.byName.delete(v.handle);
+}
+
+/**
+ * « Exclure » du streamer : le viewer quitte le classement, sa cle de reprise
+ * et son pseudo (ou son login Twitch) ne rentrent plus dans cette salle.
+ * Rend la fiche exclue, ou undefined si elle n'existe pas.
+ */
+export function banViewer(roomCode: string, id: string): Viewer | undefined {
+  const room = rooms.get(roomCode);
+  const v = room?.viewers.get(id);
+  if (!room || !v) return undefined;
+  forget(room, v);
+  room.banned.add(`key:${v.key}`);
+  room.banned.add(v.handle);
+  return v;
+}
+
+function ipCount(room: ViewerRoom, ipKey: string): number {
+  let n = 0;
+  for (const v of room.viewers.values()) if (v.source === "page" && v.ipKey === ipKey) n += 1;
+  return n;
 }
 
 /** Un socket du viewer s'ouvre (+1) ou se ferme (-1). */
@@ -123,10 +159,11 @@ export function viewerPresence(roomCode: string, id: string, delta: 1 | -1, now 
  */
 export function joinViewer(
   roomCode: string,
-  input: { pseudo: unknown; key?: unknown },
+  input: { pseudo: unknown; key?: unknown; ipKey?: string },
   now = Date.now(),
 ): ViewerJoinResult {
   const room = roomOf(roomCode, now);
+  if (typeof input.key === "string" && room.banned.has(`key:${input.key}`)) return { ok: false, code: "exclu" };
   if (typeof input.key === "string" && KEY_FORMAT.test(input.key)) {
     const id = room.byKey.get(input.key);
     const known = id ? room.viewers.get(id) : undefined;
@@ -134,13 +171,20 @@ export function joinViewer(
   }
   const pseudo = cleanPseudo(input.pseudo);
   if (!pseudo) return { ok: false, code: "pseudo_invalide" };
-  if (room.byName.has(nameKey("page", pseudo))) return { ok: false, code: "pseudo_pris" };
-  if (pageViewerCount(roomCode) >= maxStreamerViewers()) releaseStaleViewers(room, now);
-  if (pageViewerCount(roomCode) >= maxStreamerViewers()) return { ok: false, code: "live_complet" };
-  const viewer = newViewer(pseudo, "page", now);
+  if (isBlockedPseudo(pseudo)) return { ok: false, code: "pseudo_refuse" };
+  const handle = nameKey("page", pseudo);
+  if (room.banned.has(handle)) return { ok: false, code: "exclu" };
+  if (room.byName.has(handle)) return { ok: false, code: "pseudo_pris" };
+  const ipKey = input.ipKey ?? "";
+  const ipFull = () => ipKey !== "" && ipCount(room, ipKey) >= maxStreamerViewersPerIp();
+  const full = () => pageViewerCount(roomCode) >= maxStreamerViewers();
+  if (full() || ipFull()) releaseStaleViewers(room, now);
+  if (ipFull()) return { ok: false, code: "ip_pleine" };
+  if (full()) return { ok: false, code: "live_complet" };
+  const viewer = newViewer(pseudo, "page", now, handle, ipKey);
   room.viewers.set(viewer.id, viewer);
   room.byKey.set(viewer.key, viewer.id);
-  room.byName.set(nameKey("page", pseudo), viewer.id);
+  room.byName.set(handle, viewer.id);
   return { ok: true, viewer, resumed: false };
 }
 
@@ -155,14 +199,16 @@ export function chatViewer(
   displayName: string,
   now = Date.now(),
 ): { viewer: Viewer; created: boolean } | null {
-  const room = roomOf(roomCode);
-  const existingId = room.byName.get(nameKey("chat", login));
+  const room = roomOf(roomCode, now);
+  const handle = nameKey("chat", login);
+  if (room.banned.has(handle)) return null;
+  const existingId = room.byName.get(handle);
   const existing = existingId ? room.viewers.get(existingId) : undefined;
   if (existing) return { viewer: existing, created: false };
   if (room.viewers.size - pageViewerCount(roomCode) >= maxStreamerViewers()) return null;
-  const viewer = newViewer(displayName, "chat", now);
+  const viewer = newViewer(displayName, "chat", now, handle);
   room.viewers.set(viewer.id, viewer);
-  room.byName.set(nameKey("chat", login), viewer.id);
+  room.byName.set(handle, viewer.id);
   return { viewer, created: true };
 }
 
@@ -180,8 +226,11 @@ export function pageViewerCount(roomCode: string): number {
   return count;
 }
 
+/** Viewers presents : la page connectee en ce moment, et le chat Twitch (sans socket). */
 export function viewerCount(roomCode: string): number {
-  return rooms.get(roomCode)?.viewers.size ?? 0;
+  let n = 0;
+  for (const v of rooms.get(roomCode)?.viewers.values() ?? []) if (v.source === "chat" || v.online > 0) n += 1;
+  return n;
 }
 
 /** Remplace la fiche d'un viewer par une version mise a jour. */

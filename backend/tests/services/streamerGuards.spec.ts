@@ -22,7 +22,8 @@ import {
 import { maxStreamerGames, maxStreamerViewers, streamerModeEnabled } from "../../src/services/streamerConfig";
 import { OVERLAY_TTL_MS, overlayLink, signOverlayToken, verifyOverlayToken } from "../../src/services/overlayToken";
 import { signSpectatorToken, verifySpectatorToken } from "../../src/services/spectatorToken";
-import { authorizeStreamerSocket, resetStreamerAttemptsForTests, LIVE_ATTEMPTS } from "../../src/services/streamerSockets";
+import { authorizeStreamerSocket, resetStreamerAttemptsForTests, LIVE_ATTEMPTS, OVERLAY_FAILURES } from "../../src/services/streamerSockets";
+import { isBlockedPseudo } from "../../src/services/pseudoFilter";
 import { streamerStartRefusal } from "../../src/controllers/streamerController";
 import { bootstrapStreamerGame, clearAllStreamerGamesForTests, startNextStreamerRound } from "../../src/services/streamerGame";
 import type { Server as IOServer } from "socket.io";
@@ -128,12 +129,40 @@ describe("viewers", () => {
   });
 });
 
+describe("filtre des pseudos", () => {
+  it.each(["Connard", "c0nnard", "S A L O P E", "FuCk3r", "Pd", "N1ggaz", "tonpere_le_batard"])("refuse %p", p => {
+    expect(isBlockedPseudo(p)).toBe(true);
+  });
+  it.each(["Monique", "Pedersen", "Drapeau", "Kysha", "Lena", "Dickens", "Computer", "Habitee", "Connexion"])("accepte %p", p => {
+    expect(isBlockedPseudo(p)).toBe(false);
+  });
+  it("a l'inscription : refus neutre", () => {
+    expect(joinViewer(ROOM, { pseudo: "salope" })).toEqual({ ok: false, code: "pseudo_refuse" });
+  });
+});
+
+describe("plafond par adresse", () => {
+  it("8 viewers par adresse et par salle, les autres adresses passent", () => {
+    for (let i = 0; i < 8; i++) expect(joinViewer(ROOM, { pseudo: `Joueur${i}`, ipKey: "1.2.3.4" }).ok).toBe(true);
+    expect(joinViewer(ROOM, { pseudo: "Neuvieme", ipKey: "1.2.3.4" })).toEqual({ ok: false, code: "ip_pleine" });
+    expect(joinViewer(ROOM, { pseudo: "Neuvieme", ipKey: "5.6.7.8" }).ok).toBe(true);
+    expect(joinViewer("AUTRE1", { pseudo: "Neuvieme", ipKey: "1.2.3.4" }).ok).toBe(true);
+  });
+
+  it("reglable", () => {
+    process.env.STREAMER_MAX_VIEWERS_PER_IP = "1";
+    expect(joinViewer(ROOM, { pseudo: "Un1", ipKey: "9.9.9.9" }).ok).toBe(true);
+    expect(joinViewer(ROOM, { pseudo: "Deux", ipKey: "9.9.9.9" })).toEqual({ ok: false, code: "ip_pleine" });
+  });
+});
+
 describe("reglages et interrupteur", () => {
   it("STREAMER_MODE : ouvert par defaut, ferme avec off", () => {
     expect(streamerModeEnabled({})).toBe(true);
     expect(streamerModeEnabled({ STREAMER_MODE: "on" })).toBe(true);
     expect(streamerModeEnabled({ STREAMER_MODE: "OFF" })).toBe(false);
     expect(streamerModeEnabled({ STREAMER_MODE: "false" })).toBe(false);
+    for (const v of ["no", "NON", "disabled", " 0 "]) expect(streamerModeEnabled({ STREAMER_MODE: v })).toBe(false);
   });
 
   it("plafonds par defaut et reglables", () => {
@@ -226,6 +255,16 @@ describe("connexion de l'overlay et des viewers", () => {
     expect(await authorizeStreamerSocket(live("Encore"), "7.7.7.7", { findRoom: streamerRoom })).toEqual({ ok: false, code: "live_limite" });
     const back = await authorizeStreamerSocket({ kind: "live", salle: ROOM, pseudo: "Lena", cle: key }, "7.7.7.7", { findRoom: streamerRoom });
     expect(back).toMatchObject({ ok: true, data: { viewerId: first.data.viewerId } });
+  });
+
+  it("overlay : un jeton valide se reconnecte sans limite, seuls les echecs comptent", async () => {
+    const jeton = signOverlayToken({ roomCode: ROOM, roomId: 7, expiresAt: Date.now() + 60_000 }, SECRET);
+    const hs = (j: string) => ({ kind: "overlay" as const, salle: ROOM, jeton: j });
+    for (let i = 0; i < 100; i++) {
+      expect((await authorizeStreamerSocket(hs(jeton), "4.4.4.4", { findRoom: streamerRoom, overlaySecret: SECRET })).ok).toBe(true);
+    }
+    for (let i = 0; i < OVERLAY_FAILURES; i++) await authorizeStreamerSocket(hs("1.faux"), "4.4.4.4", { findRoom: streamerRoom, overlaySecret: SECRET });
+    expect(await authorizeStreamerSocket(hs(jeton), "4.4.4.4", { findRoom: streamerRoom, overlaySecret: SECRET })).toEqual({ ok: false, code: "live_limite" });
   });
 
   it("overlay : jeton valide, sinon refus net", async () => {

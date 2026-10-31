@@ -38,22 +38,29 @@ export type StreamerSocketData =
 type Handshake = { kind: "overlay"; salle: unknown; jeton: unknown } | { kind: "live"; salle: unknown; pseudo: unknown; cle: unknown };
 type RoomRow = { id: number; mode: string; status: string };
 
-/** Connexions par IP (ou /64 en IPv6) et par fenetre de 10 minutes. */
+/**
+ * Par IP (ou /64 en IPv6) et par fenetre de 10 minutes :
+ * - viewers : nouvelles inscriptions (une reprise avec cle ne compte pas) ;
+ * - overlay : ECHECS seulement (jeton faux ou expire). Un overlay valide qui se
+ *   reconnecte cent fois pendant un live ne doit jamais etre coupe.
+ */
 export const LIVE_ATTEMPTS = 120;
-export const OVERLAY_ATTEMPTS = 20;
+export const OVERLAY_FAILURES = 20;
 const WINDOW_MS = 10 * 60_000;
 const attempts = new Map<string, { count: number; start: number }>();
 
-function allowAttempt(kind: Handshake["kind"], ip: string | undefined, now: number): boolean {
-  const key = `${kind}:${ipRateLimitKey(ip)}`;
-  const limit = kind === "overlay" ? OVERLAY_ATTEMPTS : LIVE_ATTEMPTS;
+function bucketOf(key: string, now: number): { count: number; start: number } {
   const bucket = attempts.get(key);
-  if (!bucket || now - bucket.start >= WINDOW_MS) {
-    attempts.set(key, { count: 1, start: now });
-    return true;
-  }
+  return !bucket || now - bucket.start >= WINDOW_MS ? { count: 0, start: now } : bucket;
+}
+
+function overLimit(key: string, limit: number, now: number): boolean {
+  return bucketOf(key, now).count >= limit;
+}
+
+function count(key: string, now: number): void {
+  const bucket = bucketOf(key, now);
   attempts.set(key, { ...bucket, count: bucket.count + 1 });
-  return bucket.count + 1 <= limit;
 }
 
 export function resetStreamerAttemptsForTests(): void {
@@ -90,27 +97,52 @@ type Deps = { findRoom?: (code: string) => Promise<RoomRow | null>; overlaySecre
 type AuthResult = { ok: true; data: StreamerSocketData } | { ok: false; code: StreamerSocketRefusal };
 
 export async function authorizeStreamerSocket(hs: Handshake, ip: string | undefined, deps: Deps = {}): Promise<AuthResult> {
-  const now = deps.now ?? Date.now();
   if (!streamerModeEnabled()) return { ok: false, code: "live_desactive" };
   const roomCode = validRoomCode(hs.salle)?.toUpperCase() ?? null;
-  // Un viewer qui revient avec sa cle (ecran verrouille, wifi) ne compte pas :
-  // seules les nouvelles inscriptions et l'overlay entament la limite par IP.
-  const resuming = hs.kind === "live" && roomCode !== null && knownKey(roomCode, hs.cle);
-  if (!resuming && !allowAttempt(hs.kind, ip, now)) return { ok: false, code: "live_limite" };
+  return hs.kind === "overlay" ? authorizeOverlay(hs, roomCode, ip, deps) : authorizeLive(hs, roomCode, ip, deps);
+}
+
+async function authorizeOverlay(
+  hs: Extract<Handshake, { kind: "overlay" }>,
+  roomCode: string | null,
+  ip: string | undefined,
+  deps: Deps,
+): Promise<AuthResult> {
+  const now = deps.now ?? Date.now();
+  const key = `overlay:${ipRateLimitKey(ip)}`;
+  if (overLimit(key, OVERLAY_FAILURES, now)) return { ok: false, code: "live_limite" };
+  const fail = (code: StreamerSocketRefusal): AuthResult => {
+    count(key, now);
+    return { ok: false, code };
+  };
   const room = roomCode ? await (deps.findRoom ?? lookupRoom)(roomCode) : null;
-  if (!roomCode || !room || room.mode !== "streamer") {
-    return { ok: false, code: hs.kind === "overlay" ? "overlay_refuse" : "live_introuvable" };
+  if (!roomCode || !room || room.mode !== "streamer") return fail("overlay_refuse");
+  const secret = deps.overlaySecret === undefined ? readOverlaySecret() : deps.overlaySecret;
+  if (!secret) return { ok: false, code: "overlay_desactive" };
+  const check = verifyOverlayToken({ roomCode, roomId: room.id, token: hs.jeton, now }, secret);
+  if (!check.ok) return fail(check.reason === "expired" ? "overlay_expire" : "overlay_refuse");
+  return { ok: true, data: { kind: "overlay", roomCode, roomId: room.id, expiresAt: check.expiresAt } };
+}
+
+async function authorizeLive(
+  hs: Extract<Handshake, { kind: "live" }>,
+  roomCode: string | null,
+  ip: string | undefined,
+  deps: Deps,
+): Promise<AuthResult> {
+  const now = deps.now ?? Date.now();
+  const ipKey = ipRateLimitKey(ip);
+  // Un viewer qui revient avec sa cle (ecran verrouille, wifi) ne compte pas.
+  const resuming = roomCode !== null && knownKey(roomCode, hs.cle);
+  if (!resuming) {
+    if (overLimit(`live:${ipKey}`, LIVE_ATTEMPTS, now)) return { ok: false, code: "live_limite" };
+    count(`live:${ipKey}`, now);
   }
-  if (hs.kind === "overlay") {
-    const secret = deps.overlaySecret === undefined ? readOverlaySecret() : deps.overlaySecret;
-    if (!secret) return { ok: false, code: "overlay_desactive" };
-    const check = verifyOverlayToken({ roomCode, roomId: room.id, token: hs.jeton, now }, secret);
-    if (!check.ok) return { ok: false, code: check.reason === "expired" ? "overlay_expire" : "overlay_refuse" };
-    return { ok: true, data: { kind: "overlay", roomCode, roomId: room.id, expiresAt: check.expiresAt } };
-  }
+  const room = roomCode ? await (deps.findRoom ?? lookupRoom)(roomCode) : null;
+  if (!roomCode || !room || room.mode !== "streamer") return { ok: false, code: "live_introuvable" };
   // Une salle finie et videe de la memoire n'accueille plus personne.
   if (room.status === "finished" && !getStreamerState(roomCode)) return { ok: false, code: "live_introuvable" };
-  const joined = joinViewer(roomCode, { pseudo: hs.pseudo, key: hs.cle }, now);
+  const joined = joinViewer(roomCode, { pseudo: hs.pseudo, key: hs.cle, ipKey }, now);
   if (!joined.ok) return { ok: false, code: joined.code };
   return { ok: true, data: { kind: "live", roomCode, viewerId: joined.viewer.id } };
 }
@@ -181,7 +213,10 @@ export function attachViewer(io: Server, socket: Socket, data: Extract<StreamerS
   socket.join(viewersRoom(roomCode));
   socket.join(viewerSelfRoom(roomCode, viewerId));
   viewerPresence(roomCode, viewerId, 1);
-  socket.on("disconnect", () => viewerPresence(roomCode, viewerId, -1));
+  socket.on("disconnect", () => {
+    viewerPresence(roomCode, viewerId, -1);
+    refreshViewerCount(io, roomCode);
+  });
   sendLiveInit(socket, roomCode, viewerId);
   refreshViewerCount(io, roomCode);
 

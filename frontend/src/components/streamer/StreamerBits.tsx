@@ -5,7 +5,8 @@
  * l'overlay OBS et la page viewer : classement en tracklist, carte du reveal,
  * minuteur, podium. Univers Club analogique : papier, encre, ombres dures.
  */
-import { MessageSquare } from "lucide-react"
+import { useState } from "react"
+import { MessageSquare, UserX } from "lucide-react"
 import type { StreamerLeaderEntry, StreamerRound } from "@/lib/types"
 
 export const SAGE = "#7d9471"
@@ -19,10 +20,28 @@ export interface LeaderboardProps {
   meId?: string | null
   emptyLabel?: string
   size?: "md" | "lg"
+  /** Page du streamer : un bouton « Exclure » par ligne. */
+  onKick?: (id: string, pseudo: string) => void
+}
+
+/** « Exclure » en deux temps : un clic arme, le second confirme (pas de fenetre du navigateur). */
+export function KickButton({ pseudo, onConfirm }: { pseudo: string; onConfirm: () => void }) {
+  const [armed, setArmed] = useState(false)
+  return (
+    <button
+      type="button"
+      onClick={() => (armed ? onConfirm() : setArmed(true))}
+      onBlur={() => setArmed(false)}
+      aria-label={armed ? `Confirmer : exclure ${pseudo}` : `Exclure ${pseudo}`}
+      className={`inline-flex shrink-0 items-center gap-1 rounded-full border-[1.5px] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em] transition ${armed ? "border-[#9c2f1d] bg-[#9c2f1d] text-[#f4ecdb]" : "border-[#2e2014]/40 text-[#6b573f] hover:border-[#9c2f1d] hover:text-[#9c2f1d]"}`}
+    >
+      <UserX aria-hidden className="h-3 w-3" /> {armed ? "Confirmer" : "Exclure"}
+    </button>
+  )
 }
 
 /** « Face B · Classement » : rang, pseudo, pointilles, points. */
-export function Leaderboard({ entries, meId, emptyLabel = "Personne n'a encore marqué.", size = "md" }: LeaderboardProps) {
+export function Leaderboard({ entries, meId, emptyLabel = "Personne n'a encore marqué.", size = "md", onKick }: LeaderboardProps) {
   const text = size === "lg" ? "text-xl" : "text-sm"
   if (!entries.length) return <p className={`m-0 text-[#6b573f] ${text}`}>{emptyLabel}</p>
   return (
@@ -40,6 +59,7 @@ export function Leaderboard({ entries, meId, emptyLabel = "Personne n'a encore m
           ) : null}
           <span aria-hidden className="mx-1 min-w-4 flex-1 border-b-2 border-dotted border-[#2e2014]/30" />
           <span className="w-14 shrink-0 text-right font-display font-semibold tabular-nums text-[#2e2014]">{e.score}</span>
+          {onKick ? <KickButton pseudo={e.pseudo} onConfirm={() => onKick(e.id, e.pseudo)} /> : null}
         </li>
       ))}
     </ol>

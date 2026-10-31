@@ -10,8 +10,8 @@ import { bootstrapGameState, getGameState, gameStateSnapshot, revealedRoundCeili
 import { startRoundAndBroadcast } from "../services/realtimeOrchestrator";
 import { GameMode, type RoundTrack } from "../types/game";
 import { initStreamerGame } from "../services/streamerOrchestrator";
-import { streamerModeEnabled } from "../services/streamerConfig";
-import { hostStreamerState } from "../services/streamerGame";
+import { maxStreamerGames, streamerModeEnabled } from "../services/streamerConfig";
+import { activeStreamerGames, hostStreamerState } from "../services/streamerGame";
 import { startTwitch } from "../services/streamerTwitch";
 import { cleanChannel } from "../services/twitchChat";
 import { streamerStartRefusal } from "./streamerController";
@@ -150,6 +150,12 @@ export const roomsController = {
     // Interrupteur STREAMER_MODE=off (T5) : plus de nouvelle salle streamer.
     if (mode === GameMode.STREAMER && !streamerModeEnabled()) {
       fail(res, "streamer_off", "Le mode streamer est fermé pour le moment.", 403);
+      return;
+    }
+    // Serveur plein (STREAMER_MAX_GAMES) : on le dit avant que le streamer
+    // prepare son OBS, pas au clic sur Lancer.
+    if (mode === GameMode.STREAMER && activeStreamerGames().length >= maxStreamerGames()) {
+      fail(res, "streamer_full", "Trop de lives en même temps sur Blindz. Réessaie dans quelques minutes.", 503);
       return;
     }
 

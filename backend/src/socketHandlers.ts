@@ -50,7 +50,8 @@ import {
   advanceStreamerRound,
   getStreamerSnapshot,
 } from "./services/streamerOrchestrator";
-import { endStreamerGame, hostBack, hostLeft, hostStreamerState } from "./services/streamerGame";
+import { endStreamerGame, hostBack, hostLeft, hostStreamerState, kickViewer } from "./services/streamerGame";
+import { streamerModeEnabled } from "./services/streamerConfig";
 import { mediaRoom } from "./services/streamerChannels";
 import { viewerCount } from "./services/streamerViewers";
 import {
@@ -277,6 +278,9 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
         const result = await authorizeStreamerSocket(streamerRequest, handshakeIp(socket));
         if (!result.ok) {
           logger.info("streamer_socket_refuse", { kind: streamerRequest.kind, code: result.code });
+          // Interrupteur coupe pendant un live : la partie finit ici, proprement.
+          const salle = validRoomCode(streamerRequest.salle)?.toUpperCase();
+          if (result.code === "live_desactive" && salle) endStreamerGame(io, salle);
           return next(new Error(result.code));
         }
         (socket.data as { streamer?: unknown }).streamer = result.data;
@@ -966,11 +970,27 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
         emitRoomError(socket, roomCode, "Partie streamer introuvable.");
         return;
       }
+      if (event === "host:start" && !streamerModeEnabled()) {
+        // STREAMER_MODE=off pendant le live : podium, sans ouvrir de manche.
+        endStreamerGame(io, roomCode);
+        emitRoomError(socket, roomCode, "Le mode streamer vient d'être coupé sur le serveur : la partie s'arrête ici.", "streamer_off");
+        return;
+      }
       if (event === "host:start") advanceStreamerRound(io, roomCode);
       else endStreamerGame(io, roomCode);
     };
     socket.on("host:start", streamerHostAction("host:start"));
     socket.on("host:end", streamerHostAction("host:end"));
+
+    // « Exclure » un viewer (pseudo offensant, triche) : hote seulement.
+    socket.on("host:kick", async (payload: { roomCode?: unknown; viewerId?: unknown }) => {
+      const roomCode = validRoomCode(payload?.roomCode);
+      const viewerId = typeof payload?.viewerId === "string" && /^[A-Za-z0-9_-]{1,16}$/.test(payload.viewerId) ? payload.viewerId : null;
+      if (!roomCode || !viewerId || !allowEvent(socket.id, "host:kick", 20, 10_000)) return;
+      const access = await requireRoomAccess(roomCode, currentUser.id);
+      if (!access?.isHost || access.room.mode !== GameMode.STREAMER) return;
+      if (kickViewer(io, roomCode, viewerId)) logger.info("streamer_viewer_exclu", { roomCode });
+    });
 
     socket.on("disconnecting", () => {
       // Les rooms « stream:… » du mode streamer ne sont pas des salles.
