@@ -71,4 +71,6 @@ export interface StreamerState {
   answersCount?: number;
   /** Top 5 des viewers, mis a jour a chaque reveal final. */
   leaderboard?: StreamerLeaderEntry[];
+  /** Chaine Twitch dont le chat est lu (T5b), ou null. */
+  twitchChannel?: string | null;
 }

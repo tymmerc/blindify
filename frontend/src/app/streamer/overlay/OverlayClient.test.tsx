@@ -121,6 +121,12 @@ describe("overlay OBS", () => {
     expect(FakeAudio.last?.pause).toHaveBeenCalled()
   })
 
+  it("chat Twitch actif : rappel du format !b sous le code", () => {
+    render(<OverlayClient />)
+    init(game({ twitchChannel: "tymmerc" }))
+    expect(screen.getByTestId("overlay-chat-hint")).toHaveTextContent("!b titre - artiste")
+  })
+
   it("fin de partie : podium", () => {
     render(<OverlayClient />)
     init(game({ phase: "GAME_OVER", leaderboard: [{ id: "a", pseudo: "Lena", score: 90, source: "page" }, { id: "b", pseudo: "Malik", score: 60, source: "page" }] }))

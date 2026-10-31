@@ -21,6 +21,7 @@ export function initStreamerGame(io: IOServer, params: {
   shortReason?: "library" | "lookup" | null;
   sessionId?: number | null;
   timings?: Partial<StreamerTimings>;
+  twitchChannel?: string | null;
 }) {
   const state = bootstrapStreamerGame(params);
   emitStreamerState(io, params.roomCode, "state:sync", state);

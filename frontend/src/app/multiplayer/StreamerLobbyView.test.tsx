@@ -22,7 +22,7 @@ function props(over: Partial<LobbyRendererProps> = {}): LobbyRendererProps {
     friendsError: null, activeFriends: [], onQuickJoin: vi.fn(), onInviteFriend: vi.fn(), onStart: vi.fn(), starting: false, invites: [],
     onAcceptInvite: vi.fn(), canStart: true, isHost: true, isGuest: false, room: ROOM, currentUserId: 12, importing: false,
     onImportingChange: vi.fn(),
-    streamer: { subMode: "viewers_only", setSubMode: vi.fn(), viewerCount: 0 },
+    streamer: { subMode: "viewers_only", setSubMode: vi.fn(), viewerCount: 0, twitchChannel: "", setTwitchChannel: vi.fn() },
     ...over,
   } as unknown as LobbyRendererProps
 }
@@ -73,12 +73,27 @@ describe("lobby du streamer", () => {
 
   it("les formats envoient les valeurs du serveur", () => {
     const setSubMode = vi.fn()
-    render(<StreamerLobbyView {...props({ streamer: { subMode: "viewers_only", setSubMode, viewerCount: 4 } })} />)
+    render(<StreamerLobbyView {...props({ streamer: { subMode: "viewers_only", setSubMode, viewerCount: 4, twitchChannel: "", setTwitchChannel: vi.fn() } })} />)
     fireEvent.click(screen.getByRole("radio", { name: /Ton chat, puis toi/ }))
     expect(setSubMode).toHaveBeenLastCalledWith("duo")
     fireEvent.click(screen.getByRole("radio", { name: /Toi tout seul/ }))
     expect(setSubMode).toHaveBeenLastCalledWith("solo")
     expect(screen.getByTestId("streamer-viewers")).toHaveTextContent("4 viewers prêts")
+  })
+
+  it("chat Twitch : champ facultatif, nom invalide refuse au lancement, rappel du format !b", () => {
+    const setTwitchChannel = vi.fn()
+    const base = { subMode: "viewers_only" as const, setSubMode: vi.fn(), viewerCount: 0, setTwitchChannel }
+    const { rerender } = render(<StreamerLobbyView {...props({ streamer: { ...base, twitchChannel: "" } })} />)
+    fireEvent.change(screen.getByLabelText("Ta chaîne Twitch (facultatif)"), { target: { value: "TymMerc" } })
+    expect(setTwitchChannel).toHaveBeenCalledWith("TymMerc")
+    rerender(<StreamerLobbyView {...props({ streamer: { ...base, twitchChannel: "tym merc" } })} />)
+    expect(screen.getByRole("button", { name: "Lancer la partie" })).toBeDisabled()
+    rerender(<StreamerLobbyView {...props({ streamer: { ...base, twitchChannel: "https://twitch.tv/tymmerc" } })} />)
+    expect(screen.getByRole("button", { name: "Lancer la partie" })).toBeEnabled()
+    expect(screen.getByText("!b titre - artiste")).toBeInTheDocument()
+    rerender(<StreamerLobbyView {...props({ streamer: { ...base, subMode: "solo", twitchChannel: "" } })} />)
+    expect(screen.queryByLabelText("Ta chaîne Twitch (facultatif)")).toBeNull()
   })
 
   it("le bouton Lancer lance", () => {

@@ -316,6 +316,7 @@ export type StreamerState = {
   viewerCount?: number
   answersCount?: number
   leaderboard?: StreamerLeaderEntry[]
+  twitchChannel?: string | null
 }
 
 export type ImportedLink = {

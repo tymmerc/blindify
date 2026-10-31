@@ -60,6 +60,25 @@ export function isFormError(code: LiveErrorCode): boolean {
 
 export const LIVE_CODE_FORMAT = /^[A-Z0-9]{4,8}$/
 
+/** Nom de chaine Twitch, meme regle que le serveur (twitchChat.ts). */
+export const TWITCH_CHANNEL_FORMAT = /^[a-z0-9_]{3,25}$/
+
+/** Nom tape ou lien colle -> nom de chaine, ou "" si vide. Null s'il n'est pas valable. */
+export function cleanTwitchChannel(raw: string): string | null {
+  const value = raw.trim().toLowerCase().replace(/^#/, "").replace(/^https?:\/\/(www\.)?twitch\.tv\//, "").replace(/\/+$/, "")
+  if (!value) return ""
+  return TWITCH_CHANNEL_FORMAT.test(value) ? value : null
+}
+
+export type TwitchStatus = "connexion" | "connecte" | "reconnexion" | "ferme"
+
+export const TWITCH_STATUS_TEXT: Record<TwitchStatus, string> = {
+  connexion: "connexion…",
+  connecte: "lu en direct",
+  reconnexion: "coupé, on se reconnecte…",
+  ferme: "fermé",
+}
+
 export function cleanLiveCode(raw: string): string {
   return raw.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8)
 }

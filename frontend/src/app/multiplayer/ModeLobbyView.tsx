@@ -195,6 +195,23 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     noticeTimerRef.current = setTimeout(() => setSocketNotice(null), 6000)
   }, [])
   const [streamerMode, setStreamerMode] = useState<StreamerSubMode>("viewers_only")
+  // Chat Twitch (T5b) : la chaine du streamer, gardee pour son prochain live.
+  const [twitchChannel, setTwitchChannelState] = useState("")
+  useEffect(() => {
+    try {
+      setTwitchChannelState(window.localStorage.getItem("blindz_twitch_channel") ?? "")
+    } catch {
+      // Stockage bloque : le champ reste vide.
+    }
+  }, [])
+  const setTwitchChannel = useCallback((value: string) => {
+    setTwitchChannelState(value)
+    try {
+      window.localStorage.setItem("blindz_twitch_channel", value)
+    } catch {
+      // Stockage bloque : la valeur vaut pour cette page seulement.
+    }
+  }, [])
   const abortFlowRef = useRef(false)
   // Join en cours, relances comprises : coupe quand le joueur repart (page
   // quittee, "Retour au menu"). Aucun essai ne part apres son depart, et une
@@ -1168,10 +1185,13 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         // Pre-warm the audio element during this user interaction (click).
         // This unlocks autoplay so the round start audio plays without manual click.
         audioManager.warmup()
-        const payload: { source?: string; playlistId?: string; subMode?: string } = {
+        const payload: { source?: string; playlistId?: string; subMode?: string; twitchChannel?: string } = {
           source: "library",
         }
-        if (mode === "streamer") payload.subMode = streamerMode
+        if (mode === "streamer") {
+          payload.subMode = streamerMode
+          if (twitchChannel.trim()) payload.twitchChannel = twitchChannel.trim()
+        }
         const { tracks: generatedTracks, gameState: initialState } = await api.startMultiplayerGame(room.room_code, payload)
         setTracks(generatedTracks)
         if (initialState) {
@@ -1229,7 +1249,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         setStarting(false)
       }
     },
-    [room, canStartGame, mode, resolveViewFromState, viewToLobbyAction, streamerMode]
+    [room, canStartGame, mode, resolveViewFromState, viewToLobbyAction, streamerMode, twitchChannel]
   )
 
   useEffect(() => {
@@ -1553,7 +1573,9 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     chatMessages,
     onSendChat: room ? sendChat : undefined,
     rps: room ? rps : undefined,
-    streamer: mode === "streamer" ? { subMode: streamerMode, setSubMode: setStreamerMode, viewerCount: streamerFeed.viewerCount } : undefined,
+    streamer: mode === "streamer"
+      ? { subMode: streamerMode, setSubMode: setStreamerMode, viewerCount: streamerFeed.viewerCount, twitchChannel, setTwitchChannel }
+      : undefined,
   }
 
   const selectedLobby = (() => {
@@ -1594,6 +1616,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
           serverNow={serverNow}
           viewerCount={streamerFeed.viewerCount}
           answers={streamerFeed.answers}
+          twitch={streamerFeed.twitch}
           onHostGuess={guess => socketRef.current?.emit("game:guess", { roomCode: room.room_code, ...guess })}
           onHostStart={() => socketRef.current?.emit("host:start", { roomCode: room.room_code })}
           onHostEnd={() => socketRef.current?.emit("host:end", { roomCode: room.room_code })}

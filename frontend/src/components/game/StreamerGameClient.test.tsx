@@ -57,6 +57,11 @@ describe("ecran du streamer", () => {
     expect(audioManager.play).toHaveBeenCalledWith(expect.objectContaining({ src: "https://extraits.test/1.mp3" }))
   })
 
+  it("chat Twitch : la chaine lue et son etat", () => {
+    renderHost(state({ twitchChannel: "tymmerc" }), { twitch: { channel: "tymmerc", status: "connecte" } })
+    expect(screen.getByTestId("streamer-twitch")).toHaveTextContent("Chat #tymmerc : lu en direct")
+  })
+
   it("finir la partie a tout moment", () => {
     const props = renderHost(state())
     fireEvent.click(screen.getByTestId("streamer-end"))

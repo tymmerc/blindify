@@ -69,7 +69,7 @@ const FAQ: Array<{ q: string; a: string; more?: ReactNode }> = [
   // T5 (31/10/2026) : reponse du mode streamer, a valider par Tym.
   {
     q: "Je peux faire un blind test en live avec mon chat ?",
-    a: "Oui, avec le mode « Avec ta communauté ». Tu ajoutes l'overlay dans OBS, il joue la musique dans ton stream et affiche le code, et tes viewers répondent sur blindz.app/live depuis leur téléphone, avec un classement en direct. Les extraits viennent de Deezer et Blindz ne te donne aucune licence : tu restes responsable des droits sur ta plateforme, et sur Twitch une VOD coupée ou des clips supprimés restent possibles. On te conseille de garder la musique hors de ta VOD, le guide OBS est sur la page du mode.",
+    a: "Oui, avec le mode « Avec ta communauté ». Tu ajoutes l'overlay dans OBS, il joue la musique dans ton stream et affiche le code, et tes viewers répondent sur blindz.app/live depuis leur téléphone, ou dans ton chat Twitch en tapant !b titre - artiste (avec moins de points), avec un classement en direct. Les extraits viennent de Deezer et Blindz ne te donne aucune licence : tu restes responsable des droits sur ta plateforme, et sur Twitch une VOD coupée ou des clips supprimés restent possibles. On te conseille de garder la musique hors de ta VOD, le guide OBS est sur la page du mode.",
   },
   {
     q: "Mon lien de playlist n'est pas accepté, qu'est-ce qui cloche ?",

@@ -12,6 +12,8 @@ import { GameMode, type RoundTrack } from "../types/game";
 import { initStreamerGame } from "../services/streamerOrchestrator";
 import { streamerModeEnabled } from "../services/streamerConfig";
 import { hostStreamerState } from "../services/streamerGame";
+import { startTwitch } from "../services/streamerTwitch";
+import { cleanChannel } from "../services/twitchChat";
 import { streamerStartRefusal } from "./streamerController";
 import { activeLinkIds } from "./linksController";
 import { bySmallestLibrary, ownersAmong, PLAYS_TONIGHT } from "../services/userTracks";
@@ -672,10 +674,18 @@ export const roomsController = {
       return;
     }
 
+    // Chat Twitch (T5b) : facultatif, mais un nom donne doit etre valable.
+    // Verifie avant tout tirage, pour ne rien laisser a moitie lance.
+    const rawChannel = typeof req.body?.twitchChannel === "string" ? req.body.twitchChannel.trim() : "";
+    const twitchChannel = rawChannel ? cleanChannel(rawChannel) : null;
     if (room.mode === GameMode.STREAMER) {
       const refusal = streamerStartRefusal(room.room_code);
       if (refusal) {
         fail(res, refusal.code, refusal.message, refusal.status);
+        return;
+      }
+      if (rawChannel && !twitchChannel) {
+        fail(res, "chaine_invalide", "Ce nom de chaîne Twitch n'est pas valable (3 à 25 lettres, chiffres ou _).", 400);
         return;
       }
     }
@@ -1222,7 +1232,9 @@ export const roomsController = {
         sessionId: session.id,
         // « Temps pour repondre » du lobby : la phase du public.
         timings: { chatMs: roundDurationMs },
+        twitchChannel,
       });
+      if (twitchChannel) startTwitch(io, room.room_code, twitchChannel);
       ok(res, {
         session: {
           id: session.id,

@@ -33,6 +33,9 @@ export type StreamerLobbyExtras = {
   subMode: StreamerSubMode
   setSubMode: (mode: StreamerSubMode) => void
   viewerCount: number
+  /** Chat Twitch (T5b) : chaine dont le chat sera lu, vide si aucune. */
+  twitchChannel: string
+  setTwitchChannel: (channel: string) => void
 }
 
 export type LobbyRendererProps = {

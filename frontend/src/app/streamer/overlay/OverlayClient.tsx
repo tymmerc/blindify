@@ -42,7 +42,7 @@ function useStageScale(): number {
   return scale
 }
 
-function JoinCard({ code, large = false }: { code: string; large?: boolean }) {
+function JoinCard({ code, large = false, chat = false }: { code: string; large?: boolean; chat?: boolean }) {
   return (
     <div className={`${CARD} flex items-center gap-6 p-6`} data-testid="overlay-join">
       <div className="rounded-md border-[3px] border-[#2e2014] bg-white p-2">
@@ -53,6 +53,7 @@ function JoinCard({ code, large = false }: { code: string; large?: boolean }) {
         <p className={`m-0 font-display font-semibold ${large ? "text-5xl" : "text-4xl"}`}>{liveLabel()}</p>
         <p className="m-0 mt-3 text-xl font-bold uppercase tracking-[0.2em] text-[#6b573f]">Code</p>
         <p className={`m-0 font-display font-bold tracking-[0.18em] ${large ? "text-8xl" : "text-6xl"}`}>{code}</p>
+        {chat ? <p className="m-0 mt-2 text-2xl" data-testid="overlay-chat-hint">ou dans le chat : <b>!b titre - artiste</b></p> : null}
       </div>
     </div>
   )
@@ -95,7 +96,7 @@ function Stage({ view, now }: { view: OverlayView; now: number }) {
     return (
       <Corner className="bottom-12 left-12">
         <div className="space-y-4">
-          <JoinCard code={code} large />
+          <JoinCard code={code} large chat={Boolean(game?.twitchChannel)} />
           <p className={`${CARD} m-0 inline-block px-5 py-3 text-2xl font-semibold`}>{view.viewerCount} joueur{view.viewerCount > 1 ? "s" : ""} prêt{view.viewerCount > 1 ? "s" : ""}</p>
         </div>
       </Corner>
@@ -131,7 +132,7 @@ function Stage({ view, now }: { view: OverlayView; now: number }) {
         </div>
       </Corner>
       <Corner className="bottom-12 left-12">
-        <JoinCard code={code} />
+        <JoinCard code={code} chat={Boolean(game.twitchChannel)} />
       </Corner>
     </>
   )

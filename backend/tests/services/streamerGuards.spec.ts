@@ -123,8 +123,8 @@ describe("viewers", () => {
   it("un pseudo du chat et un pseudo de la page ne se confondent pas", () => {
     expect(joinViewer(ROOM, { pseudo: "Lena" }).ok).toBe(true);
     const chat = chatViewer(ROOM, "lena", "Lena");
-    expect(chat?.source).toBe("chat");
-    expect(chatViewer(ROOM, "lena", "Lena")?.id).toBe(chat?.id);
+    expect(chat).toMatchObject({ created: true, viewer: { source: "chat", pseudo: "Lena" } });
+    expect(chatViewer(ROOM, "lena", "Lena")).toMatchObject({ created: false, viewer: { id: chat?.viewer.id } });
   });
 });
 

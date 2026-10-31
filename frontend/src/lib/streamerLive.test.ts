@@ -6,6 +6,7 @@ import {
   answersOf,
   canAnswer,
   cleanLiveCode,
+  cleanTwitchChannel,
   elapsedRatio,
   initialLiveView,
   initialOverlayView,
@@ -89,6 +90,16 @@ describe("page viewer", () => {
     expect(liveErrorCode("pseudo_pris")).toBe("pseudo_pris")
     expect(liveErrorCode("xss<script>")).toBe("reseau")
     expect(cleanLiveCode(" ab-12 cd ")).toBe("AB12CD")
+  })
+})
+
+describe("chaine Twitch", () => {
+  it("nom, #nom ou lien ; vide accepte ; invalide refuse", () => {
+    expect(cleanTwitchChannel(" TymMerc ")).toBe("tymmerc")
+    expect(cleanTwitchChannel("https://www.twitch.tv/tymmerc/")).toBe("tymmerc")
+    expect(cleanTwitchChannel("")).toBe("")
+    expect(cleanTwitchChannel("ab")).toBeNull()
+    expect(cleanTwitchChannel("tym-merc")).toBeNull()
   })
 })
 

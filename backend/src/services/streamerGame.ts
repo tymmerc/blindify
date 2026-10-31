@@ -17,7 +17,7 @@ import type { Server as IOServer } from "socket.io";
 import type { StreamerState, StreamerRound, StreamerSubMode } from "../types/streamer";
 import { markMultiplayerRoomFinished, markStreamerSessionFinished } from "./gamePersistence";
 import { HIDDEN_PHASES, emitStreamerState, emitToMedia, mediaView, viewerView } from "./streamerChannels";
-import { scoreViewerAnswer, type AnswerWindow, type ViewerAnswer } from "./streamerScoring";
+import { chatFactor, scoreViewerAnswer, type AnswerWindow, type ViewerAnswer } from "./streamerScoring";
 import { evaluateGuessDetail } from "./guessMatching";
 import {
   clearViewers,
@@ -48,9 +48,6 @@ export interface ViewerRoundResult {
   points: number;
 }
 
-/** Points du chat Twitch (T5b) : facteur applique a une reponse selon son heure. */
-export type AnswerFactor = (viewerId: string, answer: ViewerAnswer) => number;
-
 /** Durees d'une manche. Les tests d'integration les raccourcissent. */
 export interface StreamerTimings {
   countdownMs: number;
@@ -77,11 +74,15 @@ interface StreamerCtx {
 }
 
 const games = new Map<string, StreamerCtx>();
-let answerFactor: AnswerFactor = () => 1;
+const endListeners: Array<(roomCode: string) => void> = [];
 
-/** Branche le bareme du chat Twitch (T5b). Par defaut, plein bareme partout. */
-export function setAnswerFactor(fn: AnswerFactor): void {
-  answerFactor = fn;
+/** Fin de partie (fin normale, « Finir », hote parti, nettoyage) : le chat Twitch s'y ferme. */
+export function onStreamerGameEnd(fn: (roomCode: string) => void): void {
+  endListeners.push(fn);
+}
+
+function notifyEnd(roomCode: string): void {
+  for (const fn of endListeners) fn(roomCode);
 }
 
 /** Une personne precise recoit son resultat : la room socket.io de ce viewer. */
@@ -109,6 +110,7 @@ export function bootstrapStreamerGame(params: {
   shortReason?: "library" | "lookup" | null;
   sessionId?: number | null;
   timings?: Partial<StreamerTimings>;
+  twitchChannel?: string | null;
 }): StreamerState {
   clearStreamerGame(params.roomCode, { keepViewers: true });
   resetViewerScores(params.roomCode);
@@ -132,6 +134,7 @@ export function bootstrapStreamerGame(params: {
     viewerCount: viewerCount(params.roomCode),
     answersCount: 0,
     leaderboard: [],
+    twitchChannel: params.twitchChannel ?? null,
   };
   games.set(params.roomCode, {
     state,
@@ -158,6 +161,7 @@ export function activeStreamerGames(): string[] {
 export function clearStreamerGame(roomCode: string, opts: { keepViewers?: boolean } = {}): void {
   const ctx = games.get(roomCode);
   if (ctx) for (const t of Object.values(ctx.timers)) if (t) clearTimeout(t);
+  if (ctx) notifyEnd(roomCode);
   games.delete(roomCode);
   if (!opts.keepViewers) clearViewers(roomCode);
 }
@@ -293,14 +297,28 @@ export function recordStreamerGuess(
   revealFinal(io, ctx);
 }
 
+/** Heure de la premiere reponse du chat qui trouve quelque chose (anti-spoiler, T5b). */
+function firstChatHit(ctx: StreamerCtx, track: StreamerRound): number | null {
+  let first: number | null = null;
+  for (const [viewerId, answer] of ctx.answers) {
+    if (getViewer(ctx.state.roomCode, viewerId)?.source !== "chat") continue;
+    if (first !== null && answer.at >= first) continue;
+    const d = evaluateGuessDetail("", track, answer.title, answer.artist);
+    if (d.matchedTitle || d.matchedArtist) first = answer.at;
+  }
+  return first;
+}
+
 /** Note les reponses de la manche et credite les viewers. Rien n'est publie ici. */
 function scoreAnswers(ctx: StreamerCtx, track: StreamerRound): ViewerRoundResult[] {
   const window = ctx.window;
   if (!window) return [];
   const roomCode = ctx.state.roomCode;
+  const firstHit = firstChatHit(ctx, track);
   const results: ViewerRoundResult[] = [];
   for (const [viewerId, answer] of ctx.answers) {
-    const score = scoreViewerAnswer(answer, track, window, answerFactor(viewerId, answer));
+    const fromChat = getViewer(roomCode, viewerId)?.source === "chat";
+    const score = scoreViewerAnswer(answer, track, window, fromChat ? chatFactor(answer.at, firstHit) : 1);
     if (score.points > 0) {
       updateViewer(roomCode, viewerId, v => ({
         ...v,
@@ -420,6 +438,7 @@ function finishGame(io: IOServer, ctx: StreamerCtx): void {
     timing: { startAt: null, endAt: null },
     ...(unrevealed ? { currentTrack: null } : {}),
   });
+  notifyEnd(roomCode);
   broadcast(io, ctx);
   void markMultiplayerRoomFinished(roomCode);
   void markStreamerSessionFinished(ctx.sessionId, ctx.state.currentRound);

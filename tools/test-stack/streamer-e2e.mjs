@@ -14,6 +14,9 @@
 //     de l'overlay sont ceux attendus ;
 //  5. captures : overlay sur fond sombre et sur fond clair (transparence),
 //     page viewer sur iPhone, page du streamer sur ordinateur.
+//  6. (T5b) le chat Twitch, par le faux serveur IRC : les reponses `!b` sont
+//     lues pendant la manche, le chat gagne moitie moins, le copieur presque
+//     rien, et la lecture reprend apres une coupure du chat.
 // Code 0 si tout passe, 1 sinon.
 import fs from "node:fs"
 import path from "node:path"
@@ -23,6 +26,9 @@ import { Bot, api } from "./bot.mjs"
 import { catalog } from "./catalog.mjs"
 import { APP, heardTrack, newPage, sleep } from "./probe.mjs"
 
+const IRC = "http://127.0.0.1:3180/twitch-irc-stub"
+const CHANNEL = "chaine_de_test"
+const chat = messages => fetch(`${IRC}/say`, { method: "POST", body: JSON.stringify(messages) }).then(r => r.json())
 const OUT = process.argv[2] || `/opt/blindify/.test-stack/logs/streamer-${Date.now()}`
 fs.mkdirSync(OUT, { recursive: true })
 const CAT = catalog()
@@ -77,7 +83,11 @@ async function openHost(browser) {
   if (!overlayUrl) throw new Error("lobby : pas de lien d'overlay")
   await p.getByRole("radio", { name: /Ton chat, puis toi/ }).click()
   await p.getByRole("button", { name: "10s", exact: true }).click()
-  return { host, code, overlayUrl }
+  // T5b : la chaine Twitch, si le lobby la propose (absente sur T5a).
+  const twitchField = p.getByLabel("Ta chaîne Twitch (facultatif)")
+  const withChat = await twitchField.isVisible().catch(() => false)
+  if (withChat) await twitchField.fill(CHANNEL)
+  return { host, code, overlayUrl, withChat }
 }
 
 /** L'adresse du lien d'overlay pointe sur la pile (base du front). */
@@ -137,7 +147,7 @@ async function main() {
     console.log("1. Lobby du streamer et overlay")
     const opened = await openHost(browser)
     host = opened.host
-    const { code, overlayUrl } = opened
+    const { code, overlayUrl, withChat } = opened
     ok(`salle ${code}, lien d'overlay signe ${overlayUrl.includes("jeton=") ? "present" : "ABSENT"}`)
     const overlayLink = overlayOnStack(overlayUrl)
     overlay = await newPage(browser, { viewport: { width: 1920, height: 1080 } }, "overlay", problems)
@@ -171,11 +181,23 @@ async function main() {
     else if (heard.k !== t1.k) bad(`overlay : mauvais morceau (k=${heard.k}, attendu ${t1.k})`)
     else ok(`overlay : joue le bon morceau (${heard.title})`)
     await shot(viewers[0].page, "viewer-2-manche")
+    if (withChat) {
+      await host.page.getByTestId("streamer-twitch").getByText("lu en direct").waitFor({ timeout: 10000 })
+        .then(() => ok("chat Twitch : lu en direct"), () => bad("chat Twitch : pas connecte au faux IRC"))
+      const r = await chat([
+        { channel: CHANNEL, login: "chatteur1", displayName: "Chatteur1", text: `!b ${t1.title} - ${t1.artist}` },
+        { channel: CHANNEL, login: "bavard", text: `${t1.title} c'est facile` },
+        { channel: CHANNEL, login: "chatteur1", text: "!b autre - reponse" },
+      ])
+      if (r.delivered !== 3) bad(`faux chat : ${r.delivered} message(s) remis sur 3`)
+      await sleep(3000)
+      await chat({ channel: CHANNEL, login: "copieur", displayName: "Copieur", text: `!b ${t1.title} - ${t1.artist}` })
+    }
     await answer(viewers[0], t1.title, t1.artist)
     await answer(viewers[1], t1.title, "")
     await answer(viewers[2], "pas du tout", "personne")
     await shot(viewers[0].page, "viewer-3-envoye")
-    await host.page.getByTestId("streamer-arrivals").getByText("3 réponses").waitFor({ timeout: 6000 }).then(() => ok("le streamer voit 3 réponses"), () => bad("le streamer ne voit pas les 3 réponses"))
+    await host.page.getByTestId("streamer-arrivals").getByText(withChat ? "5 réponses" : "3 réponses").waitFor({ timeout: 6000 }).then(() => ok(`le streamer voit ${withChat ? 5 : 3} réponses`), () => bad("le streamer ne voit pas toutes les réponses"))
     const hostText = await host.page.textContent("body")
     if (hostText.includes(t1.title)) bad("page du streamer : le titre est affiche avant le reveal")
     await shot(host.page, "streamer-2-manche")
@@ -198,6 +220,18 @@ async function main() {
     else bad(`Zoe : resultat inattendu (${r2})`)
     if (!(await host.page.textContent("body")).includes("Toi 1 · 0 Chat")) bad("duo : la manche n'est pas au streamer")
     else ok("duo : le streamer gagne la manche 1")
+    if (withChat) {
+      const board = await overlay.page.getByTestId("streamer-leaderboard").textContent()
+      const lines = (await overlay.page.getByTestId("streamer-leaderboard").locator("li").allTextContents()).map(t => t.replace(/\s+/g, " "))
+      const pts = name => Number((lines.find(l => l.includes(name)) ?? "").match(/(\d+)\s*$/)?.[1] ?? NaN)
+      if (!/Chatteur1/.test(board) || !/chat/.test(board)) bad(`overlay : Chatteur1 absent du classement ou sans la marque chat (${board})`)
+      else ok("overlay : le chat est au classement, avec sa marque")
+      const lena = pts("Lena"), c1 = pts("Chatteur1"), cp = pts("Copieur")
+      if (c1 > 0 && c1 <= lena / 2 + 1) ok(`chat : moitié du barème (Chatteur1 ${c1}, Lena ${lena})`)
+      else bad(`chat : barème inattendu (Chatteur1 ${c1}, Lena ${lena})`)
+      if (!Number.isNaN(cp) && cp >= c1 / 2) bad(`anti-spoiler : le copieur garde trop de points (${cp})`)
+      else ok(`anti-spoiler : le copieur 3 s plus tard prend ${Number.isNaN(cp) ? "trop peu pour le top 5" : `${cp} point(s)`}`)
+    }
     await shot(viewers[0].page, "viewer-4-reveal")
     await shot(host.page, "streamer-3-reveal")
     await composite(browser, overlayLink, "#18181b", "overlay-3-reveal-fond-sombre")
@@ -207,12 +241,25 @@ async function main() {
     await host.page.getByTestId("streamer-next").click()
     await viewers[0].page.getByLabel("Titre").waitFor({ timeout: 15000 })
     const t2 = oracle(code, 2)
+    if (withChat) {
+      // Coupure du chat : le lecteur se reconnecte seul, puis lit de nouveau.
+      await fetch(`${IRC}/drop`, { method: "POST" })
+      await host.page.getByTestId("streamer-twitch").getByText("lu en direct").waitFor({ timeout: 10000 })
+        .then(() => ok("chat Twitch : reprise apres une coupure"), () => bad("chat Twitch : pas de reprise apres coupure"))
+      const r = await chat({ channel: CHANNEL, login: "revenant", displayName: "Revenant", text: `!b ${t2.title} - ${t2.artist}` })
+      if (r.delivered !== 1) bad("faux chat : message non remis apres la reprise")
+    }
     await answer(viewers[2], t2.title, t2.artist)
     await host.page.getByTestId("streamer-next").waitFor({ timeout: 40000 })
     reveals.push({ round: 2, title: t2.title, at: Date.now() })
     await host.page.getByTestId("streamer-end").click()
     await overlay.page.getByTestId("overlay-podium").waitFor({ timeout: 10000 })
     const podium = await overlay.page.getByTestId("overlay-podium").textContent()
+    if (withChat) {
+      const finalBoard = await host.page.getByTestId("streamer-leaderboard").textContent()
+      if (finalBoard.includes("Revenant")) ok("chat : la reponse lue apres la reprise compte")
+      else bad(`chat : la reponse lue apres la reprise n'a pas compte (${finalBoard})`)
+    }
     if (["Lena", "Zoe", "Malik"].every(n => podium.includes(n))) ok("overlay : podium des 3 viewers")
     else bad(`overlay : podium inattendu (${podium})`)
     await composite(browser, overlayLink, "#18181b", "overlay-4-podium-fond-sombre")
