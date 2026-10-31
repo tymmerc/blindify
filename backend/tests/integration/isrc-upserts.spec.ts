@@ -35,7 +35,7 @@ const metadataOf = async () =>
   (await pool.query("SELECT metadata FROM audio_sources WHERE provider = 'spotify' AND external_id = $1", [EXT])).rows[0]?.metadata;
 
 beforeAll(async () => {
-  users = await seedUsers(1, "Isrc");
+  users = await seedUsers(2, "Isrc");
 });
 
 beforeEach(async () => {
@@ -60,6 +60,44 @@ describe("import par lien : upsertTrack", () => {
     await upsertTrack(users[0].id, track("JPZ921607277"), "playlistA", null);
     await upsertTrack(users[0].id, track(null), "playlistA", null);
     expect((await metadataOf()).isrc).toBe("JPZ921607277");
+  });
+});
+
+// T4 : upsertTrack est une seule commande (WITH ... INSERT) qui doit faire
+// les deux a la fois, meme quand le morceau existe deja chez un autre joueur :
+// relier CE joueur au morceau (user_audio_sources, avec sa carte) ET fusionner
+// l'ISRC appris dans la metadata.
+describe("upsertTrack : lien du joueur et ISRC dans la meme commande", () => {
+  const linksOf = async () => (await pool.query(
+    `SELECT ua.user_id, ua.link_id FROM user_audio_sources ua
+     JOIN audio_sources a ON a.id = ua.audio_source_id
+     WHERE a.provider = 'spotify' AND a.external_id = $1 ORDER BY ua.user_id`,
+    [EXT]
+  )).rows;
+
+  afterEach(async () => {
+    await pool.query("DELETE FROM imported_links WHERE user_id = ANY($1::int[])", [users.map(u => u.id)]);
+  });
+
+  it("un 2e joueur importe un morceau connu sans ISRC : il y est relie, avec sa carte, et l'ISRC arrive", async () => {
+    const [ana, ben] = users;
+    await upsertTrack(ana.id, track(null), "playlistA", null);
+    expect((await metadataOf()).isrc).toBeNull(); // pas encore d'ISRC
+
+    const { rows: [carte] } = await pool.query<{ id: number }>(
+      `INSERT INTO imported_links (user_id, url, normalized_url, kind, label)
+       VALUES ($1, 'https://open.spotify.com/playlist/b', 'spotify:playlist:b', 'playlist', 'Carte de Ben') RETURNING id`,
+      [ben.id]
+    );
+    await upsertTrack(ben.id, track("JPZ921607277"), "playlistB", carte.id);
+
+    expect(await metadataOf()).toMatchObject({ isrc: "JPZ921607277", playlist_id: "playlistA" });
+    expect(await linksOf()).toEqual([
+      { user_id: ana.id, link_id: null },
+      { user_id: ben.id, link_id: carte.id },
+    ]);
+    const { rows } = await pool.query("SELECT count(*)::int AS n FROM audio_sources WHERE provider = 'spotify' AND external_id = $1", [EXT]);
+    expect(rows[0].n).toBe(1); // un seul morceau, partage
   });
 });
 

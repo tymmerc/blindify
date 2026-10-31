@@ -92,6 +92,19 @@ export type PreviewOutcome =
 
 type CacheEntry = { outcome: PreviewOutcome; ts: number; ttlMs: number };
 
+/**
+ * onStart : appele quand le limiteur (6 places, 40 appels par 5 s) laisse
+ * partir le premier appel Deezer de la demande, juste avant la requete HTTP.
+ * Le lancement d'une salle y demarre le delai d'une recherche : l'attente en
+ * file ne le consomme pas. Jamais appele si la reponse vient du cache.
+ */
+export interface PreviewHooks {
+  onStart?: () => void;
+}
+
+/** Une demande en vol, partagee par les demandes identiques. */
+type Pending = { promise: Promise<PreviewOutcome>; started: boolean; listeners: Array<() => void> };
+
 const NONE: PreviewOutcome = { status: "none" };
 const ERROR: PreviewOutcome = { status: "error" };
 
@@ -124,7 +137,7 @@ function closeDuration(track: DeezerTrack, durationMs?: number | null): boolean 
 
 export class DeezerPreviewService {
   private cache = new Map<string, CacheEntry>();
-  private inFlight = new Map<string, Promise<PreviewOutcome>>();
+  private inFlight = new Map<string, Pending>();
   private requestTimestamps: number[] = [];
   // File d'attente du debit : chaque appel prend son tour, dans l'ordre.
   private throttleQueue: Promise<void> = Promise.resolve();
@@ -171,11 +184,12 @@ export class DeezerPreviewService {
   }
 
   /** Un GET Deezer : une place parmi les 6, puis son tour dans le debit. */
-  private request<T>(url: string, params?: Record<string, unknown>): Promise<T> {
+  private request<T>(url: string, params?: Record<string, unknown>, onStart?: () => void): Promise<T> {
     this.assertNotSuspended();
     return this.withSlot(async () => {
       await this.throttle();
       this.assertNotSuspended(); // le disjoncteur a pu sauter pendant l'attente
+      onStart?.(); // le limiteur laisse passer : l'appel part maintenant
       const { data } = await axios.get<T>(url, { ...(params ? { params } : {}), timeout: 8_000 });
       const code = (data as { error?: { code?: number } } | null)?.error?.code;
       if (code === 4) this.suspendedUntil = this.clock.now() + QUOTA_PAUSE_MS;
@@ -187,13 +201,37 @@ export class DeezerPreviewService {
     if (this.clock.now() < this.suspendedUntil) throw new SuspendedError("Deezer en pause (quota)");
   }
 
-  /** Une seule requete par cle a la fois : les demandes identiques attendent la meme. */
-  private dedupe(key: string, run: () => Promise<PreviewOutcome>): Promise<PreviewOutcome> {
+  /**
+   * Une seule requete par cle a la fois : les demandes identiques attendent la
+   * meme. Une demande qui rejoint un appel deja parti est prevenue tout de
+   * suite (onStart), sinon au depart de cet appel.
+   */
+  private dedupe(key: string, run: (started: () => void) => Promise<PreviewOutcome>, onStart?: () => void): Promise<PreviewOutcome> {
     const pending = this.inFlight.get(key);
-    if (pending) return pending;
-    const p = run().finally(() => this.inFlight.delete(key));
-    this.inFlight.set(key, p);
-    return p;
+    if (pending) {
+      if (onStart) {
+        if (pending.started) onStart();
+        else pending.listeners.push(onStart);
+      }
+      return pending.promise;
+    }
+    const entry: Pending = { promise: Promise.resolve(NONE), started: false, listeners: onStart ? [onStart] : [] };
+    const started = () => {
+      if (entry.started) return;
+      entry.started = true;
+      for (const listener of entry.listeners.splice(0)) {
+        // Un rappel qui leve ne doit priver ni les suivants ni l'appel Deezer
+        // (sinon : faux echec Deezer pour toutes les demandes partagees).
+        try {
+          listener();
+        } catch (err) {
+          logger.error("deezer_onstart_listener_failed", { key, error: err });
+        }
+      }
+    };
+    entry.promise = run(started).finally(() => this.inFlight.delete(key));
+    this.inFlight.set(key, entry);
+    return entry.promise;
   }
 
   private cacheKey(title: string, artist?: string): string {
@@ -224,20 +262,21 @@ export class DeezerPreviewService {
    * Deezer en erreur (quota, panne) : "error" tout de suite, sans recherche en
    * plus, pour ne pas charger davantage un service qui sature.
    */
-  async resolvePreviewOutcome(query: PreviewQuery): Promise<PreviewOutcome> {
+  async resolvePreviewOutcome(query: PreviewQuery, hooks: PreviewHooks = {}): Promise<PreviewOutcome> {
+    const { onStart } = hooks;
     const deezerId = query.deezerId && /^\d{1,15}$/.test(query.deezerId) ? query.deezerId : null;
     if (deezerId) {
-      const byId = await this.fetchExact(`id:${deezerId}`, `${DEEZER_TRACK_URL}/${deezerId}`);
+      const byId = await this.fetchExact(`id:${deezerId}`, `${DEEZER_TRACK_URL}/${deezerId}`, onStart);
       if (byId.status === "error") return byId;
       if (byId.status === "found" && byId.track.preview) return byId;
     }
     if (isIsrc(query.isrc)) {
       const isrc = query.isrc.toUpperCase();
-      const byIsrc = await this.fetchExact(`isrc:${isrc}`, `${DEEZER_TRACK_URL}/isrc:${isrc}`);
+      const byIsrc = await this.fetchExact(`isrc:${isrc}`, `${DEEZER_TRACK_URL}/isrc:${isrc}`, onStart);
       if (byIsrc.status === "error") return byIsrc;
       if (byIsrc.status === "found" && byIsrc.track.preview && closeDuration(byIsrc.track, query.durationMs)) return byIsrc;
     }
-    return this.searchOutcome(query.title, query.artist, query.durationMs);
+    return this.searchOutcome(query.title, query.artist, query.durationMs, onStart);
   }
 
   /** Comme resolvePreviewOutcome, sans distinguer "rien" et "erreur". */
@@ -247,12 +286,12 @@ export class DeezerPreviewService {
   }
 
   /** Un morceau precis (/track/<id> ou /track/isrc:<ISRC>). */
-  private async fetchExact(key: string, url: string): Promise<PreviewOutcome> {
+  private async fetchExact(key: string, url: string, onStart?: () => void): Promise<PreviewOutcome> {
     const cached = this.getCached(key);
     if (cached !== undefined) return cached;
-    return this.dedupe(key, async () => {
+    return this.dedupe(key, async (started) => {
       try {
-        const data = await this.request<DeezerTrackResponse>(url);
+        const data = await this.request<DeezerTrackResponse>(url, undefined, started);
         if (!isJsonObject(data)) {
           // Page HTML (blocage Akamai) ou corps vide : surtout pas "inconnu".
           logger.error("deezer_track_lookup_error", { key, error: "reponse non JSON" });
@@ -272,7 +311,7 @@ export class DeezerPreviewService {
         logger.error("deezer_track_lookup_failed", { key, error: err });
         return this.setCached(key, ERROR, ERROR_CACHE_TTL_MS);
       }
-    });
+    }, onStart);
   }
 
   /**
@@ -284,7 +323,7 @@ export class DeezerPreviewService {
     return outcome.status === "found" ? outcome.track : null;
   }
 
-  private async searchOutcome(title: string, artist?: string, durationMs?: number | null): Promise<PreviewOutcome> {
+  private async searchOutcome(title: string, artist?: string, durationMs?: number | null, onStart?: () => void): Promise<PreviewOutcome> {
     const trimmedTitle = title?.trim();
     if (!trimmedTitle) return NONE;
     const trimmedArtist = artist?.trim() || undefined;
@@ -293,10 +332,16 @@ export class DeezerPreviewService {
     const cached = this.getCached(key);
     if (cached !== undefined) return cached;
 
-    return this.dedupe(key, () => this.runSearch(key, trimmedTitle, trimmedArtist, durationMs));
+    return this.dedupe(key, started => this.runSearch(key, trimmedTitle, trimmedArtist, durationMs, started), onStart);
   }
 
-  private async runSearch(key: string, trimmedTitle: string, trimmedArtist: string | undefined, durationMs?: number | null): Promise<PreviewOutcome> {
+  private async runSearch(
+    key: string,
+    trimmedTitle: string,
+    trimmedArtist: string | undefined,
+    durationMs: number | null | undefined,
+    onStart: () => void
+  ): Promise<PreviewOutcome> {
     // Recherche en texte libre. La syntaxe avancee (`track:"..." artist:"..."`)
     // renvoie 0 resultat depuis le 02/10/2026 (filtre artist casse chez Deezer) :
     // plus aucun extrait, le solo par lien ne demarrait plus. Le bon morceau est
@@ -304,7 +349,7 @@ export class DeezerPreviewService {
     const q = searchQueryFor(trimmedTitle, trimmedArtist);
 
     try {
-      const data = await this.request<DeezerSearchResponse>(DEEZER_SEARCH_URL, { q, limit: SEARCH_LIMIT });
+      const data = await this.request<DeezerSearchResponse>(DEEZER_SEARCH_URL, { q, limit: SEARCH_LIMIT }, onStart);
 
       if (!isJsonObject(data) || data.error || !Array.isArray(data.data)) {
         // Quota, page HTML, corps vide ou sans resultats lisibles : erreur, retenue 30 s.
