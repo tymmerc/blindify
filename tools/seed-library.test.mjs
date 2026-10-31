@@ -63,3 +63,10 @@ test("un id qui n'est pas un entier est refuse avant toute lecture", () => {
   assert.throws(() => verifierJoueursDeTest(["5); DROP TABLE users"], () => { lu = true; return "" }), /id inattendu/)
   assert.equal(lu, false)
 })
+
+test("la fenetre d'un joueur de test s'elargit sur demande (fermeture des salles : 4 h)", () => {
+  let requete = ""
+  verifierJoueursDeTest([5], sql => { requete = sql; return "5|guest|t" }, { heures: 4 })
+  assert.match(requete, /INTERVAL '4 hour'/)
+  assert.throws(() => verifierJoueursDeTest([5], () => "", { heures: "1 hour'; DROP" }), /id inattendu/)
+})
