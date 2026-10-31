@@ -2,7 +2,15 @@
 // chaine, et le lecteur (connexion anonyme, PING, plafond, reprise).
 
 import { anonymousNick, chatLineOf, cleanChannel, parseChatAnswer, parseIrcLine } from "../../src/services/twitchChat";
-import { openTwitchReader, type WsLike } from "../../src/services/twitchReader";
+import {
+  DEFAULT_IRC_URL,
+  IDLE_TIMEOUT_MS,
+  OPEN_TIMEOUT_MS,
+  STABLE_AFTER_MS,
+  ircUrl,
+  openTwitchReader,
+  type WsLike,
+} from "../../src/services/twitchReader";
 
 describe("nom de chaine", () => {
   it.each([
@@ -101,6 +109,16 @@ class FakeWs implements WsLike {
   }
 }
 
+describe("adresse du chat", () => {
+  it("vrai Twitch par defaut, faux serveur local accepte, toute autre adresse ignoree", () => {
+    expect(ircUrl({})).toBe(DEFAULT_IRC_URL);
+    expect(ircUrl({ TWITCH_IRC_URL: "ws://127.0.0.1:3180/twitch-irc-stub" })).toBe("ws://127.0.0.1:3180/twitch-irc-stub");
+    expect(ircUrl({ TWITCH_IRC_URL: "ws://localhost:9000" })).toBe("ws://localhost:9000");
+    expect(ircUrl({ TWITCH_IRC_URL: "wss://espion.example/irc" })).toBe(DEFAULT_IRC_URL);
+    expect(ircUrl({ TWITCH_IRC_URL: "ws://127.0.0.1.evil.example/" })).toBe(DEFAULT_IRC_URL);
+  });
+});
+
 describe("lecteur du chat", () => {
   beforeEach(() => {
     jest.useFakeTimers();
@@ -110,30 +128,28 @@ describe("lecteur du chat", () => {
 
   const line = (login: string, text: string) => `@display-name=${login} :${login}!${login}@${login}.tmi.twitch.tv PRIVMSG #tymmerc :${text}`;
 
-  function reader(maxPerSecond = 50) {
+  function reader(maxPerSecond = 50, accept?: (text: string) => boolean) {
     const lines: string[] = [];
     const statuses: string[] = [];
-    let t = 0;
     const r = openTwitchReader({
       channel: "tymmerc",
       url: "ws://faux",
       openSocket: url => new FakeWs(url),
       onLine: l => lines.push(`${l.login}:${l.text}`),
       onStatus: s => statuses.push(s),
-      now: () => t,
+      now: () => Date.now(),
       maxPerSecond,
+      accept,
     });
-    return { r, lines, statuses, tick: (ms: number) => { t += ms; } };
+    return { r, lines, statuses, tick: (ms: number) => jest.advanceTimersByTime(ms) };
   }
+  const welcome = (ws: FakeWs) => ws.receive(":tmi.twitch.tv 001 justinfan1 :Welcome");
 
   it("se presente en anonyme, rejoint la chaine, repond au PING", () => {
     const { statuses } = reader();
     const ws = FakeWs.all[0];
     ws.onopen?.({});
-    expect(ws.sent[0]).toBe("CAP REQ :twitch.tv/tags");
-    expect(ws.sent[1]).toMatch(/^NICK justinfan\d+$/);
-    expect(ws.sent[2]).toBe("JOIN #tymmerc");
-    expect(ws.sent.some(s => s.startsWith("PASS"))).toBe(false);
+    expect(ws.sent).toEqual(["CAP REQ :twitch.tv/tags", "PASS SCHMOOPIIE", expect.stringMatching(/^NICK justinfan\d+$/), "JOIN #tymmerc"]);
     ws.receive(":tmi.twitch.tv 001 justinfan1 :Welcome\r\nPING :tmi.twitch.tv\r\n");
     expect(ws.sent).toContain("PONG :tmi.twitch.tv");
     expect(statuses).toEqual(["connexion", "connecte"]);
@@ -156,7 +172,7 @@ describe("lecteur du chat", () => {
     expect(lines).toHaveLength(4);
   });
 
-  it("coupure : reprise avec un delai qui double, remis a zero a la bienvenue", () => {
+  it("coupure : reprise avec un delai qui double", () => {
     const { statuses } = reader();
     FakeWs.all[0].close();
     expect(statuses.at(-1)).toBe("reconnexion");
@@ -167,10 +183,77 @@ describe("lecteur du chat", () => {
     expect(FakeWs.all).toHaveLength(2);
     jest.advanceTimersByTime(1);
     expect(FakeWs.all).toHaveLength(3);
-    FakeWs.all[2].receive(":tmi.twitch.tv 001 x :Welcome");
+  });
+
+  it("le delai ne repart a 1 s qu'apres une connexion qui a tenu 10 s", () => {
+    reader();
+    FakeWs.all[0].close();
+    jest.advanceTimersByTime(1_000);
+    // Accueillie puis tombee aussitot : le delai garde sa progression (2 s).
+    welcome(FakeWs.all[1]);
+    FakeWs.all[1].close();
+    jest.advanceTimersByTime(1_999);
+    expect(FakeWs.all).toHaveLength(2);
+    jest.advanceTimersByTime(1);
+    expect(FakeWs.all).toHaveLength(3);
+    // Accueillie et stable 10 s : le delai repart a 1 s.
+    welcome(FakeWs.all[2]);
+    jest.advanceTimersByTime(STABLE_AFTER_MS);
+    FakeWs.all[2].receive("PING :tmi.twitch.tv");
     FakeWs.all[2].close();
     jest.advanceTimersByTime(1_000);
     expect(FakeWs.all).toHaveLength(4);
+  });
+
+  it("connexion muette : fermee par le chien de garde, puis reprise", () => {
+    const { statuses } = reader();
+    welcome(FakeWs.all[0]);
+    jest.advanceTimersByTime(IDLE_TIMEOUT_MS - 1_000);
+    FakeWs.all[0].receive("PING :tmi.twitch.tv");
+    jest.advanceTimersByTime(IDLE_TIMEOUT_MS - 1);
+    expect(FakeWs.all[0].closed).toBe(false);
+    jest.advanceTimersByTime(1);
+    expect(FakeWs.all[0].closed).toBe(true);
+    expect(statuses.at(-1)).toBe("reconnexion");
+    jest.advanceTimersByTime(30_000);
+    expect(FakeWs.all.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("ouverture qui traine (pas d'accueil en 15 s) : fermee, puis reprise", () => {
+    reader();
+    FakeWs.all[0].receive(":tmi.twitch.tv CAP * ACK :twitch.tv/tags");
+    jest.advanceTimersByTime(OPEN_TIMEOUT_MS);
+    expect(FakeWs.all[0].closed).toBe(true);
+    jest.advanceTimersByTime(1_000);
+    expect(FakeWs.all).toHaveLength(2);
+  });
+
+  it("le plafond ne compte que les lignes acceptees : le bavardage ne jette pas les !b", () => {
+    const { lines } = reader(3, text => text.startsWith("!b "));
+    const ws = FakeWs.all[0];
+    for (let i = 0; i < 100; i++) ws.receive(line(`bavard${i}`, "trop facile"));
+    for (let i = 0; i < 3; i++) ws.receive(line(`joueur${i}`, "!b x"));
+    expect(lines).toEqual(["joueur0:!b x", "joueur1:!b x", "joueur2:!b x"]);
+  });
+
+  it("une ligne qui plante n'arrete ni le lecteur ni les lignes suivantes", () => {
+    const seen: string[] = [];
+    openTwitchReader({
+      channel: "tymmerc",
+      url: "ws://faux",
+      openSocket: url => new FakeWs(url),
+      onLine: l => {
+        if (l.login === "piege") throw new Error("boum");
+        seen.push(l.login);
+      },
+    });
+    expect(() => FakeWs.all[0].receive(`${line("piege", "!b x")}\r\n${line("lena", "!b y")}`)).not.toThrow();
+    expect(seen).toEqual(["lena"]);
+  });
+
+  it("nom de chaine invalide : refus a l'ouverture", () => {
+    expect(() => openTwitchReader({ channel: "pas valable!", onLine: () => undefined, openSocket: url => new FakeWs(url) })).toThrow();
+    expect(FakeWs.all).toHaveLength(0);
   });
 
   it("fermeture : plus de reprise", () => {

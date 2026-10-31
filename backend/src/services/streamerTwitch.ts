@@ -15,7 +15,7 @@ import { logger } from "../utils/logger";
 import { emitToMedia } from "./streamerChannels";
 import { getStreamerState, onStreamerGameEnd, recordViewerAnswer, refreshViewerCount } from "./streamerGame";
 import { chatViewer } from "./streamerViewers";
-import { parseChatAnswer, type ChatLine } from "./twitchChat";
+import { looksLikeAnswer, parseChatAnswer, type ChatLine } from "./twitchChat";
 import { openTwitchReader, type ReaderStatus, type TwitchReader } from "./twitchReader";
 
 type Opener = typeof openTwitchReader;
@@ -53,6 +53,9 @@ export function startTwitch(io: IOServer, roomCode: string, channel: string): vo
   stopTwitch(roomCode);
   const reader = opener({
     channel,
+    // Le plafond par seconde ne compte que les `!b` : le bavardage d'un raid
+    // ne fait pas jeter les reponses.
+    accept: looksLikeAnswer,
     onLine: line => handleChatLine(io, roomCode, line),
     onStatus: status => announce(io, roomCode, channel, status),
   });

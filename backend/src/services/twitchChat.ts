@@ -91,6 +91,11 @@ export function chatLineOf(msg: IrcMessage): ChatLine | null {
   return { channel, login, displayName, text: msg.params[1] };
 }
 
+/** Test rapide, avant tout plafond : la ligne ressemble-t-elle a une reponse `!b` ? */
+export function looksLikeAnswer(text: string): boolean {
+  return /^\s*!b\s/i.test(text);
+}
+
 /**
  * `!b titre - artiste` -> { title, artist }. Sans tiret, tout est le titre.
  * Null si le message ne commence pas par `!b` ou ne dit rien.

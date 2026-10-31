@@ -1228,6 +1228,8 @@ export const roomsController = {
         trackSource: "streamer" as const,
         provider: t.type ?? null,
       }));
+      // En « Toi tout seul », le public ne repond pas : pas de chat a lire.
+      const chatChannel = subMode === "solo" ? null : twitchChannel;
       const state = initStreamerGame(io, {
         roomCode: room.room_code,
         hostUserId: room.host_user_id,
@@ -1238,9 +1240,16 @@ export const roomsController = {
         sessionId: session.id,
         // « Temps pour repondre » du lobby : la phase du public.
         timings: { chatMs: roundDurationMs },
-        twitchChannel,
+        twitchChannel: chatChannel,
       });
-      if (twitchChannel) startTwitch(io, room.room_code, twitchChannel);
+      if (chatChannel) {
+        try {
+          startTwitch(io, room.room_code, chatChannel);
+        } catch (err) {
+          // Le jeu tourne sans le chat : la page /live reste ouverte.
+          logger.error("twitch_lecture_impossible", { roomCode: room.room_code, error: err });
+        }
+      }
       ok(res, {
         session: {
           id: session.id,

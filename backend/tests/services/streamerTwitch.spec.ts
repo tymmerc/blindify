@@ -119,6 +119,14 @@ describe("reponses du chat dans la partie", () => {
     expect(getStreamerState(ROOM)?.answersCount).toBe(0);
   });
 
+  it("un login ou un nom affiche insultant est ignore (il s'afficherait sur l'overlay)", () => {
+    const t0 = openChat();
+    say("connard77", "!b chocolat - naza", t0);
+    handleChatLine(io, ROOM, { channel: "tymmerc", login: "gentil", displayName: "S4lope", text: "!b chocolat - naza" }, t0);
+    expect(getStreamerState(ROOM)?.answersCount).toBe(0);
+    expect(rankedViewers(ROOM)).toHaveLength(0);
+  });
+
   it("le classement marque la source « chat »", () => {
     const t0 = openChat();
     say("zoe", "!b chocolat - naza", t0);

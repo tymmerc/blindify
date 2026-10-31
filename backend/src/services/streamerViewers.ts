@@ -202,6 +202,8 @@ export function chatViewer(
   const room = roomOf(roomCode, now);
   const handle = nameKey("chat", login);
   if (room.banned.has(handle)) return null;
+  // Le pseudo s'affiche dans le top 5 de l'overlay : meme filtre que la page.
+  if (isBlockedPseudo(login) || isBlockedPseudo(displayName)) return null;
   const existingId = room.byName.get(handle);
   const existing = existingId ? room.viewers.get(existingId) : undefined;
   if (existing) return { viewer: existing, created: false };

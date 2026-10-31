@@ -49,6 +49,12 @@ describe("bareme", () => {
     expect(scoreViewerAnswer({ title: "chocolat", artist: "", at: 10_000 }, track, window).points).toBe(15);
   });
 
+  it("plancher du chat : un titre seul, recopie tard, vaut encore 1 point (0,5 arrondi au-dessus)", () => {
+    // 10 points de titre, aucune rapidite, facteur plancher 0,05 : 0,5 -> 1.
+    expect(scoreViewerAnswer({ title: "chocolat", artist: "", at: 20_000 }, track, window, 0.05).points).toBe(1);
+    expect(scoreViewerAnswer({ title: "chocolat", artist: "", at: 20_000 }, track, window, 0.04).points).toBe(0);
+  });
+
   it("rien de juste : zero, meme tres vite", () => {
     const s = scoreViewerAnswer({ title: "rien", artist: "personne", at: 0 }, track, window);
     expect(s).toMatchObject({ points: 0, verdict: "wrong" });

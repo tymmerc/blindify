@@ -16,6 +16,7 @@ import gamesRoutes from "./routes/games";
 import likesRoutes from "./routes/likes";
 import roomsRoutes from "./routes/rooms";
 import streamerRoutes from "./routes/streamer";
+import { checkTwitchConfig } from "./services/twitchReader";
 import reportsRoutes from "./routes/reports";
 import feedbackRoutes from "./routes/feedback";
 import { ensureFeedbackSchema, FEEDBACK_PURGE_SQL } from "./services/feedback";
@@ -90,6 +91,9 @@ if (ignoredOrigins.length) {
   logger.warn("allowed_origins_ignored", { ignored: ignoredOrigins });
 }
 logger.info("allowed_origins", { origins: allowedOrigins });
+
+// Chat Twitch (T5b) : une TWITCH_IRC_URL non locale est ignoree, on le dit au demarrage.
+checkTwitchConfig();
 
 const lastKnownUsername = new Map<number, string | null>();
 const PRESENCE_SWEEP_INTERVAL_MS = 5_000;
