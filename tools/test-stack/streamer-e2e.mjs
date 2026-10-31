@@ -249,8 +249,17 @@ async function main() {
     if (withChat) {
       // Coupure du chat : le lecteur se reconnecte seul, puis lit de nouveau.
       await fetch(`${IRC}/drop`, { method: "POST" })
-      await host.page.getByTestId("streamer-twitch").getByText("lu en direct").waitFor({ timeout: 10000 })
-        .then(() => ok("chat Twitch : reprise apres une coupure"), () => bad("chat Twitch : pas de reprise apres coupure"))
+      await host.page.getByTestId("streamer-twitch").getByText("on se reconnecte").waitFor({ timeout: 5000 })
+        .then(() => ok("chat Twitch : la coupure se voit chez le streamer"), () => bad("chat Twitch : coupure invisible chez le streamer"))
+      let back = false
+      for (let i = 0; i < 40 && !back; i++) {
+        const st = await (await fetch(`${IRC}/state`)).json()
+        back = st.clients.some(c => c.channels.includes(CHANNEL))
+        if (!back) await sleep(250)
+      }
+      if (back) ok("chat Twitch : reprise apres une coupure")
+      else bad("chat Twitch : pas de reprise apres coupure")
+      await host.page.getByTestId("streamer-twitch").getByText("lu en direct").waitFor({ timeout: 5000 }).catch(() => bad("chat Twitch : l'etat ne revient pas a « lu en direct »"))
       const r = await chat({ channel: CHANNEL, login: "revenant", displayName: "Revenant", text: `!b ${t2.title} - ${t2.artist}` })
       if (r.delivered !== 1) bad("faux chat : message non remis apres la reprise")
     }
