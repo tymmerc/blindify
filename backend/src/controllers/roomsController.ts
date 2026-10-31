@@ -196,13 +196,21 @@ export const roomsController = {
     }
 
     const { rows } = await pool.query(
-      `SELECT id, room_code, max_players, status FROM multiplayer_rooms WHERE room_code=$1 LIMIT 1`,
+      `SELECT id, room_code, max_players, status, mode, host_user_id FROM multiplayer_rooms WHERE room_code=$1 LIMIT 1`,
       [code]
     );
     const room = rows[0];
 
     if (!room) {
       fail(res, "room_not_found", "Salle introuvable", 404);
+      return;
+    }
+
+    // Salle streamer (T5) : son code est affiche sur le live. Le public joue
+    // par /live ; personne d'autre que le streamer n'entre dans la salle (sa
+    // musique alimenterait la partie, et la salle sert le corrige a ses membres).
+    if (room.mode === GameMode.STREAMER && room.host_user_id !== user.id) {
+      fail(res, "streamer_viewer", "Pour jouer pendant un live, passe par la page /live avec le code du stream.", 403);
       return;
     }
 
@@ -788,7 +796,7 @@ export const roomsController = {
     // Mode streamer (T5) : le public joue depuis /live, sans etre inscrit dans
     // la salle. Seul l'hote (et sa musique) compte : pas de minimum de joueurs.
     const isStreamerRoom = room.mode === GameMode.STREAMER;
-    if (isStreamerRoom) musicContributorIds = Array.from(new Set(participantRows.map(p => p.user_id)));
+    if (isStreamerRoom) musicContributorIds = [room.host_user_id];
 
     if (!participantIds.length && !isStreamerRoom) {
       fail(res, "no_participants", "Aucun joueur connecté pour lancer en mode événement", 400);
@@ -1181,6 +1189,14 @@ export const roomsController = {
           : subModeRaw === "solo" || subModeRaw === "just_stream"
             ? ("solo" as const)
             : ("viewers_only" as const);
+
+      // Plafond revu juste avant de creer la partie : le tirage des morceaux
+      // ci-dessus prend plusieurs secondes, d'autres lancements ont pu passer.
+      const lateRefusal = streamerStartRefusal(room.room_code);
+      if (lateRefusal) {
+        fail(res, lateRefusal.code, lateRefusal.message, lateRefusal.status);
+        return;
+      }
 
       // Toute la musique vient du streamer : les viewers n'importent rien.
       const streamerRounds = normalizedTracks.map(t => ({

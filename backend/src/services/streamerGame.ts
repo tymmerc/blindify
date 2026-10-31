@@ -16,7 +16,7 @@
 import type { Server as IOServer } from "socket.io";
 import type { StreamerState, StreamerRound, StreamerSubMode } from "../types/streamer";
 import { markMultiplayerRoomFinished, markStreamerSessionFinished } from "./gamePersistence";
-import { emitStreamerState, emitToMedia, mediaView, viewerView } from "./streamerChannels";
+import { HIDDEN_PHASES, emitStreamerState, emitToMedia, mediaView, viewerView } from "./streamerChannels";
 import { scoreViewerAnswer, type AnswerWindow, type ViewerAnswer } from "./streamerScoring";
 import { evaluateGuessDetail } from "./guessMatching";
 import {
@@ -35,6 +35,8 @@ export const STREAMER_GUESS_DURATION = 15_000;
 /** L'hote coupe (F5, wifi) : la partie l'attend une minute avant de finir. */
 export const HOST_ABSENCE_MS = 60_000;
 const CLEANUP_MS = 10 * 60_000;
+/** Partie laissee en plan (lobby ou entre deux manches) : finie apres 30 min. */
+export const IDLE_MS = 30 * 60_000;
 const ANSWERS_THROTTLE_MS = 500;
 const ANSWERED_NAMES = 8;
 
@@ -172,12 +174,23 @@ export function hostStreamerState(state: StreamerState): StreamerState {
   return mediaView(state);
 }
 
-/** Le nombre de viewers a change : l'etat et les compteurs le disent. */
+const viewerCountTimers = new Map<string, NodeJS.Timeout>();
+
+/**
+ * Le nombre de viewers a change : l'etat et les compteurs le disent. Regroupe
+ * (une trame par seconde au plus) : un raid de 300 viewers n'envoie pas 300 trames.
+ */
 export function refreshViewerCount(io: IOServer, roomCode: string): void {
-  const count = viewerCount(roomCode);
-  const ctx = games.get(roomCode);
-  if (ctx) ctx.state = { ...ctx.state, viewerCount: count };
-  emitToMedia(io, roomCode, "streamer:viewers", { roomCode, count });
+  if (viewerCountTimers.has(roomCode)) return;
+  const timer = setTimeout(() => {
+    viewerCountTimers.delete(roomCode);
+    const count = viewerCount(roomCode);
+    const ctx = games.get(roomCode);
+    if (ctx) ctx.state = { ...ctx.state, viewerCount: count };
+    emitToMedia(io, roomCode, "streamer:viewers", { roomCode, count });
+  }, 1_000);
+  timer.unref?.();
+  viewerCountTimers.set(roomCode, timer);
 }
 
 export function startNextStreamerRound(io: IOServer, roomCode: string): StreamerState | undefined {
@@ -355,6 +368,19 @@ function revealFinal(io: IOServer, ctx: StreamerCtx): void {
   }
   setPhase(ctx, "ROUND_ENDED", { timing: { startAt: null, endAt: null } });
   broadcast(io, ctx);
+  scheduleIdleEnd(io, ctx);
+}
+
+/** Partie lancee mais premiere manche jamais demarree : meme delai. */
+export function armStreamerIdle(io: IOServer, roomCode: string): void {
+  const ctx = games.get(roomCode);
+  if (ctx && ctx.state.phase === "LOBBY") scheduleIdleEnd(io, ctx);
+}
+
+/** Personne ne lance la suite : la partie libere sa place au bout de IDLE_MS. */
+function scheduleIdleEnd(io: IOServer, ctx: StreamerCtx): void {
+  schedule(ctx, IDLE_MS, () => finishGame(io, ctx));
+  ctx.timers.phase?.unref?.();
 }
 
 /** Chaque viewer qui a repondu recoit son verdict, ses points et sa place. */
@@ -386,7 +412,14 @@ function finishGame(io: IOServer, ctx: StreamerCtx): void {
     if (t) clearTimeout(t);
     ctx.timers[key] = undefined;
   }
-  setPhase(ctx, "GAME_OVER", { leaderboard: leaderboard(roomCode), timing: { startAt: null, endAt: null } });
+  // Finie en pleine manche (« Finir », hote parti) : la reponse n'a pas ete
+  // revelee, elle ne sort pas avec le podium.
+  const unrevealed = HIDDEN_PHASES.has(ctx.state.phase);
+  setPhase(ctx, "GAME_OVER", {
+    leaderboard: leaderboard(roomCode),
+    timing: { startAt: null, endAt: null },
+    ...(unrevealed ? { currentTrack: null } : {}),
+  });
   broadcast(io, ctx);
   void markMultiplayerRoomFinished(roomCode);
   void markStreamerSessionFinished(ctx.sessionId, ctx.state.currentRound);

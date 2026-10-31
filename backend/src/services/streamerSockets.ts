@@ -20,7 +20,7 @@ import { readOverlaySecret, verifyOverlayToken } from "./overlayToken";
 import { streamerModeEnabled } from "./streamerConfig";
 import { mediaRoom, mediaView, viewerView, viewersRoom } from "./streamerChannels";
 import { getStreamerState, recordViewerAnswer, refreshViewerCount, viewerSelfRoom } from "./streamerGame";
-import { getViewer, joinViewer, ranks, viewerCount, type ViewerJoinRefusal } from "./streamerViewers";
+import { getViewer, joinViewer, knownKey, ranks, viewerCount, viewerPresence, type ViewerJoinRefusal } from "./streamerViewers";
 
 export type StreamerSocketRefusal =
   | "live_desactive"
@@ -39,7 +39,7 @@ type Handshake = { kind: "overlay"; salle: unknown; jeton: unknown } | { kind: "
 type RoomRow = { id: number; mode: string; status: string };
 
 /** Connexions par IP (ou /64 en IPv6) et par fenetre de 10 minutes. */
-export const LIVE_ATTEMPTS = 40;
+export const LIVE_ATTEMPTS = 120;
 export const OVERLAY_ATTEMPTS = 20;
 const WINDOW_MS = 10 * 60_000;
 const attempts = new Map<string, { count: number; start: number }>();
@@ -92,8 +92,11 @@ type AuthResult = { ok: true; data: StreamerSocketData } | { ok: false; code: St
 export async function authorizeStreamerSocket(hs: Handshake, ip: string | undefined, deps: Deps = {}): Promise<AuthResult> {
   const now = deps.now ?? Date.now();
   if (!streamerModeEnabled()) return { ok: false, code: "live_desactive" };
-  if (!allowAttempt(hs.kind, ip, now)) return { ok: false, code: "live_limite" };
   const roomCode = validRoomCode(hs.salle)?.toUpperCase() ?? null;
+  // Un viewer qui revient avec sa cle (ecran verrouille, wifi) ne compte pas :
+  // seules les nouvelles inscriptions et l'overlay entament la limite par IP.
+  const resuming = hs.kind === "live" && roomCode !== null && knownKey(roomCode, hs.cle);
+  if (!resuming && !allowAttempt(hs.kind, ip, now)) return { ok: false, code: "live_limite" };
   const room = roomCode ? await (deps.findRoom ?? lookupRoom)(roomCode) : null;
   if (!roomCode || !room || room.mode !== "streamer") {
     return { ok: false, code: hs.kind === "overlay" ? "overlay_refuse" : "live_introuvable" };
@@ -177,6 +180,8 @@ export function attachViewer(io: Server, socket: Socket, data: Extract<StreamerS
   const { roomCode, viewerId } = data;
   socket.join(viewersRoom(roomCode));
   socket.join(viewerSelfRoom(roomCode, viewerId));
+  viewerPresence(roomCode, viewerId, 1);
+  socket.on("disconnect", () => viewerPresence(roomCode, viewerId, -1));
   sendLiveInit(socket, roomCode, viewerId);
   refreshViewerCount(io, roomCode);
 

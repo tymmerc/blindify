@@ -19,6 +19,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { chromium } from "@playwright/test"
 import { oracle, seedUser } from "./testdb.mjs"
+import { Bot, api } from "./bot.mjs"
 import { catalog } from "./catalog.mjs"
 import { APP, heardTrack, newPage, sleep } from "./probe.mjs"
 
@@ -145,6 +146,12 @@ async function main() {
     if (!(await overlay.page.getByTestId("overlay-join").textContent())?.includes(code)) bad("overlay : code absent")
     else ok("overlay : code et QR affiches")
     await shot(host.page, "streamer-1-lobby")
+
+    // Le code est a l'ecran du live : personne d'autre que le streamer n'entre dans la salle.
+    const intrus = await new Bot({ name: "Intrus", plan: () => ({ action: "juste" }) }).enter()
+    const refus = await api(`/api/rooms/${code}/join`, { method: "POST", token: intrus.token })
+    if (refus.status === 403 && refus.error?.code === "streamer_viewer") ok("un compte qui tente d'entrer dans la salle est renvoye vers /live")
+    else bad(`entree dans la salle streamer non refusee (${refus.status} ${JSON.stringify(refus.error)})`)
 
     console.log("2. Trois viewers sur /live")
     for (const pseudo of ["Lena", "Malik", "Zoe"]) viewers.push(await openViewer(browser, code, pseudo))

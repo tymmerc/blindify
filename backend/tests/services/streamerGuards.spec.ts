@@ -13,8 +13,11 @@ import {
   clearAllViewersForTests,
   joinViewer,
   leaderboard,
+  getViewer,
   pageViewerCount,
+  STALE_VIEWER_MS,
   updateViewer,
+  viewerPresence,
 } from "../../src/services/streamerViewers";
 import { maxStreamerGames, maxStreamerViewers, streamerModeEnabled } from "../../src/services/streamerConfig";
 import { OVERLAY_TTL_MS, overlayLink, signOverlayToken, verifyOverlayToken } from "../../src/services/overlayToken";
@@ -99,6 +102,22 @@ describe("viewers", () => {
     expect(joinViewer(ROOM, { pseudo: "Deux" }).ok).toBe(true);
     expect(joinViewer(ROOM, { pseudo: "Trois" })).toEqual({ ok: false, code: "live_complet" });
     expect(pageViewerCount(ROOM)).toBe(2);
+  });
+
+  it("plafond atteint : un viewer parti depuis longtemps sans un point libere sa place", () => {
+    process.env.STREAMER_MAX_VIEWERS = "2";
+    const t0 = 1_000_000;
+    const gone = joinViewer(ROOM, { pseudo: "Parti" }, t0);
+    const scorer = joinViewer(ROOM, { pseudo: "Marqueur" }, t0);
+    if (!gone.ok || !scorer.ok) throw new Error("join");
+    viewerPresence(ROOM, gone.viewer.id, 1, t0);
+    viewerPresence(ROOM, gone.viewer.id, -1, t0);
+    updateViewer(ROOM, scorer.viewer.id, v => ({ ...v, score: 10 }));
+    expect(joinViewer(ROOM, { pseudo: "Nouveau" }, t0 + 1_000)).toEqual({ ok: false, code: "live_complet" });
+    const later = joinViewer(ROOM, { pseudo: "Nouveau" }, t0 + STALE_VIEWER_MS + 1);
+    expect(later.ok).toBe(true);
+    // Celui qui avait marque garde sa place et son score.
+    expect(joinViewer(ROOM, { pseudo: "x", key: scorer.viewer.key }, t0 + STALE_VIEWER_MS + 2)).toMatchObject({ ok: true, viewer: { score: 10 } });
   });
 
   it("un pseudo du chat et un pseudo de la page ne se confondent pas", () => {
@@ -197,6 +216,16 @@ describe("connexion de l'overlay et des viewers", () => {
     }
     expect(await authorizeStreamerSocket(live("EncoreUn"), "9.9.9.9", { findRoom: streamerRoom })).toEqual({ ok: false, code: "live_limite" });
     expect((await authorizeStreamerSocket(live("Ailleurs"), "8.8.8.8", { findRoom: streamerRoom })).ok).toBe(true);
+  });
+
+  it("viewer : revenir avec sa cle n'entame pas la limite", async () => {
+    const first = await authorizeStreamerSocket(live("Lena"), "7.7.7.7", { findRoom: streamerRoom });
+    if (!first.ok || first.data.kind !== "live") throw new Error("join");
+    const key = getViewer(ROOM, first.data.viewerId)?.key;
+    for (let i = 1; i < LIVE_ATTEMPTS; i++) await authorizeStreamerSocket(live(`Joueur${i}`), "7.7.7.7", { findRoom: streamerRoom });
+    expect(await authorizeStreamerSocket(live("Encore"), "7.7.7.7", { findRoom: streamerRoom })).toEqual({ ok: false, code: "live_limite" });
+    const back = await authorizeStreamerSocket({ kind: "live", salle: ROOM, pseudo: "Lena", cle: key }, "7.7.7.7", { findRoom: streamerRoom });
+    expect(back).toMatchObject({ ok: true, data: { viewerId: first.data.viewerId } });
   });
 
   it("overlay : jeton valide, sinon refus net", async () => {

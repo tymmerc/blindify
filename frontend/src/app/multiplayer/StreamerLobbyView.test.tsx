@@ -44,6 +44,17 @@ describe("lobby du streamer", () => {
     expect(screen.getByTestId("copy-overlay")).toHaveTextContent("Lien copié")
   })
 
+  it("le jeton n'est jamais a l'ecran sans le demander, meme si la copie echoue", async () => {
+    Object.assign(navigator, { clipboard: { writeText: vi.fn(() => Promise.reject(new Error("refus"))) } })
+    const { container } = render(<StreamerLobbyView {...props()} />)
+    const button = await screen.findByTestId("copy-overlay")
+    expect(container.innerHTML).not.toContain("jeton=")
+    await act(async () => { fireEvent.click(button) })
+    expect(container.innerHTML).not.toContain("jeton=")
+    fireEvent.click(screen.getByRole("button", { name: "Afficher le lien" }))
+    expect(screen.getByLabelText("Lien de l'overlay")).toHaveValue("https://blindz.app/streamer/overlay/?salle=ABC123&jeton=1.x")
+  })
+
   it("lien d'overlay indisponible : le message du serveur", async () => {
     const { ApiError } = await import("@/lib/apiClient")
     streamerOverlay.mockRejectedValue(new ApiError(503, "Le lien d'overlay n'est pas configuré sur le serveur.", "overlay_desactive"))

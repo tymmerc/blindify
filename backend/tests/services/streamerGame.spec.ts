@@ -12,7 +12,9 @@ import {
   CHAT_GUESS_DURATION,
   START_COUNTDOWN_MS,
   STREAMER_GUESS_DURATION,
+  IDLE_MS,
   activeStreamerGames,
+  armStreamerIdle,
   bootstrapStreamerGame,
   clearAllStreamerGamesForTests,
   endStreamerGame,
@@ -138,6 +140,35 @@ describe("phases", () => {
     endStreamerGame(io, ROOM);
     expect(phase()).toBe("GAME_OVER");
     expect(activeStreamerGames()).toEqual([]);
+  });
+
+  it("« Finir » en pleine manche : le podium sort, pas la reponse", () => {
+    const { io, sent } = setup("duo", 5);
+    startNextStreamerRound(io, ROOM);
+    jest.advanceTimersByTime(START_COUNTDOWN_MS + 1_000);
+    endStreamerGame(io, ROOM);
+    const over = sent.filter(s => (s.payload as StreamerState)?.phase === "GAME_OVER");
+    expect(over.length).toBe(2);
+    for (const f of over) {
+      expect((f.payload as StreamerState).currentTrack).toBeNull();
+      expect(JSON.stringify(f.payload)).not.toContain("Chanson 1");
+    }
+  });
+
+  it("partie laissee en plan (lobby, entre deux manches) : finie apres 30 minutes", () => {
+    const { io } = setup("viewers_only", 5);
+    armStreamerIdle(io, ROOM);
+    jest.advanceTimersByTime(IDLE_MS);
+    expect(phase()).toBe("GAME_OVER");
+    clearAllStreamerGamesForTests();
+    const again = setup("viewers_only", 5);
+    startNextStreamerRound(again.io, ROOM);
+    jest.advanceTimersByTime(START_COUNTDOWN_MS + CHAT_GUESS_DURATION);
+    expect(phase()).toBe("ROUND_ENDED");
+    jest.advanceTimersByTime(IDLE_MS - 1);
+    expect(phase()).toBe("ROUND_ENDED");
+    jest.advanceTimersByTime(1);
+    expect(phase()).toBe("GAME_OVER");
   });
 
   it("l'hote coupe : la partie l'attend, puis finit s'il ne revient pas", () => {
@@ -285,6 +316,11 @@ describe("anti-triche : ce que recoit chaque public", () => {
     const guessing = sent.filter(s => toMedia(s) && (s.payload as StreamerState)?.phase === "GUESSING_CHAT");
     expect(guessing.length).toBeGreaterThan(0);
     expect((guessing[0].payload as StreamerState).currentTrack?.previewUrl).toBe("https://extraits.test/1.mp3");
+  });
+
+  it("le public ne recoit pas l'id du compte de l'hote", () => {
+    const { sent } = playRound("viewers_only");
+    for (const f of sent.filter(toPublic)) expect((f.payload as StreamerState).hostUserId).toBe(0);
   });
 
   it("au reveal, le public voit titre, artiste et pochette", () => {

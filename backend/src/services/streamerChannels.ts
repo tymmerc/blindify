@@ -51,13 +51,14 @@ export function mediaView(state: StreamerState): StreamerState {
   return { ...state, currentTrack: hiddenTrack(t, t.previewUrl) };
 }
 
-/** Vue des viewers : jamais d'extrait, ni d'id, ni de metadonnees. */
+/** Vue des viewers : jamais d'extrait, ni d'id (morceau ou compte de l'hote), ni de metadonnees. */
 export function viewerView(state: StreamerState): StreamerState {
+  const base = { ...state, hostUserId: 0 };
   const t = state.currentTrack;
-  if (!t) return state;
-  if (HIDDEN_PHASES.has(state.phase)) return { ...state, currentTrack: hiddenTrack(t, null) };
+  if (!t) return base;
+  if (HIDDEN_PHASES.has(state.phase)) return { ...base, currentTrack: hiddenTrack(t, null) };
   return {
-    ...state,
+    ...base,
     currentTrack: {
       round: t.round,
       trackId: "hidden",

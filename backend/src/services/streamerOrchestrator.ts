@@ -1,5 +1,6 @@
 import type { Server as IOServer } from "socket.io";
 import {
+  armStreamerIdle,
   bootstrapStreamerGame,
   clearStreamerGame,
   getStreamerState,
@@ -23,6 +24,7 @@ export function initStreamerGame(io: IOServer, params: {
 }) {
   const state = bootstrapStreamerGame(params);
   emitStreamerState(io, params.roomCode, "state:sync", state);
+  armStreamerIdle(io, params.roomCode);
   return state;
 }
 

@@ -46,6 +46,9 @@ function useOverlayLink(code: string | null, isHost: boolean): OverlayLink {
 
 function CopyOverlay({ link }: { link: OverlayLink }) {
   const [copied, setCopied] = useState<"ok" | "ko" | null>(null)
+  // Le lobby passe souvent a l'ecran du live : le lien (qui donne l'extrait)
+  // n'apparait en clair que si le streamer le demande.
+  const [shown, setShown] = useState(false)
   if (link.status === "loading") return <p className="m-0 text-sm text-[#6b573f]">Préparation du lien…</p>
   if (link.status === "error") return <p role="alert" className="m-0 text-sm font-semibold text-[#9c2f1d]">{link.message}</p>
   const copy = async () => {
@@ -67,7 +70,13 @@ function CopyOverlay({ link }: { link: OverlayLink }) {
         {copied === "ok" ? <Check aria-hidden className="h-4 w-4" /> : <Copy aria-hidden className="h-4 w-4" />}
         {copied === "ok" ? "Lien copié" : "Copier le lien de l'overlay"}
       </button>
-      {copied === "ko" ? (
+      {copied === "ko" && !shown ? (
+        <p className="m-0 text-xs text-[#9c2f1d]">
+          La copie automatique est bloquée.{" "}
+          <button type="button" onClick={() => setShown(true)} className="font-semibold underline">Afficher le lien</button> (hors de l&apos;écran du live)
+        </p>
+      ) : null}
+      {shown ? (
         <input readOnly value={link.url} aria-label="Lien de l'overlay" onFocus={e => e.currentTarget.select()} className="w-full rounded-md border-2 border-[#2e2014] bg-[#efe5d0] px-2 py-1.5 text-xs" />
       ) : null}
       <p className="m-0 text-xs text-[#8a7558]">Ce lien joue la musique : garde-le pour toi, ne le colle pas dans le chat.</p>

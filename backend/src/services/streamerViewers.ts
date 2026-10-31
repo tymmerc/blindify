@@ -15,6 +15,10 @@ import type { StreamerLeaderEntry, ViewerSource } from "../types/streamer";
 import { maxStreamerViewers } from "./streamerConfig";
 
 export const LEADERBOARD_SIZE = 5;
+/** Un viewer parti sans marquer libere sa place apres ce delai (plafond par partie). */
+export const STALE_VIEWER_MS = 10 * 60_000;
+/** Un registre sans aucune activite depuis ce delai est oublie (salle abandonnee). */
+const ROOM_IDLE_MS = 6 * 60 * 60_000;
 const PSEUDO_MIN = 2;
 const PSEUDO_MAX = 20;
 // Lettres de toutes les langues, chiffres, espace et quelques signes courants.
@@ -33,9 +37,13 @@ export interface Viewer {
   joinedAt: number;
   /** Derniere manche ou il a repondu (0 = jamais). */
   answeredRound: number;
+  /** Sockets ouverts de ce viewer, et derniere fois qu'on l'a vu. */
+  online: number;
+  lastSeen: number;
 }
 
 interface ViewerRoom {
+  touchedAt: number;
   viewers: Map<string, Viewer>;
   byKey: Map<string, string>;
   byName: Map<string, string>;
@@ -59,10 +67,13 @@ function nameKey(source: ViewerSource, pseudo: string): string {
   return `${source}:${pseudo.toLocaleLowerCase("fr-FR")}`;
 }
 
-function roomOf(roomCode: string): ViewerRoom {
+function roomOf(roomCode: string, now = Date.now()): ViewerRoom {
   const existing = rooms.get(roomCode);
-  if (existing) return existing;
-  const created: ViewerRoom = { viewers: new Map(), byKey: new Map(), byName: new Map() };
+  if (existing) {
+    existing.touchedAt = now;
+    return existing;
+  }
+  const created: ViewerRoom = { touchedAt: now, viewers: new Map(), byKey: new Map(), byName: new Map() };
   rooms.set(roomCode, created);
   return created;
 }
@@ -78,7 +89,32 @@ function newViewer(pseudo: string, source: ViewerSource, now: number): Viewer {
     reactionMs: 0,
     joinedAt: now,
     answeredRound: 0,
+    online: 0,
+    lastSeen: now,
   };
+}
+
+/** La cle de reprise designe-t-elle un viewer connu de la salle ? (sans rien creer) */
+export function knownKey(roomCode: string, key: unknown): boolean {
+  return typeof key === "string" && KEY_FORMAT.test(key) && Boolean(rooms.get(roomCode)?.byKey.has(key));
+}
+
+/** Libere les places des viewers de la page partis depuis longtemps sans un point. */
+function releaseStaleViewers(room: ViewerRoom, now: number): void {
+  for (const [id, v] of room.viewers) {
+    if (v.source !== "page" || v.online > 0 || v.score > 0 || now - v.lastSeen < STALE_VIEWER_MS) continue;
+    room.viewers.delete(id);
+    room.byKey.delete(v.key);
+    room.byName.delete(nameKey("page", v.pseudo));
+  }
+}
+
+/** Un socket du viewer s'ouvre (+1) ou se ferme (-1). */
+export function viewerPresence(roomCode: string, id: string, delta: 1 | -1, now = Date.now()): void {
+  const room = rooms.get(roomCode);
+  const v = room?.viewers.get(id);
+  if (!room || !v) return;
+  room.viewers.set(id, { ...v, online: Math.max(0, v.online + delta), lastSeen: now });
 }
 
 /**
@@ -90,7 +126,7 @@ export function joinViewer(
   input: { pseudo: unknown; key?: unknown },
   now = Date.now(),
 ): ViewerJoinResult {
-  const room = roomOf(roomCode);
+  const room = roomOf(roomCode, now);
   if (typeof input.key === "string" && KEY_FORMAT.test(input.key)) {
     const id = room.byKey.get(input.key);
     const known = id ? room.viewers.get(id) : undefined;
@@ -99,6 +135,7 @@ export function joinViewer(
   const pseudo = cleanPseudo(input.pseudo);
   if (!pseudo) return { ok: false, code: "pseudo_invalide" };
   if (room.byName.has(nameKey("page", pseudo))) return { ok: false, code: "pseudo_pris" };
+  if (pageViewerCount(roomCode) >= maxStreamerViewers()) releaseStaleViewers(room, now);
   if (pageViewerCount(roomCode) >= maxStreamerViewers()) return { ok: false, code: "live_complet" };
   const viewer = newViewer(pseudo, "page", now);
   room.viewers.set(viewer.id, viewer);
@@ -146,6 +183,7 @@ export function updateViewer(roomCode: string, id: string, patch: (v: Readonly<V
   const room = rooms.get(roomCode);
   const current = room?.viewers.get(id);
   if (!room || !current) return undefined;
+  room.touchedAt = Date.now();
   const next = { ...patch(current), id: current.id, key: current.key };
   room.viewers.set(id, next);
   return next;
@@ -188,3 +226,10 @@ export function clearViewers(roomCode: string): void {
 export function clearAllViewersForTests(): void {
   rooms.clear();
 }
+
+/** Registres de salles abandonnees (lobby jamais lance, serveur jamais redemarre). */
+export function purgeIdleViewerRooms(now = Date.now()): void {
+  for (const [code, room] of rooms) if (now - room.touchedAt > ROOM_IDLE_MS) rooms.delete(code);
+}
+
+setInterval(() => purgeIdleViewerRooms(), 30 * 60_000).unref?.();
