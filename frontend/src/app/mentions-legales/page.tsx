@@ -1,6 +1,6 @@
-import type React from "react"
 import type { Metadata } from "next"
 import Link from "next/link"
+import { ContactLink, Section } from "@/components/legal/LegalBlocks"
 
 export const metadata: Metadata = {
   alternates: { canonical: "https://blindz.app/mentions-legales/" },
@@ -26,7 +26,7 @@ export default function MentionsLegalesPage() {
           <h1 className="font-display text-4xl font-semibold md:text-5xl">
             Mentions <em className="font-medium italic text-[#c65133]">légales</em>
           </h1>
-          <p className="text-sm text-[#8a7558]">Dernière mise à jour : 10 octobre 2026</p>
+          <p className="text-sm text-[#8a7558]">Dernière mise à jour : 29 octobre 2026</p>
         </div>
 
         <div className="space-y-6">
@@ -85,7 +85,9 @@ export default function MentionsLegalesPage() {
               Les extraits audio de 30 secondes joués pendant les parties sont fournis par Deezer, y
               compris pour les playlists importées depuis Spotify. Leur écoute est réservée à un usage
               privé, entre amis ou en famille : ils ne doivent pas être diffusés en public (bar,
-              commerce, entreprise) ni en direct sur une plateforme de streaming.
+              commerce, entreprise). Le direct sur une plateforme de streaming passe uniquement par le
+              mode streamer, sous la responsabilité de celui qui diffuse (voir les conditions
+              d&apos;utilisation).
             </p>
             <p className="mt-3">
               Les titres importés depuis Spotify renvoient vers le morceau sur Spotify au moment de leur
@@ -97,7 +99,14 @@ export default function MentionsLegalesPage() {
             <p>
               L'éditeur s'efforce de garder les informations du site à jour, mais ne peut garantir
               l'exactitude ou l'exhaustivité de tout le contenu. L'utilisation du site se fait sous ta
-              propre responsabilité.
+              propre responsabilité. Les règles du jeu (écoute privée, comportement, âge) sont dans les{" "}
+              <Link
+                href="/conditions/"
+                className="font-bold text-[#c65133] underline decoration-[#c65133]/40 underline-offset-2 transition hover:decoration-[#c65133]"
+              >
+                conditions d&apos;utilisation
+              </Link>
+              .
             </p>
           </Section>
 
@@ -117,6 +126,12 @@ export default function MentionsLegalesPage() {
 
         <div className="mt-12 flex flex-wrap gap-3">
           <Link
+            href="/conditions/"
+            className="inline-flex items-center gap-2 rounded-full border-[1.5px] border-[#2e2014] bg-transparent px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+          >
+            Conditions
+          </Link>
+          <Link
             href="/confidentialite"
             className="inline-flex items-center gap-2 rounded-full border-[1.5px] border-[#2e2014] bg-transparent px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
           >
@@ -131,36 +146,5 @@ export default function MentionsLegalesPage() {
         </div>
       </div>
     </div>
-  )
-}
-
-function Section({
-  title,
-  accent,
-  children,
-}: {
-  title: string
-  accent: string
-  children: React.ReactNode
-}) {
-  return (
-    <div
-      className="rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-6 shadow-[4px_4px_0_rgba(46,32,20,.18)]"
-      style={{ borderLeft: `6px solid ${accent}` }}
-    >
-      <h2 className="mb-3 text-[11px] font-bold uppercase tracking-[0.22em] text-[#6b573f]">{title}</h2>
-      <div className="space-y-1 text-[15px] leading-relaxed text-[#4a3a28]">{children}</div>
-    </div>
-  )
-}
-
-function ContactLink() {
-  return (
-    <a
-      href="mailto:tym.mercier@gmail.com"
-      className="font-bold text-[#c65133] underline decoration-[#c65133]/40 underline-offset-2 transition hover:decoration-[#c65133]"
-    >
-      tym.mercier@gmail.com
-    </a>
   )
 }

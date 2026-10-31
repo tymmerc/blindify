@@ -32,6 +32,14 @@ describe("DiscordPlay", () => {
     expect(screen.getByText(/sans rien installer/i)).toBeInTheDocument()
   })
 
+  it("sous le bouton, un lien discret vers le serveur Blindz (T17b)", () => {
+    render(<DiscordPlay />)
+    const link = screen.getByRole("link", { name: /le serveur blindz/i })
+    expect(link).toHaveAttribute("href", "https://discord.gg/8pyAtVDFzU")
+    expect(link).toHaveAttribute("target", "_blank")
+    expect(link).toHaveAttribute("rel", "noopener noreferrer")
+  })
+
   it("heading=false : sans en-tete, le bouton reste", () => {
     render(<DiscordPlay heading={false} />)
     expect(screen.queryByText(/en appel sur discord/i)).not.toBeInTheDocument()

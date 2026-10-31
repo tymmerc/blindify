@@ -26,6 +26,7 @@ jest.mock("../../src/socket", () => ({
 import { roomsController } from "../../src/controllers/roomsController";
 import { pool } from "../../src/config/db";
 import { getSessionContext } from "../../src/utils/session";
+import { bootstrapGameState, clearGame, getGameState, revealRound, startNextRound } from "../../src/services/realtimeGame";
 import { resolveTestDatabaseUrl } from "../testDatabase";
 
 // Cette suite ecrit de vraies lignes : sans base de test jetable, elle s'arrete ici.
@@ -37,7 +38,7 @@ type Player = { id: number; username: string; provider: "guest" };
 type Room = { id: number; code: string };
 type JoinBody = {
   success: boolean;
-  data: { room: { room_code: string } } | null;
+  data: { room: { room_code: string }; lateJoin?: boolean; rejoined?: boolean } | null;
   error: { code: string } | null;
 };
 
@@ -143,5 +144,68 @@ describe("join d'une salle, base reelle", () => {
 
     await join(lea, room, "Lea B");
     expect(await seats(room)).toEqual([{ user_id: lea.id, nickname: "Lea B" }]);
+  });
+});
+
+/** Partie en cours, en base et en memoire, avec `players` a la table. */
+async function startLiveGame(room: Room, players: Player[]): Promise<void> {
+  await pool.query(`UPDATE multiplayer_rooms SET status='in_progress' WHERE id=$1`, [room.id]);
+  for (const p of players) {
+    await pool.query(`INSERT INTO room_participants (room_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [room.id, p.id]);
+  }
+  bootstrapGameState({
+    roomCode: room.code,
+    hostUserId: players[0].id,
+    tracks: [1, 2, 3].map(round => ({ round, trackId: `t${round}`, title: `T${round}`, artist: `A${round}`, previewUrl: null })),
+    participants: players.map(p => ({ userId: p.id, username: p.username })),
+    config: { roundDurationMs: 20_000 },
+  });
+  startNextRound(room.code);
+}
+
+describe("arriver pendant une partie (T19)", () => {
+  it("pendant une manche ou un reveal : entre, avec lateJoin, au lieu du 409", async () => {
+    const [host, lea, zoe, max] = [await seedPlayer("Hote"), await seedPlayer("Lea"), await seedPlayer("Zoe"), await seedPlayer("Max")];
+    const room = await seedRoom(host, 6);
+    await startLiveGame(room, [host, lea]);
+    try {
+      const during = await join(zoe, room, "Zoe");
+      expect(during.status).toBe(200);
+      expect(during.body.data).toMatchObject({ room: { room_code: room.code }, lateJoin: true });
+      expect((await seats(room)).map(s => s.user_id)).toContain(zoe.id);
+
+      revealRound(room.code);
+      expect(getGameState(room.code)?.phase).toBe("REVEAL");
+      expect((await join(max, room, "Max")).body.data?.lateJoin).toBe(true);
+
+      // Rechargement de page : il en fait deja partie.
+      const again = await join(zoe, room);
+      expect(again.status).toBe(200);
+      expect(again.body.data).toMatchObject({ rejoined: true });
+    } finally {
+      clearGame(room.code);
+    }
+  });
+
+  it("salle pleine : toujours refuse pendant une partie", async () => {
+    const [host, lea, zoe] = [await seedPlayer("Hote"), await seedPlayer("Lea"), await seedPlayer("Zoe")];
+    const room = await seedRoom(host, 2);
+    await startLiveGame(room, [host, lea]);
+    try {
+      const refused = await join(zoe, room, "Zoe");
+      expect(refused.status).toBe(409);
+      expect(refused.body.error?.code).toBe("room_full");
+    } finally {
+      clearGame(room.code);
+    }
+  });
+
+  it("salle en cours sans etat en memoire (backend redemarre) : entre comme avant, sans lateJoin", async () => {
+    const [host, zoe] = [await seedPlayer("Hote"), await seedPlayer("Zoe")];
+    const room = await seedRoom(host, 4);
+    await pool.query(`UPDATE multiplayer_rooms SET status='in_progress' WHERE id=$1`, [room.id]);
+    const entered = await join(zoe, room, "Zoe");
+    expect(entered.status).toBe(200);
+    expect(entered.body.data?.lateJoin).toBeUndefined();
   });
 });

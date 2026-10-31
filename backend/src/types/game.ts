@@ -61,6 +61,15 @@ export interface GameConfig {
   roundDurationMs: number
 }
 
+/**
+ * Joueur arrive pendant une partie (T19) : il regarde, puis joue a partir de
+ * la manche suivante. Jamais dans `players` tant qu'il attend.
+ */
+export interface WaitingPlayer {
+  userId: number
+  username: string | null
+}
+
 export interface GameState {
   roomCode: string
   hostUserId: number | null
@@ -72,6 +81,8 @@ export interface GameState {
   totalRounds: number
   currentTrack: RoundTrack | null
   players: Record<number, PlayerState>
+  /** Arrives en cours de partie, en attente de la manche suivante. */
+  waiting?: WaitingPlayer[]
   /** Partie mise en pause par l'hote (timers geles cote serveur). */
   paused?: boolean
   timing: GameTiming

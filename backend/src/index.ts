@@ -15,6 +15,8 @@ import authRoutes from "./routes/auth";
 import gamesRoutes from "./routes/games";
 import likesRoutes from "./routes/likes";
 import roomsRoutes from "./routes/rooms";
+import streamerRoutes from "./routes/streamer";
+import { checkTwitchConfig } from "./services/twitchReader";
 import reportsRoutes from "./routes/reports";
 import feedbackRoutes from "./routes/feedback";
 import { ensureFeedbackSchema, FEEDBACK_PURGE_SQL } from "./services/feedback";
@@ -45,6 +47,7 @@ import {
 } from "./services/presence";
 import { expireOldInvitations, getAcceptedFriendIds, type ExpiredInvitation } from "./services/social";
 import { registerSocketHandlers, broadcastFriendPresence } from "./socketHandlers";
+import { reportGameStartNotifStatus } from "./services/gameStartAnnounce";
 import { logger } from "./utils/logger";
 import { buildAllowedOrigins, matchesAllowedOrigin } from "./utils/origins";
 
@@ -89,6 +92,9 @@ if (ignoredOrigins.length) {
 }
 logger.info("allowed_origins", { origins: allowedOrigins });
 
+// Chat Twitch (T5b) : une TWITCH_IRC_URL non locale est ignoree, on le dit au demarrage.
+checkTwitchConfig();
+
 const lastKnownUsername = new Map<number, string | null>();
 const PRESENCE_SWEEP_INTERVAL_MS = 5_000;
 
@@ -116,6 +122,9 @@ setInterval(() => {
     `DELETE FROM multiplayer_rooms
      WHERE status = 'waiting'
      AND discord_instance_id IS NULL
+     -- Un lobby streamer (T5) attend que le public arrive par /live, sans
+     -- nouvelle ligne dans room_participants : on lui laisse 6 heures.
+     AND (mode IS DISTINCT FROM 'streamer' OR created_at < NOW() - INTERVAL '6 hours')
      AND (SELECT MAX(joined_at) FROM room_participants WHERE room_id = multiplayer_rooms.id)
          < NOW() - INTERVAL '30 minutes'`
   ).then(res => {
@@ -304,6 +313,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/games", gamesRoutes);
 app.use("/api/likes", likesRoutes);
 app.use("/api/rooms", roomsRoutes);
+app.use("/api/streamer", streamerRoutes);
 app.use("/api/stats", statsRoutes);
 app.use("/api/audio-sources", audioSourcesRoutes);
 app.use("/api/friends", friendsRoutes);
@@ -458,6 +468,7 @@ process.on("unhandledRejection", (reason) => {
 await userTracksReady;
 server.listen(PORT, "0.0.0.0", () => {
     logger.info(`🚀 Blindify API listening on port ${PORT}`);
+    reportGameStartNotifStatus();
   });
 }
 

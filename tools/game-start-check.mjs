@@ -28,7 +28,10 @@ const api = async (path, { method = "GET", token, body } = {}) => {
   return { status: res.status, data: json?.data, error: json?.error }
 }
 
-const guest = await api("/api/auth/guest", { method: "POST" })
+// Pseudos en « e2e » : le backend les range parmi les comptes de test
+// (services/testAccounts.ts), donc pas de mail « vraie partie » a Tym (T18).
+// La prod n'a pas E2E_BYPASS_KEY : l'en-tete seul ne suffit pas a l'ecarter.
+const guest = await api("/api/auth/guest", { method: "POST", body: { nickname: "e2e-check-a" } })
 const token = guest.data?.sessionToken
 const userId = guest.data?.user?.id
 if (!token || !userId) { bad(`session invite refusee (${guest.status} ${JSON.stringify(guest.error)})`); process.exit(1) }
@@ -45,7 +48,7 @@ okk(`salon cree : ${code}`)
 
 // Deuxieme joueur : le mode a plusieurs exige 2 participants, et ca teste en
 // prime le partage du canal temps reel entre deux sockets.
-const g2 = await api("/api/auth/guest", { method: "POST" })
+const g2 = await api("/api/auth/guest", { method: "POST", body: { nickname: "e2e-check-b" } })
 const t2 = g2.data?.sessionToken, u2 = g2.data?.user?.id
 if (!t2) { bad("second invite refuse"); process.exit(1) }
 await seedLibrary(u2, 12)

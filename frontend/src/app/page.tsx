@@ -67,7 +67,7 @@ const MODES = [
     title: "Autour d'une table",
     max: "12 places, écran compris",
     body:
-      "Un écran au milieu, la télé ou un PC, qui diffuse la musique et affiche les scores. Chacun scanne le QR code et répond depuis son téléphone. Ceux qui arrivent en retard voient un écran d'attente et entrent tout seuls à la fin de la partie en cours.",
+      "Un écran au milieu, la télé ou un PC, qui diffuse la musique et affiche les scores. Chacun scanne le QR code et répond depuis son téléphone. Quelqu'un arrive en retard ? Il scanne le même QR code, suit la manche en cours et joue dès la suivante.",
   },
   {
     key: "untel",
@@ -92,8 +92,8 @@ const MODES = [
 // Les questions posees avant de jouer. Reponses courtes : la version longue est
 // sur /faq/, qui reste la seule page a porter le JSON-LD FAQPage.
 // Verifie contre le code : cookie invite d'un an (authController), hotes acceptes
-// par parseProfileUrl (open.spotify.com et deezer.com seulement, donc les liens
-// courts spotify.link / link.deezer.com sont refuses), buzzer a 5 doigts.
+// par parseProfileUrl (open.spotify.com et deezer.com, plus les liens courts
+// spotify.link / link.deezer.com que le serveur ouvre lui-meme), buzzer a 5 doigts.
 const FAQ_TEASER = [
   {
     q: "Il faut créer un compte ?",
@@ -109,7 +109,7 @@ const FAQ_TEASER = [
   },
   {
     q: "Mon lien ne passe pas, pourquoi ?",
-    a: "Presque toujours parce que la playlist est privée, et ça se change en trente secondes. L'autre cause classique, ce sont les liens courts du bouton Partager (spotify.link, link.deezer.com) : ouvre-les et copie l'adresse complète.",
+    a: "Presque toujours parce que la playlist est privée, et ça se change en trente secondes. Sinon, vérifie que c'est bien une playlist ou un profil, pas un morceau ni un album.",
   },
   {
     q: "On n'a pas un téléphone chacun.",

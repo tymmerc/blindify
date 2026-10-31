@@ -21,7 +21,7 @@ export interface StreamerRound {
   album?: string | null;
   previewUrl: string | null;
   albumCover?: string | null;
-  metadata?: Record<string, any> | null;
+  metadata?: Record<string, unknown> | null;
   trackSource: TrackSource;
   provider?: string | null;
 }
@@ -30,6 +30,17 @@ export interface StreamerChatSnapshot {
   total: number;
   correct: number;
   percentCorrect: number;
+}
+
+/** D'ou vient un viewer du classement : la page blindz.app/live, ou le chat Twitch (T5b). */
+export type ViewerSource = "page" | "chat";
+
+/** Une ligne du classement des viewers. `id` est public (pas la cle de reprise). */
+export interface StreamerLeaderEntry {
+  id: string;
+  pseudo: string;
+  score: number;
+  source: ViewerSource;
 }
 
 export interface StreamerState {
@@ -54,4 +65,12 @@ export interface StreamerState {
   streamerWins: number;
   chatWins: number;
   chatSnapshot?: StreamerChatSnapshot | null;
+  /** Viewers inscrits sur la page (et, en T5b, vus dans le chat). */
+  viewerCount?: number;
+  /** Reponses recues pendant la manche en cours (nombre seulement, jamais le texte). */
+  answersCount?: number;
+  /** Top 5 des viewers, mis a jour a chaque reveal final. */
+  leaderboard?: StreamerLeaderEntry[];
+  /** Chaine Twitch dont le chat est lu (T5b), ou null. */
+  twitchChannel?: string | null;
 }

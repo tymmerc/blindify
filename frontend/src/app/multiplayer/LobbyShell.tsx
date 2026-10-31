@@ -24,6 +24,8 @@ type LobbyShellProps = {
   dataAttrs?: Record<string, string>
   stage?: "entry" | "lobby" | "game" | "results"
   isGuest?: boolean
+  /** A cote de « Quitter » : l'indicateur de spectateur (T18). */
+  aside?: ReactNode
   children: ReactNode
 }
 
@@ -36,13 +38,14 @@ export function LobbyShell({
   errorAction,
   dataAttrs,
   stage = "entry",
+  aside,
   children,
 }: LobbyShellProps) {
   const accent = ANALOG_ACCENTS[mode] ?? "#c65133"
   return (
     <main className="min-h-screen text-[#2e2014]" {...(dataAttrs ?? {})}>
       <div className={`relative mx-auto flex w-full flex-col ${stage === "game" ? "gap-0" : "min-h-screen max-w-6xl gap-5 px-4 py-5 sm:gap-6 sm:px-6 sm:py-8"}`}>
-        {!hideHeader ? <LobbyHeader title={title} onLeave={onLeave} stage={stage} accent={accent} /> : null}
+        {!hideHeader ? <LobbyHeader title={title} onLeave={onLeave} stage={stage} accent={accent} aside={aside} /> : null}
         {error ? (
           <div className="flex flex-col gap-3 rounded-md border-2 border-[#9c2f1d] bg-[#efe5d0] px-5 py-4 text-sm font-semibold text-[#9c2f1d] shadow-[4px_4px_0_rgba(46,32,20,.18)] sm:flex-row sm:items-center sm:justify-between">
             <span>{error}</span>
@@ -77,11 +80,13 @@ function LobbyHeader({
   onLeave,
   stage,
   accent,
+  aside,
 }: {
   title: string
   onLeave: () => void
   stage: LobbyShellProps["stage"]
   accent: string
+  aside?: ReactNode
 }) {
   return (
     <header className="flex items-center justify-between gap-3 border-b-2 border-[#2e2014] pb-3 sm:pb-4">
@@ -94,6 +99,8 @@ function LobbyHeader({
           <h1 className="m-0 mt-0.5 truncate font-display text-xl font-semibold text-[#2e2014] sm:text-2xl">{title}</h1>
         </div>
       </div>
+      <div className="flex shrink-0 items-center gap-2">
+      {aside}
       <button
         type="button"
         onClick={onLeave}
@@ -102,6 +109,7 @@ function LobbyHeader({
         <ArrowLeft className="h-3.5 w-3.5" />
         Quitter
       </button>
+      </div>
     </header>
   )
 }

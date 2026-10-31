@@ -84,10 +84,31 @@ services:
       DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}
       DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:-}
       SENTRY_DSN: ${SENTRY_DSN:-}
+      # Mail a Tym au debut d'une vraie partie (T18), meme config que la sonde
+      # de prod. La cle Resend reste dans son fichier : il est monte en lecture
+      # seule ci-dessous. Sans ces variables, le backend demarre sans mail
+      # (journal : notif_partie_desactivee).
+      ALERTE_DESTINATAIRE: ${ALERTE_DESTINATAIRE:-}
+      ALERTE_EXPEDITEUR: ${ALERTE_EXPEDITEUR:-}
+      RESEND_CLE_FICHIER: ${RESEND_CLE_FICHIER:+/run/blindz/resend.env}
+      # Lien spectateur signe (T18) : `openssl rand -hex 32`. Sans lui, pas de lien.
+      SPECTATEUR_SECRET: ${SPECTATEUR_SECRET:-}
+      # Mode streamer (T5) : lien d'overlay OBS signe, `openssl rand -hex 32`.
+      # Sans lui, le lobby dit que le lien d'overlay n'est pas configure.
+      OVERLAY_SECRET: ${OVERLAY_SECRET:-}
+      # Interrupteur : vide = ouvert, off = coupe (parties en cours comprises).
+      STREAMER_MODE: ${STREAMER_MODE:-}
+      STREAMER_MAX_GAMES: ${STREAMER_MAX_GAMES:-}
+      STREAMER_MAX_VIEWERS: ${STREAMER_MAX_VIEWERS:-}
+      STREAMER_MAX_VIEWERS_PER_IP: ${STREAMER_MAX_VIEWERS_PER_IP:-}
+      # Chat Twitch (T5b) : vide = le vrai chat (wss://irc-ws.chat.twitch.tv:443).
+      # Ne sert qu'aux tests (faux serveur IRC de la pile isolee).
+      TWITCH_IRC_URL: ${TWITCH_IRC_URL:-}
     ports:
       - "127.0.0.1:3000:3000"
     volumes:
       - ./backend/logs:/app/logs
+      - ${RESEND_CLE_FICHIER:-/dev/null}:/run/blindz/resend.env:ro
     networks:
       - blindify-network
     healthcheck:

@@ -1,6 +1,7 @@
 import type React from "react"
 import type { Metadata } from "next"
 import Link from "next/link"
+import { ContactLink, Section } from "@/components/legal/LegalBlocks"
 
 export const metadata: Metadata = {
   alternates: { canonical: "https://blindz.app/confidentialite/" },
@@ -27,7 +28,7 @@ export default function ConfidentialitePage() {
           <h1 className="font-display text-4xl font-semibold md:text-5xl">
             Politique de <em className="font-medium italic text-[#c65133]">confidentialité</em>
           </h1>
-          <p className="text-sm text-[#8a7558]">Dernière mise à jour : 5 octobre 2026</p>
+          <p className="text-sm text-[#8a7558]">Dernière mise à jour : 29 octobre 2026</p>
         </div>
 
         <div className="space-y-6">
@@ -102,6 +103,15 @@ export default function ConfidentialitePage() {
             </p>
           </Section>
 
+          <Section title="Parties regardées en direct" accent="#e0a32e">
+            <p>
+              L'éditeur de Blindz peut regarder une partie à plusieurs en direct, pour améliorer le jeu.
+              Il ne joue pas et ne voit que ce que voient les joueurs. Les joueurs le voient à l'écran
+              (« 👀 1 spectateur »), et rien n'est enregistré. Pour être prévenu, il reçoit un mail interne
+              avec le mode, l'heure et les pseudos de la salle, rien de plus.
+            </p>
+          </Section>
+
           <Section title="Cookies" accent="#c65133">
             <p>
               Blindz pose un seul cookie : un cookie de session, en httpOnly et secure, qui sert à te
@@ -142,6 +152,12 @@ export default function ConfidentialitePage() {
 
         <div className="mt-12 flex flex-wrap gap-3">
           <Link
+            href="/conditions/"
+            className="inline-flex items-center gap-2 rounded-full border-[1.5px] border-[#2e2014] bg-transparent px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+          >
+            Conditions
+          </Link>
+          <Link
             href="/mentions-legales"
             className="inline-flex items-center gap-2 rounded-full border-[1.5px] border-[#2e2014] bg-transparent px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
           >
@@ -159,42 +175,11 @@ export default function ConfidentialitePage() {
   )
 }
 
-function Section({
-  title,
-  accent,
-  children,
-}: {
-  title: string
-  accent: string
-  children: React.ReactNode
-}) {
-  return (
-    <div
-      className="rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-6 shadow-[4px_4px_0_rgba(46,32,20,.18)]"
-      style={{ borderLeft: `6px solid ${accent}` }}
-    >
-      <h2 className="mb-3 text-[11px] font-bold uppercase tracking-[0.22em] text-[#6b573f]">{title}</h2>
-      <div className="space-y-1 text-[15px] leading-relaxed text-[#4a3a28]">{children}</div>
-    </div>
-  )
-}
-
 function Item({ children }: { children: React.ReactNode }) {
   return (
     <li className="flex gap-2">
       <span className="mt-[6px] h-1.5 w-1.5 shrink-0 rounded-full bg-[#c65133]" />
       <span>{children}</span>
     </li>
-  )
-}
-
-function ContactLink() {
-  return (
-    <a
-      href="mailto:tym.mercier@gmail.com"
-      className="font-bold text-[#c65133] underline decoration-[#c65133]/40 underline-offset-2 transition hover:decoration-[#c65133]"
-    >
-      tym.mercier@gmail.com
-    </a>
   )
 }

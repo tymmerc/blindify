@@ -126,6 +126,15 @@ export type MultiplayerPlayerState = {
   disconnected?: boolean
 }
 
+/**
+ * Joueur arrive pendant une partie (T19) : il regarde, puis joue a partir de
+ * la manche suivante. Jamais dans `players` tant qu'il attend.
+ */
+export interface WaitingPlayer {
+  userId: number
+  username: string | null
+}
+
 export type MultiplayerGameState = {
   roomCode: string
   hostUserId: number | null
@@ -154,6 +163,8 @@ export type MultiplayerGameState = {
     provider?: string | null
   } | null
   players: Record<number, MultiplayerPlayerState>
+  /** Arrives en cours de partie, en attente de la manche suivante (T19). */
+  waiting?: WaitingPlayer[]
   /** Partie mise en pause par l'hote. */
   paused?: boolean
   /** L'hote (source audio en mode event) est-il toujours connecte ? */
@@ -274,6 +285,16 @@ export type StreamerRound = {
   provider?: string | null
 }
 
+/** D'ou vient un viewer du classement : la page /live, ou le chat Twitch. */
+export type ViewerSource = "page" | "chat"
+
+export type StreamerLeaderEntry = {
+  id: string
+  pseudo: string
+  score: number
+  source: ViewerSource
+}
+
 export type StreamerState = {
   roomCode: string
   hostUserId: number
@@ -292,6 +313,10 @@ export type StreamerState = {
   streamerWins: number
   chatWins: number
   chatSnapshot?: { total: number; correct: number; percentCorrect: number } | null
+  viewerCount?: number
+  answersCount?: number
+  leaderboard?: StreamerLeaderEntry[]
+  twitchChannel?: string | null
 }
 
 export type ImportedLink = {
