@@ -15,6 +15,7 @@ import authRoutes from "./routes/auth";
 import gamesRoutes from "./routes/games";
 import likesRoutes from "./routes/likes";
 import roomsRoutes from "./routes/rooms";
+import streamerRoutes from "./routes/streamer";
 import reportsRoutes from "./routes/reports";
 import feedbackRoutes from "./routes/feedback";
 import { ensureFeedbackSchema, FEEDBACK_PURGE_SQL } from "./services/feedback";
@@ -117,6 +118,9 @@ setInterval(() => {
     `DELETE FROM multiplayer_rooms
      WHERE status = 'waiting'
      AND discord_instance_id IS NULL
+     -- Un lobby streamer (T5) attend que le public arrive par /live, sans
+     -- nouvelle ligne dans room_participants : on lui laisse 6 heures.
+     AND (mode IS DISTINCT FROM 'streamer' OR created_at < NOW() - INTERVAL '6 hours')
      AND (SELECT MAX(joined_at) FROM room_participants WHERE room_id = multiplayer_rooms.id)
          < NOW() - INTERVAL '30 minutes'`
   ).then(res => {
@@ -305,6 +309,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/games", gamesRoutes);
 app.use("/api/likes", likesRoutes);
 app.use("/api/rooms", roomsRoutes);
+app.use("/api/streamer", streamerRoutes);
 app.use("/api/stats", statsRoutes);
 app.use("/api/audio-sources", audioSourcesRoutes);
 app.use("/api/friends", friendsRoutes);

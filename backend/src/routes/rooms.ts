@@ -1,5 +1,6 @@
 import express from "express";
 import { roomsController } from "../controllers/roomsController";
+import { streamerController } from "../controllers/streamerController";
 
 const router = express.Router();
 
@@ -11,6 +12,8 @@ router.get("/:code", roomsController.details);
 router.post("/:code/start", roomsController.startGame);
 router.post("/:code/config", roomsController.updateConfig);
 router.get("/:code/rounds", roomsController.roundsSummary);
+// Mode streamer (T5) : lien d'overlay OBS signe, pour l'hote.
+router.post("/:code/overlay", streamerController.overlay);
 router.post("/join", (req, res) => {
   if (typeof req.body?.code === "string") {
     (req.params as { code?: string }).code = req.body.code;

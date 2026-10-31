@@ -161,14 +161,24 @@ describe("POST /rooms/:code/start ne livre pas le corrige a l'hote", () => {
     const code = await seedRoom(users, "waiting");
     try {
       await pool.query(`UPDATE multiplayer_rooms SET mode = 'streamer' WHERE room_code = $1`, [code]);
-      const library = [...(await seedLibrary(users[1].id, 3)), ...(await seedLibrary(users[2].id, 3))];
+      // T5 : toute la musique vient du streamer (users[0]) ; celle des autres
+      // membres de la salle n'entre pas dans la partie.
+      const library = await seedLibrary(users[0].id, 6);
+      const others = await seedLibrary(users[1].id, 3);
 
       const { status, body } = await callStart(code, users[0].id, { source: "library", subMode: "duo" });
 
       expect(status).toBe(200);
       expect(leakedSecrets(body, library)).toEqual([]);
       expectHiddenTracks(body.data.tracks, body.data.session.totalRounds);
-      expect(previewsInBody(body, library)).toBeLessThanOrEqual(1);
+      // Partie en LOBBY : aucune manche ouverte, donc aucun extrait.
+      expect(previewsInBody(body, library)).toBe(0);
+      const { rows } = await pool.query<{ correct_title: string }>(
+        `SELECT gr.correct_title FROM game_rounds gr JOIN multiplayer_rooms m ON m.session_id = gr.session_id WHERE m.room_code = $1`,
+        [code],
+      );
+      const othersTitles = new Set(others.map(o => o.title));
+      expect(rows.some(r => othersTitles.has(r.correct_title))).toBe(false);
     } finally {
       await cleanupRoom(code, users);
     }

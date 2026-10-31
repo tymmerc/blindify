@@ -10,6 +10,9 @@ import { bootstrapGameState, getGameState, gameStateSnapshot, revealedRoundCeili
 import { startRoundAndBroadcast } from "../services/realtimeOrchestrator";
 import { GameMode, type RoundTrack } from "../types/game";
 import { initStreamerGame } from "../services/streamerOrchestrator";
+import { maxStreamerGames, streamerModeEnabled } from "../services/streamerConfig";
+import { activeStreamerGames, hostStreamerState } from "../services/streamerGame";
+import { streamerStartRefusal } from "./streamerController";
 import { activeLinkIds } from "./linksController";
 import { bySmallestLibrary, ownersAmong, PLAYS_TONIGHT } from "../services/userTracks";
 import {
@@ -142,6 +145,18 @@ export const roomsController = {
       ? Math.min(Math.max(Number(req.body.questionCount), 5), 25)
       : 10;
 
+    // Interrupteur STREAMER_MODE=off (T5) : plus de nouvelle salle streamer.
+    if (mode === GameMode.STREAMER && !streamerModeEnabled()) {
+      fail(res, "streamer_off", "Le mode streamer est fermé pour le moment.", 403);
+      return;
+    }
+    // Serveur plein (STREAMER_MAX_GAMES) : on le dit avant que le streamer
+    // prepare son OBS, pas au clic sur Lancer.
+    if (mode === GameMode.STREAMER && activeStreamerGames().length >= maxStreamerGames()) {
+      fail(res, "streamer_full", "Trop de lives en même temps sur Blindz. Réessaie dans quelques minutes.", 503);
+      return;
+    }
+
     const nickname = typeof req.body?.nickname === "string" ? req.body.nickname.trim().slice(0, 30) || null : null;
     // Event uniquement : l'hote joue-t-il (true) ou presente-t-il seulement (false) ?
     const hostPlays = mode === GameMode.EVENT ? Boolean(req.body?.hostPlays) : false;
@@ -187,13 +202,21 @@ export const roomsController = {
     }
 
     const { rows } = await pool.query(
-      `SELECT id, room_code, max_players, status FROM multiplayer_rooms WHERE room_code=$1 LIMIT 1`,
+      `SELECT id, room_code, max_players, status, mode, host_user_id FROM multiplayer_rooms WHERE room_code=$1 LIMIT 1`,
       [code]
     );
     const room = rows[0];
 
     if (!room) {
       fail(res, "room_not_found", "Salle introuvable", 404);
+      return;
+    }
+
+    // Salle streamer (T5) : son code est affiche sur le live. Le public joue
+    // par /live ; personne d'autre que le streamer n'entre dans la salle (sa
+    // musique alimenterait la partie, et la salle sert le corrige a ses membres).
+    if (room.mode === GameMode.STREAMER && room.host_user_id !== user.id) {
+      fail(res, "streamer_viewer", "Pour jouer pendant un live, passe par la page /live avec le code du stream.", 403);
       return;
     }
 
@@ -655,6 +678,14 @@ export const roomsController = {
       return;
     }
 
+    if (room.mode === GameMode.STREAMER) {
+      const refusal = streamerStartRefusal(room.room_code);
+      if (refusal) {
+        fail(res, refusal.code, refusal.message, refusal.status);
+        return;
+      }
+    }
+
     if (room.status !== "waiting") {
       // Allow restart if the game is finished
       const existingState = getGameState(room.room_code);
@@ -764,11 +795,16 @@ export const roomsController = {
     // Contributeurs MUSIQUE : qui peut ramener la playlist. Autour d'une table, l'hote
     // presentateur est le DJ : sa musique DOIT alimenter le pool meme s'il ne joue pas.
     // Tout le monde present dans la room peut contribuer.
-    const musicContributorIds = room.mode === GameMode.EVENT
+    let musicContributorIds = room.mode === GameMode.EVENT
       ? Array.from(new Set(participantRows.map(p => p.user_id)))
       : participantIds;
 
-    if (!participantIds.length) {
+    // Mode streamer (T5) : le public joue depuis /live, sans etre inscrit dans
+    // la salle. Seul l'hote (et sa musique) compte : pas de minimum de joueurs.
+    const isStreamerRoom = room.mode === GameMode.STREAMER;
+    if (isStreamerRoom) musicContributorIds = [room.host_user_id];
+
+    if (!participantIds.length && !isStreamerRoom) {
       fail(res, "no_participants", "Aucun joueur connecté pour lancer en mode événement", 400);
       return;
     }
@@ -781,7 +817,7 @@ export const roomsController = {
     const playersWithMusic = Number(musicRows[0]?.n ?? 0);
     // Assoupli : 2 joueurs minimum + au moins 1 playlist importee. Une seule personne
     // peut ramener la musique (pratique pour une partie autour d'une table).
-    if (participantIds.length < 2) {
+    if (participantIds.length < 2 && !isStreamerRoom) {
       fail(res, "need_more_players", "Il faut au moins 2 joueurs pour lancer la partie.", 400);
       return;
     }
@@ -1152,27 +1188,24 @@ export const roomsController = {
     const publicTracks = normalizedTracks.map(t => hiddenTrackRow(t.round, t.type));
 
     if (room.mode === GameMode.STREAMER) {
-      const subModeRaw = typeof req.body?.subMode === "string" ? req.body.subMode.toLowerCase() : "duo";
-      const soloSourceRaw = typeof req.body?.soloSource === "string" ? req.body.soloSource.toLowerCase() : "streamer";
+      const subModeRaw = typeof req.body?.subMode === "string" ? req.body.subMode.toLowerCase() : "viewers_only";
       const subMode =
-        subModeRaw === "viewers_only" || subModeRaw === "chat_only" || subModeRaw === "streamer_only"
-          ? ("viewers_only" as const)
+        subModeRaw === "duo"
+          ? ("duo" as const)
           : subModeRaw === "solo" || subModeRaw === "just_stream"
             ? ("solo" as const)
-            : ("duo" as const);
-      const soloTrackSource = soloSourceRaw === "chat" || soloSourceRaw === "audience" ? ("chat" as const) : ("streamer" as const);
+            : ("viewers_only" as const);
 
-      const streamerRounds = normalizedTracks.map((t, index) => {
-        let trackSource: "streamer" | "chat";
-        if (subMode === "viewers_only") {
-          trackSource = "chat";
-        } else if (subMode === "solo") {
-          trackSource = soloTrackSource;
-        } else {
-          // duo: alternate between streamer and chat for variety
-          trackSource = index % 2 === 0 ? "streamer" : "chat";
-        }
-        return {
+      // Plafond revu juste avant de creer la partie : le tirage des morceaux
+      // ci-dessus prend plusieurs secondes, d'autres lancements ont pu passer.
+      const lateRefusal = streamerStartRefusal(room.room_code);
+      if (lateRefusal) {
+        fail(res, lateRefusal.code, lateRefusal.message, lateRefusal.status);
+        return;
+      }
+
+      // Toute la musique vient du streamer : les viewers n'importent rien.
+      const streamerRounds = normalizedTracks.map(t => ({
         round: t.round,
         trackId: String(t.track_id),
         audioSourceId: t.audioSourceId,
@@ -1182,10 +1215,9 @@ export const roomsController = {
         previewUrl: t.audio_url,
         albumCover: t.album_cover,
         metadata: t.metadata ?? {},
-        trackSource,
+        trackSource: "streamer" as const,
         provider: t.type ?? null,
-      };
-      });
+      }));
       const state = initStreamerGame(io, {
         roomCode: room.room_code,
         hostUserId: room.host_user_id,
@@ -1193,6 +1225,9 @@ export const roomsController = {
         subMode,
         requestedRounds: room.question_count,
         shortReason,
+        sessionId: session.id,
+        // « Temps pour repondre » du lobby : la phase du public.
+        timings: { chatMs: roundDurationMs },
       });
       ok(res, {
         session: {
@@ -1207,7 +1242,7 @@ export const roomsController = {
           roomCode: room.room_code,
         },
         tracks: publicTracks,
-        gameState: state,
+        gameState: hostStreamerState(state),
       });
       return;
     }

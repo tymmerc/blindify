@@ -92,7 +92,7 @@ function artistVariants(artist: string): string[] {
 
 export function evaluateGuessDetail(
   guess: string,
-  track: RoundTrack,
+  track: Pick<RoundTrack, "title" | "artist">,
   separateTitle?: string | null,
   separateArtist?: string | null,
 ): {

@@ -6,6 +6,7 @@ import type { Mode } from "@/contexts/ModeContext"
 import { useMode } from "@/contexts/ModeContext"
 import { AccountMenu } from "@/components/AccountMenu"
 import { publicPath } from "@/lib/publicPath"
+import { api } from "@/lib/api"
 
 type ModeCard = {
   key: Mode
@@ -40,12 +41,11 @@ const MODE_CARDS: ModeCard[] = [
   {
     key: "streamer",
     title: "Avec ta communauté",
-    subtitle: "Ton public devine les morceaux en direct depuis le chat de ton live.",
+    subtitle: "Ton public devine les morceaux en direct, depuis son téléphone, pendant ton live.",
     accent: "#7d9471",
     destination: "/streamer",
     posture: "Stream",
     rpm: "45 RPM · MONO",
-    wip: true,
   },
 ]
 
@@ -173,6 +173,15 @@ function ModeSelectionContent() {
   const [selection, setSelection] = useState<Mode | null>(mode)
   const [picking, setPicking] = useState<Mode | "solo" | null>(null)
   const [showHelp, setShowHelp] = useState(false)
+  // Interrupteur STREAMER_MODE du serveur (T5) : coupe, la carte repasse en « Bientôt ».
+  const [streamerOff, setStreamerOff] = useState(false)
+  useEffect(() => {
+    let active = true
+    api.streamerStatus()
+      .then(status => { if (active) setStreamerOff(!status.enabled) })
+      .catch(() => { /* serveur injoignable : la creation de salle le dira */ })
+    return () => { active = false }
+  }, [])
 
   const fallbackRoute = useMemo(() => searchParams.get("from") || "/modes", [searchParams])
 
@@ -185,13 +194,17 @@ function ModeSelectionContent() {
     setGuest(false)
   }, [setGuest])
 
-  const getCard = (key: Mode | null) => MODE_CARDS.find(card => card.key === key) ?? null
+  const cards = useMemo(
+    () => MODE_CARDS.map(card => (card.key === "streamer" && streamerOff ? { ...card, wip: true } : card)),
+    [streamerOff]
+  )
+  const getCard = (key: Mode | null) => cards.find(card => card.key === key) ?? null
 
   const handleConfirm = (targetMode?: Mode) => {
     const selected = targetMode ?? selection
     const card = getCard(selected)
     if (!selected || !card) return
-    if (card.wip) return // "Avec ta communaute" : bientot, pas jouable
+    if (card.wip) return // "Avec ta communaute" coupe par STREAMER_MODE=off : pas jouable
     if (picking) return // un choix est deja en cours d'animation
     setMode(selected)
     // On arrive ici via "Creer" (choisi a l'entree) -> on cree directement la partie (host).
@@ -235,7 +248,7 @@ function ModeSelectionContent() {
         </header>
 
         <div className="grid gap-10 sm:gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          {MODE_CARDS.map(card => (
+          {cards.map(card => (
             <VinylSleeve
               key={card.key}
               title={card.title}

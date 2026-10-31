@@ -1,95 +1,104 @@
+/**
+ * Machine a etats du mode streamer (T5), en memoire.
+ *
+ * LOBBY -> STARTING_ROUND (3 s) -> GUESSING_CHAT (20 s, les viewers repondent)
+ *   -> [duo] REVEAL_PARTIAL -> GUESSING_STREAMER (15 s, l'hote repond)
+ *   -> REVEAL_FINAL -> ROUND_ENDED -> (l'hote lance la suivante) ... -> GAME_OVER
+ * En `solo`, seul l'hote devine : la manche passe directement a GUESSING_STREAMER.
+ *
+ * Les viewers (page /live, et chat Twitch en T5b) ont une reponse par manche.
+ * Leurs points sont calcules et publies au reveal final, pas avant : en duo,
+ * le streamer devine encore apres eux.
+ *
+ * Qui recoit quoi : streamerChannels.ts (l'extrait ne va qu'a l'hote et a
+ * l'overlay, la reponse a personne avant le reveal).
+ */
 import type { Server as IOServer } from "socket.io";
 import type { StreamerState, StreamerRound, StreamerSubMode } from "../types/streamer";
-import { markMultiplayerRoomFinished } from "./gamePersistence";
-import { roundOwnerIds } from "./roundOwners";
+import { markMultiplayerRoomFinished, markStreamerSessionFinished } from "./gamePersistence";
+import { HIDDEN_PHASES, emitStreamerState, emitToMedia, mediaView, viewerView } from "./streamerChannels";
+import { scoreViewerAnswer, type AnswerWindow, type ViewerAnswer } from "./streamerScoring";
+import { evaluateGuessDetail } from "./guessMatching";
+import {
+  banViewer,
+  clearViewers,
+  getViewer,
+  leaderboard,
+  ranks,
+  resetViewerScores,
+  updateViewer,
+  viewerCount,
+} from "./streamerViewers";
 
-type Guess = { userId: number; guess: string; at: number };
+export const START_COUNTDOWN_MS = 3_000;
+export const CHAT_GUESS_DURATION = 20_000;
+export const STREAMER_GUESS_DURATION = 15_000;
+/** L'hote coupe (F5, wifi) : la partie l'attend une minute avant de finir. */
+export const HOST_ABSENCE_MS = 60_000;
+const CLEANUP_MS = 10 * 60_000;
+/** Partie laissee en plan (lobby ou entre deux manches) : finie apres 30 min. */
+export const IDLE_MS = 30 * 60_000;
+const ANSWERS_THROTTLE_MS = 500;
+const ANSWERED_NAMES = 8;
 
-const START_COUNTDOWN_MS = 3_000;
-const CHAT_GUESS_DURATION = 20_000;
-const STREAMER_GUESS_DURATION = 15_000;
+/** Sortie d'une manche pour un viewer, envoyee a lui seul au reveal final. */
+export interface ViewerRoundResult {
+  viewerId: string;
+  round: number;
+  verdict: "correct" | "close" | "wrong" | "none";
+  points: number;
+}
 
-const games = new Map<string, {
+/** Points du chat Twitch (T5b) : facteur applique a une reponse selon son heure. */
+export type AnswerFactor = (viewerId: string, answer: ViewerAnswer) => number;
+
+/** Durees d'une manche. Les tests d'integration les raccourcissent. */
+export interface StreamerTimings {
+  countdownMs: number;
+  chatMs: number;
+  streamerMs: number;
+}
+
+const DEFAULT_TIMINGS: StreamerTimings = {
+  countdownMs: START_COUNTDOWN_MS,
+  chatMs: CHAT_GUESS_DURATION,
+  streamerMs: STREAMER_GUESS_DURATION,
+};
+
+interface StreamerCtx {
   state: StreamerState;
+  timings: StreamerTimings;
   rounds: StreamerRound[];
-  timers: { phase?: NodeJS.Timeout };
-  chatGuesses: Map<number, Guess>;
-  streamerGuess?: Guess;
-}>();
-
-// Qui a apporte le morceau ne le devine pas : le contributeur de la manche,
-// et tout autre joueur de la salle qui l'a importe aussi (roundOwners.ts).
-function enforceProviderRule(round: StreamerRound, userId: number): boolean {
-  return !roundOwnerIds(round.metadata).includes(userId);
+  sessionId: number | null;
+  timers: { phase?: NodeJS.Timeout; hostAbsence?: NodeJS.Timeout; answers?: NodeJS.Timeout };
+  answers: Map<string, ViewerAnswer>;
+  answeredNames: Array<{ id: string; pseudo: string }>;
+  window: AnswerWindow | null;
+  streamerGuess?: { title: string; artist: string };
 }
 
-// Phases pendant lesquelles quelqu'un doit encore deviner : la reponse ne
-// doit pas partir sur le fil (le streamer devine encore en REVEAL_PARTIAL).
-const HIDDEN_PHASES: ReadonlySet<StreamerState["phase"]> = new Set([
-  "STARTING_ROUND",
-  "GUESSING_CHAT",
-  "REVEAL_PARTIAL",
-  "GUESSING_STREAMER",
-]);
+const games = new Map<string, StreamerCtx>();
+let answerFactor: AnswerFactor = () => 1;
 
-/**
- * Vue publique de l'etat streamer : piste caviardee tant que la manche n'est
- * pas entierement revelee. Meme contrat que le multi classique : un viewer
- * qui lit les trames socket ne doit jamais voir titre/artiste en avance.
- */
-function publicState(state: StreamerState): StreamerState {
-  if (!state.currentTrack || !HIDDEN_PHASES.has(state.phase)) return state;
-  const t = state.currentTrack;
-  return {
-    ...state,
-    currentTrack: {
-      round: t.round,
-      // trackId/audioSourceId sont l'external_id du provider : les laisser
-      // permettait de resoudre la reponse via api.deezer.com/track/{id} avant
-      // le reveal. On les masque, comme le multi classique.
-      trackId: "hidden",
-      title: "",
-      artist: "",
-      album: null,
-      previewUrl: t.previewUrl,
-      albumCover: null,
-      metadata: null,
-      trackSource: t.trackSource,
-    },
-  };
+/** Branche le bareme du chat Twitch (T5b). Par defaut, plein bareme partout. */
+export function setAnswerFactor(fn: AnswerFactor): void {
+  answerFactor = fn;
 }
 
-/** Idem publicState mais expose l'export du snapshot pour l'orchestrateur. */
-export function publicStreamerState(state: StreamerState): StreamerState {
-  return publicState(state);
-}
+/** Une personne precise recoit son resultat : la room socket.io de ce viewer. */
+export const viewerSelfRoom = (roomCode: string, viewerId: string): string => `stream:viewer:${roomCode}:${viewerId}`;
 
-/**
- * Game over streamer : (1) la room sort de 'in_progress' en base tout de suite
- * (sinon zombie + faux game:lost au resync tardif), (2) l'etat memoire est
- * libere apres 10 min (le temps que les clients voient l'ecran de fin).
- */
-function scheduleCleanup(roomCode: string): void {
-  const ctx = games.get(roomCode);
-  if (!ctx) return;
-  void markMultiplayerRoomFinished(roomCode);
-  if (ctx.timers.phase) clearTimeout(ctx.timers.phase);
-  const timer = setTimeout(() => clearStreamerGame(roomCode), 10 * 60_000);
-  (timer as NodeJS.Timeout).unref?.();
-  ctx.timers.phase = timer;
-}
-
-function setPhase(roomCode: string, phase: StreamerState["phase"], update?: Partial<StreamerState>) {
-  const ctx = games.get(roomCode);
-  if (!ctx) return;
+function setPhase(ctx: StreamerCtx, phase: StreamerState["phase"], update?: Partial<StreamerState>): void {
   ctx.state = { ...ctx.state, ...update, phase };
 }
 
-function schedule(roomCode: string, delay: number, cb: () => void) {
-  const ctx = games.get(roomCode);
-  if (!ctx) return;
+function schedule(ctx: StreamerCtx, delay: number, cb: () => void): void {
   if (ctx.timers.phase) clearTimeout(ctx.timers.phase);
   ctx.timers.phase = setTimeout(cb, delay);
+}
+
+function broadcast(io: IOServer, ctx: StreamerCtx, event = "state:sync"): void {
+  emitStreamerState(io, ctx.state.roomCode, event, ctx.state);
 }
 
 export function bootstrapStreamerGame(params: {
@@ -99,7 +108,11 @@ export function bootstrapStreamerGame(params: {
   subMode: StreamerSubMode;
   requestedRounds?: number;
   shortReason?: "library" | "lookup" | null;
+  sessionId?: number | null;
+  timings?: Partial<StreamerTimings>;
 }): StreamerState {
+  clearStreamerGame(params.roomCode, { keepViewers: true });
+  resetViewerScores(params.roomCode);
   const state: StreamerState = {
     roomCode: params.roomCode,
     hostUserId: params.hostUserId,
@@ -117,13 +130,19 @@ export function bootstrapStreamerGame(params: {
     streamerWins: 0,
     chatWins: 0,
     chatSnapshot: null,
+    viewerCount: viewerCount(params.roomCode),
+    answersCount: 0,
+    leaderboard: [],
   };
   games.set(params.roomCode, {
     state,
     rounds: params.rounds,
+    timings: { ...DEFAULT_TIMINGS, ...params.timings },
+    sessionId: params.sessionId ?? null,
     timers: {},
-    chatGuesses: new Map(),
-    streamerGuess: undefined,
+    answers: new Map(),
+    answeredNames: [],
+    window: null,
   });
   return state;
 }
@@ -132,164 +151,336 @@ export function getStreamerState(roomCode: string): StreamerState | undefined {
   return games.get(roomCode)?.state;
 }
 
-export function clearStreamerGame(roomCode: string) {
+/** Parties streamer en cours (pas finies) sur le serveur, pour le plafond. */
+export function activeStreamerGames(): string[] {
+  return [...games.values()].filter(c => c.state.phase !== "GAME_OVER").map(c => c.state.roomCode);
+}
+
+export function clearStreamerGame(roomCode: string, opts: { keepViewers?: boolean } = {}): void {
   const ctx = games.get(roomCode);
-  if (ctx?.timers.phase) clearTimeout(ctx.timers.phase);
+  if (ctx) for (const t of Object.values(ctx.timers)) if (t) clearTimeout(t);
   games.delete(roomCode);
+  if (!opts.keepViewers) clearViewers(roomCode);
 }
 
-// Un "match" par inclusion doit porter sur assez de matiere : sans garde de
-// longueur, taper "a" validait n'importe quel titre contenant un "a".
-function looseMatch(guess: string, target: string): boolean {
-  if (!guess || !target) return false;
-  if (guess === target) return true;
-  if (target.length >= 4 && guess.includes(target)) return true;
-  if (guess.length >= 4 && guess.length >= target.length * 0.5 && target.includes(guess)) return true;
-  return false;
+export function clearAllStreamerGamesForTests(): void {
+  for (const code of [...games.keys()]) clearStreamerGame(code);
 }
 
-function scoreGuess(text: string, round: StreamerRound): boolean {
-  const norm = (v: string) => v.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9\s]/g, " ").trim();
-  const guess = norm(text);
-  if (!guess) return false;
-  const title = norm(round.title);
-  const artist = norm(round.artist);
-  return looseMatch(guess, title) && looseMatch(guess, artist);
+export function publicStreamerState(state: StreamerState): StreamerState {
+  return viewerView(state);
+}
+
+export function hostStreamerState(state: StreamerState): StreamerState {
+  return mediaView(state);
+}
+
+const viewerCountTimers = new Map<string, NodeJS.Timeout>();
+
+/**
+ * Le nombre de viewers a change : l'etat et les compteurs le disent. Regroupe
+ * (une trame par seconde au plus) : un raid de 300 viewers n'envoie pas 300 trames.
+ */
+export function refreshViewerCount(io: IOServer, roomCode: string): void {
+  if (viewerCountTimers.has(roomCode)) return;
+  const timer = setTimeout(() => {
+    viewerCountTimers.delete(roomCode);
+    const count = viewerCount(roomCode);
+    const ctx = games.get(roomCode);
+    if (ctx) ctx.state = { ...ctx.state, viewerCount: count };
+    emitToMedia(io, roomCode, "streamer:viewers", { roomCode, count });
+  }, 1_000);
+  timer.unref?.();
+  viewerCountTimers.set(roomCode, timer);
 }
 
 export function startNextStreamerRound(io: IOServer, roomCode: string): StreamerState | undefined {
   const ctx = games.get(roomCode);
   if (!ctx) return undefined;
-
-  if (ctx.state.phase !== "LOBBY" && ctx.state.phase !== "ROUND_ENDED") {
-    return ctx.state;
-  }
+  if (ctx.state.phase !== "LOBBY" && ctx.state.phase !== "ROUND_ENDED") return ctx.state;
 
   const nextRound = ctx.state.currentRound + 1;
-  if (nextRound > ctx.state.totalRounds) {
-    setPhase(roomCode, "GAME_OVER");
-    io.to(roomCode).emit("state:sync", publicState(ctx.state));
-    scheduleCleanup(roomCode);
-    return ctx.state;
-  }
-
   const round = ctx.rounds.find(r => r.round === nextRound);
-  if (!round) {
-    setPhase(roomCode, "GAME_OVER");
-    io.to(roomCode).emit("state:sync", publicState(ctx.state));
-    scheduleCleanup(roomCode);
+  if (nextRound > ctx.state.totalRounds || !round) {
+    finishGame(io, ctx);
     return ctx.state;
   }
 
-  const trackSource = round.trackSource;
-  ctx.chatGuesses.clear();
+  ctx.answers = new Map();
+  ctx.answeredNames = [];
+  ctx.window = null;
   ctx.streamerGuess = undefined;
-
   const startAt = Date.now();
-  setPhase(roomCode, "STARTING_ROUND", {
+  setPhase(ctx, "STARTING_ROUND", {
     currentRound: nextRound,
-    currentTrack: { ...round, trackSource },
-    timing: { startAt, endAt: startAt + START_COUNTDOWN_MS },
+    currentTrack: { ...round },
+    timing: { startAt, endAt: startAt + ctx.timings.countdownMs },
     chatSnapshot: null,
+    answersCount: 0,
   });
-  io.to(roomCode).emit("round:start", publicState(ctx.state));
-  io.to(roomCode).emit("state:sync", publicState(ctx.state));
-
-  schedule(roomCode, START_COUNTDOWN_MS, () => {
-    // Solo mode: only the streamer guesses; skip chat phase entirely.
-    if (ctx.state.subMode === "solo") {
-      setPhase(roomCode, "GUESSING_STREAMER", {
-        timing: { startAt: Date.now(), endAt: Date.now() + STREAMER_GUESS_DURATION },
-      });
-      io.to(roomCode).emit("state:sync", publicState(ctx.state));
-      schedule(roomCode, STREAMER_GUESS_DURATION, () => revealFinal(io, roomCode));
-      return;
-    }
-
-    // Viewers-only or duo: start with chat guesses
-    setPhase(roomCode, "GUESSING_CHAT", {
-      timing: { startAt: Date.now(), endAt: Date.now() + CHAT_GUESS_DURATION },
-    });
-    io.to(roomCode).emit("state:sync", publicState(ctx.state));
-    schedule(roomCode, CHAT_GUESS_DURATION, () => {
-      if (ctx.state.subMode === "viewers_only") {
-        revealFinal(io, roomCode);
-      } else {
-        revealPartial(io, roomCode);
-      }
-    });
-  });
-
+  broadcast(io, ctx, "round:start");
+  broadcast(io, ctx);
+  schedule(ctx, ctx.timings.countdownMs, () => openGuessing(io, ctx));
   return ctx.state;
 }
 
-export function recordChatGuess(io: IOServer, roomCode: string, userId: number, guess: string) {
-  const ctx = games.get(roomCode);
-  if (!ctx || ctx.state.phase !== "GUESSING_CHAT" || ctx.state.hostUserId === userId) return;
-  if (!ctx.state.currentTrack) return;
-  if (!enforceProviderRule(ctx.state.currentTrack, userId)) return;
-  if (ctx.chatGuesses.has(userId)) return;
-  ctx.chatGuesses.set(userId, { userId, guess, at: Date.now() });
-  io.to(roomCode).emit("state:sync", publicState(ctx.state));
-}
-
-export function recordStreamerGuess(io: IOServer, roomCode: string, userId: number, guess: string) {
-  const ctx = games.get(roomCode);
-  if (!ctx || ctx.state.phase !== "GUESSING_STREAMER") return;
-  if (userId !== ctx.state.hostUserId) return;
-  if (!ctx.state.currentTrack) return;
-  if (!enforceProviderRule(ctx.state.currentTrack, userId)) return;
-  ctx.streamerGuess = { userId, guess, at: Date.now() };
-  revealFinal(io, roomCode);
-}
-
-function revealPartial(io: IOServer, roomCode: string) {
-  const ctx = games.get(roomCode);
-  if (!ctx || ctx.state.phase !== "GUESSING_CHAT") return;
-  const current = ctx.state.currentTrack;
-  if (!current) return;
-  const total = ctx.chatGuesses.size || 1;
-  const correct = Array.from(ctx.chatGuesses.values()).filter(g => scoreGuess(g.guess, current)).length;
-  const percent = Math.round((correct / total) * 100);
-  ctx.state.chatScore += correct;
-  ctx.state.chatStreak = correct > 0 ? ctx.state.chatStreak + 1 : 0;
-  setPhase(roomCode, "REVEAL_PARTIAL", {
-    chatSnapshot: { total, correct, percentCorrect: percent },
-    timing: { startAt: Date.now(), endAt: null },
-  });
-  io.to(roomCode).emit("round:reveal:partial", publicState(ctx.state));
-  setPhase(roomCode, "GUESSING_STREAMER", { timing: { startAt: Date.now(), endAt: Date.now() + STREAMER_GUESS_DURATION } });
-  io.to(roomCode).emit("state:sync", publicState(ctx.state));
-  schedule(roomCode, STREAMER_GUESS_DURATION, () => revealFinal(io, roomCode));
-}
-
-function revealFinal(io: IOServer, roomCode: string) {
-  const ctx = games.get(roomCode);
-  if (!ctx || (ctx.state.phase !== "GUESSING_CHAT" && ctx.state.phase !== "GUESSING_STREAMER" && ctx.state.phase !== "REVEAL_PARTIAL")) return;
-  const current = ctx.state.currentTrack;
-  if (!current) return;
-  const chatCorrect = Array.from(ctx.chatGuesses.values()).filter(g => scoreGuess(g.guess, current)).length;
-  const chatTotal = ctx.chatGuesses.size || 1;
-  const chatPercent = Math.round((chatCorrect / chatTotal) * 100);
-  ctx.state.chatSnapshot = { total: chatTotal, correct: chatCorrect, percentCorrect: chatPercent };
-  const streamerCorrect = ctx.streamerGuess ? scoreGuess(ctx.streamerGuess.guess, current) : false;
-  if (streamerCorrect) {
-    ctx.state.streamerScore += 1;
-    ctx.state.streamerWins += 1;
-  } else {
-    ctx.state.chatWins += 1;
-  }
-  setPhase(roomCode, "REVEAL_FINAL", {
-    timing: { startAt: Date.now(), endAt: null },
-  });
-  io.to(roomCode).emit("round:reveal:final", publicState(ctx.state));
-  const isLastRound = ctx.state.currentRound >= ctx.state.totalRounds;
-  if (isLastRound) {
-    setPhase(roomCode, "GAME_OVER", { timing: { startAt: null, endAt: null } });
-    io.to(roomCode).emit("state:sync", publicState(ctx.state));
-    scheduleCleanup(roomCode);
+function openGuessing(io: IOServer, ctx: StreamerCtx): void {
+  const now = Date.now();
+  if (ctx.state.subMode === "solo") {
+    setPhase(ctx, "GUESSING_STREAMER", { timing: { startAt: now, endAt: now + ctx.timings.streamerMs } });
+    broadcast(io, ctx);
+    schedule(ctx, ctx.timings.streamerMs, () => revealFinal(io, ctx));
     return;
   }
-  setPhase(roomCode, "ROUND_ENDED", { timing: { startAt: null, endAt: null } });
-  io.to(roomCode).emit("state:sync", publicState(ctx.state));
+  ctx.window = { startAt: now, endAt: now + ctx.timings.chatMs };
+  setPhase(ctx, "GUESSING_CHAT", { timing: { ...ctx.window } });
+  broadcast(io, ctx);
+  schedule(ctx, ctx.timings.chatMs, () => {
+    if (ctx.state.subMode === "viewers_only") revealFinal(io, ctx);
+    else revealPartial(io, ctx);
+  });
+}
+
+export type AnswerOutcome = "ok" | "ferme" | "deja" | "inconnu" | "vide";
+
+/** Reponse d'un viewer (page ou chat). Une seule par manche, pendant GUESSING_CHAT. */
+export function recordViewerAnswer(
+  io: IOServer,
+  roomCode: string,
+  viewerId: string,
+  input: { title?: string; artist?: string },
+  at = Date.now(),
+): AnswerOutcome {
+  const ctx = games.get(roomCode);
+  if (!ctx || ctx.state.phase !== "GUESSING_CHAT" || !ctx.window) return "ferme";
+  const viewer = getViewer(roomCode, viewerId);
+  if (!viewer) return "inconnu";
+  const title = input.title?.trim() ?? "";
+  const artist = input.artist?.trim() ?? "";
+  if (!title && !artist) return "vide";
+  if (viewer.answeredRound >= ctx.state.currentRound || ctx.answers.has(viewerId)) return "deja";
+  ctx.answers.set(viewerId, { title, artist, at });
+  updateViewer(roomCode, viewerId, v => ({ ...v, answeredRound: ctx.state.currentRound }));
+  ctx.answeredNames = [{ id: viewer.id, pseudo: viewer.pseudo }, ...ctx.answeredNames].slice(0, ANSWERED_NAMES);
+  ctx.state = { ...ctx.state, answersCount: ctx.answers.size };
+  scheduleAnswersEmit(io, ctx);
+  return "ok";
+}
+
+/** Compteur de reponses vers l'hote et l'overlay, regroupe (pas une trame par reponse). */
+function scheduleAnswersEmit(io: IOServer, ctx: StreamerCtx): void {
+  if (ctx.timers.answers) return;
+  ctx.timers.answers = setTimeout(() => {
+    ctx.timers.answers = undefined;
+    emitAnswers(io, ctx);
+  }, ANSWERS_THROTTLE_MS);
+}
+
+function emitAnswers(io: IOServer, ctx: StreamerCtx): void {
+  emitToMedia(io, ctx.state.roomCode, "streamer:answers", {
+    roomCode: ctx.state.roomCode,
+    round: ctx.state.currentRound,
+    count: ctx.answers.size,
+    names: ctx.answeredNames.map(n => n.pseudo),
+    // Avec leur id : l'hote peut exclure un pseudo depuis sa page.
+    viewers: ctx.answeredNames,
+  });
+}
+
+/** Reponse de l'hote, pendant GUESSING_STREAMER (duo et solo). */
+export function recordStreamerGuess(
+  io: IOServer,
+  roomCode: string,
+  userId: number,
+  guess: { title?: string; artist?: string },
+): void {
+  const ctx = games.get(roomCode);
+  if (!ctx || ctx.state.phase !== "GUESSING_STREAMER" || userId !== ctx.state.hostUserId) return;
+  ctx.streamerGuess = { title: guess.title?.trim() ?? "", artist: guess.artist?.trim() ?? "" };
+  revealFinal(io, ctx);
+}
+
+/** Note les reponses de la manche et credite les viewers. Rien n'est publie ici. */
+function scoreAnswers(ctx: StreamerCtx, track: StreamerRound): ViewerRoundResult[] {
+  const window = ctx.window;
+  if (!window) return [];
+  const roomCode = ctx.state.roomCode;
+  const results: ViewerRoundResult[] = [];
+  for (const [viewerId, answer] of ctx.answers) {
+    const score = scoreViewerAnswer(answer, track, window, answerFactor(viewerId, answer));
+    if (score.points > 0) {
+      updateViewer(roomCode, viewerId, v => ({
+        ...v,
+        score: v.score + score.points,
+        correct: v.correct + (score.verdict === "correct" ? 1 : 0),
+        reactionMs: v.reactionMs + score.reactionMs,
+      }));
+    }
+    results.push({ viewerId, round: track.round, verdict: score.verdict, points: score.points });
+  }
+  return results;
+}
+
+/** Part des viewers qui ont trouve au moins le titre ou l'artiste. */
+function chatSnapshotOf(found: boolean[]): NonNullable<StreamerState["chatSnapshot"]> {
+  const total = found.length;
+  const correct = found.filter(Boolean).length;
+  return { total, correct, percentCorrect: total ? Math.round((correct / total) * 100) : 0 };
+}
+
+function revealPartial(io: IOServer, ctx: StreamerCtx): void {
+  const track = ctx.state.currentTrack;
+  if (ctx.state.phase !== "GUESSING_CHAT" || !track) return;
+  // Pourcentage seulement : les points individuels sortent au reveal final.
+  const found = [...ctx.answers.values()].map(a => {
+    const d = evaluateGuessDetail("", track, a.title, a.artist);
+    return d.matchedTitle || d.matchedArtist;
+  });
+  const now = Date.now();
+  setPhase(ctx, "REVEAL_PARTIAL", { chatSnapshot: chatSnapshotOf(found), timing: { startAt: now, endAt: null } });
+  broadcast(io, ctx, "round:reveal:partial");
+  setPhase(ctx, "GUESSING_STREAMER", { timing: { startAt: now, endAt: now + ctx.timings.streamerMs } });
+  broadcast(io, ctx);
+  schedule(ctx, ctx.timings.streamerMs, () => revealFinal(io, ctx));
+}
+
+function revealFinal(io: IOServer, ctx: StreamerCtx): void {
+  const phase = ctx.state.phase;
+  if (phase !== "GUESSING_CHAT" && phase !== "GUESSING_STREAMER" && phase !== "REVEAL_PARTIAL") return;
+  const track = ctx.state.currentTrack;
+  if (!track) return;
+  const results = scoreAnswers(ctx, track);
+  const snapshot = chatSnapshotOf(results.map(r => r.points > 0));
+  const guess = ctx.streamerGuess;
+  const streamerCorrect = Boolean(guess) && evaluateGuessDetail("", track, guess?.title, guess?.artist).verdict === "correct";
+  const wins = ctx.state.subMode === "viewers_only"
+    ? {}
+    : streamerCorrect
+      ? { streamerScore: ctx.state.streamerScore + 1, streamerWins: ctx.state.streamerWins + 1 }
+      : snapshot.correct > 0
+        ? { chatWins: ctx.state.chatWins + 1 }
+        : {};
+  setPhase(ctx, "REVEAL_FINAL", {
+    ...wins,
+    chatSnapshot: snapshot,
+    chatScore: ctx.state.chatScore + snapshot.correct,
+    chatStreak: snapshot.correct > 0 ? ctx.state.chatStreak + 1 : 0,
+    leaderboard: leaderboard(ctx.state.roomCode),
+    timing: { startAt: Date.now(), endAt: null },
+  });
+  if (ctx.timers.phase) clearTimeout(ctx.timers.phase);
+  broadcast(io, ctx, "round:reveal:final");
+  sendResults(io, ctx, results);
+  if (ctx.state.currentRound >= ctx.state.totalRounds) {
+    finishGame(io, ctx);
+    return;
+  }
+  setPhase(ctx, "ROUND_ENDED", { timing: { startAt: null, endAt: null } });
+  broadcast(io, ctx);
+  scheduleIdleEnd(io, ctx);
+}
+
+/** Partie lancee mais premiere manche jamais demarree : meme delai. */
+export function armStreamerIdle(io: IOServer, roomCode: string): void {
+  const ctx = games.get(roomCode);
+  if (ctx && ctx.state.phase === "LOBBY") scheduleIdleEnd(io, ctx);
+}
+
+/** Personne ne lance la suite : la partie libere sa place au bout de IDLE_MS. */
+function scheduleIdleEnd(io: IOServer, ctx: StreamerCtx): void {
+  schedule(ctx, IDLE_MS, () => finishGame(io, ctx));
+  ctx.timers.phase?.unref?.();
+}
+
+/** Chaque viewer qui a repondu recoit son verdict, ses points et sa place. */
+function sendResults(io: IOServer, ctx: StreamerCtx, results: ViewerRoundResult[]): void {
+  if (!results.length) return;
+  const roomCode = ctx.state.roomCode;
+  const places = ranks(roomCode);
+  const total = places.size;
+  for (const r of results) {
+    const viewer = getViewer(roomCode, r.viewerId);
+    if (!viewer || viewer.source !== "page") continue;
+    io.to(viewerSelfRoom(roomCode, r.viewerId)).emit("live:result", {
+      roomCode,
+      round: r.round,
+      verdict: r.verdict,
+      points: r.points,
+      score: viewer.score,
+      rank: places.get(r.viewerId) ?? null,
+      total,
+    });
+  }
+}
+
+function finishGame(io: IOServer, ctx: StreamerCtx): void {
+  if (ctx.state.phase === "GAME_OVER") return;
+  const roomCode = ctx.state.roomCode;
+  for (const key of ["phase", "answers", "hostAbsence"] as const) {
+    const t = ctx.timers[key];
+    if (t) clearTimeout(t);
+    ctx.timers[key] = undefined;
+  }
+  // Finie en pleine manche (« Finir », hote parti) : la reponse n'a pas ete
+  // revelee, elle ne sort pas avec le podium.
+  const unrevealed = HIDDEN_PHASES.has(ctx.state.phase);
+  setPhase(ctx, "GAME_OVER", {
+    leaderboard: leaderboard(roomCode),
+    timing: { startAt: null, endAt: null },
+    ...(unrevealed ? { currentTrack: null } : {}),
+  });
+  broadcast(io, ctx);
+  void markMultiplayerRoomFinished(roomCode);
+  void markStreamerSessionFinished(ctx.sessionId, ctx.state.currentRound);
+  // Les ecrans de fin (overlay, viewers) gardent l'etat 10 minutes.
+  const timer = setTimeout(() => clearStreamerGame(roomCode), CLEANUP_MS);
+  timer.unref?.();
+  ctx.timers.phase = timer;
+}
+
+/** « Finir la partie » de l'hote : podium tout de suite, quelle que soit la phase. */
+export function endStreamerGame(io: IOServer, roomCode: string): void {
+  const ctx = games.get(roomCode);
+  if (ctx) finishGame(io, ctx);
+}
+
+/** L'hote a coupe : la partie finit s'il n'est pas revenu dans la minute. */
+export function hostLeft(io: IOServer, roomCode: string, delayMs = HOST_ABSENCE_MS): void {
+  const ctx = games.get(roomCode);
+  if (!ctx || ctx.state.phase === "GAME_OVER" || ctx.timers.hostAbsence) return;
+  const timer = setTimeout(() => {
+    ctx.timers.hostAbsence = undefined;
+    finishGame(io, ctx);
+  }, delayMs);
+  timer.unref?.();
+  ctx.timers.hostAbsence = timer;
+}
+
+export function hostBack(roomCode: string): void {
+  const ctx = games.get(roomCode);
+  if (!ctx?.timers.hostAbsence) return;
+  clearTimeout(ctx.timers.hostAbsence);
+  ctx.timers.hostAbsence = undefined;
+}
+
+/**
+ * « Exclure » du streamer : le viewer quitte le classement et la manche en
+ * cours, son socket est coupe, et ni sa cle ni son pseudo ne rentrent plus.
+ */
+export function kickViewer(io: IOServer, roomCode: string, viewerId: string): boolean {
+  const banned = banViewer(roomCode, viewerId);
+  if (!banned) return false;
+  const self = viewerSelfRoom(roomCode, viewerId);
+  io.to(self).emit("live:error", { code: "exclu" });
+  io.in(self).disconnectSockets(true);
+  const ctx = games.get(roomCode);
+  if (ctx) {
+    ctx.answers.delete(viewerId);
+    ctx.answeredNames = ctx.answeredNames.filter(n => n.id !== viewerId);
+    ctx.state = { ...ctx.state, answersCount: ctx.answers.size, leaderboard: leaderboard(roomCode) };
+    broadcast(io, ctx);
+    emitAnswers(io, ctx);
+  }
+  refreshViewerCount(io, roomCode);
+  return true;
 }

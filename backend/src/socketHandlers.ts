@@ -20,7 +20,6 @@ import {
   dropWaiting,
   isWaitingPlayer,
 } from "./services/realtimeGame";
-import { markMultiplayerRoomFinished } from "./services/gamePersistence";
 import * as lobbyRps from "./services/lobbyRps";
 import { validRoomCode, clampText, toIntOrNull, MAX_GUESS_LEN, MAX_CHAT_LEN } from "./utils/socketValidation";
 import {
@@ -50,9 +49,18 @@ import {
   handleStreamerGuess,
   advanceStreamerRound,
   getStreamerSnapshot,
-  cleanupStreamer,
 } from "./services/streamerOrchestrator";
-import { publicStreamerState } from "./services/streamerGame";
+import { endStreamerGame, hostBack, hostLeft, hostStreamerState, kickViewer } from "./services/streamerGame";
+import { streamerModeEnabled } from "./services/streamerConfig";
+import { mediaRoom } from "./services/streamerChannels";
+import { viewerCount } from "./services/streamerViewers";
+import {
+  attachOverlay,
+  attachViewer,
+  authorizeStreamerSocket,
+  readStreamerHandshake,
+  streamerSocketOf,
+} from "./services/streamerSockets";
 import { GameMode } from "./types/game";
 import { relayDiscordHost } from "./services/hostRelay";
 import { logger } from "./utils/logger";
@@ -264,6 +272,20 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
     try {
       // Lien spectateur (T18) : jeton du lien verifie a chaque connexion, sans
       // session. Refus net si le jeton est expire, falsifie ou vise une autre salle.
+      // Overlay OBS et viewers de /live (T5) : pas de session non plus.
+      const streamerRequest = readStreamerHandshake(socket);
+      if (streamerRequest) {
+        const result = await authorizeStreamerSocket(streamerRequest, handshakeIp(socket));
+        if (!result.ok) {
+          logger.info("streamer_socket_refuse", { kind: streamerRequest.kind, code: result.code });
+          // Interrupteur coupe pendant un live : la partie finit ici, proprement.
+          const salle = validRoomCode(streamerRequest.salle)?.toUpperCase();
+          if (result.code === "live_desactive" && salle) endStreamerGame(io, salle);
+          return next(new Error(result.code));
+        }
+        (socket.data as { streamer?: unknown }).streamer = result.data;
+        return next();
+      }
       const spectatorRequest = readSpectatorHandshake(socket);
       if (spectatorRequest) {
         const result = await authorizeSpectator({ ...spectatorRequest, ip: handshakeIp(socket) });
@@ -298,6 +320,12 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
     const spectator = spectatorOf(socket);
     if (spectator) {
       attachSpectator(io, socket, spectator);
+      return;
+    }
+    const streamerSocket = streamerSocketOf(socket);
+    if (streamerSocket) {
+      if (streamerSocket.kind === "overlay") attachOverlay(socket, streamerSocket);
+      else attachViewer(io, socket, streamerSocket);
       return;
     }
     const auth = (socket.data as { auth?: SessionContext }).auth;
@@ -367,6 +395,16 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
       }
     };
 
+    // Hote streamer (T5) : il recoit l'extrait avec l'overlay, et sa partie
+    // ne s'arrete plus s'il revient dans la minute.
+    const joinStreamerMedia = (roomCode: string) => {
+      socket.join(mediaRoom(roomCode));
+      hostBack(roomCode);
+      const snapshot = getStreamerSnapshot(roomCode);
+      if (snapshot) socket.emit("state:sync", hostStreamerState(snapshot));
+      socket.emit("streamer:viewers", { roomCode, count: viewerCount(roomCode) });
+    };
+
     socket.on("room:join", async (payload: { roomCode?: unknown }) => {
       const roomCode = validRoomCode(payload?.roomCode);
       logger.debug(`room:join request from user ${currentUser.id} (${currentUser.username}) for room ${roomCode}, socketId=${socket.id}`);
@@ -432,6 +470,7 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
         serverTimestamp: Date.now(),
       });
       sendStateToSocket(roomCode);
+      if (access.room.mode === GameMode.STREAMER && access.isHost) joinStreamerMedia(roomCode);
       // « 👀 1 spectateur » : le joueur qui arrive (ou revient) sait tout de suite.
       socket.emit(SPECTATORS_EVENT, spectatorCountPayload(io, roomCode));
 
@@ -467,6 +506,11 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
         serverTimestamp: Date.now(),
       });
       broadcastState(io, roomCode);
+      if (access.isHost && access.room.mode === GameMode.STREAMER) {
+        // « Quitter » de l'hote streamer : podium tout de suite, pas d'attente.
+        socket.leave(mediaRoom(roomCode));
+        endStreamerGame(io, roomCode);
+      }
       if (access.isHost) await relayHostIfNeeded(io, roomCode, currentUser.id);
 
       setPresence(currentUser.id, { online: true, activity: "idle", context: null });
@@ -665,7 +709,11 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
         // encore la, le backend n'a PAS redemarre, game:sync ne la concerne pas
         // (les clients streamer emettent quand meme game:sync a la reconnexion).
         // Sans ce garde, une simple reconnexion de viewer tuait la partie live.
-        if (getStreamerSnapshot(roomCode)) return;
+        const streamerSnapshot = getStreamerSnapshot(roomCode);
+        if (streamerSnapshot) {
+          if (access.isHost) socket.emit("state:sync", hostStreamerState(streamerSnapshot));
+          return;
+        }
         // Sinon : backend redemarre en pleine partie, l'etat memoire est perdu
         // et les clients resteraient figes sur l'ecran de jeu pour toujours. On
         // leur signale la perte et on solde la room en base pour que la table
@@ -892,42 +940,61 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
       broadcastState(io, roomCode);
     });
 
-    // Streamer mode: game:guess (chat or host submits a guess)
-    socket.on("game:guess", async (payload: { roomCode?: unknown; guess?: unknown }) => {
+    // Mode streamer : reponse de l'hote (duo, solo). Les viewers repondent par
+    // leur propre socket (live:guess, streamerSockets.ts).
+    socket.on("game:guess", async (payload: { roomCode?: unknown; guess?: unknown; title?: unknown; artist?: unknown }) => {
       const roomCode = validRoomCode(payload?.roomCode);
-      const guess = clampText(payload?.guess, MAX_GUESS_LEN);
-      if (!roomCode || !guess) return;
+      if (!roomCode || !allowEvent(socket.id, "streamer_guess", 5, 10_000)) return;
+      const title = clampText(payload?.title, MAX_GUESS_LEN) ?? clampText(payload?.guess, MAX_GUESS_LEN);
+      const artist = clampText(payload?.artist, MAX_GUESS_LEN);
+      if (!title && !artist) return;
       const access = await requireRoomAccess(roomCode, currentUser.id);
-      if (!access) {
-        emitRoomError(socket, roomCode, "Accès refusé à cette salle.");
-        return;
-      }
-      const streamerState = getStreamerSnapshot(roomCode);
-      if (!streamerState) {
+      if (!access?.isHost) return;
+      if (!getStreamerSnapshot(roomCode)) {
         emitRoomError(socket, roomCode, "Partie streamer introuvable.");
         return;
       }
-      handleStreamerGuess(io, roomCode, currentUser.id, guess, GameMode.STREAMER);
+      handleStreamerGuess(io, roomCode, currentUser.id, { title, artist }, GameMode.STREAMER);
     });
 
-    // Streamer mode: host:start (host advances to next round)
-    socket.on("host:start", async ({ roomCode }: { roomCode: string }) => {
-      if (!roomCode) return;
+    // Mode streamer : l'hote lance la manche suivante, ou finit la partie.
+    const streamerHostAction = (event: "host:start" | "host:end") => async (payload: { roomCode?: unknown }) => {
+      const roomCode = validRoomCode(payload?.roomCode);
+      if (!roomCode || !allowEvent(socket.id, event, 6, 10_000)) return;
       const access = await requireRoomAccess(roomCode, currentUser.id);
       if (!access || !access.isHost) {
-        emitRoomError(socket, roomCode, "Seul l'hôte peut lancer la manche.");
+        emitRoomError(socket, roomCode, "Seul l'hôte peut piloter la partie.");
         return;
       }
-      const streamerState = getStreamerSnapshot(roomCode);
-      if (!streamerState) {
+      if (!getStreamerSnapshot(roomCode)) {
         emitRoomError(socket, roomCode, "Partie streamer introuvable.");
         return;
       }
-      advanceStreamerRound(io, roomCode);
+      if (event === "host:start" && !streamerModeEnabled()) {
+        // STREAMER_MODE=off pendant le live : podium, sans ouvrir de manche.
+        endStreamerGame(io, roomCode);
+        emitRoomError(socket, roomCode, "Le mode streamer vient d'être coupé sur le serveur : la partie s'arrête ici.", "streamer_off");
+        return;
+      }
+      if (event === "host:start") advanceStreamerRound(io, roomCode);
+      else endStreamerGame(io, roomCode);
+    };
+    socket.on("host:start", streamerHostAction("host:start"));
+    socket.on("host:end", streamerHostAction("host:end"));
+
+    // « Exclure » un viewer (pseudo offensant, triche) : hote seulement.
+    socket.on("host:kick", async (payload: { roomCode?: unknown; viewerId?: unknown }) => {
+      const roomCode = validRoomCode(payload?.roomCode);
+      const viewerId = typeof payload?.viewerId === "string" && /^[A-Za-z0-9_-]{1,16}$/.test(payload.viewerId) ? payload.viewerId : null;
+      if (!roomCode || !viewerId || !allowEvent(socket.id, "host:kick", 20, 10_000)) return;
+      const access = await requireRoomAccess(roomCode, currentUser.id);
+      if (!access?.isHost || access.room.mode !== GameMode.STREAMER) return;
+      if (kickViewer(io, roomCode, viewerId)) logger.info("streamer_viewer_exclu", { roomCode });
     });
 
     socket.on("disconnecting", () => {
-      const rooms = Array.from(socket.rooms).filter(room => room !== socket.id);
+      // Les rooms « stream:… » du mode streamer ne sont pas des salles.
+      const rooms = Array.from(socket.rooms).filter(room => room !== socket.id && !room.startsWith("stream:"));
       for (const roomCode of rooms) {
         // Revenu sur un autre socket avant que celui-ci meure : pas un depart.
         if (hasOtherSocketInRoom(io, roomCode, currentUser.id, socket.id)) continue;
@@ -992,17 +1059,10 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
         serverTimestamp: Date.now(),
       });
 
-        // Cleanup streamer game if the host disconnects
+        // Hote streamer coupe (F5, wifi) : la partie l'attend une minute
+        // (hostLeft), puis finit. Avant, la moindre coupure tuait le live.
         const streamerState = getStreamerSnapshot(roomCode);
-        if (streamerState && streamerState.hostUserId === currentUser.id) {
-          cleanupStreamer(roomCode);
-          // La room doit sortir de 'in_progress' en base (comme au game over
-          // normal) sinon elle reste zombie.
-          void markMultiplayerRoomFinished(roomCode);
-          // Caviarde : la manche pouvait etre en cours (GUESSING_CHAT), on ne
-          // divulgue pas la reponse en partant.
-          io.to(roomCode).emit("state:sync", { ...publicStreamerState(streamerState), phase: "GAME_OVER" });
-        }
+        if (streamerState && streamerState.hostUserId === currentUser.id) hostLeft(io, roomCode);
       }
     });
 

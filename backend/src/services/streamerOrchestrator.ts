@@ -1,13 +1,15 @@
 import type { Server as IOServer } from "socket.io";
 import {
+  armStreamerIdle,
   bootstrapStreamerGame,
   clearStreamerGame,
   getStreamerState,
-  recordChatGuess,
   recordStreamerGuess,
   startNextStreamerRound,
 } from "./streamerGame";
+import { emitStreamerState } from "./streamerChannels";
 import type { StreamerRound, StreamerSubMode } from "../types/streamer";
+import type { StreamerTimings } from "./streamerGame";
 import { GameMode } from "../types/game";
 
 export function initStreamerGame(io: IOServer, params: {
@@ -17,24 +19,26 @@ export function initStreamerGame(io: IOServer, params: {
   subMode: StreamerSubMode;
   requestedRounds?: number;
   shortReason?: "library" | "lookup" | null;
+  sessionId?: number | null;
+  timings?: Partial<StreamerTimings>;
 }) {
   const state = bootstrapStreamerGame(params);
-  io.to(params.roomCode).emit("state:sync", state);
+  emitStreamerState(io, params.roomCode, "state:sync", state);
+  armStreamerIdle(io, params.roomCode);
   return state;
 }
 
-export function handleStreamerGuess(io: IOServer, roomCode: string, userId: number, guess: string, mode: GameMode) {
+/** Seul l'hote repond par ce chemin : les viewers passent par live:guess. */
+export function handleStreamerGuess(
+  io: IOServer,
+  roomCode: string,
+  userId: number,
+  guess: { title?: string; artist?: string },
+  mode: GameMode,
+) {
   if (mode !== GameMode.STREAMER) return;
   const state = getStreamerState(roomCode);
-  if (!state) return;
-  if (state.hostUserId === userId) {
-    recordStreamerGuess(io, roomCode, userId, guess);
-  } else {
-    recordChatGuess(io, roomCode, userId, guess);
-  }
-}
-
-export function handleStreamerHostGuess(io: IOServer, roomCode: string, userId: number, guess: string) {
+  if (!state || state.hostUserId !== userId) return;
   recordStreamerGuess(io, roomCode, userId, guess);
 }
 

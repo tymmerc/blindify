@@ -38,6 +38,7 @@ import { RequestTimeoutError, withTimeoutRetry } from "@/lib/withTimeoutRetry"
 import { LateJoinerView } from "@/components/game/LateJoinerView"
 import { arrivalNotice, isLateJoiner } from "@/lib/lateJoin"
 import { useLateArrivals } from "./hooks/useLateArrivals"
+import { useStreamerFeed } from "./hooks/useStreamerFeed"
 
 // Entree dans un salon : un essai sans reponse au bout de 8 s est abandonne et
 // relance, trois essais en tout. Rejouer le join est sans risque (le backend
@@ -193,8 +194,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current)
     noticeTimerRef.current = setTimeout(() => setSocketNotice(null), 6000)
   }, [])
-  const [streamerMode, setStreamerMode] = useState<StreamerSubMode>("duo")
-  const [soloSource, setSoloSource] = useState<"streamer" | "chat">("streamer")
+  const [streamerMode, setStreamerMode] = useState<StreamerSubMode>("viewers_only")
   const abortFlowRef = useRef(false)
   // Join en cours, relances comprises : coupe quand le joueur repart (page
   // quittee, "Retour au menu"). Aucun essai ne part apres son depart, et une
@@ -257,6 +257,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   const [joinCode, setJoinCode] = useState(initialJoinCode?.toUpperCase() ?? "")
   const serverNow = useServerTime(socketRef.current)
   // Quelqu'un arrive en pleine partie (T19) : les autres le voient arriver.
+  const streamerFeed = useStreamerFeed(socketConnected ? socketRef.current : null, room?.room_code ?? null, mode === "streamer")
   useLateArrivals(
     socketConnected ? socketRef.current : null,
     room?.room_code ?? null,
@@ -281,10 +282,11 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     },
     [participants, mode, room?.host_user_id, room?.host_plays]
   )
+  // Streamer (T5) : le public arrive par /live, pas dans la salle. Pas de minimum.
   const canStartGame =
     isHost &&
     (lobby.status === "hosting" || lobby.status === "waiting") &&
-    activeParticipants.length >= modeConfig.lobby.minPlayers &&
+    (mode === "streamer" || activeParticipants.length >= modeConfig.lobby.minPlayers) &&
     !starting &&
     !importing
 
@@ -1166,15 +1168,10 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         // Pre-warm the audio element during this user interaction (click).
         // This unlocks autoplay so the round start audio plays without manual click.
         audioManager.warmup()
-        const payload: { source?: string; playlistId?: string; subMode?: string; soloSource?: string } = {
+        const payload: { source?: string; playlistId?: string; subMode?: string } = {
           source: "library",
         }
-        if (mode === "streamer") {
-          payload.subMode = streamerMode
-          if (streamerMode === "solo") {
-            payload.soloSource = soloSource
-          }
-        }
+        if (mode === "streamer") payload.subMode = streamerMode
         const { tracks: generatedTracks, gameState: initialState } = await api.startMultiplayerGame(room.room_code, payload)
         setTracks(generatedTracks)
         if (initialState) {
@@ -1232,7 +1229,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         setStarting(false)
       }
     },
-    [room, canStartGame, mode, resolveViewFromState, viewToLobbyAction, streamerMode, soloSource]
+    [room, canStartGame, mode, resolveViewFromState, viewToLobbyAction, streamerMode]
   )
 
   useEffect(() => {
@@ -1556,34 +1553,8 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     chatMessages,
     onSendChat: room ? sendChat : undefined,
     rps: room ? rps : undefined,
+    streamer: mode === "streamer" ? { subMode: streamerMode, setSubMode: setStreamerMode, viewerCount: streamerFeed.viewerCount } : undefined,
   }
-
-  const streamerModeSelector =
-    mode === "streamer" && view !== "playing" && view !== "results" ? (
-      <div className="mx-auto w-full max-w-6xl rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-4 text-[#2e2014] shadow-[4px_4px_0_rgba(46,32,20,.18)] sm:p-5">
-        <p className="m-0 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.22em]">
-          <span aria-hidden className="h-2.5 w-2.5 rounded-full border-[1.5px] border-[#2e2014] bg-[#7d9471]" />
-          Le format
-        </p>
-        <div className="mt-3 grid gap-2 md:grid-cols-3">
-          {[
-            { key: "viewers_only", title: "Chat avec ta musique", desc: "Le chat joue avec tes musiques", value: "viewers_only" as StreamerSubMode },
-            { key: "duo", title: "Toi avec leur musique", desc: "Tu joues avec les musiques du chat", value: "duo" as StreamerSubMode },
-            { key: "solo", title: "Vous deux ensemble", desc: "Les deux jouent avec les deux musiques", value: "solo" as StreamerSubMode },
-          ].map(opt => (
-            <button
-              key={opt.key}
-              type="button"
-              onClick={() => setStreamerMode(opt.value)}
-              className={`rounded-md border-2 px-3 py-3 text-left transition ${streamerMode === opt.value ? "border-[#2e2014] bg-[#7d9471] text-[#2e2014] shadow-[3px_3px_0_#2e2014]" : "border-[rgba(46,32,20,.35)] bg-[#efe5d0] text-[#2e2014] hover:border-[#2e2014]"}`}
-            >
-              <p className="text-sm font-bold">{opt.title}</p>
-              <p className="text-xs opacity-80">{opt.desc}</p>
-            </button>
-          ))}
-        </div>
-      </div>
-    ) : null
 
   const selectedLobby = (() => {
     switch (mode) {
@@ -1614,27 +1585,20 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     ) : null
 
   const content =
-    view === "playing" && gameState && room ? (
+    // Streamer : l'ecran de fin (podium du chat) reste celui de la partie.
+    (view === "playing" || (view === "results" && mode === "streamer")) && gameState && room ? (
       mode === "streamer" ? (
         <StreamerGameClient
           userId={userPayload.user.id}
           state={gameState as StreamerState}
           serverNow={serverNow}
-          onChatGuess={guess => {
-            const socket = socketRef.current
-            if (!socket) return
-            socket.emit("game:guess", { roomCode: room.room_code, guess })
-          }}
-          onHostGuess={guess => {
-            const socket = socketRef.current
-            if (!socket) return
-            socket.emit("game:guess", { roomCode: room.room_code, guess })
-          }}
-          onHostStart={() => {
-            const socket = socketRef.current
-            if (!socket) return
-            socket.emit("host:start", { roomCode: room.room_code })
-          }}
+          viewerCount={streamerFeed.viewerCount}
+          answers={streamerFeed.answers}
+          onHostGuess={guess => socketRef.current?.emit("game:guess", { roomCode: room.room_code, ...guess })}
+          onHostStart={() => socketRef.current?.emit("host:start", { roomCode: room.room_code })}
+          onHostEnd={() => socketRef.current?.emit("host:end", { roomCode: room.room_code })}
+          onKick={viewerId => socketRef.current?.emit("host:kick", { roomCode: room.room_code, viewerId })}
+          onReplay={isHost ? () => void handleStartGame({ restart: true }) : undefined}
           onExit={handleLeaveRoom}
           accent={accentColor}
         />
@@ -1774,7 +1738,6 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       loadingGame
     ) : (
       <>
-        {streamerModeSelector}
         {selectedLobby}
       </>
     )
