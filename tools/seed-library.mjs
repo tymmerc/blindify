@@ -57,7 +57,7 @@ export function cibleSeed(argv = process.argv, env = process.env) {
   }
   return cible
 }
-const SEED_PG = cibleSeed()
+export const SEED_PG = cibleSeed()
 
 // Arguments separes, SANS shell : les titres viennent de Deezer (donnees
 // tierces) et finissent dans une commande lancee en root. Avec l'ancien
@@ -91,18 +91,20 @@ export const codeSalle = c => {
 }
 
 // Un joueur de test, c'est un invite cree il y a moins d'une heure dans la base
-// visee : c'est ce que font tous les outils juste avant d'ensemencer. Un vrai
+// visee : c'est ce que font tous les outils juste avant d'ensemencer. `heures`
+// elargit la fenetre (fermeture des salles, salles-de-test.mjs : 4 h). Un vrai
 // joueur (compte ancien, compte avec mot de passe) arrete tout, avant la
 // moindre ecriture. Un id absent arrete l'ensemencement (`exiger`) ; au menage,
 // il est seulement ignore (rien a supprimer pour lui).
 // `lire` execute une requete et rend ses lignes (psql en vrai, une fausse base
 // dans tools/seed-library.test.mjs). Rend les ids retenus, en texte.
-export function verifierJoueursDeTest(userIds, lire = psql, { exiger = false } = {}) {
+export function verifierJoueursDeTest(userIds, lire = psql, { exiger = false, heures = 1 } = {}) {
   const ids = userIds.filter(Boolean).map(id => String(entier(id)))
+  const fenetre = Number(entier(heures))
   if (!ids.length) return []
   const trouves = new Map()
   // CASE explicite : un booleen colle par || sort en "true", pas en "t".
-  for (const l of lire(`SELECT id||'|'||provider||'|'||CASE WHEN created_at > NOW() - INTERVAL '1 hour' THEN 't' ELSE 'f' END
+  for (const l of lire(`SELECT id||'|'||provider||'|'||CASE WHEN created_at > NOW() - INTERVAL '${fenetre} hour' THEN 't' ELSE 'f' END
                         FROM users WHERE id IN (${ids.join(",")})`).split("\n")) {
     const [id, provider, recent] = l.split("|"); if (id) trouves.set(id, { provider, recent: recent === "t" })
   }
@@ -115,67 +117,11 @@ export function verifierJoueursDeTest(userIds, lire = psql, { exiger = false } =
       continue
     }
     if (u.provider !== "guest" || !u.recent) {
-      throw new Error(`seed-library : l'utilisateur ${id} de la ${ou} n'est pas un joueur de test (invite cree il y a moins d'une heure). Arret, rien n'est ecrit.`)
+      throw new Error(`seed-library : l'utilisateur ${id} de la ${ou} n'est pas un joueur de test (invite cree il y a moins de ${fenetre} h). Arret, rien n'est ecrit.`)
     }
     retenus.push(id)
   }
   return retenus
-}
-
-// Salles creees par l'outil : code -> id de son hote (le joueur de test).
-// Une salle laissee en 'in_progress' (partie 2 coupee par la fin du script,
-// script plante en route) passe pour une vraie partie aupres de
-// scripts/attendre-parties.sh pendant 3 h et bloque les mises en prod
-// (VLKAH9 le 31/10/2026, MAS2L3 le 30/10). Elles sont donc fermees a la sortie
-// du processus, quelle qu'elle soit.
-const salles = new Map()
-let fermetureALaSortie = false
-
-/**
- * Retient une salle que CE script vient de creer, pour la fermer a la sortie
- * (fin normale, process.exit, exception, Ctrl+C). Rend le code, verifie par
- * codeSalle : il finit dans une requete.
- */
-export function retenirSalle(code, hoteId) {
-  const c = codeSalle(code)
-  const h = entier(hoteId)
-  if (!c || !h) return c
-  salles.set(c, String(h))
-  if (!fermetureALaSortie) {
-    fermetureALaSortie = true
-    // psql est synchrone (execFileSync) : il peut tourner dans 'exit'.
-    process.on("exit", () => {
-      try {
-        const fermees = fermerSalles()
-        if (fermees.length) console.log(`salle(s) de test fermee(s) : ${fermees.join(", ")}`)
-      } catch (e) {
-        console.error(`!! salle(s) de test NON fermee(s) (${[...salles.keys()].join(", ")}) : ${e.message}`)
-      }
-    })
-    // Ctrl+C, arret par heavy ou systemd : sortir proprement, donc par 'exit'.
-    for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) process.once(signal, () => process.exit(130))
-  }
-  return c
-}
-
-/**
- * Passe en 'finished' les salles retenues qui ne le sont pas deja. Jamais une
- * salle qu'on n'a pas creee : le code ET l'hote doivent correspondre, et
- * l'hote doit etre un joueur de test (verifierJoueursDeTest). Rend les codes
- * fermes. `lire` : psql en vrai, une fausse base dans les tests.
- */
-export function fermerSalles(lire = psql, liste = salles) {
-  const hotes = verifierJoueursDeTest([...new Set(liste.values())], lire)
-  const fermees = []
-  for (const [code, hote] of liste) {
-    if (!hotes.includes(hote)) continue // hote absent de cette base : rien a lui
-    const sortie = lire(`UPDATE multiplayer_rooms SET status='finished', completed_at=COALESCE(completed_at, NOW())
-                         WHERE room_code='${codeSalle(code)}' AND host_user_id=${entier(hote)}
-                           AND status IS DISTINCT FROM 'finished' RETURNING room_code`)
-    if (sortie) fermees.push(...sortie.split("\n").filter(Boolean))
-  }
-  liste.clear()
-  return fermees
 }
 
 const MOTS = [

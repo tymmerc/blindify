@@ -2,8 +2,9 @@ import { chromium, devices } from "@playwright/test"
 import fs from "fs"
 import { execSync } from "child_process"
 // Ensemencement partage : vrais identifiants Deezer, donc extraits rafraichissables.
+import { seedLibrary, cleanupSeeded } from "./seed-library.mjs"
 // retenirSalle : la salle est fermee a la sortie, meme sur un echec.
-import { seedLibrary, cleanupSeeded, retenirSalle } from "./seed-library.mjs"
+import { retenirSalle } from "./salles-de-test.mjs"
 
 // "prod" vise blindz.app, comme soiree.mjs ; sans argument, le dev. Avant le
 // 01/10 le script visait toujours le dev, meme avec "prod".
