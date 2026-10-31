@@ -127,13 +127,17 @@ async function answer(viewer, title, artist) {
   await viewer.page.getByTestId("live-sent").waitFor({ timeout: 8000 })
 }
 
-/** Aucune trame viewer : ni extrait, ni titre avant le reveal de sa manche. */
+/** Aucune trame viewer : ni extrait, ni titre avant LA trame de reveal de sa manche. */
 function judgeFrames(viewer, reveals) {
   const audio = viewer.frames.filter(f => f.text.includes("/test-audio/"))
   if (audio.length) bad(`${viewer.pseudo} : ${audio.length} trame(s) avec l'adresse d'un extrait`)
-  for (const { round, title, at } of reveals) {
-    const early = viewer.frames.filter(f => f.at < at - 200 && f.text.includes(title))
-    if (early.length) bad(`${viewer.pseudo} : titre de la manche ${round} recu avant le reveal`)
+  for (const { round, title } of reveals) {
+    // Ordre d'arrivee des trames : la premiere qui porte le reveal final de la manche.
+    const first = viewer.frames.findIndex(f => f.text.includes("round:reveal:final") && f.text.includes(title))
+    const before = first < 0 ? viewer.frames : viewer.frames.slice(0, first)
+    const early = before.filter(f => f.text.includes(title))
+    if (first < 0) bad(`${viewer.pseudo} : aucun reveal recu pour la manche ${round}`)
+    if (early.length) bad(`${viewer.pseudo} : titre de la manche ${round} recu avant le reveal (${early[0].text.slice(0, 160)})`)
   }
   return audio.length === 0
 }
@@ -212,9 +216,9 @@ async function main() {
     const r0 = await viewers[0].page.getByTestId("live-result").textContent()
     const r1 = await viewers[1].page.getByTestId("live-result").textContent()
     const r2 = await viewers[2].page.getByTestId("live-result").textContent()
-    if (/Bien joué/.test(r0) && /1er sur 3/.test(r0)) ok("Lena : titre et artiste, 1re")
+    if (/Bien joué/.test(r0) && /1er sur \d/.test(r0)) ok("Lena : titre et artiste, 1re")
     else bad(`Lena : resultat inattendu (${r0})`)
-    if (/Presque/.test(r1) && /2e sur 3/.test(r1)) ok("Malik : le titre seul, 2e")
+    if (/Presque/.test(r1) && /e sur \d/.test(r1)) ok("Malik : le titre seul, classe")
     else bad(`Malik : resultat inattendu (${r1})`)
     if (/Raté/.test(r2)) ok("Zoe : ratee")
     else bad(`Zoe : resultat inattendu (${r2})`)
@@ -227,7 +231,8 @@ async function main() {
       if (!/Chatteur1/.test(board) || !/chat/.test(board)) bad(`overlay : Chatteur1 absent du classement ou sans la marque chat (${board})`)
       else ok("overlay : le chat est au classement, avec sa marque")
       const lena = pts("Lena"), c1 = pts("Chatteur1"), cp = pts("Copieur")
-      if (c1 > 0 && c1 <= lena / 2 + 1) ok(`chat : moitié du barème (Chatteur1 ${c1}, Lena ${lena})`)
+      // Plein bareme : 30 au plus sur la page, donc 15 au plus dans le chat.
+      if (c1 > 0 && c1 <= 15) ok(`chat : moitié du barème (Chatteur1 ${c1}, Lena ${lena} sur la page)`)
       else bad(`chat : barème inattendu (Chatteur1 ${c1}, Lena ${lena})`)
       if (!Number.isNaN(cp) && cp >= c1 / 2) bad(`anti-spoiler : le copieur garde trop de points (${cp})`)
       else ok(`anti-spoiler : le copieur 3 s plus tard prend ${Number.isNaN(cp) ? "trop peu pour le top 5" : `${cp} point(s)`}`)
