@@ -24,8 +24,9 @@ const BLOCKED_ROOTS: readonly string[] = [
 ];
 
 // Racines tres courtes : seulement si le pseudo entier (normalise) les vaut,
-// pour ne pas refuser « Monique », « Pedersen », « Drapeau » ou « Kysha ».
-const EXACT_ONLY: ReadonlySet<string> = new Set(["pd", "pede", "rape", "fdp", "ntm", "fag", "kys", "pute", "bite", "conne", "dick", "cock", "pedo", "nique"]);
+// pour ne pas refuser « Monique », « Pedersen », « Drapeau », « Kysha »,
+// « Chatteur », « Château » ou « Retardataire ».
+const EXACT_ONLY: ReadonlySet<string> = new Set(["chatte", "retard", "pd", "pede", "rape", "fdp", "ntm", "fag", "kys", "pute", "bite", "conne", "dick", "cock", "pedo", "nique"]);
 
 const LEET: Record<string, string> = { "0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "@": "a", $: "s", "!": "i" };
 

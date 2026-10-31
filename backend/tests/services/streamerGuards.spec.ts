@@ -139,7 +139,7 @@ describe("filtre des pseudos", () => {
   it.each(["Connard", "c0nnard", "S A L O P E", "FuCk3r", "Pd", "N1ggaz", "tonpere_le_batard"])("refuse %p", p => {
     expect(isBlockedPseudo(p)).toBe(true);
   });
-  it.each(["Monique", "Pedersen", "Drapeau", "Kysha", "Lena", "Dickens", "Computer", "Habitee", "Connexion"])("accepte %p", p => {
+  it.each(["Monique", "Pedersen", "Drapeau", "Kysha", "Lena", "Dickens", "Computer", "Habitee", "Connexion", "Chatteur1", "Chateau", "Retardataire"])("accepte %p", p => {
     expect(isBlockedPseudo(p)).toBe(false);
   });
   it("a l'inscription : refus neutre", () => {
