@@ -85,6 +85,7 @@ describe("hydratePreviewUrl", () => {
     query.mockRejectedValue(new Error("connexion perdue"));
     const outcome = await hydratePreviewOutcome(source({ audio_url: null }));
     expect(outcome).toEqual({ url: "https://cdn.example/bon.mp3", failed: false });
+    await new Promise(r => setImmediate(r)); // l'ecriture se fait en arriere-plan
     expect(logger.error).toHaveBeenCalledWith("preview_save_failed", expect.objectContaining({ id: "s1" }));
     expect(logger.error).not.toHaveBeenCalledWith("deezer_hydrate_failed", expect.anything());
   });
@@ -208,6 +209,44 @@ describe("delai d'une recherche du lancement", () => {
     expect(Date.now() - t0).toBeLessThan(1_000);
     expect(tried[0].audio_url).toBeNull();
     expect(guard.failures).toBe(1);
+  });
+
+  // Relecture de #98 : l'UPDATE etait encore dans les 4 s. Pool sature =
+  // recherche reussie qui expire et faux echec Deezer.
+  it("une ecriture en base lente ne fait pas expirer une recherche reussie", async () => {
+    Object.assign(START_LIMITS, { deadlineMs: 5_000, lookupTimeoutMs: 50 });
+    resolvePreview.mockImplementation(async (_q: unknown, hooks: Hooks) => {
+      hooks?.onStart?.();
+      return found("https://cdn.example/vite.mp3");
+    });
+    query.mockImplementation(() => new Promise(() => {})); // la base ne repond plus
+    const guard = new LookupGuard(100);
+    const { tried } = await hydrateWithinBudget([source({ audio_url: null })], guard);
+    expect(tried[0].audio_url).toBe("https://cdn.example/vite.mp3");
+    expect(guard.failures).toBe(0);
+    expect(query).toHaveBeenCalledWith("UPDATE audio_sources SET audio_url=$1 WHERE id=$2", ["https://cdn.example/vite.mp3", "s1"]);
+  });
+
+  it("une recherche abandonnee qui sort de file plus tard n'arme aucune minuterie", async () => {
+    jest.useFakeTimers();
+    try {
+      Object.assign(START_LIMITS, { deadlineMs: 100, lookupTimeoutMs: 50 });
+      let lateStart: (() => void) | undefined;
+      resolvePreview.mockImplementation((_q: unknown, hooks: Hooks) => {
+        lateStart = hooks?.onStart;
+        return new Promise(() => {}); // toujours en file a l'echeance
+      });
+      const guard = new LookupGuard(100);
+      const run = hydrateWithinBudget([source({ audio_url: null })], guard);
+      await jest.advanceTimersByTimeAsync(101);
+      await run;
+      expect(guard.failures).toBe(1);
+      expect(jest.getTimerCount()).toBe(0);
+      lateStart?.(); // le limiteur la laisse enfin partir, en arriere-plan
+      expect(jest.getTimerCount()).toBe(0);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it("une recherche restee en file est bornee par l'echeance du lancement", async () => {

@@ -219,7 +219,15 @@ export class DeezerPreviewService {
     const started = () => {
       if (entry.started) return;
       entry.started = true;
-      for (const listener of entry.listeners.splice(0)) listener();
+      for (const listener of entry.listeners.splice(0)) {
+        // Un rappel qui leve ne doit priver ni les suivants ni l'appel Deezer
+        // (sinon : faux echec Deezer pour toutes les demandes partagees).
+        try {
+          listener();
+        } catch (err) {
+          logger.error("deezer_onstart_listener_failed", { key, error: err });
+        }
+      }
     };
     entry.promise = run(started).finally(() => this.inFlight.delete(key));
     this.inFlight.set(key, entry);

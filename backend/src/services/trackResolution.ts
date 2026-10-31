@@ -1,7 +1,7 @@
 import { pool } from "../config/db";
 import type { AudioSourceRow } from "../types/audio";
 import type { MusicProvider } from "../types/user";
-import { deezerPreviewService, type PreviewHooks, type PreviewQuery } from "./deezerPreviewService";
+import { deezerPreviewService, type PreviewHooks, type PreviewOutcome, type PreviewQuery } from "./deezerPreviewService";
 import { isIsrc } from "./previewMatch";
 import { logger } from "../utils/logger";
 import { isExpiredPreview } from "../utils/previewExpiry";
@@ -34,8 +34,9 @@ export function previewQueryFor(
 }
 
 /**
- * Stocke l'extrait trouve. Une erreur d'ecriture est loggee sans remonter :
- * l'extrait reste bon pour cette partie, et ce n'est pas un echec de Deezer.
+ * Stocke l'extrait trouve. Ne rejette jamais : une erreur d'ecriture est
+ * loggee, l'extrait reste bon pour cette partie, et ce n'est pas un echec de
+ * Deezer.
  */
 async function savePreview(id: AudioSourceRow["id"], preview: string): Promise<void> {
   try {
@@ -64,7 +65,7 @@ export async function hydratePreviewOutcome(
   const query = previewQueryFor(source);
   const { title } = query;
   if (title) {
-    let outcome;
+    let outcome: PreviewOutcome;
     try {
       outcome = await deezerPreviewService.resolvePreviewOutcome(query, hooks);
     } catch (err) {
@@ -78,7 +79,10 @@ export async function hydratePreviewOutcome(
     }
     const preview = outcome.status === "found" ? outcome.track.preview : null;
     if (preview) {
-      await savePreview(source.id, preview);
+      // Ecriture en arriere-plan, hors du delai de la recherche : une base
+      // lente (pool sature) ne doit pas faire expirer une recherche reussie,
+      // ni compter un faux echec Deezer au disjoncteur.
+      void savePreview(source.id, preview);
       return { url: preview, failed: false };
     }
   }
@@ -195,7 +199,9 @@ const FAILED: unique symbol = Symbol("failed");
  *
  * Le delai d'une recherche (START_LIMITS.lookupTimeoutMs, 4 s) part quand le
  * limiteur de deezerPreviewService (6 requetes en vol, 40 par 5 s) laisse
- * passer son appel : l'attente en file ne le consomme pas. Avant, sous charge
+ * passer son PREMIER appel : l'attente en file ne le consomme pas. Ces 4 s
+ * couvrent ensuite toute la chaine du morceau (identifiant Deezer, puis ISRC,
+ * puis recherche par titre), files d'attente intermediaires comprises. Avant, sous charge
  * (un gros import en cours), des recherches expiraient sans avoir appele
  * Deezer et le disjoncteur sautait alors que Deezer allait bien. L'attente en
  * file reste bornee par l'echeance du lancement (guard.remainingMs()).
@@ -212,8 +218,12 @@ async function lookupWithin(source: AudioSourceRow, guard: LookupGuard): Promise
   // En file : seule l'echeance du lancement compte.
   expireIn(Math.max(0, guard.remainingMs()));
   let started = false;
+  // Fin de lookupWithin : une recherche abandonnee peut sortir de file plus
+  // tard, en arriere-plan. Son onStart ne doit plus armer de minuterie, que
+  // personne n'effacerait.
+  let done = false;
   const onStart = () => {
-    if (started) return;
+    if (started || done) return;
     started = true;
     expireIn(guard.timeoutMs()); // l'appel part : son delai commence
   };
@@ -228,6 +238,7 @@ async function lookupWithin(source: AudioSourceRow, guard: LookupGuard): Promise
       .catch((): typeof FAILED => FAILED);
     return await Promise.race([lookup, late]);
   } finally {
+    done = true;
     timers.forEach(clearTimeout);
   }
 }

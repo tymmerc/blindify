@@ -290,6 +290,47 @@ describe("DeezerPreviewService : debit et cache", () => {
     await Promise.all([a, b]);
   });
 
+  // Relecture de #98 : deux demandes identiques en file, avant le depart de
+  // l'appel partage. Chacune doit etre prevenue une fois quand il part.
+  it("onStart : deux demandes identiques en file sont prevenues chacune une fois au depart", async () => {
+    const releases: Array<() => void> = [];
+    get.mockImplementation(() => new Promise(resolve => releases.push(() => resolve({ data: { data: [] } }))));
+    const svc = new DeezerPreviewService();
+    const busy = Array.from({ length: 6 }, (_, i) => svc.resolvePreviewOutcome({ title: `Occupe ${i}`, artist: "A" }));
+    const a = jest.fn();
+    const b = jest.fn();
+    const pa = svc.resolvePreviewOutcome({ title: "Meme", artist: "A" }, { onStart: a });
+    await new Promise(r => setTimeout(r, 0));
+    const pb = svc.resolvePreviewOutcome({ title: "Meme", artist: "A" }, { onStart: b });
+    await new Promise(r => setTimeout(r, 10));
+    expect(a).not.toHaveBeenCalled();
+    expect(b).not.toHaveBeenCalled();
+
+    releases.shift()?.();
+    await new Promise(r => setTimeout(r, 10));
+    expect(a).toHaveBeenCalledTimes(1);
+    expect(b).toHaveBeenCalledTimes(1);
+    expect(get).toHaveBeenCalledTimes(7); // un seul appel pour A et B
+
+    releases.splice(0).forEach(release => release());
+    await Promise.all([...busy, pa, pb]);
+    expect(a).toHaveBeenCalledTimes(1);
+    expect(b).toHaveBeenCalledTimes(1);
+  });
+
+  it("onStart : un rappel qui leve ne prive pas les suivants et ne fait pas echouer l'appel", async () => {
+    get.mockResolvedValue({ data: { data: [item(1, "Song", "A")] } });
+    const svc = new DeezerPreviewService();
+    const second = jest.fn();
+    const [x, y] = await Promise.all([
+      svc.resolvePreviewOutcome({ title: "Song", artist: "A" }, { onStart: () => { throw new Error("rappel casse"); } }),
+      svc.resolvePreviewOutcome({ title: "Song", artist: "A" }, { onStart: second }),
+    ]);
+    expect(second).toHaveBeenCalledTimes(1);
+    expect(x.status).toBe("found");
+    expect(y.status).toBe("found");
+  });
+
   it("onStart : jamais appele quand la reponse vient du cache", async () => {
     get.mockResolvedValue({ data: { data: [item(1, "Song", "A")] } });
     const svc = new DeezerPreviewService();
