@@ -79,7 +79,10 @@ export const TWITCH_CHANNEL_FORMAT = /^[a-z0-9_]{3,25}$/
 
 /** Nom tape ou lien colle -> nom de chaine, ou "" si vide. Null s'il n'est pas valable. */
 export function cleanTwitchChannel(raw: string): string | null {
-  const value = raw.trim().toLowerCase().replace(/^#/, "").replace(/^https?:\/\/(www\.)?twitch\.tv\//, "").replace(/\/+$/, "")
+  if (raw.length > 100) return null
+  let value = raw.trim().toLowerCase().replace(/^#/, "").replace(/^https?:\/\/(www\.)?twitch\.tv\//, "")
+  // Boucle plutot que /\/+$/ : lente sur une saisie piegee de « / » (ReDoS).
+  while (value.endsWith("/")) value = value.slice(0, -1)
   if (!value) return ""
   return TWITCH_CHANNEL_FORMAT.test(value) ? value : null
 }

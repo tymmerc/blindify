@@ -19,6 +19,13 @@ describe("nom de chaine", () => {
   ])("%p -> %p", (raw, expected) => {
     expect(cleanChannel(raw)).toBe(expected);
   });
+
+  it("saisie piegee (des milliers de « / ») : refusee tout de suite", () => {
+    const started = Date.now();
+    expect(cleanChannel(`a${"/".repeat(50_000)}x`)).toBeNull();
+    expect(cleanChannel(`tymmerc${"/".repeat(40)}`)).toBe("tymmerc");
+    expect(Date.now() - started).toBeLessThan(200);
+  });
 });
 
 describe("reponses du chat", () => {

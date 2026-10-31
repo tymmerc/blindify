@@ -14,9 +14,20 @@ export const ANSWER_PREFIX = "!b";
 const MAX_ANSWER_LEN = 120;
 const MAX_LINE_LEN = 4_096;
 
+/** Longueur au-dela de laquelle ce n'est ni un nom ni un lien de chaine. */
+const MAX_CHANNEL_INPUT = 100;
+
+function stripTrailingSlashes(value: string): string {
+  // Une boucle plutot qu'une expression /\/+$/ : sur une saisie piegee
+  // (des milliers de « / »), l'expression devient lente (alerte CodeQL).
+  let end = value.length;
+  while (end > 0 && value[end - 1] === "/") end -= 1;
+  return value.slice(0, end);
+}
+
 export function cleanChannel(raw: unknown): string | null {
-  if (typeof raw !== "string") return null;
-  const value = raw.trim().toLowerCase().replace(/^#/, "").replace(/^https?:\/\/(www\.)?twitch\.tv\//, "").replace(/\/+$/, "");
+  if (typeof raw !== "string" || raw.length > MAX_CHANNEL_INPUT) return null;
+  const value = stripTrailingSlashes(raw.trim().toLowerCase().replace(/^#/, "").replace(/^https?:\/\/(www\.)?twitch\.tv\//, ""));
   return CHANNEL_FORMAT.test(value) ? value : null;
 }
 
