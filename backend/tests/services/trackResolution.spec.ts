@@ -11,8 +11,9 @@ jest.mock("../../src/utils/logger", () => ({
 
 import { pool } from "../../src/config/db";
 import { deezerPreviewService } from "../../src/services/deezerPreviewService";
-import { hydratePreviewUrl, previewQueryFor, collectPlayableSources, hydrateWithinBudget } from "../../src/services/trackResolution";
-import { LookupGuard } from "../../src/services/lookupGuard";
+import { hydratePreviewUrl, hydratePreviewOutcome, previewQueryFor, collectPlayableSources, hydrateWithinBudget } from "../../src/services/trackResolution";
+import { LookupGuard, START_LIMITS } from "../../src/services/lookupGuard";
+import { logger } from "../../src/utils/logger";
 import type { AudioSourceRow } from "../../src/types/audio";
 
 const query = pool.query as jest.Mock;
@@ -27,6 +28,7 @@ const source = (over: Partial<AudioSourceRow>): AudioSourceRow => ({
 beforeEach(() => {
   query.mockReset().mockResolvedValue({ rows: [] });
   resolvePreview.mockReset();
+  (logger.error as jest.Mock).mockClear();
 });
 
 describe("previewQueryFor", () => {
@@ -51,7 +53,7 @@ describe("hydratePreviewUrl", () => {
   it("re-resout un extrait expire avec l'ISRC et le stocke", async () => {
     resolvePreview.mockResolvedValue(found("https://cdn.example/bon.mp3"));
     const url = await hydratePreviewUrl(source({ audio_url: "https://cdn.example/earth.mp3?hdnea=exp=1700000000~acl" }));
-    expect(resolvePreview).toHaveBeenCalledWith(expect.objectContaining({ isrc: "JPZ921607277", durationMs: 228746 }));
+    expect(resolvePreview.mock.calls[0][0]).toMatchObject({ isrc: "JPZ921607277", durationMs: 228746 });
     expect(url).toBe("https://cdn.example/bon.mp3");
     expect(query).toHaveBeenCalledWith("UPDATE audio_sources SET audio_url=$1 WHERE id=$2", ["https://cdn.example/bon.mp3", "s1"]);
   });
@@ -74,6 +76,17 @@ describe("hydratePreviewUrl", () => {
     resolvePreview.mockRejectedValue(new Error("boom"));
     expect(await hydratePreviewUrl(source({ audio_url: "https://cdn.example/earth.mp3?hdnea=exp=1700000000~acl" }))).toBeNull();
     expect(query).not.toHaveBeenCalled();
+  });
+
+  // T4 : avant, l'erreur d'ecriture tombait dans le catch de la recherche :
+  // l'extrait trouve etait perdu et le disjoncteur comptait un echec Deezer.
+  it("ecriture en base en echec apres un extrait trouve : l'extrait est garde, pas d'echec", async () => {
+    resolvePreview.mockResolvedValue(found("https://cdn.example/bon.mp3"));
+    query.mockRejectedValue(new Error("connexion perdue"));
+    const outcome = await hydratePreviewOutcome(source({ audio_url: null }));
+    expect(outcome).toEqual({ url: "https://cdn.example/bon.mp3", failed: false });
+    expect(logger.error).toHaveBeenCalledWith("preview_save_failed", expect.objectContaining({ id: "s1" }));
+    expect(logger.error).not.toHaveBeenCalledWith("deezer_hydrate_failed", expect.anything());
   });
 
   it("garde un extrait encore valide sans appeler Deezer", async () => {
@@ -148,5 +161,65 @@ describe("hydrateWithinBudget et le disjoncteur du lancement", () => {
     expect(guard.failures).toBe(0);
     expect(guard.stoppedBy).toBeNull();
     expect(guard.lookups).toBe(12);
+  });
+});
+
+it("ecriture en base en echec : le disjoncteur du lancement ne compte pas d'echec", async () => {
+  resolvePreview.mockResolvedValue(found("https://cdn.example/bon.mp3"));
+  query.mockRejectedValue(new Error("connexion perdue"));
+  const guard = new LookupGuard(100);
+  const { tried } = await hydrateWithinBudget([source({ audio_url: null })], guard);
+  expect(tried[0].audio_url).toBe("https://cdn.example/bon.mp3");
+  expect(guard.failures).toBe(0);
+});
+
+// T4 : le delai d'une recherche (4 s en prod) part quand le limiteur Deezer
+// laisse passer l'appel (onStart), pas avant : sous charge, l'attente en file
+// faisait expirer des recherches qui n'avaient jamais appele Deezer.
+describe("delai d'une recherche du lancement", () => {
+  const DEFAULT_LIMITS = { ...START_LIMITS };
+  afterEach(() => Object.assign(START_LIMITS, DEFAULT_LIMITS));
+  const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+  type Hooks = { onStart?: () => void } | undefined;
+
+  it("l'attente en file ne compte pas : longue file, appel rapide, extrait trouve", async () => {
+    Object.assign(START_LIMITS, { deadlineMs: 5_000, lookupTimeoutMs: 50 });
+    resolvePreview.mockImplementation(async (_q: unknown, hooks: Hooks) => {
+      await sleep(150); // 3 fois le delai, en file
+      hooks?.onStart?.();
+      await sleep(10);
+      return found("https://cdn.example/apres-file.mp3");
+    });
+    const guard = new LookupGuard(100);
+    const { tried } = await hydrateWithinBudget([source({ audio_url: null })], guard);
+    expect(tried[0].audio_url).toBe("https://cdn.example/apres-file.mp3");
+    expect(guard.failures).toBe(0);
+  });
+
+  it("un appel parti qui ne repond pas dans le delai : echec, sans attendre la fin", async () => {
+    Object.assign(START_LIMITS, { deadlineMs: 5_000, lookupTimeoutMs: 50 });
+    resolvePreview.mockImplementation((_q: unknown, hooks: Hooks) => {
+      hooks?.onStart?.();
+      return new Promise(() => {}); // Deezer muet
+    });
+    const guard = new LookupGuard(100);
+    const t0 = Date.now();
+    const { tried } = await hydrateWithinBudget([source({ audio_url: null })], guard);
+    expect(Date.now() - t0).toBeLessThan(1_000);
+    expect(tried[0].audio_url).toBeNull();
+    expect(guard.failures).toBe(1);
+  });
+
+  it("une recherche restee en file est bornee par l'echeance du lancement", async () => {
+    Object.assign(START_LIMITS, { deadlineMs: 150, lookupTimeoutMs: 50 });
+    resolvePreview.mockImplementation(() => new Promise(() => {})); // jamais sortie de file
+    const guard = new LookupGuard(100);
+    const t0 = Date.now();
+    const { tried } = await hydrateWithinBudget([source({ audio_url: null })], guard);
+    const elapsed = Date.now() - t0;
+    expect(elapsed).toBeGreaterThanOrEqual(120); // pas expiree au bout des 50 ms du delai
+    expect(elapsed).toBeLessThan(1_000);
+    expect(tried[0].audio_url).toBeNull();
+    expect(guard.failures).toBe(1);
   });
 });

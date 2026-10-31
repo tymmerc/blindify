@@ -1,7 +1,7 @@
 import { pool } from "../config/db";
 import type { AudioSourceRow } from "../types/audio";
 import type { MusicProvider } from "../types/user";
-import { deezerPreviewService, type PreviewQuery } from "./deezerPreviewService";
+import { deezerPreviewService, type PreviewHooks, type PreviewQuery } from "./deezerPreviewService";
 import { isIsrc } from "./previewMatch";
 import { logger } from "../utils/logger";
 import { isExpiredPreview } from "../utils/previewExpiry";
@@ -12,10 +12,6 @@ import { LookupGuard } from "./lookupGuard";
 // Preview hydration — resolves audio URLs via Deezer search
 // ---------------------------------------------------------------------------
 
-/**
- * Hydrate a single audio source's preview URL using Deezer.
- * Updates the database if a preview is found. Returns the URL or null.
- */
 // isExpiredPreview vit dans utils/previewExpiry (le cache Deezer s'en sert aussi).
 export { isExpiredPreview };
 
@@ -38,11 +34,29 @@ export function previewQueryFor(
 }
 
 /**
- * L'extrait d'un morceau, et si la recherche a echoue (Deezer en erreur,
- * quota, panne, file pleine) : `failed` vrai. Un "pas d'extrait" n'est pas un
- * echec. Le disjoncteur du lancement (LookupGuard) compte les echecs.
+ * Stocke l'extrait trouve. Une erreur d'ecriture est loggee sans remonter :
+ * l'extrait reste bon pour cette partie, et ce n'est pas un echec de Deezer.
  */
-export async function hydratePreviewOutcome(source: AudioSourceRow): Promise<{ url: string | null; failed: boolean }> {
+async function savePreview(id: AudioSourceRow["id"], preview: string): Promise<void> {
+  try {
+    await pool.query("UPDATE audio_sources SET audio_url=$1 WHERE id=$2", [preview, id]);
+  } catch (err) {
+    logger.error("preview_save_failed", { id, error: err });
+  }
+}
+
+/**
+ * Hydrate a single audio source's preview URL using Deezer.
+ * Updates the database if a preview is found.
+ *
+ * Renvoie l'extrait, et si la recherche a echoue (Deezer en erreur, quota,
+ * panne, file pleine) : `failed` vrai. Un "pas d'extrait" n'est pas un echec.
+ * Le disjoncteur du lancement (LookupGuard) compte les echecs.
+ */
+export async function hydratePreviewOutcome(
+  source: AudioSourceRow,
+  hooks?: PreviewHooks
+): Promise<{ url: string | null; failed: boolean }> {
   const cached = source.audio_url;
   // URL en cache encore valide -> on la garde.
   if (cached && !isExpiredPreview(cached)) return { url: cached, failed: false };
@@ -50,21 +64,22 @@ export async function hydratePreviewOutcome(source: AudioSourceRow): Promise<{ u
   const query = previewQueryFor(source);
   const { title } = query;
   if (title) {
+    let outcome;
     try {
-      const outcome = await deezerPreviewService.resolvePreviewOutcome(query);
-      if (outcome.status === "error") {
-        // Deezer en erreur (quota, panne) : on ne conclut rien, la base reste
-        // telle quelle. Le morceau n'est pas jouable cette fois-ci.
-        return { url: null, failed: true };
-      }
-      const preview = outcome.status === "found" ? outcome.track.preview : null;
-      if (preview) {
-        await pool.query("UPDATE audio_sources SET audio_url=$1 WHERE id=$2", [preview, source.id]);
-        return { url: preview, failed: false };
-      }
+      outcome = await deezerPreviewService.resolvePreviewOutcome(query, hooks);
     } catch (err) {
       logger.error("deezer_hydrate_failed", { id: source.id, title, error: err });
       return { url: null, failed: true }; // erreur : ne rien ecrire
+    }
+    if (outcome.status === "error") {
+      // Deezer en erreur (quota, panne) : on ne conclut rien, la base reste
+      // telle quelle. Le morceau n'est pas jouable cette fois-ci.
+      return { url: null, failed: true };
+    }
+    const preview = outcome.status === "found" ? outcome.track.preview : null;
+    if (preview) {
+      await savePreview(source.id, preview);
+      return { url: preview, failed: false };
     }
   }
 
@@ -175,30 +190,45 @@ const TIMED_OUT: unique symbol = Symbol("timed_out");
 const FAILED: unique symbol = Symbol("failed");
 
 /**
- * La recherche, ou TIMED_OUT passe `ms`, ou FAILED si elle echoue.
- * Le delai part avant la file de deezerPreviewService (6 requetes en vol, 40
- * par 5 s, pause de 20 s sur quota) : l'attente en file compte dans les `ms`.
- * C'est voulu : quand Deezer est sature ou en pause, les recherches expirent,
- * le disjoncteur du lancement saute, et la partie part avec ce qu'elle a au
- * lieu d'attendre.
+ * La recherche, ou TIMED_OUT si elle depasse son delai, ou FAILED si elle
+ * echoue.
+ *
+ * Le delai d'une recherche (START_LIMITS.lookupTimeoutMs, 4 s) part quand le
+ * limiteur de deezerPreviewService (6 requetes en vol, 40 par 5 s) laisse
+ * passer son appel : l'attente en file ne le consomme pas. Avant, sous charge
+ * (un gros import en cours), des recherches expiraient sans avoir appele
+ * Deezer et le disjoncteur sautait alors que Deezer allait bien. L'attente en
+ * file reste bornee par l'echeance du lancement (guard.remainingMs()).
+ * Deezer en pause sur quota ou file pleine : erreur tout de suite (FAILED),
+ * le disjoncteur les voit sans attendre.
  */
-async function lookupWithin(source: AudioSourceRow, ms: number): Promise<string | null | typeof TIMED_OUT | typeof FAILED> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
+async function lookupWithin(source: AudioSourceRow, guard: LookupGuard): Promise<string | null | typeof TIMED_OUT | typeof FAILED> {
+  const timers: Array<ReturnType<typeof setTimeout>> = [];
+  let expire: () => void = () => {};
   const late = new Promise<typeof TIMED_OUT>(resolve => {
-    timer = setTimeout(() => resolve(TIMED_OUT), ms);
+    expire = () => resolve(TIMED_OUT);
   });
+  const expireIn = (ms: number) => timers.push(setTimeout(expire, ms));
+  // En file : seule l'echeance du lancement compte.
+  expireIn(Math.max(0, guard.remainingMs()));
+  let started = false;
+  const onStart = () => {
+    if (started) return;
+    started = true;
+    expireIn(guard.timeoutMs()); // l'appel part : son delai commence
+  };
   try {
     // Abandonnee, la recherche finit en arriere-plan : son resultat (ecrit en
-    // base par hydratePreviewUrl) servira au prochain lancement.
+    // base par hydratePreviewOutcome) servira au prochain lancement.
     // Une erreur Deezer (quota, panne, file pleine, disjoncteur de quota du
     // service) compte comme un echec pour le disjoncteur du lancement ; un
     // "pas d'extrait" non.
-    const lookup: Promise<string | null | typeof FAILED> = hydratePreviewOutcome(source)
+    const lookup: Promise<string | null | typeof FAILED> = hydratePreviewOutcome(source, { onStart })
       .then(({ url, failed }) => (failed ? FAILED : url))
       .catch((): typeof FAILED => FAILED);
     return await Promise.race([lookup, late]);
   } finally {
-    clearTimeout(timer);
+    timers.forEach(clearTimeout);
   }
 }
 
@@ -228,7 +258,7 @@ export async function hydrateWithinBudget(
       return;
     }
     if (!guard.take()) return;
-    const result = await lookupWithin(source, guard.timeoutMs());
+    const result = await lookupWithin(source, guard);
     if (result === TIMED_OUT || result === FAILED) {
       guard.failed();
       source.audio_url = null;

@@ -54,7 +54,10 @@ jest.mock("../../src/services/deezerPreviewService", () => {
       searchTrack: lookup,
       resolvePreview: (query: { title: string }) => lookup(query.title),
       // Chemin du lancement depuis #64 : found / none (jamais "error" ici).
-      resolvePreviewOutcome: async (query: { title: string }) => {
+      // Pas de file ici : l'appel part tout de suite (onStart, T4), puis
+      // repond ou reste muet (hangIf).
+      resolvePreviewOutcome: async (query: { title: string }, hooks?: { onStart?: () => void }) => {
+        hooks?.onStart?.();
         const track = await lookup(query.title);
         return track ? { status: "found", track } : { status: "none" };
       },

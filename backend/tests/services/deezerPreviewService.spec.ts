@@ -249,6 +249,58 @@ describe("DeezerPreviewService : debit et cache", () => {
     expect(peak).toBeGreaterThan(1);
   });
 
+  // T4 : le lancement d'une salle demarre le delai d'une recherche a onStart.
+  // L'attente derriere les 6 places ne doit pas le declencher.
+  it("onStart : appele quand l'appel quitte la file, pas quand il y entre", async () => {
+    const releases: Array<() => void> = [];
+    get.mockImplementation(() => new Promise(resolve => releases.push(() => resolve({ data: { data: [] } }))));
+    const svc = new DeezerPreviewService();
+    const busy = Array.from({ length: 6 }, (_, i) => svc.resolvePreviewOutcome({ title: `Occupe ${i}`, artist: "A" }));
+    const onStart = jest.fn();
+    const waiting = svc.resolvePreviewOutcome({ title: "En file", artist: "A" }, { onStart });
+    await new Promise(r => setTimeout(r, 10));
+    expect(get).toHaveBeenCalledTimes(6);
+    expect(onStart).not.toHaveBeenCalled(); // 7e : en file, pas parti
+
+    releases.shift()?.(); // une place se libere
+    await new Promise(r => setTimeout(r, 10));
+    expect(onStart).toHaveBeenCalledTimes(1);
+    expect(get).toHaveBeenCalledTimes(7);
+
+    releases.splice(0).forEach(release => release());
+    await Promise.all([...busy, waiting]);
+    expect(onStart).toHaveBeenCalledTimes(1);
+  });
+
+  it("onStart : une demande qui rejoint un appel deja parti est prevenue tout de suite", async () => {
+    let release: () => void = () => {};
+    get.mockImplementation(() => new Promise(resolve => { release = () => resolve({ data: { data: [item(1, "Song", "A")] } }); }));
+    const svc = new DeezerPreviewService();
+    const first = jest.fn();
+    const a = svc.resolvePreviewOutcome({ title: "Song", artist: "A" }, { onStart: first });
+    await new Promise(r => setTimeout(r, 10));
+    expect(first).toHaveBeenCalledTimes(1);
+
+    const second = jest.fn();
+    const b = svc.resolvePreviewOutcome({ title: "Song", artist: "A" }, { onStart: second });
+    await new Promise(r => setTimeout(r, 0));
+    expect(second).toHaveBeenCalledTimes(1);
+    expect(get).toHaveBeenCalledTimes(1);
+    release();
+    await Promise.all([a, b]);
+  });
+
+  it("onStart : jamais appele quand la reponse vient du cache", async () => {
+    get.mockResolvedValue({ data: { data: [item(1, "Song", "A")] } });
+    const svc = new DeezerPreviewService();
+    await svc.resolvePreviewOutcome({ title: "Song", artist: "A" });
+    const onStart = jest.fn();
+    const outcome = await svc.resolvePreviewOutcome({ title: "Song", artist: "A" }, { onStart });
+    expect(outcome.status).toBe("found");
+    expect(onStart).not.toHaveBeenCalled();
+    expect(get).toHaveBeenCalledTimes(1);
+  });
+
   it("quota (code 4) : retenu 30 s comme une panne, puis on retente", async () => {
     const clock = virtualClock();
     get.mockResolvedValue({ data: { error: { type: "Exception", message: "Quota limit exceeded", code: 4 } } });
