@@ -1,6 +1,6 @@
 import type React from "react"
 import type { GameMode, GameModeConfig } from "@/lib/gameModes"
-import type { FriendEntry, MultiplayerParticipant, MultiplayerRoom, RoomInvitation } from "@/lib/types"
+import type { FriendEntry, MultiplayerParticipant, MultiplayerRoom, RoomInvitation, StreamerSubMode } from "@/lib/types"
 import type { LobbyStatus } from "./lobbyMachine"
 import type { RpsMove, RpsScoreEntry, RpsIncoming, RpsActive, RpsResult } from "./hooks/useLobbyRps"
 
@@ -26,6 +26,16 @@ export type LobbyChatMessage = {
   username: string
   message: string
   timestamp: number
+}
+
+/** Mode streamer (T5) : format choisi par l'hote et public deja arrive sur /live. */
+export type StreamerLobbyExtras = {
+  subMode: StreamerSubMode
+  setSubMode: (mode: StreamerSubMode) => void
+  viewerCount: number
+  /** Chat Twitch (T5b) : chaine dont le chat sera lu, vide si aucune. */
+  twitchChannel: string
+  setTwitchChannel: (channel: string) => void
 }
 
 export type LobbyRendererProps = {
@@ -69,4 +79,5 @@ export type LobbyRendererProps = {
   chatMessages?: LobbyChatMessage[]
   onSendChat?: (message: string) => void
   rps?: LobbyRpsState
+  streamer?: StreamerLobbyExtras
 }

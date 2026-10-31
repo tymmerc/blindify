@@ -183,7 +183,7 @@ describe("persistGameResults", () => {
     await pending;
 
     const participantUpdates = query.mock.calls
-      .filter(([sql]) => String(sql).includes("UPDATE game_participants"))
+      .filter(([sql]) => String(sql).includes("INSERT INTO game_participants"))
       .map(([, p]) => ({ userId: p[1], score: p[2] }))
       .sort((a, b) => a.userId - b.userId);
     expect(participantUpdates).toEqual(final.map(f => ({ userId: f.userId, score: f.score })).sort((a, b) => a.userId - b.userId));

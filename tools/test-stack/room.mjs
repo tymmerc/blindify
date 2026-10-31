@@ -72,19 +72,24 @@ export async function runRoom({ label, mode, hostPlays = false, players, rounds 
       if (againLeak.length) bad(`une relance pendant la partie donne a l'hote les titres des manches ${againLeak.join(", ")}`)
     }
 
-    // Retardataire : il tente d'entrer en pleine partie (refus attendu), puis
-    // re-essaie a la fin comme l'ecran d'attente du client.
+    // Retardataire (T19) : il entre en pleine partie, regarde la manche en
+    // cours sans pouvoir y repondre, puis joue a partir de la suivante.
     let lateBot = null
     if (late) {
-      lateBot = new Bot({ name: late.name, plan: () => ({ action: "juste" }), random: rng(seed * 7) })
+      lateBot = new Bot({ name: late.name, plan: () => ({ action: "juste" }), random: rng(seed * 7), watchFromState: true })
       await lateBot.enter()
       seedUser(lateBot.id, [40, 41, 42, 43])
       await sleep(late.afterMs ?? 15000)
       const early = await lateBot.join(code)
-      if (early.ok) bad(`${late.name} est entre en pleine partie (attendu : refus room_in_progress)`)
-      else stats.retardataire_refus = early.code || early.status
+      if (!early.ok) bad(`${late.name} refuse en pleine partie (${early.status} ${early.code}), attendu : il regarde puis joue`)
+      else {
+        stats.retardataire_en_cours = early.lateJoin
+        if (!early.lateJoin) bad(`${late.name} : la reponse du join ne dit pas qu'il arrive en cours de partie`)
+        await sleep(400)
+        const refused = await lateBot.answerNow(0)
+        if (refused?.reason !== "waiting") bad(`${late.name} : reponse pendant l'attente ${JSON.stringify(refused)}, attendu un refus "waiting"`)
+      }
     }
-
     const budget = rounds * (seconds + 12) * 1000 + 30000
     const active = () => bots.filter(b => !b.left && !b.isPresenter)
     while (Date.now() - t0 < budget && !bots.every(b => b.over || b.left)) await sleep(500)
@@ -94,9 +99,7 @@ export async function runRoom({ label, mode, hostPlays = false, players, rounds 
     if (lateBot) {
       await sleep(1500)
       const after = await lateBot.join(code)
-      if (!after.ok) bad(`${late.name} ne peut toujours pas entrer apres la partie (${after.status} ${after.code})`)
-      else stats.retardataire_entre = true
-      lateBot.close()
+      if (!after.ok) bad(`${late.name} ne peut pas revenir apres la partie (${after.status} ${after.code})`)
     }
 
     // --- verdict contre la base ---
@@ -139,6 +142,9 @@ export async function runRoom({ label, mode, hostPlays = false, players, rounds 
       if (b.leaks.length) bad(`${b.name} a vu la reponse avant la revelation (${b.leaks.map(l => `m${l.round} ${l.quoi} dans ${l.evt}`).join(", ")})`)
       for (const e of b.errors) bad(`${b.name} : ${e}`)
     }
+    if (lateBot) {
+      try { judgeLateBot(lateBot, facts, bad, stats) } finally { lateBot.close() }
+    }
     const partis = bots.filter(b => b.left)
     for (const b of partis) if (!facts.participants.some(p => p.userId === b.id)) bad(`${b.name} (parti en cours) a disparu des participants`)
     stats.reponses_verifiees = verifiees
@@ -153,6 +159,39 @@ export async function runRoom({ label, mode, hostPlays = false, players, rounds 
     for (const b of bots) b.close()
   }
   return { label: label || mode, code, ok: problems.length === 0, problems, stats }
+}
+
+/**
+ * Le retardataire (T19) : aucune ligne pour les manches regardees, ses
+ * reponses comptees a partir de la manche suivante, son score dans
+ * game_participants, et jamais la reponse avant la revelation.
+ */
+function judgeLateBot(b, facts, bad, stats) {
+  const watched = [...(b.watched ?? [])]
+  const played = [...b.intents.keys()]
+  stats.retardataire_manches = { regardees: watched, jouees: played }
+  // Entre pendant un reveal, il n'a regarde aucune manche en cours : rien a
+  // juger cote anti-triche, ce n'est pas un echec (le rapport le montre).
+  if (!played.length) bad(`${b.name} n'a joue aucune manche apres son arrivee`)
+  for (const r of watched) {
+    if (facts.reponses.some(x => x.userId === b.id && x.round === r)) bad(`${b.name} : une ligne en base pour la manche ${r}, qu'il regardait`)
+  }
+  for (const r of played) {
+    const it = b.intents.get(r)
+    if (it.lost) continue
+    if (!it.ack?.ok) { bad(`${b.name} manche ${r} : reponse refusee apres son arrivee (${it.ack?.reason})`); continue }
+    const row = facts.reponses.find(x => x.userId === b.id && x.round === r)
+    if (row?.verdict !== "correct") bad(`${b.name} manche ${r} : verdict ${row?.verdict}, attendu correct`)
+  }
+  const mine = facts.participants.find(p => p.userId === b.id)
+  if (!mine) bad(`${b.name} absent de game_participants : son score est perdu`)
+  else {
+    const fromRows = facts.reponses.filter(x => x.userId === b.id).reduce((n, x) => n + x.delta, 0)
+    if (mine.score !== fromRows) bad(`${b.name} : score ${mine.score} en base, ${fromRows} d'apres ses manches`)
+    stats.retardataire_score = mine.score
+  }
+  if (b.leaks.length) bad(`${b.name} a vu la reponse avant la revelation (${b.leaks.map(l => `m${l.round} ${l.quoi} dans ${l.evt}`).join(", ")})`)
+  for (const e of b.errors) bad(`${b.name} : ${e}`)
 }
 
 /** Plans tout faits. */

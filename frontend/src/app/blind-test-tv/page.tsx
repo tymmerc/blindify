@@ -102,7 +102,7 @@ export default function Page() {
         <ul>
           <Li color="#486090"><span><strong>Le QR code ne passe pas de loin ?</strong> Approche-toi de l'écran, ou va sur blindz.app/jouer et tape le code à 6 caractères.</span></Li>
           <Li color="#486090"><span><strong>Présenter et jouer quand même.</strong> L'organisateur met l'ordinateur en Je présente seulement, puis scanne le QR code avec son propre téléphone comme tout le monde. Il pilote la partie sur l'ordinateur et répond sur son téléphone.</span></Li>
-          <Li color="#486090"><span><strong>Les retardataires</strong> qui scannent pendant une partie voient un écran d'attente et entrent tout seuls à la fin de la partie en cours.</span></Li>
+          <Li color="#486090"><span><strong>Les retardataires</strong> qui scannent pendant une partie suivent la manche en cours et jouent dès la suivante. L'écran les ajoute au classement à ce moment-là.</span></Li>
         </ul>
         <p>
           Le déroulé d'une partie et les pièges classiques (playlists privées, manches trop longues) sont dans le{" "}

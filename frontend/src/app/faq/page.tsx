@@ -1,5 +1,7 @@
 import type { Metadata } from "next"
+import type { ReactNode } from "react"
 import Link from "next/link"
+import { CONTACT_EMAIL, CONTACT_MAILTO, DISCORD_SUPPORT_URL } from "@/lib/contact"
 import { SiteFooter, SiteHeader } from "@/components/home/SiteChrome"
 import { Tag, VERMILION, faqJsonLd, webPageJsonLd } from "@/components/home/Guide"
 import { FaqAccordion } from "@/components/home/FaqAccordion"
@@ -17,7 +19,7 @@ const URL = "https://blindz.app/faq/"
 const TITLE = "FAQ · Blind test avec vos playlists, entre amis"
 const DESC =
   "Comment faire un blind test avec ses propres playlists Spotify ou Deezer, sans compte, sur téléphone, entre amis ou avec un seul tel. Toutes les réponses."
-const UPDATED = "2026-10-28"
+const UPDATED = "2026-10-29"
 
 export const metadata: Metadata = {
   title: TITLE,
@@ -26,7 +28,24 @@ export const metadata: Metadata = {
   openGraph: { title: TITLE, description: DESC, url: URL, type: "website", locale: "fr_FR" },
 }
 
-const FAQ: Array<{ q: string; a: string }> = [
+const MORE_LINK =
+  "border-b-2 border-[#2e2014] pb-0.5 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-[#2e2014] transition hover:border-[#cc4830] hover:text-[#cc4830]"
+
+const SUPPORT_LINKS = (
+  <p className="flex flex-wrap gap-x-6 gap-y-3">
+    <a href={DISCORD_SUPPORT_URL} target="_blank" rel="noopener noreferrer" className={MORE_LINK}>
+      Le serveur Blindz<span className="sr-only"> (s&apos;ouvre dans un nouvel onglet)</span>
+    </a>
+    <a href={CONTACT_MAILTO} className={MORE_LINK}>
+      {CONTACT_EMAIL}
+    </a>
+    <Link href="/conditions/" className={MORE_LINK}>
+      Conditions d&apos;utilisation
+    </Link>
+  </p>
+)
+
+const FAQ: Array<{ q: string; a: string; more?: ReactNode }> = [
   {
     q: "Comment faire un blind test avec mes propres playlists, pas des playlists imposées ?",
     a: "C'est exactement le principe de blindz.app : chaque joueur colle le lien de son profil Spotify ou Deezer (ou d'une playlist publique), et la partie est générée uniquement à partir de VOS musiques. Pas de playlists toutes faites \"années 80\" ou \"hits du moment\" : vous jouez sur les morceaux que vous écoutez vraiment, et une partie du jeu consiste à deviner qui a ramené quel titre.",
@@ -45,15 +64,24 @@ const FAQ: Array<{ q: string; a: string }> = [
   },
   {
     q: "D'où viennent les extraits, et peut-on les diffuser en public ?",
-    a: "Les extraits de 30 secondes sont fournis par Deezer, quelle que soit la source de ta playlist : Spotify ne sert qu'à lire la liste des morceaux, et un lien « Écouter sur Spotify » s'affiche à la révélation des titres venus de Spotify. Leur écoute est réservée à un usage privé, entre amis ou en famille : pas de diffusion dans un bar, un commerce ou une entreprise, ni en direct sur Twitch ou YouTube.",
+    a: "Les extraits de 30 secondes sont fournis par Deezer, quelle que soit la source de ta playlist : Spotify ne sert qu'à lire la liste des morceaux, et un lien « Écouter sur Spotify » s'affiche à la révélation des titres venus de Spotify. Leur écoute est réservée à un usage privé, entre amis ou en famille : pas de diffusion dans un bar, un commerce ou une entreprise. Le direct sur Twitch ou ailleurs passe uniquement par le mode streamer, et tu y restes responsable des droits sur ta plateforme.",
+  },
+  // T5 (31/10/2026) : reponse du mode streamer, validee par Tym.
+  {
+    q: "Je peux faire un blind test en live avec mon chat ?",
+    a: "Oui, avec le mode « Avec ta communauté ». Tu ajoutes l'overlay dans OBS, il joue la musique dans ton stream et affiche le code, et tes viewers répondent sur blindz.app/live depuis leur téléphone, ou dans ton chat Twitch en tapant !b titre - artiste (avec moins de points), avec un classement en direct. Les extraits viennent de Deezer et Blindz ne te donne aucune licence : tu restes responsable des droits sur ta plateforme, et sur Twitch une VOD coupée ou des clips supprimés restent possibles. On te conseille de garder la musique hors de ta VOD, le guide OBS est sur la page du mode.",
   },
   {
     q: "Mon lien de playlist n'est pas accepté, qu'est-ce qui cloche ?",
-    a: "Deux causes dans presque tous les cas. Soit la playlist est privée : passe-la en publique dans Spotify ou Deezer, ça prend trente secondes. Soit tu as collé un lien court du bouton Partager (spotify.link, link.deezer.com), qui n'est pas reconnu : ouvre-le dans ton navigateur et copie l'adresse complète, celle qui commence par open.spotify.com ou www.deezer.com.",
+    a: "Deux causes dans presque tous les cas. Soit la playlist est privée : passe-la en publique dans Spotify ou Deezer, ça prend trente secondes. Soit le lien mène à un morceau, un album ou un artiste, et ça, ce n'est pas une playlist. Les liens courts du bouton Partager des applis (spotify.link, link.deezer.com) passent sans souci. Si l'un d'eux bloque quand même, ouvre-le dans ton navigateur et copie l'adresse complète, celle qui commence par open.spotify.com ou www.deezer.com.",
   },
   {
     q: "Comment organiser un blind test en soirée, autour d'une table ?",
-    a: "Le mode \"Autour d'une table\" est fait pour ça : un écran central (le téléphone de l'organisateur, ou un PC branché sur la télé) diffuse la musique et affiche les scores, et chacun répond depuis son propre téléphone en scannant un QR code. L'organisateur peut jouer aussi ou seulement présenter. Les retardataires rejoignent automatiquement entre deux parties.",
+    a: "Le mode \"Autour d'une table\" est fait pour ça : un écran central (le téléphone de l'organisateur, ou un PC branché sur la télé) diffuse la musique et affiche les scores, et chacun répond depuis son propre téléphone en scannant un QR code. L'organisateur peut jouer aussi ou seulement présenter. Un retardataire peut entrer en pleine partie : il suit la manche en cours et joue dès la suivante.",
+  },
+  {
+    q: "Peut-on rejoindre une partie déjà commencée ?",
+    a: "Oui. Celui qui arrive en retard entre avec le même code ou le même QR code, à distance, autour d'une table ou dans Discord. Il voit la manche en cours sans pouvoir y répondre, puis il joue dès la manche suivante en partant de 0 point. Sa musique n'entre pas dans la partie déjà lancée, puisque les morceaux sont tirés au départ : elle comptera pour la suivante.",
   },
   {
     q: "Peut-on faire un blind test avec un seul téléphone ?",
@@ -74,6 +102,11 @@ const FAQ: Array<{ q: string; a: string }> = [
   {
     q: "blindz.app, c'est le retour de l'ancien site Blindz qui a fermé en 2021 ?",
     a: "Non. Blindz (blindz.fr) est un autre site, plus ancien, où l'on crée et personnalise des blind tests entre amis ; il avait été hors ligne un long moment après l'incendie du datacenter OVH de Strasbourg en 2021. blindz.app est un projet indépendant, lancé en 2026, sans aucun lien avec cette équipe. Le principe est différent aussi : ici il n'y a rien à créer ni à personnaliser, la partie est générée automatiquement à partir des playlists Spotify ou Deezer des joueurs, et on devine qui a ramené chaque morceau.",
+  },
+  {
+    q: "Un bug, une idée\u00a0?",
+    a: `Passe sur le serveur Discord de Blindz (${DISCORD_SUPPORT_URL.replace("https://", "")})\u00a0: on y répond aux questions, on y lit les idées et on y annonce les nouveautés. Tu préfères le mail\u00a0? Écris à ${CONTACT_EMAIL}. Pour un bug en pleine partie, le plus rapide reste «\u00a0Signaler un bug\u00a0», dans le menu du compte en haut à droite. Et les règles du jeu (écoute privée, comportement, âge) sont dans les conditions d'utilisation.`,
+    more: SUPPORT_LINKS,
   },
   {
     q: "Pourquoi blindz.app est marqué « bêta » ?",

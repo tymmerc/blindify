@@ -9,7 +9,11 @@
 // elle est utilisee aujourd'hui. Sur fond encre il faudrait un jeu de couleurs
 // clair, pas encore ecrit.
 
-type Item = { q: string; a: string }
+import type { ReactNode } from "react"
+
+// more : liens cliquables sous la reponse. Hors JSON-LD (qui ne lit que a),
+// donc la reponse texte doit se suffire a elle-meme.
+type Item = { q: string; a: string; more?: ReactNode }
 
 export function FaqAccordion({
   items,
@@ -40,7 +44,8 @@ export function FaqAccordion({
           </summary>
           {/* pr- seulement a partir de sm : sur un telephone etroit, reserver la
               largeur du chevron couperait le texte trop tot. */}
-          <p className="pb-6 text-[1.05rem] leading-relaxed text-[#2e2014] sm:pr-12">{item.a}</p>
+          <p className={`${item.more ? "pb-3" : "pb-6"} text-[1.05rem] leading-relaxed text-[#2e2014] sm:pr-12`}>{item.a}</p>
+          {item.more ? <div className="pb-6 sm:pr-12">{item.more}</div> : null}
         </details>
       ))}
     </div>

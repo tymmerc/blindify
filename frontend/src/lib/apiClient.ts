@@ -330,6 +330,14 @@ export const clientApi = {
       body: JSON.stringify(payload),
     })
   },
+  /** Mode streamer (T5) : interrupteur STREAMER_MODE et lien d'overlay configure. */
+  async streamerStatus(): Promise<{ enabled: boolean; overlay: boolean; maxViewers: number }> {
+    return request("/api/streamer/status", { method: "GET" })
+  },
+  /** Lien d'overlay OBS signe, pour l'hote de la salle. */
+  async streamerOverlay(code: string): Promise<{ url: string; expiresAt: number }> {
+    return request(`/api/rooms/${encodeURIComponent(code)}/overlay`, { method: "POST" })
+  },
   async friends(): Promise<{
     friends: import("./types").FriendEntry[]
     incoming: import("./types").FriendEntry[]

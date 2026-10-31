@@ -14,6 +14,8 @@ import type { MultiplayerGameState, MultiplayerParticipant, MultiplayerRoom, Sol
 import { StreamerGameClient } from "@/components/game/StreamerGameClient"
 import { MultiplayerGameClient } from "@/components/game/MultiplayerGameClient"
 import { useRoomChat } from "./hooks/useRoomChat"
+import { useSpectatorCount } from "./hooks/useSpectatorCount"
+import { SpectatorBadge } from "@/components/game/SpectatorBadge"
 import { useLobbyRps } from "./hooks/useLobbyRps"
 import { ProfileImportBlock } from "@/components/import/ProfileImportBlock"
 import { Button } from "@/components/ui/button"
@@ -33,6 +35,10 @@ import { ENTRY_ROUTE, HEADER_COPY } from "./lobbyCopy"
 import type { LobbyRendererProps, LobbySurface, LobbyViewState } from "./lobbyTypes"
 import { initialLobbyContext, lobbyReducer } from "./lobbyMachine"
 import { RequestTimeoutError, withTimeoutRetry } from "@/lib/withTimeoutRetry"
+import { LateJoinerView } from "@/components/game/LateJoinerView"
+import { arrivalNotice, isLateJoiner } from "@/lib/lateJoin"
+import { useLateArrivals } from "./hooks/useLateArrivals"
+import { useStreamerFeed } from "./hooks/useStreamerFeed"
 
 // Entree dans un salon : un essai sans reponse au bout de 8 s est abandonne et
 // relance, trois essais en tout. Rejouer le join est sans risque (le backend
@@ -172,20 +178,40 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   const [importing, setImporting] = useState(false)
   // Bandeau d'erreur transitoire (room:error socket, resync...) - auto-efface.
   const [socketNotice, setSocketNotice] = useState<string | null>(null)
+  // Ton du bandeau : "alert" pour un refus ou une erreur, "info" pour une
+  // simple nouvelle (quelqu'un arrive en pleine partie).
+  const [noticeTone, setNoticeTone] = useState<"alert" | "info">("alert")
   // Signal incrementiel : un refus serveur d'une reponse doit sortir l'UI de
   // l'etat optimiste "Envoyee" (sinon le joueur croit avoir repondu).
   const [answerRejectSignal, setAnswerRejectSignal] = useState(0)
   // Bootstrap rate-limite (429) : message au lieu d'un spinner infini.
   const [rateLimited, setRateLimited] = useState(false)
   const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const showNotice = useCallback((msg: string, isAnswerReject = false) => {
+  const showNotice = useCallback((msg: string, isAnswerReject = false, tone: "alert" | "info" = "alert") => {
     setSocketNotice(msg)
+    setNoticeTone(tone)
     if (isAnswerReject) setAnswerRejectSignal(x => x + 1)
     if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current)
     noticeTimerRef.current = setTimeout(() => setSocketNotice(null), 6000)
   }, [])
-  const [streamerMode, setStreamerMode] = useState<StreamerSubMode>("duo")
-  const [soloSource, setSoloSource] = useState<"streamer" | "chat">("streamer")
+  const [streamerMode, setStreamerMode] = useState<StreamerSubMode>("viewers_only")
+  // Chat Twitch (T5b) : la chaine du streamer, gardee pour son prochain live.
+  const [twitchChannel, setTwitchChannelState] = useState("")
+  useEffect(() => {
+    try {
+      setTwitchChannelState(window.localStorage.getItem("blindz_twitch_channel") ?? "")
+    } catch {
+      // Stockage bloque : le champ reste vide.
+    }
+  }, [])
+  const setTwitchChannel = useCallback((value: string) => {
+    setTwitchChannelState(value)
+    try {
+      window.localStorage.setItem("blindz_twitch_channel", value)
+    } catch {
+      // Stockage bloque : la valeur vaut pour cette page seulement.
+    }
+  }, [])
   const abortFlowRef = useRef(false)
   // Join en cours, relances comprises : coupe quand le joueur repart (page
   // quittee, "Retour au menu"). Aucun essai ne part apres son depart, et une
@@ -204,6 +230,11 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
 
   // Room chat (listener + send). Hook attaches when socket+roomCode ready.
   const { messages: chatMessages, sendChat } = useRoomChat(
+    socketConnected ? socketRef.current : null,
+    room?.room_code ?? null
+  )
+  // « 👀 1 spectateur » : l'editeur regarde la partie (T18).
+  const spectators = useSpectatorCount(
     socketConnected ? socketRef.current : null,
     room?.room_code ?? null
   )
@@ -242,6 +273,14 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
 
   const [joinCode, setJoinCode] = useState(initialJoinCode?.toUpperCase() ?? "")
   const serverNow = useServerTime(socketRef.current)
+  // Quelqu'un arrive en pleine partie (T19) : les autres le voient arriver.
+  const streamerFeed = useStreamerFeed(socketConnected ? socketRef.current : null, room?.room_code ?? null, mode === "streamer")
+  useLateArrivals(
+    socketConnected ? socketRef.current : null,
+    room?.room_code ?? null,
+    userPayload?.user.id ?? null,
+    arrival => showNotice(arrivalNotice(arrival.username, gameStateRef.current as MultiplayerGameState | null), false, "info")
+  )
   const autoHostTriggered = useRef(false)
   const autoStartGameRef = useRef(false)
   // « Revanche » et « Rejouer » : un double clic ne relance pas deux fois.
@@ -260,10 +299,11 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     },
     [participants, mode, room?.host_user_id, room?.host_plays]
   )
+  // Streamer (T5) : le public arrive par /live, pas dans la salle. Pas de minimum.
   const canStartGame =
     isHost &&
     (lobby.status === "hosting" || lobby.status === "waiting") &&
-    activeParticipants.length >= modeConfig.lobby.minPlayers &&
+    (mode === "streamer" || activeParticipants.length >= modeConfig.lobby.minPlayers) &&
     !starting &&
     !importing
 
@@ -1101,8 +1141,10 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     ]
   )
 
-  // Retardataire : on retente le join en douceur. Quand la partie se termine,
-  // il entre tout seul, sans avoir a marteler un bouton.
+  // Retardataire face a un ANCIEN backend (avant T19, qui refusait en pleine
+  // partie avec room_in_progress) : on retente le join en douceur. Le backend
+  // actuel ne renvoie plus ce code ; garde tant que front et backend peuvent
+  // partir en prod a des moments differents.
   useEffect(() => {
     if (errorCode !== "room_in_progress" || room) return
     const code = joinCode.trim().toUpperCase()
@@ -1143,14 +1185,13 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         // Pre-warm the audio element during this user interaction (click).
         // This unlocks autoplay so the round start audio plays without manual click.
         audioManager.warmup()
-        const payload: { source?: string; playlistId?: string; subMode?: string; soloSource?: string } = {
+        const payload: { source?: string; playlistId?: string; subMode?: string; twitchChannel?: string } = {
           source: "library",
         }
         if (mode === "streamer") {
           payload.subMode = streamerMode
-          if (streamerMode === "solo") {
-            payload.soloSource = soloSource
-          }
+          // En « Toi tout seul », le public ne repond pas : pas de chat a lire.
+          if (twitchChannel.trim() && streamerMode !== "solo") payload.twitchChannel = twitchChannel.trim()
         }
         const { tracks: generatedTracks, gameState: initialState } = await api.startMultiplayerGame(room.room_code, payload)
         setTracks(generatedTracks)
@@ -1209,7 +1250,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         setStarting(false)
       }
     },
-    [room, canStartGame, mode, resolveViewFromState, viewToLobbyAction, streamerMode, soloSource]
+    [room, canStartGame, mode, resolveViewFromState, viewToLobbyAction, streamerMode, twitchChannel]
   )
 
   useEffect(() => {
@@ -1533,34 +1574,10 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     chatMessages,
     onSendChat: room ? sendChat : undefined,
     rps: room ? rps : undefined,
+    streamer: mode === "streamer"
+      ? { subMode: streamerMode, setSubMode: setStreamerMode, viewerCount: streamerFeed.viewerCount, twitchChannel, setTwitchChannel }
+      : undefined,
   }
-
-  const streamerModeSelector =
-    mode === "streamer" && view !== "playing" && view !== "results" ? (
-      <div className="mx-auto w-full max-w-6xl rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-4 text-[#2e2014] shadow-[4px_4px_0_rgba(46,32,20,.18)] sm:p-5">
-        <p className="m-0 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.22em]">
-          <span aria-hidden className="h-2.5 w-2.5 rounded-full border-[1.5px] border-[#2e2014] bg-[#7d9471]" />
-          Le format
-        </p>
-        <div className="mt-3 grid gap-2 md:grid-cols-3">
-          {[
-            { key: "viewers_only", title: "Chat avec ta musique", desc: "Le chat joue avec tes musiques", value: "viewers_only" as StreamerSubMode },
-            { key: "duo", title: "Toi avec leur musique", desc: "Tu joues avec les musiques du chat", value: "duo" as StreamerSubMode },
-            { key: "solo", title: "Vous deux ensemble", desc: "Les deux jouent avec les deux musiques", value: "solo" as StreamerSubMode },
-          ].map(opt => (
-            <button
-              key={opt.key}
-              type="button"
-              onClick={() => setStreamerMode(opt.value)}
-              className={`rounded-md border-2 px-3 py-3 text-left transition ${streamerMode === opt.value ? "border-[#2e2014] bg-[#7d9471] text-[#2e2014] shadow-[3px_3px_0_#2e2014]" : "border-[rgba(46,32,20,.35)] bg-[#efe5d0] text-[#2e2014] hover:border-[#2e2014]"}`}
-            >
-              <p className="text-sm font-bold">{opt.title}</p>
-              <p className="text-xs opacity-80">{opt.desc}</p>
-            </button>
-          ))}
-        </div>
-      </div>
-    ) : null
 
   const selectedLobby = (() => {
     switch (mode) {
@@ -1591,29 +1608,36 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     ) : null
 
   const content =
-    view === "playing" && gameState && room ? (
+    // Streamer : l'ecran de fin (podium du chat) reste celui de la partie.
+    (view === "playing" || (view === "results" && mode === "streamer")) && gameState && room ? (
       mode === "streamer" ? (
         <StreamerGameClient
           userId={userPayload.user.id}
           state={gameState as StreamerState}
           serverNow={serverNow}
-          onChatGuess={guess => {
-            const socket = socketRef.current
-            if (!socket) return
-            socket.emit("game:guess", { roomCode: room.room_code, guess })
-          }}
-          onHostGuess={guess => {
-            const socket = socketRef.current
-            if (!socket) return
-            socket.emit("game:guess", { roomCode: room.room_code, guess })
-          }}
-          onHostStart={() => {
-            const socket = socketRef.current
-            if (!socket) return
-            socket.emit("host:start", { roomCode: room.room_code })
-          }}
+          viewerCount={streamerFeed.viewerCount}
+          answers={streamerFeed.answers}
+          twitch={streamerFeed.twitch}
+          onHostGuess={guess => socketRef.current?.emit("game:guess", { roomCode: room.room_code, ...guess })}
+          onHostStart={() => socketRef.current?.emit("host:start", { roomCode: room.room_code })}
+          onHostEnd={() => socketRef.current?.emit("host:end", { roomCode: room.room_code })}
+          onKick={viewerId => socketRef.current?.emit("host:kick", { roomCode: room.room_code, viewerId })}
+          onReplay={isHost ? () => void handleStartGame({ restart: true }) : undefined}
           onExit={handleLeaveRoom}
           accent={accentColor}
+        />
+      ) : isLateJoiner(gameState as MultiplayerGameState, userPayload.user.id) ? (
+        // Arrive en cours de partie (T19) : il regarde, puis joue a la manche
+        // suivante. L'ecran de jeu prend la place tout seul, sans rechargement.
+        <LateJoinerView
+          state={gameState as MultiplayerGameState}
+          currentUserId={userPayload.user.id}
+          serverNow={serverNow}
+          chatMessages={chatMessages}
+          onSendChat={sendChat}
+          onExit={handleLeaveRoom}
+          onRejoin={() => socketRef.current?.emit("room:join", { roomCode: room.room_code })}
+          accentColor={accentColor}
         />
       ) : (
         <MultiplayerGameClient
@@ -1687,6 +1711,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
             }
           }) : undefined}
           chatMessages={chatMessages}
+          spectators={spectators}
           onSendChat={sendChat}
         />
       )
@@ -1737,7 +1762,6 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       loadingGame
     ) : (
       <>
-        {streamerModeSelector}
         {selectedLobby}
       </>
     )
@@ -1749,6 +1773,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       subtitle={headerCopy.subtitle}
       onLeave={handleLeaveRoom}
       hideHeader={view === "results" || view === "playing"}
+      aside={<SpectatorBadge count={spectators} />}
       error={error || lobby.message}
       errorAction={error ? errorAction : null}
       dataAttrs={dataAttrs}
@@ -1758,8 +1783,10 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       <div className="flex flex-col gap-4">
         {socketNotice ? (
           <div
-            role="alert"
-            className="flex items-center justify-between gap-3 rounded-md border-2 border-[#9c2f1d] bg-[#efe5d0] px-4 py-3 text-sm font-semibold text-[#9c2f1d] shadow-[4px_4px_0_rgba(46,32,20,.18)]"
+            role={noticeTone === "alert" ? "alert" : "status"}
+            className={`flex items-center justify-between gap-3 rounded-md border-2 bg-[#efe5d0] px-4 py-3 text-sm font-semibold shadow-[4px_4px_0_rgba(46,32,20,.18)] ${
+              noticeTone === "alert" ? "border-[#9c2f1d] text-[#9c2f1d]" : "border-[#2e2014] text-[#2e2014]"
+            }`}
           >
             <span>{socketNotice}</span>
             <button type="button" onClick={() => setSocketNotice(null)} className="shrink-0 text-xs font-bold uppercase tracking-[0.14em] underline">Fermer</button>

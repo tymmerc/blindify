@@ -12,3 +12,21 @@ describe("Mentions legales : extraits musicaux", () => {
     expect(section).toMatch(/usage privé/)
   })
 })
+
+// T17c et T17a : l'adresse de l'editeur est contact@blindz.app, et la page
+// renvoie vers les conditions d'utilisation.
+describe("Mentions legales : contact et conditions", () => {
+  it("publie contact@blindz.app comme contact de l'editeur", () => {
+    render(<MentionsLegalesPage />)
+    const editeur = screen.getByRole("heading", { name: "Éditeur du site" }).parentElement
+    const link = editeur?.querySelector("a[href^='mailto:']")
+    expect(link).toHaveAttribute("href", "mailto:contact@blindz.app")
+    expect(link).toHaveTextContent("contact@blindz.app")
+  })
+
+  it("renvoie vers les conditions d'utilisation", () => {
+    render(<MentionsLegalesPage />)
+    const hrefs = screen.getAllByRole("link").map(a => a.getAttribute("href"))
+    expect(hrefs.filter(h => h === "/conditions/" || h === "/conditions").length).toBe(2)
+  })
+})

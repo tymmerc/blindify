@@ -1,5 +1,6 @@
-// La soiree complete, comme en vrai : partie 1 → retardataire qui attend →
-// fin de partie → il entre tout seul → l'hote relance → partie 2 avec lui.
+// La soiree complete, comme en vrai : partie 1 → retardataire qui arrive en
+// pleine partie, regarde, puis joue des la manche suivante (T19) → fin de
+// partie, il est au classement → l'hote relance → partie 2 avec lui.
 // Plus : hote qui recharge sa page en pleine manche, joueur qui quitte et garde son score.
 import { chromium, devices } from "@playwright/test"
 import fs from "fs"
@@ -28,7 +29,7 @@ const probe = p => p.evaluate(() => {
     round: r ? Number(r[1]) : null,
     input: !!document.querySelector('input[placeholder*="morceau qui tourne"]'),
     fin: /FIN DE LA FACE|On rejoue \?/i.test(txt),
-    attente: /rejoindras automatiquement/i.test(txt),
+    attente: /tu joues dès la prochaine manche|tu joues la prochaine partie/i.test(txt),
     organiser: /ORGANISER/i.test(txt) && /Lancer une partie/i.test(txt),
     lancerVisible: /LANCER LA PARTIE/i.test(txt),
     txt: txt.replace(/\s+/g, " ").slice(0, 200),
@@ -131,12 +132,20 @@ const zoeFlow = (async () => {
   await zoe.locator("input").first().fill("Zoe")
   await zoe.getByRole("button", { name: /continuer/i }).click()
   await zoe.getByRole("button", { name: /rejoindre la partie/i }).click().catch(() => {})
-  await sleep(6000)
+  await zoe.getByTestId("late-joiner-view").waitFor({ timeout: 30000 }).catch(() => {})
   const zs = await probe(zoe)
   await zoe.screenshot({ path: `${SHOTS}/zoe-attente.png` })
-  if (zs.attente) say("  [ok] Zoe voit l'ecran d'attente 'tu rejoindras automatiquement'")
-  else bad(`Zoe ne voit pas l'ecran d'attente (${zs.txt})`)
-  if (zs.organiser) bad("Zoe voit encore le bloc ORGANISER au lieu de l'ecran d'attente")
+  if (zs.attente) say(`  [ok] Zoe regarde la partie en attendant la manche suivante (arrivee en manche ${zs.round})`)
+  else bad(`Zoe ne voit pas la vue d'attente (${zs.txt})`)
+  if (zs.organiser) bad("Zoe voit encore le bloc ORGANISER au lieu de la vue d'attente")
+  if (zs.input) bad("Zoe a un champ de reponse pendant son attente")
+  // Elle joue des la manche suivante, sans rien recharger.
+  answered.Zoe = new Set()
+  await playLoop({ name: "Zoe", page: zoe })
+  const joue = [...answered.Zoe].sort((x, y) => x - y)
+  if (zs.round && zs.round >= 5) say("  [ok] Zoe arrivee en derniere manche : elle jouera la partie suivante")
+  else if (joue.length && !joue.includes(zs.round)) say(`  [ok] Zoe a joue les manches ${joue.join(", ")}`)
+  else bad(`Zoe n'a pas joue apres son arrivee en manche ${zs.round} (manches repondues : ${joue.join(", ") || "aucune"})`)
 })()
 
 const results = await Promise.all(players.map(playLoop))
@@ -151,15 +160,11 @@ if (/Lea/.test(fin)) say("  [ok] Lea (partie en manche 3) est toujours au classe
 else bad("Lea a disparu du classement final apres avoir quitte")
 await megane.screenshot({ path: `${SHOTS}/podium-avec-lea.png` })
 
-// ---- Zoe doit entrer toute seule dans les 15s apres la fin ----
-say("  [test] on attend que Zoe rejoigne automatiquement (retry 10s)")
-let zoeIn = false
-for (let i = 0; i < 4; i++) {
-  await sleep(6000)
-  const zs = await probe(zoe)
-  if (!zs.attente) { zoeIn = true; say(`  [ok] Zoe est entree automatiquement (${zs.txt.slice(0, 80)})`); break }
+// ---- Zoe, arrivee en route, est au classement final ----
+if ((answered.Zoe?.size ?? 0) > 0) {
+  if (/Zoe/.test(fin)) say("  [ok] Zoe est au classement final")
+  else bad("Zoe a joue des manches mais n'est pas au classement final")
 }
-if (!zoeIn) bad("Zoe n'est jamais entree automatiquement apres la fin de partie")
 
 // ---- l'hote relance : Zoe doit etre dans la partie 2 ----
 const replay = host.getByRole("button", { name: /rejouer|relancer/i }).first()

@@ -82,6 +82,7 @@ export function SiteFooter() {
             <Link href="/faq/" className="transition hover:text-[#d88418]">FAQ</Link>
             <Link href="/mentions-legales/" className="transition hover:text-[#d88418]">Mentions légales</Link>
             <Link href="/confidentialite/" className="transition hover:text-[#d88418]">Confidentialité</Link>
+            <Link href="/conditions/" className="transition hover:text-[#d88418]">Conditions</Link>
           </nav>
         </div>
       </div>

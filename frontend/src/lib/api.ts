@@ -133,6 +133,12 @@ export const api = {
   async roomRounds(code: string) {
     return clientApi.roomRounds(code)
   },
+  async streamerStatus() {
+    return clientApi.streamerStatus()
+  },
+  async streamerOverlay(code: string) {
+    return clientApi.streamerOverlay(code)
+  },
   async updateRoomConfig(code: string, payload: { questionCount?: number; roundSeconds?: number }) {
     return clientApi.updateRoomConfig(code, payload)
   },

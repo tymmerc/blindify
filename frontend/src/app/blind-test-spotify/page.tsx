@@ -82,8 +82,8 @@ export default function Page() {
         <p>
           Les titres likés, les playlists privées et les playlists « collaboratives non publiques » ne passent pas :
           Spotify ne les rend pas accessibles. La solution tient en trente secondes, une playlist publique avec les
-          morceaux que tu veux. Autre piège : si Partager te donne un lien court du type spotify.link, ouvre-le
-          dans le navigateur et copie l'adresse qui commence par open.spotify.com.
+          morceaux que tu veux. Et le lien court spotify.link que donne Partager sur mobile ? Colle-le tel
+          quel, il passe.
         </p>
       </Section>
 
