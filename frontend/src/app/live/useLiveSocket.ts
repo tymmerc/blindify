@@ -76,6 +76,8 @@ export function useLiveSocket(): LiveSocket {
     socket.on("live:error", payload => {
       dispatch({ type: "error", code: liveErrorCode(payload?.code) })
       close()
+      // Exclu : sa cle ne vaut plus rien dans cette salle.
+      if (payload?.code === "exclu") writeStorage(`${KEY_PREFIX}${code}`, "")
     })
     socket.on("connect_error", err => {
       const code = liveErrorCode(err?.message)

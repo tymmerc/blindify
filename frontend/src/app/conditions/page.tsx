@@ -71,7 +71,7 @@ export default function ConditionsPage() {
               pas t&apos;en servir pour une diffusion en public (bar, commerce, entreprise, soirée payante).
               N&apos;enregistre pas les extraits pour les réutiliser.
             </p>
-            {/* T5 (31/10/2026) : paragraphe du mode streamer, a valider par Tym. */}
+            {/* T5 (31/10/2026) : paragraphe du mode streamer, valide par Tym. */}
             <p className="mt-3">
               Le direct n&apos;est possible qu&apos;avec le mode streamer (« Avec ta communauté »), pensé pour
               jouer avec ton public sur Twitch ou une autre plateforme. Dans ce cas, c&apos;est toi qui diffuses

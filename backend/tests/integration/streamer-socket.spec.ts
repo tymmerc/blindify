@@ -233,6 +233,34 @@ describe("mode streamer sur le vrai serveur", () => {
     expect(await refusal({ live: { salle: "ZZZZZZ", pseudo: "Lena" } })).toBe("live_introuvable");
   });
 
+  it("l'hote exclut un viewer : coupe, retire du classement, sa cle ne le fait pas revenir", async () => {
+    const host = await connectClient(server.port, users[0]);
+    await joinRoom(server.io, roomCode, [host]);
+    const bad = await connectWatcher({ live: { salle: roomCode, pseudo: "Vilain" } });
+    await waitFor(() => bad.frames.some(f => f.event === "live:init"), 3000, "live:init");
+    const me = (bad.frames.find(f => f.event === "live:init")?.payload as { me: { id: string; key: string } }).me;
+    const gone = new Promise<void>(resolve => bad.socket.on("disconnect", () => resolve()));
+    host.socket.emit("host:kick", { roomCode, viewerId: me.id });
+    await gone;
+    expect(bad.frames.some(f => f.event === "live:error" && (f.payload as { code: string }).code === "exclu")).toBe(true);
+    expect(await refusal({ live: { salle: roomCode, pseudo: "Autre", cle: me.key } })).toBe("exclu");
+    expect(await refusal({ live: { salle: roomCode, pseudo: "Vilain" } })).toBe("exclu");
+    host.socket.close();
+  });
+
+  it("STREAMER_MODE=off pendant un live : « manche suivante » donne le podium, sans ouvrir de manche", async () => {
+    const host = await connectClient(server.port, users[0]);
+    const frames = recordAll(host);
+    await joinRoom(server.io, roomCode, [host]);
+    initStreamerGame(server.io, { roomCode, hostUserId: users[0].id, rounds: rounds(), subMode: "viewers_only" });
+    process.env.STREAMER_MODE = "off";
+    host.socket.emit("host:start", { roomCode });
+    await waitFor(() => getStreamerState(roomCode)?.phase === "GAME_OVER", 3000, "GAME_OVER");
+    expect(frames.some(f => isState(f.payload) && f.payload.phase === "STARTING_ROUND")).toBe(false);
+    for (const f of frames) expect(text(f)).not.toContain(TITLE);
+    host.socket.close();
+  });
+
   it("STREAMER_MODE=off : ni overlay ni viewer", async () => {
     process.env.STREAMER_MODE = "off";
     expect(await refusal({ overlay: { salle: roomCode, jeton: overlayToken() } })).toBe("live_desactive");

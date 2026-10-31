@@ -57,6 +57,20 @@ describe("ecran du streamer", () => {
     expect(audioManager.play).toHaveBeenCalledWith(expect.objectContaining({ src: "https://extraits.test/1.mp3" }))
   })
 
+  it("exclure un viewer : deux clics, depuis les reponses ou le classement", () => {
+    const onKick = vi.fn()
+    renderHost(
+      state({ leaderboard: [{ id: "v9", pseudo: "Vilain", score: 30, source: "page" }] }),
+      { onKick, answers: { round: 1, count: 1, names: ["Vilain"], viewers: [{ id: "v9", pseudo: "Vilain" }] } },
+    )
+    const buttons = screen.getAllByRole("button", { name: "Exclure Vilain" })
+    expect(buttons).toHaveLength(2)
+    fireEvent.click(buttons[0])
+    expect(onKick).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole("button", { name: "Confirmer : exclure Vilain" }))
+    expect(onKick).toHaveBeenCalledWith("v9")
+  })
+
   it("finir la partie a tout moment", () => {
     const props = renderHost(state())
     fireEvent.click(screen.getByTestId("streamer-end"))

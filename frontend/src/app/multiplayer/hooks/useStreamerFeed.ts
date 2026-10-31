@@ -10,7 +10,7 @@ import type { Socket } from "socket.io-client"
 
 export type StreamerFeed = {
   viewerCount: number
-  answers: { round: number; count: number; names: string[] } | null
+  answers: { round: number; count: number; names: string[]; viewers: Array<{ id: string; pseudo: string }> } | null
 }
 
 export function useStreamerFeed(socket: Socket | null, roomCode: string | null, enabled: boolean): StreamerFeed {
@@ -22,9 +22,10 @@ export function useStreamerFeed(socket: Socket | null, roomCode: string | null, 
       const count = p.count
       setFeed(prev => ({ ...prev, viewerCount: count }))
     }
-    const onAnswers = (p: { roomCode?: string; round?: number; count?: number; names?: string[] } | null) => {
+    const onAnswers = (p: { roomCode?: string; round?: number; count?: number; names?: string[]; viewers?: Array<{ id: string; pseudo: string }> } | null) => {
       if (p?.roomCode !== roomCode || typeof p.round !== "number" || typeof p.count !== "number") return
-      const answers = { round: p.round, count: p.count, names: Array.isArray(p.names) ? p.names.slice(0, 8) : [] }
+      const viewers = Array.isArray(p.viewers) ? p.viewers.filter(v => typeof v?.id === "string" && typeof v?.pseudo === "string").slice(0, 8) : []
+      const answers = { round: p.round, count: p.count, names: Array.isArray(p.names) ? p.names.slice(0, 8) : [], viewers }
       setFeed(prev => ({ ...prev, answers }))
     }
     socket.on("streamer:viewers", onViewers)

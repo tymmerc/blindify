@@ -20,6 +20,7 @@ import { HIDDEN_PHASES, emitStreamerState, emitToMedia, mediaView, viewerView } 
 import { scoreViewerAnswer, type AnswerWindow, type ViewerAnswer } from "./streamerScoring";
 import { evaluateGuessDetail } from "./guessMatching";
 import {
+  banViewer,
   clearViewers,
   getViewer,
   leaderboard,
@@ -71,7 +72,7 @@ interface StreamerCtx {
   sessionId: number | null;
   timers: { phase?: NodeJS.Timeout; hostAbsence?: NodeJS.Timeout; answers?: NodeJS.Timeout };
   answers: Map<string, ViewerAnswer>;
-  answeredNames: string[];
+  answeredNames: Array<{ id: string; pseudo: string }>;
   window: AnswerWindow | null;
   streamerGuess?: { title: string; artist: string };
 }
@@ -260,7 +261,7 @@ export function recordViewerAnswer(
   if (viewer.answeredRound >= ctx.state.currentRound || ctx.answers.has(viewerId)) return "deja";
   ctx.answers.set(viewerId, { title, artist, at });
   updateViewer(roomCode, viewerId, v => ({ ...v, answeredRound: ctx.state.currentRound }));
-  ctx.answeredNames = [viewer.pseudo, ...ctx.answeredNames].slice(0, ANSWERED_NAMES);
+  ctx.answeredNames = [{ id: viewer.id, pseudo: viewer.pseudo }, ...ctx.answeredNames].slice(0, ANSWERED_NAMES);
   ctx.state = { ...ctx.state, answersCount: ctx.answers.size };
   scheduleAnswersEmit(io, ctx);
   return "ok";
@@ -271,13 +272,19 @@ function scheduleAnswersEmit(io: IOServer, ctx: StreamerCtx): void {
   if (ctx.timers.answers) return;
   ctx.timers.answers = setTimeout(() => {
     ctx.timers.answers = undefined;
-    emitToMedia(io, ctx.state.roomCode, "streamer:answers", {
-      roomCode: ctx.state.roomCode,
-      round: ctx.state.currentRound,
-      count: ctx.answers.size,
-      names: ctx.answeredNames,
-    });
+    emitAnswers(io, ctx);
   }, ANSWERS_THROTTLE_MS);
+}
+
+function emitAnswers(io: IOServer, ctx: StreamerCtx): void {
+  emitToMedia(io, ctx.state.roomCode, "streamer:answers", {
+    roomCode: ctx.state.roomCode,
+    round: ctx.state.currentRound,
+    count: ctx.answers.size,
+    names: ctx.answeredNames.map(n => n.pseudo),
+    // Avec leur id : l'hote peut exclure un pseudo depuis sa page.
+    viewers: ctx.answeredNames,
+  });
 }
 
 /** Reponse de l'hote, pendant GUESSING_STREAMER (duo et solo). */
@@ -350,7 +357,9 @@ function revealFinal(io: IOServer, ctx: StreamerCtx): void {
     ? {}
     : streamerCorrect
       ? { streamerScore: ctx.state.streamerScore + 1, streamerWins: ctx.state.streamerWins + 1 }
-      : { chatWins: ctx.state.chatWins + 1 };
+      : snapshot.correct > 0
+        ? { chatWins: ctx.state.chatWins + 1 }
+        : {};
   setPhase(ctx, "REVEAL_FINAL", {
     ...wins,
     chatSnapshot: snapshot,
@@ -452,4 +461,26 @@ export function hostBack(roomCode: string): void {
   if (!ctx?.timers.hostAbsence) return;
   clearTimeout(ctx.timers.hostAbsence);
   ctx.timers.hostAbsence = undefined;
+}
+
+/**
+ * « Exclure » du streamer : le viewer quitte le classement et la manche en
+ * cours, son socket est coupe, et ni sa cle ni son pseudo ne rentrent plus.
+ */
+export function kickViewer(io: IOServer, roomCode: string, viewerId: string): boolean {
+  const banned = banViewer(roomCode, viewerId);
+  if (!banned) return false;
+  const self = viewerSelfRoom(roomCode, viewerId);
+  io.to(self).emit("live:error", { code: "exclu" });
+  io.in(self).disconnectSockets(true);
+  const ctx = games.get(roomCode);
+  if (ctx) {
+    ctx.answers.delete(viewerId);
+    ctx.answeredNames = ctx.answeredNames.filter(n => n.id !== viewerId);
+    ctx.state = { ...ctx.state, answersCount: ctx.answers.size, leaderboard: leaderboard(roomCode) };
+    broadcast(io, ctx);
+    emitAnswers(io, ctx);
+  }
+  refreshViewerCount(io, roomCode);
+  return true;
 }

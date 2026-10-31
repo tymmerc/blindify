@@ -8,10 +8,13 @@
 import { useEffect, useReducer, useRef, useState } from "react"
 import { io, type Socket } from "socket.io-client"
 import { socketEndpoint } from "@/lib/socket"
-import { initialOverlayView, liveErrorCode, overlayReducer, type OverlayView } from "@/lib/streamerLive"
+import { initialOverlayView, liveErrorCode, overlayErrorIsFinal, overlayReducer, type OverlayView } from "@/lib/streamerLive"
 import type { StreamerState } from "@/lib/types"
 
 const STATE_EVENTS = ["state:sync", "round:start", "round:reveal:partial", "round:reveal:final"] as const
+/** Refus non definitif (limite, serveur qui redemarre) : on retente, de plus en plus lentement. */
+const RETRY_START_MS = 2_000
+const RETRY_MAX_MS = 60_000
 
 export function useOverlaySocket(salle: string | null, jeton: string | null): OverlayView {
   const [view, dispatch] = useReducer(overlayReducer, initialOverlayView)
@@ -37,14 +40,33 @@ export function useOverlaySocket(salle: string | null, jeton: string | null): Ov
       dispatch({ type: "error", code: "overlay_expire" })
       socket.close()
     })
+    // Un overlay ne doit jamais rester eteint en plein live : seuls un lien
+    // faux ou expire, ou le mode coupe, l'arretent pour de bon.
+    let retry: ReturnType<typeof setTimeout> | null = null
+    let delay = RETRY_START_MS
+    socket.on("connect", () => {
+      delay = RETRY_START_MS
+    })
     socket.on("connect_error", err => {
       const code = liveErrorCode(err?.message)
       dispatch({ type: "error", code })
-      if (code !== "reseau") socket.close()
+      if (overlayErrorIsFinal(code)) {
+        socket.close()
+        return
+      }
+      // Refus du serveur (limite) : socket.io ne retente pas seul, on le fait.
+      if (!socket.active && !retry) {
+        retry = setTimeout(() => {
+          retry = null
+          socket.connect()
+        }, delay)
+        delay = Math.min(delay * 2, RETRY_MAX_MS)
+      }
     })
     // Reconnexion apres une coupure : relire l'etat complet.
     socket.io.on("reconnect", () => socket.emit("overlay:sync"))
     return () => {
+      if (retry) clearTimeout(retry)
       socket.close()
     }
   }, [salle, jeton])

@@ -1597,6 +1597,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
           onHostGuess={guess => socketRef.current?.emit("game:guess", { roomCode: room.room_code, ...guess })}
           onHostStart={() => socketRef.current?.emit("host:start", { roomCode: room.room_code })}
           onHostEnd={() => socketRef.current?.emit("host:end", { roomCode: room.room_code })}
+          onKick={viewerId => socketRef.current?.emit("host:kick", { roomCode: room.room_code, viewerId })}
           onReplay={isHost ? () => void handleStartGame({ restart: true }) : undefined}
           onExit={handleLeaveRoom}
           accent={accentColor}

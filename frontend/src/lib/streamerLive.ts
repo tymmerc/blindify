@@ -15,7 +15,10 @@ export type LiveErrorCode =
   | "live_introuvable"
   | "live_complet"
   | "pseudo_invalide"
+  | "pseudo_refuse"
   | "pseudo_pris"
+  | "ip_pleine"
+  | "exclu"
   | "overlay_desactive"
   | "overlay_refuse"
   | "overlay_expire"
@@ -28,7 +31,10 @@ const KNOWN: ReadonlySet<string> = new Set<LiveErrorCode>([
   "live_introuvable",
   "live_complet",
   "pseudo_invalide",
+  "pseudo_refuse",
   "pseudo_pris",
+  "ip_pleine",
+  "exclu",
   "overlay_desactive",
   "overlay_refuse",
   "overlay_expire",
@@ -45,7 +51,10 @@ export const LIVE_ERROR_TEXT: Record<LiveErrorCode, string> = {
   live_introuvable: "Aucun live avec ce code. Vérifie le code affiché sur le stream.",
   live_complet: "Ce live est complet. Tu peux toujours regarder et jouer dans ta tête.",
   pseudo_invalide: "Ton pseudo doit faire entre 2 et 20 caractères (lettres, chiffres, espaces).",
+  pseudo_refuse: "Ce pseudo n'est pas accepté ici. Choisis-en un autre.",
   pseudo_pris: "Ce pseudo est déjà pris dans ce live. Choisis-en un autre.",
+  ip_pleine: "Trop de joueurs depuis ta connexion dans ce live.",
+  exclu: "Le streamer t'a retiré de cette partie.",
   overlay_desactive: "Le lien d'overlay n'est pas configuré sur le serveur.",
   overlay_refuse: "Ce lien d'overlay n'est pas valable. Recopie-le depuis le lobby.",
   overlay_expire: "Ce lien d'overlay a expiré. Recopie-le depuis le lobby.",
@@ -55,7 +64,12 @@ export const LIVE_ERROR_TEXT: Record<LiveErrorCode, string> = {
 
 /** Les erreurs ou le viewer doit corriger sa saisie (on lui rend le formulaire). */
 export function isFormError(code: LiveErrorCode): boolean {
-  return code === "pseudo_invalide" || code === "pseudo_pris" || code === "live_introuvable"
+  return code === "pseudo_invalide" || code === "pseudo_refuse" || code === "pseudo_pris" || code === "live_introuvable"
+}
+
+/** Refus definitifs de l'overlay : le lien ne vaut rien. Le reste (limite, reseau) se retente. */
+export function overlayErrorIsFinal(code: LiveErrorCode): boolean {
+  return code === "overlay_refuse" || code === "overlay_expire" || code === "overlay_desactive" || code === "live_desactive" || code === "lien_incomplet"
 }
 
 export const LIVE_CODE_FORMAT = /^[A-Z0-9]{4,8}$/
@@ -270,7 +284,7 @@ export function overlayReducer(view: OverlayView, event: OverlayEvent): OverlayV
       return { ...view, answers: { round: event.payload.round, count: event.payload.count, names: event.payload.names } }
     }
     case "error":
-      return { ...view, status: event.code === "reseau" ? view.status : "error", error: event.code }
+      return { ...view, status: overlayErrorIsFinal(event.code) ? "error" : view.status, error: event.code }
   }
 }
 

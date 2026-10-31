@@ -18,10 +18,10 @@ import { shortGameNotice } from "@/lib/roundCount"
 import { REVEALED_PHASES, elapsedRatio, secondsLeft } from "@/lib/streamerLive"
 import { Label, Panel } from "@/app/multiplayer/lobbyKit"
 import { STREAMER_FORMATS } from "@/app/multiplayer/StreamerLobbyView"
-import { Leaderboard, RevealCard, SAGE, StreamerPodium, TimerBar } from "@/components/streamer/StreamerBits"
+import { KickButton, Leaderboard, RevealCard, SAGE, StreamerPodium, TimerBar } from "@/components/streamer/StreamerBits"
 import { DeezerCredit } from "./SourceCredits"
 
-export type StreamerAnswers = { round: number; count: number; names: string[] } | null
+export type StreamerAnswers = { round: number; count: number; names: string[]; viewers?: Array<{ id: string; pseudo: string }> } | null
 
 type Props = {
   userId: number
@@ -32,6 +32,8 @@ type Props = {
   onHostGuess: (guess: { title: string; artist: string }) => void
   onHostStart: () => void
   onHostEnd: () => void
+  /** « Exclure » un viewer (pseudo offensant) : il quitte la partie pour de bon. */
+  onKick?: (viewerId: string) => void
   onReplay?: () => void
   onExit?: () => void
   accent?: string
@@ -83,16 +85,20 @@ function HostGuess({ round, onGuess }: { round: number; onGuess: Props["onHostGu
   )
 }
 
-function Arrivals({ answers, state }: { answers: StreamerAnswers | undefined; state: StreamerState }) {
+function Arrivals({ answers, state, onKick }: { answers: StreamerAnswers | undefined; state: StreamerState; onKick?: (id: string) => void }) {
   const count = Math.max(state.answersCount ?? 0, answers?.round === state.currentRound ? answers.count : 0)
-  const names = answers?.round === state.currentRound ? answers.names : []
+  const current = answers?.round === state.currentRound ? answers : null
+  const names = current?.viewers?.length ? current.viewers : (current?.names ?? []).map(pseudo => ({ id: "", pseudo }))
   return (
     <div className="space-y-2" data-testid="streamer-arrivals">
       <p className="m-0 text-lg"><b className="tabular-nums">{count}</b> réponse{count > 1 ? "s" : ""}</p>
       {names.length ? (
         <ul className="m-0 flex list-none flex-wrap gap-1.5 p-0">
           {names.map((n, i) => (
-            <li key={`${n}-${i}`} className="rounded-full border-[1.5px] border-[#2e2014] bg-[#efe5d0] px-2.5 py-0.5 text-xs font-semibold">{n}</li>
+            <li key={`${n.id || n.pseudo}-${i}`} className="flex items-center gap-1.5 rounded-full border-[1.5px] border-[#2e2014] bg-[#efe5d0] py-0.5 pl-2.5 pr-1 text-xs font-semibold">
+              {n.pseudo}
+              {onKick && n.id ? <KickButton pseudo={n.pseudo} onConfirm={() => onKick(n.id)} /> : null}
+            </li>
           ))}
         </ul>
       ) : null}
@@ -100,7 +106,7 @@ function Arrivals({ answers, state }: { answers: StreamerAnswers | undefined; st
   )
 }
 
-function PhasePanel({ state, now, answers, onHostGuess }: { state: StreamerState; now: number; answers: StreamerAnswers | undefined; onHostGuess: Props["onHostGuess"] }) {
+function PhasePanel({ state, now, answers, onHostGuess, onKick }: { state: StreamerState; now: number; answers: StreamerAnswers | undefined; onHostGuess: Props["onHostGuess"]; onKick?: (id: string) => void }) {
   const timer = <TimerBar seconds={secondsLeft(state.timing, now)} ratio={elapsedRatio(state.timing, now)} />
   switch (state.phase) {
     case "LOBBY":
@@ -112,7 +118,7 @@ function PhasePanel({ state, now, answers, onHostGuess }: { state: StreamerState
         <div className="space-y-4">
           <p className="m-0 font-display text-2xl font-semibold">Ton chat cherche</p>
           {timer}
-          <Arrivals answers={answers} state={state} />
+          <Arrivals answers={answers} state={state} onKick={onKick} />
           {state.subMode === "duo" ? <p className="m-0 text-sm text-[#6b573f]">Tu réponds juste après eux.</p> : null}
         </div>
       )
@@ -146,7 +152,7 @@ function PhasePanel({ state, now, answers, onHostGuess }: { state: StreamerState
   }
 }
 
-export function StreamerGameClient({ state, serverNow, viewerCount, answers, onHostGuess, onHostStart, onHostEnd, onReplay, onExit }: Props) {
+export function StreamerGameClient({ state, serverNow, viewerCount, answers, onHostGuess, onHostStart, onHostEnd, onKick, onReplay, onExit }: Props) {
   const [listening, setListening] = useState(false)
   useLocalListening(state, listening)
   if (!state) return null
@@ -196,7 +202,7 @@ export function StreamerGameClient({ state, serverNow, viewerCount, answers, onH
             </div>
           ) : (
             <div className="space-y-5">
-              <PhasePanel state={state} now={serverNow} answers={answers} onHostGuess={onHostGuess} />
+              <PhasePanel state={state} now={serverNow} answers={answers} onHostGuess={onHostGuess} onKick={onKick} />
               {canNext ? (
                 <button type="button" onClick={onHostStart} className={`${BUTTON} w-full bg-[#c65133] py-3.5 text-base text-[#f4ecdb]`} data-testid="streamer-next">
                   <Play aria-hidden className="h-4 w-4" /> {state.phase === "LOBBY" ? "Lancer la première manche" : "Manche suivante"}
@@ -206,7 +212,7 @@ export function StreamerGameClient({ state, serverNow, viewerCount, answers, onH
           )}
         </Panel>
         <Panel label="Face B · Classement" dot={SAGE}>
-          <Leaderboard entries={state.leaderboard ?? []} emptyLabel="Le classement arrive au premier reveal." />
+          <Leaderboard entries={state.leaderboard ?? []} emptyLabel="Le classement arrive au premier reveal." onKick={onKick ? id => onKick(id) : undefined} />
         </Panel>
       </div>
       {!REVEALED_PHASES.has(state.phase) && !over ? (

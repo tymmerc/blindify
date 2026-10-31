@@ -123,6 +123,21 @@ describe("page viewer", () => {
     expect(socket.close).toHaveBeenCalled()
   })
 
+  it("exclu par le streamer : message, et sa cle est oubliee", () => {
+    const socket = join()
+    act(() => socket.fire("live:init", { roomCode: "AB12CD", me: { id: "v1", key: "k".repeat(32), pseudo: "Lena", score: 0, rank: null }, answeredRound: 0, state: game() }))
+    act(() => socket.fire("live:error", { code: "exclu" }))
+    expect(screen.getByRole("alert")).toHaveTextContent("Le streamer t'a retiré de cette partie.")
+    expect(window.localStorage.getItem("blindz_live_key:AB12CD")).toBe("")
+  })
+
+  it("pseudo refuse par le filtre : retour au formulaire avec un message neutre", () => {
+    const socket = join("Vilain")
+    act(() => socket.fire("connect_error", { message: "pseudo_refuse" }))
+    expect(screen.getByRole("alert")).toHaveTextContent("Ce pseudo n'est pas accepté ici.")
+    expect(screen.getByLabelText("Ton pseudo")).toBeInTheDocument()
+  })
+
   it("la cle gardee fait revenir le meme viewer", () => {
     window.localStorage.setItem("blindz_live_key:AB12CD", "c".repeat(32))
     const socket = join()
