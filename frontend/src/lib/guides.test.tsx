@@ -17,8 +17,8 @@ const APP_DIR = path.resolve(__dirname, "../app")
 const SITE = "https://blindz.app"
 // Le tiret cadratin est banni des textes du site (regle de copie de Tym).
 const EM_DASH = String.fromCharCode(0x2014)
-// layout.tsx ajoute " · blindz.app" au titre : Google en affiche une soixantaine.
-const TITLE_SUFFIX = " · blindz.app"
+// layout.tsx ajoute " · Blindz" au titre : Google en affiche une soixantaine.
+const TITLE_SUFFIX = " · Blindz"
 const TITLE_MAX = 60
 const DESC_MAX = 160
 // Le comparatif garde son titre et sa description longs tant que la PR #49,
