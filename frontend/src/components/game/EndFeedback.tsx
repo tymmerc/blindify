@@ -12,7 +12,7 @@ import {
   type FeedbackContext,
   type FeedbackFailure,
 } from "@/lib/feedback"
-import { recordGameEnd } from "@/lib/feedbackPrompt"
+import { claimGameEnd } from "@/lib/feedbackPrompt"
 import { StudentNote } from "./StudentNote"
 
 // Petit bloc discret sous les resultats d'une partie : un avis en un geste,
@@ -48,25 +48,27 @@ export interface EndFeedbackProps {
 }
 
 /**
- * Compte cette fin de partie, une fois par ecran de resultats, et dit s'il
- * faut montrer le message de Tym. Avant le dessin (layout effect) : pas de
- * Oui / Pas trop qui clignote avant d'etre remplace. La ref empeche le double
- * appel du mode strict de React en developpement de compter deux parties.
+ * Compte cette fin de partie et dit s'il faut montrer le message de Tym.
+ * Avant le dessin (layout effect) : pas de Oui / Pas trop qui clignote avant
+ * d'etre remplace. La ref evite un 2e appel au rendu suivant ; claimGameEnd
+ * evite de compter deux fois un ecran demonte puis remonte pour la meme partie.
  */
-function useNotePrompt(): boolean {
+function useNotePrompt(context: FeedbackContext): boolean {
   const counted = useRef(false)
   const [show, setShow] = useState(false)
   useLayoutEffect(() => {
     if (counted.current) return
     counted.current = true
-    if (recordGameEnd()) setShow(true)
+    if (claimGameEnd(context)) setShow(true)
+    // Une seule decision par ecran : le contexte du premier rendu suffit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   return show
 }
 
 export function EndFeedback({ context, className = "" }: EndFeedbackProps) {
   const titleId = useId()
-  const showNote = useNotePrompt()
+  const showNote = useNotePrompt(context)
   return (
     <section
       aria-labelledby={showNote ? undefined : titleId}

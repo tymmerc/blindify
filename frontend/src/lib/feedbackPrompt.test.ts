@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest"
-import { GAMES_KEY, PROMPT_SHOWN_KEY, recordGameEnd, resetPromptMemory } from "./feedbackPrompt"
+import { claimGameEnd, GAMES_KEY, PROMPT_SHOWN_KEY, recordGameEnd, resetPromptMemory, SAME_GAME_WINDOW_MS } from "./feedbackPrompt"
 
 /** Stockage qui refuse tout, comme une navigation privee stricte. */
 const brokenStore = {
@@ -54,5 +54,28 @@ describe("recordGameEnd", () => {
     expect(recordGameEnd(brokenStore)).toBe(false)
     expect(recordGameEnd(brokenStore)).toBe(true)
     expect(recordGameEnd(brokenStore)).toBe(false)
+  })
+})
+
+describe("claimGameEnd", () => {
+  beforeEach(() => {
+    localStorage.removeItem(PROMPT_SHOWN_KEY)
+    localStorage.removeItem(GAMES_KEY)
+    resetPromptMemory()
+  })
+
+  it("un solo identifie ne compte qu'une fois, meme remonte bien plus tard", () => {
+    expect(claimGameEnd({ mode: "solo", sessionId: 5 }, 0)).toBe(false)
+    expect(claimGameEnd({ mode: "solo", sessionId: 5 }, 10 * 60_000)).toBe(false)
+    expect(localStorage.getItem(GAMES_KEY)).toBe("1")
+    expect(claimGameEnd({ mode: "solo", sessionId: 6 }, 11 * 60_000)).toBe(true)
+    expect(claimGameEnd({ mode: "solo", sessionId: 6 }, 12 * 60_000)).toBe(true)
+  })
+
+  it("sans identifiant unique, meme cle dans la fenetre = meme partie, au-dela = partie suivante", () => {
+    expect(claimGameEnd({ mode: "buzzer" }, 0)).toBe(false)
+    expect(claimGameEnd({ mode: "buzzer" }, SAME_GAME_WINDOW_MS - 1)).toBe(false)
+    expect(localStorage.getItem(GAMES_KEY)).toBe("1")
+    expect(claimGameEnd({ mode: "buzzer" }, 2 * SAME_GAME_WINDOW_MS + 5)).toBe(true)
   })
 })

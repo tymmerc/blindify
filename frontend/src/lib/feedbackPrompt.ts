@@ -51,8 +51,47 @@ export function recordGameEnd(store: Store | null = browserStore()): boolean {
   return true
 }
 
+// Un meme ecran de fin peut etre monte plusieurs fois pour UNE partie. Vu en
+// solo sur la pile (04/11) : a la derniere manche, l'ecran de fin apparait
+// 120 ms avant la fenetre du resultat, disparait, puis revient apres
+// « Terminer ». Sans garde, la 1re partie comptait double et le message de
+// Tym sortait des la 1re partie.
+//
+// On retient donc la derniere fin comptee et sa decision :
+// - partie identifiee de facon unique (solo avec son identifiant) : meme
+//   partie, meme decision, quel que soit le delai ;
+// - sinon (code de salle reutilise d'une partie a l'autre, chrono, buzzer) :
+//   meme cle a moins de SAME_GAME_WINDOW_MS du dernier affichage = meme partie.
+//   La plus courte partie (chrono, 60 s, plus le lancement) dure davantage.
+export const SAME_GAME_WINDOW_MS = 45_000
+
+let lastEnd: { key: string; unique: boolean; at: number; show: boolean } | null = null
+
+export interface GameEndIdentity {
+  mode: string
+  sessionId?: number | null
+  gameCode?: string | null
+}
+
+/**
+ * Comme recordGameEnd, mais un ecran remonte pour la meme partie ne compte
+ * pas une 2e fois et garde la decision deja prise (le message reste affiche).
+ */
+export function claimGameEnd(game: GameEndIdentity, now = Date.now(), store?: Store | null): boolean {
+  const unique = game.mode === "solo" && Boolean(game.sessionId)
+  const key = `${game.mode}:${game.sessionId ?? ""}:${game.gameCode ?? ""}`
+  if (lastEnd && lastEnd.key === key && (unique || now - lastEnd.at < SAME_GAME_WINDOW_MS)) {
+    lastEnd = { ...lastEnd, at: now }
+    return lastEnd.show
+  }
+  const show = store === undefined ? recordGameEnd() : recordGameEnd(store)
+  lastEnd = { key, unique, at: now, show }
+  return show
+}
+
 /** Pour les tests : remet le compte en memoire a zero. */
 export function resetPromptMemory(): void {
   memory.games = 0
   memory.shown = false
+  lastEnd = null
 }

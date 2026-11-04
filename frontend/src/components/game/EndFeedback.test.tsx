@@ -213,10 +213,39 @@ describe("EndFeedback : le message de Tym en fin de 2e partie (T24)", () => {
     })
     try {
       render(<EndFeedback context={{ mode: "friends", gameCode: "AB12CD" }} />).unmount()
-      render(<EndFeedback context={{ mode: "friends", gameCode: "AB12CD" }} />)
+      render(<EndFeedback context={{ mode: "chrono" }} />)
       expect(screen.getByText(NOTE_INTRO)).toBeInTheDocument()
     } finally {
       spy.mockRestore()
+    }
+  })
+
+  it("un ecran de fin demonte puis remonte pour la meme partie ne compte qu'une fois (solo, vu sur la pile)", () => {
+    // Derniere manche du solo : l'ecran de fin apparait 120 ms, disparait sous
+    // la fenetre du resultat, puis revient apres « Terminer ».
+    render(<EndFeedback context={{ mode: "solo", sessionId: 31 }} />).unmount()
+    render(<EndFeedback context={{ mode: "solo", sessionId: 31 }} />)
+    expect(localStorage.getItem(GAMES_KEY)).toBe("1")
+    expect(screen.queryByText(NOTE_INTRO)).not.toBeInTheDocument()
+  })
+
+  it("garde le message affiche si l'ecran de la 2e partie est remonte", () => {
+    render(<EndFeedback context={{ mode: "solo", sessionId: 1 }} />).unmount()
+    render(<EndFeedback context={{ mode: "solo", sessionId: 2 }} />).unmount()
+    render(<EndFeedback context={{ mode: "solo", sessionId: 2 }} />)
+    expect(screen.getByText(NOTE_INTRO)).toBeInTheDocument()
+    expect(localStorage.getItem(GAMES_KEY)).toBe("2")
+  })
+
+  it("dans la meme salle, la partie suivante compte bien (apres la fenetre de remontage)", () => {
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_000_000)
+    try {
+      render(<EndFeedback context={{ mode: "friends", gameCode: "AB12CD" }} />).unmount()
+      now.mockReturnValue(1_000_000 + 4 * 60_000)
+      render(<EndFeedback context={{ mode: "friends", gameCode: "AB12CD" }} />)
+      expect(screen.getByText(NOTE_INTRO)).toBeInTheDocument()
+    } finally {
+      now.mockRestore()
     }
   })
 
