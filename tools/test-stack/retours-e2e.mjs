@@ -302,7 +302,8 @@ async function adminCheck(browser, roomSessionId) {
     check(order[0] === ROOM_BUG_TEXT && order[1] === "avis rapide, sans texte" && order[2] === BUG_TEXT,
       "tableau de bord : le plus recent d'abord (bug a distance, puis avis oui, puis bug du solo)")
     const kpis = await page.locator("#retours .kpi .v").allTextContents()
-    check(kpis.join() === "1,1,2", `tableau de bord : compteurs oui / pas trop / bugs (${kpis.join(" / ")})`)
+    // 4e compteur depuis T24 : les messages ecrits (aucun dans ce parcours).
+    check(kpis.join() === "1,1,2,0", `tableau de bord : compteurs oui / pas trop / bugs / messages (${kpis.join(" / ")})`)
     const bugText = await page.locator(".retour.bug .texte").nth(1).textContent()
     check(bugText === BUG_TEXT, "tableau de bord : le texte du bug est affiche tel quel, balises comprises")
     check(await page.locator(".retour img").count() === 0 && scripts.length === 0, "tableau de bord : aucune balise injectee, aucun script execute")
