@@ -18,6 +18,9 @@
 jest.mock("../../src/utils/logger", () => ({
   logger: { error: jest.fn(), warn: jest.fn(), info: jest.fn(), debug: jest.fn() },
 }));
+// Le mail a Tym est teste a part (services/feedbackNotifier.spec.ts) : ici on
+// verifie seulement quand la route le demande.
+jest.mock("../../src/services/feedbackNotifier", () => ({ notifyWrittenFeedback: jest.fn() }));
 
 import fs from "fs";
 import path from "path";
@@ -27,13 +30,16 @@ import express from "express";
 import type { AddressInfo } from "net";
 import { resolveTestDatabaseUrl } from "../testDatabase";
 import { pool } from "../../src/config/db";
-import { ensureFeedbackSchema, FEEDBACK_PURGE_SQL, MAX_USER_AGENT } from "../../src/services/feedback";
+import { CONTACT_PURGE_SQL, ensureFeedbackSchema, FEEDBACK_PURGE_SQL, MAX_USER_AGENT } from "../../src/services/feedback";
+import { notifyWrittenFeedback } from "../../src/services/feedbackNotifier";
+import { logger } from "../../src/utils/logger";
 import { createFeedbackRouter, type FeedbackLimits } from "../../src/routes/feedback";
 
 // Sans base de test jetable, la suite s'arrete ici, avant toute requete.
 resolveTestDatabaseUrl(process.env.TEST_DATABASE_URL);
 
 const MIGRATION = path.join(__dirname, "../../migrations/004_game_feedback.sql");
+const MIGRATION_007 = path.join(__dirname, "../../migrations/007_feedback_contact.sql");
 
 type TestApp = { url: string; close: () => Promise<void> };
 
@@ -98,11 +104,14 @@ afterAll(async () => {
 const randomCode = () => crypto.randomUUID().replace(/[^A-Z0-9]/gi, "").slice(0, 6).toUpperCase();
 
 describe("game_feedback : schema", () => {
-  it("la migration 004 et le demarrage du backend creent la meme table", async () => {
+  it("les migrations 004 puis 007 et le demarrage du backend creent la meme table", async () => {
     await pool.query("DROP TABLE IF EXISTS game_feedback");
     const sql = fs.readFileSync(MIGRATION, "utf8");
     await pool.query(sql);
     await pool.query(sql); // rejouable sans erreur
+    const sql007 = fs.readFileSync(MIGRATION_007, "utf8");
+    await pool.query(sql007);
+    await pool.query(sql007); // rejouable sans erreur
     const fromMigration = await tableShape();
 
     await pool.query("DROP TABLE game_feedback");
@@ -112,8 +121,32 @@ describe("game_feedback : schema", () => {
 
     expect(fromBoot).toEqual(fromMigration);
     expect(fromBoot.columns.map(c => c.attname)).toEqual([
-      "id", "kind", "answer", "message", "mode", "session_id", "game_code", "user_agent", "app_version", "created_at",
+      "id", "kind", "answer", "message", "mode", "session_id", "game_code", "user_agent", "app_version", "created_at", "contact",
     ]);
+  });
+
+  it("la 007 s'applique sur une table de prod deja remplie, sans rien perdre", async () => {
+    await pool.query("DROP TABLE IF EXISTS game_feedback");
+    await pool.query(fs.readFileSync(MIGRATION, "utf8"));
+    await pool.query(`INSERT INTO game_feedback (kind, answer, mode) VALUES ('avis', 'oui', 'solo')`);
+    await pool.query(`INSERT INTO game_feedback (kind, mode, message) VALUES ('bug', 'event', 'jest: avant 007')`);
+    await ensureFeedbackSchema();
+    const { rows } = await pool.query(`SELECT kind, answer, message, contact FROM game_feedback ORDER BY id`);
+    expect(rows).toEqual([
+      { kind: "avis", answer: "oui", message: null, contact: null },
+      { kind: "bug", answer: null, message: "jest: avant 007", contact: null },
+    ]);
+    await pool.query(`DELETE FROM game_feedback`);
+  });
+
+  it("la base accepte un mot avec contact et borne le contact a 120 caracteres", async () => {
+    await ensureFeedbackSchema();
+    await pool.query(`INSERT INTO game_feedback (kind, mode, message, contact) VALUES ('mot', 'site', 'jest: base', '@moi')`);
+    await expect(
+      pool.query(`INSERT INTO game_feedback (kind, mode, message, contact) VALUES ('mot', 'solo', 'jest: base', $1)`, ["a".repeat(121)])
+    ).rejects.toThrow(/game_feedback_contact_check/);
+    await expect(pool.query(`INSERT INTO game_feedback (kind, answer, mode) VALUES ('mot', 'oui', 'solo')`)).rejects.toThrow(/game_feedback_answer_kind/);
+    await pool.query(`DELETE FROM game_feedback WHERE message = 'jest: base'`);
   });
 
   it("la base refuse elle aussi un avis sans reponse ou un bug avec reponse", async () => {
@@ -166,6 +199,45 @@ describe("POST /api/feedback", () => {
       game_code: null, user_agent: "Mozilla/5.0 (iPhone) jest", app_version: "abc1234",
     });
     expect(row.created_at).toBeInstanceOf(Date);
+  });
+
+  it("enregistre un mot avec contact, previent Tym, et ne journalise ni l'un ni l'autre", async () => {
+    const secret = "jest: mot 0612345678";
+    const res = await post(app.url, { kind: "mot", mode: "friends", gameCode: roomCode, message: `  ${secret}  `, contact: " @prive.jest " });
+    expect(res.status).toBe(201);
+    expect(await lastFeedback()).toMatchObject({
+      kind: "mot", answer: null, message: secret, contact: "@prive.jest", mode: "friends", session_id: roomSessionId,
+    });
+    expect(notifyWrittenFeedback).toHaveBeenLastCalledWith(
+      { kind: "mot", mode: "friends", message: secret, contact: "@prive.jest" }, false
+    );
+    const logs = JSON.stringify([(logger.info as jest.Mock).mock.calls, (logger.error as jest.Mock).mock.calls]);
+    expect(logs).not.toContain("0612345678");
+    expect(logs).not.toContain("@prive.jest");
+  });
+
+  it("enregistre un mot sans contact depuis le pied de page (mode site)", async () => {
+    const res = await post(app.url, { kind: "mot", mode: "site", message: "jest: mot du site" });
+    expect(res.status).toBe(201);
+    expect(await lastFeedback()).toMatchObject({ kind: "mot", mode: "site", message: "jest: mot du site", contact: null, session_id: null });
+  });
+
+  it("ne previent pas Tym pour un simple Oui / Pas trop, mais oui pour un bug decrit", async () => {
+    (notifyWrittenFeedback as jest.Mock).mockClear();
+    await post(app.url, { kind: "avis", answer: "pas_trop", mode: "chrono" });
+    expect(notifyWrittenFeedback).not.toHaveBeenCalled();
+    await post(app.url, { kind: "bug", mode: "chrono", message: "jest: bug decrit" });
+    expect(notifyWrittenFeedback).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuse un mot sans texte ou un contact trop long, sans rien ecrire", async () => {
+    const before = await pool.query(`SELECT count(*)::int AS n FROM game_feedback`);
+    expect((await post(app.url, { kind: "mot", mode: "solo", message: "   " })).status).toBe(400);
+    const res = await post(app.url, { kind: "mot", mode: "solo", message: "jest: x", contact: "a".repeat(121) });
+    expect(res.status).toBe(400);
+    expect((await readJson(res)).error?.code).toBe("invalid_contact");
+    const after = await pool.query(`SELECT count(*)::int AS n FROM game_feedback`);
+    expect(after.rows[0].n).toBe(before.rows[0].n);
   });
 
   it("retrouve la partie d'un bug multijoueur par son code de salle", async () => {
@@ -321,5 +393,29 @@ describe("purge des vieux retours (janitor)", () => {
     );
     expect(rows.map(r => r.message)).toEqual(["jest: purge 11 mois", "jest: purge hier"]);
     await pool.query(`DELETE FROM game_feedback WHERE message LIKE 'jest: purge%'`);
+  });
+});
+
+describe("purge des contacts (janitor, T24)", () => {
+  it("efface le contact apres 12 mois et garde le message", async () => {
+    await ensureFeedbackSchema();
+    const insert = (message: string, age: string) =>
+      pool.query(
+        `INSERT INTO game_feedback (kind, mode, message, contact, created_at) VALUES ('mot', 'site', $1, '@moi', NOW() - $2::interval)`,
+        [message, age]
+      );
+    await insert("jest: contact 13 mois", "13 months");
+    await insert("jest: contact 11 mois", "11 months");
+
+    await pool.query(CONTACT_PURGE_SQL);
+
+    const { rows } = await pool.query<{ message: string; contact: string | null }>(
+      `SELECT message, contact FROM game_feedback WHERE message LIKE 'jest: contact%' ORDER BY id`
+    );
+    expect(rows).toEqual([
+      { message: "jest: contact 13 mois", contact: null },
+      { message: "jest: contact 11 mois", contact: "@moi" },
+    ]);
+    await pool.query(`DELETE FROM game_feedback WHERE message LIKE 'jest: contact%'`);
   });
 });
