@@ -41,7 +41,7 @@ const MODE_CARDS: ModeCard[] = [
   {
     key: "streamer",
     title: "Avec ta communauté",
-    subtitle: "Ton public devine les morceaux en direct, depuis son téléphone, pendant ton live.",
+    subtitle: "Ton public devine en direct depuis son téléphone, pendant ton live.",
     accent: "#7d9471",
     destination: "/streamer",
     posture: "Stream",
@@ -97,7 +97,7 @@ function VinylSleeve({
       onClick={onClick}
       onDoubleClick={onDoubleClick}
       disabled={picking}
-      className="group relative block w-full text-left"
+      className="group relative flex h-full w-full flex-col text-left"
     >
       {/* Le disque sort au survol ; au CLIC il RENTRE dans la pochette (geste "je range le disque = je choisis") */}
       <span
@@ -119,7 +119,7 @@ function VinylSleeve({
       </span>
       {/* La pochette — au survol elle prend la COULEUR du mode (bordure + ombre) */}
       <span
-        className={`relative z-10 mt-9 flex min-h-[225px] flex-col justify-between border-2 bg-[#ece1c8] p-5 transition-all duration-200 group-hover:translate-y-0.5 group-hover:![border-color:var(--ac)] group-hover:!shadow-[6px_6px_0_var(--ac)] ${
+        className={`relative z-10 mt-9 flex min-h-[225px] flex-1 flex-col justify-between border-2 bg-[#ece1c8] p-5 transition-all duration-200 group-hover:translate-y-0.5 group-hover:![border-color:var(--ac)] group-hover:!shadow-[6px_6px_0_var(--ac)] ${
           picking || discOut ? "![border-color:var(--ac)] !shadow-[6px_6px_0_var(--ac)]" : ""
         }`}
         style={{

@@ -2,6 +2,7 @@ import Link from "next/link"
 import type { ReactNode } from "react"
 import { GUIDES, SiteFooter, SiteHeader } from "@/components/home/SiteChrome"
 import { FaqAccordion } from "@/components/home/FaqAccordion"
+import { SITE_NAME, SITE_URL } from "@/lib/site"
 
 // Gabarit des guides (pages de contenu SEO/GEO). Composants SERVEUR : le texte
 // est dans le HTML exporte. Meme systeme visuel que la landing : palette du
@@ -182,6 +183,6 @@ export function webPageJsonLd(url: string, name: string, description: string, up
     description,
     inLanguage: "fr",
     dateModified: updated,
-    isPartOf: { "@type": "WebSite", name: "blindz.app", url: "https://blindz.app/" },
+    isPartOf: { "@type": "WebSite", name: SITE_NAME, url: SITE_URL },
   }
 }

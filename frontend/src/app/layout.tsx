@@ -10,6 +10,7 @@ import { ModeProvider } from "@/contexts/ModeContext"
 import { ThemeProvider } from "@/contexts/ThemeContext"
 import { publicPath } from "@/lib/publicPath"
 import { DISCORD_HEAD_CLEANUP } from "@/lib/discord/headCleanup"
+import { SITE_ALTERNATE_NAMES, SITE_NAME, organizationJsonLd, websiteJsonLd } from "@/lib/site"
 
 const karla = Karla({
   subsets: ["latin"],
@@ -37,17 +38,17 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 }
 
-const SEO_TITLE = "blindz.app · Le blind test avec VOS musiques, entre potes"
+const SEO_TITLE = "Blindz : le blind test avec vos musiques, entre potes"
 const SEO_DESC =
   "Le blind test avec VOS propres musiques. Importe tes playlists Spotify ou Deezer, devine les titres entre potes, autour d'une table ou à distance. Gratuit, rien à installer."
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://blindz.app"),
-  applicationName: "blindz.app",
+  applicationName: SITE_NAME,
   title: {
     default: SEO_TITLE,
     // Les pages internes deviennent "… · Blindz" ; l'accueil garde le titre complet.
-    template: "%s · blindz.app",
+    template: `%s · ${SITE_NAME}`,
   },
   description: SEO_DESC,
   keywords: [
@@ -69,7 +70,7 @@ export const metadata: Metadata = {
   manifest: publicPath("/manifest.webmanifest"),
   appleWebApp: {
     capable: true,
-    title: "blindz.app",
+    title: SITE_NAME,
     statusBarStyle: "default",
   },
   icons: {
@@ -77,11 +78,13 @@ export const metadata: Metadata = {
       { url: publicPath("/favicon.ico") },
       { url: publicPath("/favicon-32x32.png"), sizes: "32x32", type: "image/png" },
       { url: publicPath("/favicon-16x16.png"), sizes: "16x16", type: "image/png" },
+      // Google affiche le favicon a cote du resultat : il veut un multiple de 48 px.
+      { url: publicPath("/icon-192.png"), sizes: "192x192", type: "image/png" },
     ],
     apple: publicPath("/apple-touch-icon.png"),
   },
   openGraph: {
-    siteName: "blindz.app",
+    siteName: SITE_NAME,
     title: SEO_TITLE,
     description: SEO_DESC,
     url: "https://blindz.app/",
@@ -120,30 +123,20 @@ export default function RootLayout({
             }`,
           }}
         />
-        {/* Nom de site pour les resultats de recherche (le "blindz.app" a cote du
-            favicon) : Google le lit dans un WebSite avec name + alternateName. */}
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{
-            __html: JSON.stringify({
-              "@context": "https://schema.org",
-              "@type": "WebSite",
-              name: "blindz.app",
-              alternateName: ["Blindz app"],
-              url: "https://blindz.app/",
-              inLanguage: "fr",
-            }),
-          }}
-        />
-        {/* Donnees structurees : Google comprend que blindz.app est un jeu de blind test. */}
+        {/* Nom de site pour les resultats de recherche (le "Blindz" a cote du
+            favicon) : Google le lit dans un WebSite avec name + alternateName,
+            et l'Organization porte le logo et les profils publics (lib/site). */}
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd()) }} />
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd()) }} />
+        {/* Donnees structurees : Google comprend que Blindz est un jeu de blind test. */}
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
             __html: JSON.stringify({
               "@context": "https://schema.org",
               "@type": "WebApplication",
-              name: "blindz.app",
-              alternateName: ["Blindz app", "blindz.app blind test"],
+              name: SITE_NAME,
+              alternateName: [...SITE_ALTERNATE_NAMES],
               url: "https://blindz.app/",
               description: SEO_DESC,
               applicationCategory: "GameApplication",
