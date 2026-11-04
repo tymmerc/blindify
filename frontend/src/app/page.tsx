@@ -7,6 +7,7 @@ import { SiteHeader, SiteFooter } from "@/components/home/SiteChrome"
 import { FaqAccordion } from "@/components/home/FaqAccordion"
 import { RotatingEnd } from "@/components/home/RotatingEnd"
 import { DiscordPlay } from "@/components/DiscordPlay"
+import { SITE_NAME } from "@/lib/site"
 
 // Landing de blindz.app. Composant SERVEUR : tout le texte est dans le HTML
 // pre-rendu (export statique), c'est ce que lisent Google, Bing, Brave et
@@ -22,15 +23,17 @@ import { DiscordPlay } from "@/components/DiscordPlay"
 // le code (limites de salle roomsController, scoring realtimeGame, buzzer
 // local, cookie invite d'un an). Ne pas gonfler.
 
-const TITLE = "blindz.app · Le blind test de vos soirées, avec vos playlists Spotify et Deezer"
+// Le titre commence par le nom du site (T23) : c'est ce qu'on tape pour nous retrouver.
+const TITLE = `${SITE_NAME} : le blind test avec vos playlists Spotify et Deezer`
 const DESC =
-  "blindz.app génère un blind test avec les playlists Spotify ou Deezer des joueurs, sans pack imposé ni quiz à préparer. À table, sur un seul tel ou à distance, gratuit et sans compte."
+  "Blindz génère un blind test avec les playlists Spotify ou Deezer des joueurs, sans pack imposé ni quiz à préparer. À table, sur un seul tel ou à distance, gratuit et sans compte."
 
 export const metadata: Metadata = {
   title: { absolute: TITLE },
   description: DESC,
   alternates: { canonical: "https://blindz.app/" },
-  openGraph: { title: TITLE, description: DESC, url: "https://blindz.app/", type: "website", locale: "fr_FR" },
+  // openGraph remplace celui du layout en entier : siteName doit etre repris ici.
+  openGraph: { siteName: SITE_NAME, title: TITLE, description: DESC, url: "https://blindz.app/", type: "website", locale: "fr_FR" },
   twitter: { card: "summary", title: TITLE, description: DESC },
 }
 
