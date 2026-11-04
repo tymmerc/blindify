@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useId, useRef, useState, type FormEvent } from "react"
+import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent } from "react"
 import { Check, Loader2 } from "lucide-react"
 import {
   buildAnswerPayload,
@@ -12,10 +12,15 @@ import {
   type FeedbackContext,
   type FeedbackFailure,
 } from "@/lib/feedback"
+import { recordGameEnd } from "@/lib/feedbackPrompt"
+import { StudentNote } from "./StudentNote"
 
 // Petit bloc discret sous les resultats d'une partie : un avis en un geste,
 // et un lien pour decrire un bug. Les reponses vont dans la table
 // game_feedback, lues par Tym dans l'onglet Retours du tableau de bord.
+//
+// Une seule fois par appareil, a la fin de la 2e partie, le bloc laisse la
+// place au message de Tym (StudentNote, T24) : un champ toujours ouvert.
 
 type SendStatus = "idle" | "sending" | "sent" | FeedbackFailure
 
@@ -42,16 +47,41 @@ export interface EndFeedbackProps {
   className?: string
 }
 
+/**
+ * Compte cette fin de partie, une fois par ecran de resultats, et dit s'il
+ * faut montrer le message de Tym. Avant le dessin (layout effect) : pas de
+ * Oui / Pas trop qui clignote avant d'etre remplace. La ref empeche le double
+ * appel du mode strict de React en developpement de compter deux parties.
+ */
+function useNotePrompt(): boolean {
+  const counted = useRef(false)
+  const [show, setShow] = useState(false)
+  useLayoutEffect(() => {
+    if (counted.current) return
+    counted.current = true
+    if (recordGameEnd()) setShow(true)
+  }, [])
+  return show
+}
+
 export function EndFeedback({ context, className = "" }: EndFeedbackProps) {
   const titleId = useId()
+  const showNote = useNotePrompt()
   return (
     <section
-      aria-labelledby={titleId}
+      aria-labelledby={showNote ? undefined : titleId}
+      aria-label={showNote ? "Un mot pour l'étudiant derrière Blindz" : undefined}
       data-testid="end-feedback"
       className={`mx-auto w-full max-w-sm border-t-2 border-dotted border-[rgba(46,32,20,.35)] pt-4 text-left text-[#2e2014] ${className}`}
     >
-      <QuickAnswer context={context} titleId={titleId} />
-      <BugReport context={context} />
+      {showNote ? (
+        <StudentNote context={context} />
+      ) : (
+        <>
+          <QuickAnswer context={context} titleId={titleId} />
+          <BugReport context={context} />
+        </>
+      )}
     </section>
   )
 }

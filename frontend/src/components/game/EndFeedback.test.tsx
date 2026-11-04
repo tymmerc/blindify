@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { EndFeedback } from "./EndFeedback"
 import { ApiError, clientApi } from "@/lib/apiClient"
 import { buildAnswerPayload, buildBugPayload } from "@/lib/feedback"
+import { GAMES_KEY, PROMPT_SHOWN_KEY, resetPromptMemory } from "@/lib/feedbackPrompt"
+import { NOTE_INTRO } from "./StudentNote"
 
 vi.mock("@/lib/apiClient", async importOriginal => ({
   ...(await importOriginal<typeof import("@/lib/apiClient")>()),
@@ -167,5 +169,66 @@ describe("buildAnswerPayload", () => {
     const payload = buildAnswerPayload({ mode: "solo", sessionId: 0 }, "pas_trop")
     expect(payload).toMatchObject({ kind: "avis", answer: "pas_trop", mode: "solo" })
     expect(payload).not.toHaveProperty("sessionId")
+  })
+})
+
+describe("EndFeedback : le message de Tym en fin de 2e partie (T24)", () => {
+  beforeEach(() => {
+    send.mockReset()
+    send.mockResolvedValue({ received: true })
+    localStorage.removeItem(PROMPT_SHOWN_KEY)
+    localStorage.removeItem(GAMES_KEY)
+    resetPromptMemory()
+  })
+
+  it("garde le Oui / Pas trop a la 1re partie, montre le message a la 2e, puis plus jamais", () => {
+    const first = render(<EndFeedback context={{ mode: "solo" }} />)
+    expect(screen.getByRole("button", { name: "Oui" })).toBeInTheDocument()
+    expect(screen.queryByText(NOTE_INTRO)).not.toBeInTheDocument()
+    first.unmount()
+
+    const second = render(<EndFeedback context={{ mode: "buzzer" }} />)
+    expect(screen.getByText(NOTE_INTRO)).toBeInTheDocument()
+    expect(screen.getByRole("textbox", { name: "Ton message" })).toBeVisible()
+    expect(screen.queryByRole("button", { name: "Oui" })).not.toBeInTheDocument()
+    expect(screen.getByRole("region", { name: "Un mot pour l'étudiant derrière Blindz" })).toBeInTheDocument()
+    second.unmount()
+
+    render(<EndFeedback context={{ mode: "chrono" }} />)
+    expect(screen.queryByText(NOTE_INTRO)).not.toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Oui" })).toBeInTheDocument()
+  })
+
+  it("ne compte qu'une partie par ecran, meme si l'ecran se redessine", () => {
+    const view = render(<EndFeedback context={{ mode: "solo" }} />)
+    view.rerender(<EndFeedback context={{ mode: "solo" }} />)
+    view.rerender(<EndFeedback context={{ mode: "solo" }} />)
+    expect(localStorage.getItem(GAMES_KEY)).toBe("1")
+    expect(screen.queryByText(NOTE_INTRO)).not.toBeInTheDocument()
+  })
+
+  it("sans stockage, montre quand meme le message a la 2e partie de la session", () => {
+    const spy = vi.spyOn(window, "localStorage", "get").mockImplementation(() => {
+      throw new Error("SecurityError")
+    })
+    try {
+      render(<EndFeedback context={{ mode: "friends", gameCode: "AB12CD" }} />).unmount()
+      render(<EndFeedback context={{ mode: "friends", gameCode: "AB12CD" }} />)
+      expect(screen.getByText(NOTE_INTRO)).toBeInTheDocument()
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it("le message part avec le contexte de la partie", async () => {
+    localStorage.setItem(GAMES_KEY, "1")
+    const user = userEvent.setup()
+    render(<EndFeedback context={{ mode: "solo", sessionId: 7 }} />)
+    await user.type(screen.getByRole("textbox", { name: "Ton message" }), "génial")
+    await user.click(screen.getByRole("button", { name: "Envoyer" }))
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "mot", mode: "solo", sessionId: 7, message: "génial" }),
+      expect.any(AbortSignal)
+    )
   })
 })
