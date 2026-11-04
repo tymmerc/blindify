@@ -418,7 +418,9 @@ export function TheaterGameView(props: Props) {
                 className="theater-submit flex-1"
                 disabled={localHasAnswered || disabled}
               >
-                {localHasAnswered ? "Envoyée" : <>Valider<span className="theater-submit-tail"> ma réponse</span></>}
+                {/* L'espace reste hors du span : jsdom 30 ne compte plus l'espace de tete
+                    d'un span inline dans le nom accessible ("Validerma reponse"). */}
+                {localHasAnswered ? "Envoyée" : <>Valider{" "}<span className="theater-submit-tail">ma réponse</span></>}
               </button>
               {/* Personne ne connait ce son : on passe au lieu de regarder le
                   chrono, reveal des que tout le monde a tranche. */}
