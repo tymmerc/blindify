@@ -24,6 +24,10 @@ const STUB = "http://127.0.0.1:3180/resend-stub/mails"
 const LOGS = "/opt/blindify/.test-stack/logs"
 const args = process.argv.slice(2)
 const OUT = args.includes("--out") ? args[args.indexOf("--out") + 1] : "/opt/mira/dossier/preuves/2026-11-04-blindz-avis"
+// --pc : meme parcours sur un ecran d'ordinateur (1440x900) au lieu de l'iPhone.
+const PC = args.includes("--pc")
+const DEVICE = PC ? { viewport: { width: 1440, height: 900 } } : { ...devices["iPhone 13"] }
+const SCREEN = PC ? "pc" : "iphone"
 const INTRO = "Hello, je suis l'étudiant derrière Blindz. Un truc qui t'a plu, un truc qui t'a saoulé ? Écris-le ici, je lis tout."
 const CONTACT_LABEL = "Ton Insta ou ton e-mail si tu veux que je te réponde (facultatif)"
 // Marqueurs uniques : on les cherche ensuite dans les journaux de la pile.
@@ -76,7 +80,7 @@ const feedbackMails = async () => {
 }
 
 async function phone(browser) {
-  const { ctx, page } = await newPage(browser, { ...devices["iPhone 13"] }, "telephone", problems)
+  const { ctx, page } = await newPage(browser, DEVICE, SCREEN, problems)
   try {
     await playSolo(page, 21)
     check(await quickBlock(page).isVisible(), "1re partie : le « Ça s'est bien passé ? » habituel")
@@ -90,18 +94,18 @@ async function phone(browser) {
     check(!(await quickBlock(page).isVisible().catch(() => false)), "2e partie : plus de Oui / Pas trop")
     const field = region.getByRole("textbox", { name: "Ton message" })
     check(await field.isVisible(), "2e partie : le champ est ouvert sans clic")
-    await shot(page, "1-fin-2e-partie-iphone-bloc")
-    await shot(page, "2-fin-2e-partie-iphone-page", { fullPage: true })
+    await shot(page, `1-fin-2e-partie-${SCREEN}-bloc`)
+    await shot(page, `2-fin-2e-partie-${SCREEN}-page`, { fullPage: true })
 
     await field.fill(MESSAGE)
     await region.getByRole("textbox", { name: CONTACT_LABEL }).fill(CONTACT)
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
-    check(overflow <= 2, `iPhone : pas de debordement horizontal (${overflow} px)`)
-    await shot(page, "3-fin-2e-partie-iphone-rempli")
+    check(overflow <= 2, `${SCREEN} : pas de debordement horizontal (${overflow} px)`)
+    await shot(page, `3-fin-2e-partie-${SCREEN}-rempli`)
     await region.getByRole("button", { name: "Envoyer" }).click()
     await page.getByText("Merci, c'est bien arrivé. Je te réponds dès que je l'ai lu.").waitFor({ timeout: 10000 })
     check(true, "envoi : merci affiche (avec contact)")
-    await shot(page, "4-fin-2e-partie-iphone-merci")
+    await shot(page, `4-fin-2e-partie-${SCREEN}-merci`)
 
     const row = psql(`SELECT kind || '|' || mode || '|' || coalesce(contact, '') FROM game_feedback WHERE message = '${MESSAGE.replace(/'/g, "''")}'`)
     check(row === `mot|solo|${CONTACT}`, `base : ligne « mot » solo avec le contact (${row})`)
@@ -122,7 +126,7 @@ async function phone(browser) {
 }
 
 async function footerLink(browser) {
-  const { ctx, page } = await newPage(browser, { ...devices["iPhone 13"] }, "pied-de-page", problems)
+  const { ctx, page } = await newPage(browser, DEVICE, "pied-de-page", problems)
   try {
     await page.goto(`${APP}/`, { waitUntil: "networkidle", timeout: 60000 })
     const link = page.getByRole("navigation", { name: "Pied de page" }).getByRole("link", { name: "Donne ton avis" })
@@ -131,7 +135,7 @@ async function footerLink(browser) {
     await page.waitForURL(/\/avis\/?$/, { timeout: 15000 })
     check(await page.getByText(INTRO).isVisible(), "pied de page : « Donne ton avis » ouvre le meme formulaire")
     await page.getByRole("textbox", { name: "Ton message" }).fill(SITE_MESSAGE)
-    await shot(page, "5-page-avis-iphone")
+    await shot(page, `5-page-avis-${SCREEN}`)
     await page.getByRole("button", { name: "Envoyer" }).click()
     await page.getByText("Merci, c'est bien arrivé. Je lis ça très vite.").waitFor({ timeout: 10000 })
     const row = psql(`SELECT kind || '|' || mode || '|' || coalesce(contact, 'null') FROM game_feedback WHERE message = '${SITE_MESSAGE.replace(/'/g, "''")}'`)
