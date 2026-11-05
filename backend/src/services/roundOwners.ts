@@ -51,3 +51,14 @@ export function ownerChoices(metadata: unknown, playerIds: number[]): number[] {
   const decoys = shuffled(playerIds.filter(id => !owners.includes(id)));
   return shuffled([right, ...decoys, ...shuffled(otherOwners)].slice(0, 3));
 }
+
+/**
+ * Poser « qui a ajoute ce titre ? » cette manche (T7) : pas a moins de trois
+ * joueurs du lancement (a deux, si ce n'est pas toi, c'est forcement l'autre ;
+ * sessions 752 a 754 du 01/11), ni quand une seule personne a ramene la musique.
+ */
+export const MIN_OWNER_QUESTION_PLAYERS = 3;
+
+export function ownerQuestionOpen(launchPlayersPresent: number, singleContributor: boolean): boolean {
+  return !singleContributor && launchPlayersPresent >= MIN_OWNER_QUESTION_PLAYERS;
+}

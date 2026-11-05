@@ -1,4 +1,4 @@
-import { isOwnerGuess, ownerChoices } from "./roundOwners";
+import { isOwnerGuess, ownerChoices, ownerQuestionOpen } from "./roundOwners";
 import { evaluateGuessDetail, type GuessDetail } from "./guessMatching";
 import {
   promoteWaiting,
@@ -22,6 +22,8 @@ export type RoundTrack = {
   albumCover?: string | null;
   metadata?: Record<string, unknown> | null;
   ownerChoices?: number[];
+  /** false : pas de « qui a ajoute ? » cette manche (moins de 3 joueurs, T7). */
+  ownerQuestion?: boolean;
   // Source du morceau : jamais copiee par redactedGuessingTrack (reveal seulement).
   provider?: string | null;
 };
@@ -413,7 +415,8 @@ export function startNextRound(roomCode: string, opts?: { forceRound?: number; s
   // monde. Seulement parmi les joueurs du lancement : un retardataire n'a mis
   // aucun morceau dans cette partie, il n'est jamais propose.
   const candidates = Object.keys(ctx.state.players).map(Number).filter(id => ctx.launchPlayerIds.has(id));
-  track.ownerChoices = ownerChoices(track.metadata, candidates);
+  track.ownerQuestion = ownerQuestionOpen(candidates.length, ctx.state.singleContributor === true);
+  track.ownerChoices = track.ownerQuestion ? ownerChoices(track.metadata, candidates) : [];
 
   Object.values(ctx.state.players).forEach(player => {
     player.hasAnswered = false;
@@ -595,7 +598,8 @@ export function revealRound(roomCode: string): GameState | undefined {
       answerAt: player.answerAt,
       startAt: startAt,
       maxDuration: ctx.state.timing.revealAt && startAt ? ctx.state.timing.revealAt - startAt : ctx.roundDurationMs,
-      ownerGuessed: isOwnerGuess(track.metadata, player.lastSourceGuess),
+      // Question pas posee (moins de 3 joueurs) : un vieux client qui l'envoie quand meme ne marque rien.
+      ownerGuessed: track.ownerQuestion !== false && isOwnerGuess(track.metadata, player.lastSourceGuess),
     });
     ctx.state.players[player.userId] = {
       ...next,
@@ -630,6 +634,7 @@ export function redactedGuessingTrack(track: RoundTrack): RoundTrack {
     albumCover: null,
     metadata: null,
     ownerChoices: track.ownerChoices,
+    ownerQuestion: track.ownerQuestion,
   };
 }
 
