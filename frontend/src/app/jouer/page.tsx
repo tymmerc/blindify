@@ -49,10 +49,18 @@ function Shell({ dots, index, onBack, wide, children }: { dots: number; index: n
           ))}
         </div>
         <div className="flex flex-1 flex-col justify-center animate-in fade-in slide-in-from-right-4 duration-300 sm:block sm:flex-none">{children}</div>
-        {/* Lien decouvrable par les crawlers (le sitemap ne suffit pas toujours) */}
-        <p className="mt-6 shrink-0 text-center text-[11px] text-[#b3a182]">
-          <a href="/faq/" className="underline hover:text-[#6b573f]">Questions fréquentes</a>
-        </p>
+        {/* La FAQ en petit rond « ? » dans le coin (demande de Tym, 05/11) : le lien
+            texte sous le bouton chargeait l'ecran. Reste un vrai lien, decouvrable
+            par les crawlers (le sitemap ne suffit pas toujours). */}
+        <a
+          href={publicPath("/faq/")}
+          aria-label="Questions fréquentes"
+          title="Questions fréquentes"
+          data-testid="jouer-faq"
+          className="fixed bottom-4 right-4 z-30 flex h-9 w-9 items-center justify-center rounded-full border-[1.5px] border-[#2e2014] bg-[#ece1c8] font-display text-base font-bold text-[#2e2014] shadow-[2px_2px_0_#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb] sm:bottom-6 sm:right-6"
+        >
+          ?
+        </a>
       </div>
     </div>
   )

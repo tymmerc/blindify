@@ -18,8 +18,8 @@ export type PlaySituation = {
 export const PLAY_SITUATIONS: readonly PlaySituation[] = [
   {
     key: "event",
-    title: "À une soirée, sur une télé ou une enceinte",
-    subtitle: "Vous êtes dans la même pièce. Un écran passe la musique, chacun répond sur son téléphone.",
+    title: "À une soirée",
+    subtitle: "Vous êtes dans la même pièce. La musique passe sur une télé ou une enceinte, chacun répond sur son téléphone.",
     modeName: "Autour d'une table",
     accent: "#e0a32e",
   },

@@ -7,7 +7,9 @@ describe("playSituations : choisir le mode par la situation", () => {
     // tools/soiree.mjs, party-4-joueurs.mjs... cliquent sur ces noms exacts.
     expect(situationFor("event").modeName).toBe("Autour d'une table")
     expect(situationFor("friends").modeName).toBe("À distance")
-    expect(situationFor("event").title).toMatch(/télé/)
+    // Titre court (Tym, 05/11) : la tele et l'enceinte sont dans la phrase dessous.
+    expect(situationFor("event").title).toBe("À une soirée")
+    expect(situationFor("event").subtitle).toMatch(/télé ou une enceinte/)
   })
 
   it("la carte de la soiree ne contient pas « distance » (getByText('À distance').first())", () => {
