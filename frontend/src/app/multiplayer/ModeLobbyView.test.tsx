@@ -73,6 +73,7 @@ const mocks = vi.hoisted(() => ({
     roomDetails: vi.fn(),
     roomState: vi.fn(),
     createRoom: vi.fn(),
+    updateRoomConfig: vi.fn(),
     startMultiplayerGame: vi.fn(),
   },
 }))
@@ -105,6 +106,8 @@ vi.mock("@/components/game/StreamerGameClient", () => ({ StreamerGameClient: () 
 vi.mock("@/components/import/ProfileImportBlock", () => ({ ProfileImportBlock: () => null }))
 
 import { ModeLobbyView } from "./ModeLobbyView"
+import { ApiError } from "@/lib/apiClient"
+import { HOSTED_ROOMS_KEY, rememberHostedRoom } from "@/lib/hostedRooms"
 
 const ROOM = { room_code: "ABC123", host_user_id: 1, status: "waiting", mode: "event", host_plays: false }
 
@@ -415,5 +418,55 @@ describe("ModeLobbyView : arriver pendant une partie", () => {
       mocks.socket!.emitServer("game:waiting", { roomCode: "ABC123", userId: 9, username: "Nora" })
     })
     expect(await screen.findByText("Nora arrive et jouera la prochaine partie.")).toBeInTheDocument()
+  })
+})
+
+// T7 (01/11) : un invite revient le soir avec le code de sa salle de l'apres-midi,
+// effacee par le serveur (30 min sans partie) : avant, un bandeau sec.
+describe("ModeLobbyView : revenir sur une salle effacee", () => {
+  const gone = () => new ApiError(404, "Salle introuvable", "room_not_found")
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    window.localStorage.removeItem(HOSTED_ROOMS_KEY)
+    mocks.socket = makeSocket()
+    mocks.api.checkAuth.mockImplementation(async () => guestSession())
+    mocks.api.joinRoom.mockRejectedValue(gone())
+    mocks.api.roomState.mockResolvedValue({ room: ROOM, tracks: [], gameState: null })
+  })
+
+  it("explique ce qui s'est passe, sans rien recreer tout seul", async () => {
+    renderLobby()
+    expect(await screen.findByText("Cette salle n'existe plus")).toBeInTheDocument()
+    expect(screen.getByText(/Demande le nouveau code/)).toBeInTheDocument()
+    expect(screen.queryByText("Rouvrir une salle pareille")).not.toBeInTheDocument()
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument()
+    expect(mocks.api.createRoom).not.toHaveBeenCalled()
+  })
+
+  it("l'hote qui l'avait creee ici en rouvre une avec les memes reglages", async () => {
+    rememberHostedRoom({ code: "ABC123", mode: "event", hostPlays: true, questionCount: 15, roundSeconds: 30 })
+    const NEW = { ...ROOM, room_code: "NEW123", host_user_id: 7, host_plays: true, question_count: 15 }
+    mocks.api.createRoom.mockResolvedValue({ room: NEW })
+    mocks.api.updateRoomConfig.mockResolvedValue({})
+    mocks.api.roomDetails.mockResolvedValue({ room: NEW, participants: [{ user_id: 7, username: "Lea" }], selfPreference: null })
+    renderLobby()
+
+    expect(await screen.findByText(/Autour d'une table, 15 manches, 30 s pour répondre/)).toBeInTheDocument()
+    fireEvent.click(screen.getByText("Rouvrir une salle pareille"))
+
+    expect(await screen.findByText(/Tu es dans la partie NEW123 \(hôte\)/)).toBeInTheDocument()
+    expect(mocks.api.createRoom).toHaveBeenCalledWith(expect.objectContaining({ mode: "event", hostPlays: true, questionCount: 15 }))
+    expect(mocks.api.updateRoomConfig).toHaveBeenCalledWith("NEW123", { roundSeconds: 30 })
+    // L'ancienne est oubliee, la nouvelle est notee pour la prochaine fois.
+    const saved = JSON.parse(window.localStorage.getItem(HOSTED_ROOMS_KEY) ?? "[]") as Array<{ code: string }>
+    expect(saved.map(r => r.code)).toEqual(["NEW123"])
+  })
+
+  it("une salle notee pour un autre mode ne se rouvre pas ici", async () => {
+    rememberHostedRoom({ code: "ABC123", mode: "friends", hostPlays: false, questionCount: 10, roundSeconds: 20 })
+    renderLobby()
+    expect(await screen.findByText("Cette salle n'existe plus")).toBeInTheDocument()
+    expect(screen.queryByText("Rouvrir une salle pareille")).not.toBeInTheDocument()
   })
 })

@@ -34,6 +34,7 @@ export function GuideShell({
   updated,
   jsonLd,
   currentHref,
+  playMode,
   children,
 }: {
   tag: string
@@ -43,6 +44,8 @@ export function GuideShell({
   updated: string
   jsonLd: object[]
   currentHref: string
+  /** Mode ou mene le bouton « Jouer » (T7) : la page tele va tout droit a « Autour d'une table ». */
+  playMode?: "event" | "friends"
   children: ReactNode
 }) {
   return (
@@ -68,7 +71,7 @@ export function GuideShell({
             <Tag color={VERMILION}>Prêt ?</Tag>
             <h2 className="mt-5 font-display text-[2.4rem] font-semibold leading-[1] sm:text-[3.4rem]">On lance ?</h2>
             <div className="mt-8 flex flex-wrap items-center gap-6">
-              <Link href="/jouer/" className={CTA}>
+              <Link href={playMode ? `/jouer/?mode=${playMode}` : "/jouer/"} className={CTA}>
                 Jouer, c'est gratuit
               </Link>
               <Link

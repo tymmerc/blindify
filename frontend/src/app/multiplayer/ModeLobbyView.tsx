@@ -39,6 +39,8 @@ import { LateJoinerView } from "@/components/game/LateJoinerView"
 import { arrivalNotice, isLateJoiner } from "@/lib/lateJoin"
 import { useLateArrivals } from "./hooks/useLateArrivals"
 import { useStreamerFeed } from "./hooks/useStreamerFeed"
+import { ExpiredRoomView } from "./ExpiredRoomView"
+import { findHostedRoom, forgetHostedRoom, rememberHostedRoom, type HostedRoom } from "@/lib/hostedRooms"
 
 // Entree dans un salon : un essai sans reponse au bout de 8 s est abandonne et
 // relance, trois essais en tout. Rejouer le join est sans risque (le backend
@@ -174,6 +176,8 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   // Code d'erreur structure du dernier join (ex: "room_in_progress") : les vues
   // s'en servent pour afficher un ecran adapte plutot qu'un bandeau generique.
   const [errorCode, setErrorCode] = useState<string | null>(null)
+  // Salle effacee par le serveur (404 au join, T7) : on l'explique au lieu d'un bandeau sec.
+  const [expiredCode, setExpiredCode] = useState<string | null>(null)
   const autoJoinedCodesRef = useRef<Set<string>>(new Set())
   const [importing, setImporting] = useState(false)
   // Bandeau d'erreur transitoire (room:error socket, resync...) - auto-efface.
@@ -984,7 +988,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   )
 
   const handleCreateRoom = useCallback(
-    async (hostPlays?: boolean) => {
+    async (hostPlays?: boolean, preset?: Pick<HostedRoom, "questionCount" | "roundSeconds">) => {
       if (!requireSession()) return
       if (!canHostNow && lobby.status !== "waiting") return
       if (lobby.status === "creating") return
@@ -993,7 +997,28 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         dispatchLobby({ type: "creating" })
         setFlowStarted(true)
         autoStartGameRef.current = false
-        const { room: created } = await api.createRoom({ questionCount: 10, nickname: initialNickname || undefined, mode, hostPlays })
+        const questionCount = preset?.questionCount ?? 10
+        const { room: fresh } = await api.createRoom({ questionCount, nickname: initialNickname || undefined, mode, hostPlays })
+        let created = fresh
+        // Salle rouverte apres expiration : meme temps de reponse que l'ancienne.
+        // Applique AVANT d'afficher le lobby (les reglages lisent la salle au montage).
+        if (preset?.roundSeconds) {
+          try {
+            await api.updateRoomConfig(fresh.room_code, { roundSeconds: preset.roundSeconds })
+            created = { ...fresh, round_duration_ms: preset.roundSeconds * 1000 }
+          } catch (cfgErr) {
+            console.error("recreate_config_failed", cfgErr)
+          }
+        }
+        rememberHostedRoom({
+          code: created.room_code,
+          mode,
+          hostPlays: created.host_plays === true,
+          questionCount: created.question_count ?? questionCount,
+          roundSeconds: Math.round((created.round_duration_ms ?? 20000) / 1000),
+        })
+        setExpiredCode(null)
+        setErrorCode(null)
         // Le code dans l'URL : un F5 de l'hote passe alors par le flux de rejoin
         // au lieu de le renvoyer au choix de role en perdant sa salle.
         try {
@@ -1113,6 +1138,15 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         console.error("join_room_failed", err)
         const code = err instanceof ApiError ? err.code ?? null : null
         setErrorCode(code)
+        // Salle effacee : un ecran qui l'explique (et qui propose d'en rouvrir une), pas un bandeau.
+        if (code === "room_not_found") {
+          setExpiredCode(normalizedCode)
+          setError(null)
+          // "reset" et non "error" : le bandeau d'erreur reprendrait lobby.message.
+          dispatchLobby({ type: "reset" })
+          setFlowStarted(false)
+          return
+        }
         const message = err instanceof RequestTimeoutError
           ? "Le serveur ne répond pas. Vérifie ton réseau, puis appuie sur « Rejoindre la partie »."
           : err instanceof ApiError && err.message ? err.message : friendlyError(mode, "join")
@@ -1537,6 +1571,15 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     )
   }
 
+  // L'hote revient sur une salle effacee qu'il avait creee ici : on la rouvre pareille.
+  const expiredHosted = expiredCode ? findHostedRoom(expiredCode) : null
+  const reopenable = expiredHosted && expiredHosted.mode === mode ? expiredHosted : null
+  const handleRecreate = () => {
+    if (!reopenable || !expiredCode) return
+    const oldCode = expiredCode
+    void handleCreateRoom(reopenable.hostPlays, reopenable).then(() => forgetHostedRoom(oldCode))
+  }
+
   const lobbyProps: LobbyRendererProps = {
     mode,
     modeConfig,
@@ -1760,6 +1803,13 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       />
     ) : loadingGame ? (
       loadingGame
+    ) : view === "landing" && expiredCode && surface !== "discord" ? (
+      <ExpiredRoomView
+        code={expiredCode}
+        hosted={reopenable}
+        recreating={lobby.status === "creating"}
+        onRecreate={handleRecreate}
+      />
     ) : (
       <>
         {selectedLobby}

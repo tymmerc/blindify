@@ -15,6 +15,7 @@
 import { useState, type ReactNode } from "react"
 import { Check, Copy, Crown, Link2 } from "lucide-react"
 import { api } from "@/lib/api"
+import { updateHostedRoom } from "@/lib/hostedRooms"
 import type { MultiplayerParticipant, MultiplayerRoom } from "@/lib/types"
 
 export const PAPER = "#f4ecdb"
@@ -273,6 +274,8 @@ export function RoundSettings({ room, accent, accentText, readOnly = false }: { 
   const seconds = readOnly ? Math.round((room?.round_duration_ms ?? 20000) / 1000) : ownSeconds
   const save = (payload: { questionCount?: number; roundSeconds?: number }) => {
     if (!room) return
+    // Garde les reglages pour rouvrir la meme salle si elle expire (T7).
+    updateHostedRoom(room.room_code, payload)
     void api.updateRoomConfig(room.room_code, payload).catch(err => console.error("room_config_save_failed", err))
   }
   return (

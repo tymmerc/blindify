@@ -68,6 +68,7 @@ export default function Page() {
       intro="Un écran au milieu et les téléphones des invités, ou un seul téléphone qui passe de main en main. Dans les deux cas il n'y a rien à préparer : chacun ramène sa playlist, la partie se génère toute seule. Voilà comment ça se déroule, et les deux ou trois pièges à éviter."
       updated="5 octobre 2026"
       currentHref="/blind-test-soiree/"
+      playMode="event"
       jsonLd={[webPageJsonLd(URL, TITLE, DESC, UPDATED), faqJsonLd(FAQ)]}
     >
       <Section tag="Avant que les gens arrivent" title="Une seule chose à demander à tes invités">
