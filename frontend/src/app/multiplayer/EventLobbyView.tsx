@@ -11,7 +11,7 @@ import { publicPath } from "@/lib/publicPath"
 import type { LobbyRendererProps } from "./lobbyTypes"
 import { LobbyDock } from "./LobbyDock"
 import { RecentPlayers } from "./RecentPlayers"
-import { BLOCK, CARD, Label, LaunchButton, LaunchDock, Panel, RoomCode, Roster, RoundSettings } from "./lobbyKit"
+import { BLOCK, CARD, Label, LaunchButton, LaunchDock, Panel, RoomCode, Roster, RoundSettings, ShareButtons } from "./lobbyKit"
 
 const ACCENT = "#e0a32e"
 // Le serveur refuse de lancer sous 2 joueurs qui repondent (roomsController
@@ -259,6 +259,12 @@ function EventHostLobby(props: LobbyRendererProps) {
             <RoomCode code={code} size="xl" />
             <p className="mb-0 mt-3 text-center text-[11px] font-bold uppercase tracking-[0.22em]">Code de la salle</p>
             <p className="m-0 mt-1 break-all text-center text-sm">{shortUrl}</p>
+            {/* Pour ceux qui ne sont pas encore la : le lien part par message (T7). */}
+            {code ? (
+              <div className="mx-auto mt-4 max-w-[24rem]">
+                <ShareButtons code={code} link={joinUrl} />
+              </div>
+            ) : null}
           </div>
           <div className="min-w-0 self-stretch border-t-2 border-dashed border-[#2e2014]/40 pt-4 lg:border-l-2 lg:border-t-0 lg:pl-8 lg:pt-0">
             <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.18em]">À table · {n}</p>

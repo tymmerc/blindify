@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { ArrowLeft, PartyPopper, ShieldCheck, Share2, ChevronDown } from "lucide-react"
+import { ArrowLeft, PartyPopper, ShieldCheck, Share2, ChevronDown, Music } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ConfettiBurst } from "@/components/game/ConfettiBurst"
 import { InstallApp } from "@/components/InstallApp"
@@ -74,6 +74,7 @@ export function ResultsView({
   currentUserId,
   onReturn,
   onReplay,
+  onEditMusic,
   accentColor,
   isHost = true,
   isGuest = false,
@@ -95,6 +96,8 @@ export function ResultsView({
   /** Retour au choix des modes. Absent dans l'Activite Discord : il n'y a pas de menu, on reste sur le podium jusqu'au Rejouer de l'hote. */
   onReturn?: () => void
   onReplay: () => void
+  /** Ouvre « Ta musique » par-dessus l'ecran de fin, sans quitter la salle (T7). */
+  onEditMusic?: () => void
   accentColor?: string
   isHost?: boolean
   isGuest?: boolean
@@ -514,6 +517,17 @@ export function ResultsView({
           >
             <ArrowLeft className="h-4 w-4" />
             Retour modes
+          </Button>
+        ) : null}
+        {onEditMusic ? (
+          <Button
+            variant="outline"
+            onClick={onEditMusic}
+            data-testid="fin-musique"
+            className="gap-2 rounded-full border-[1.5px] border-[#2e2014] bg-transparent px-4 py-2 text-sm font-bold text-[#2e2014] hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+          >
+            <Music className="h-4 w-4" />
+            Changer la musique
           </Button>
         ) : null}
         <Button

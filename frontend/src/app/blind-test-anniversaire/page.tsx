@@ -103,7 +103,7 @@ export default function Page() {
           <Li><span><strong>Chacun fait sa propre liste.</strong> Sur blindz.app, un morceau reste au nom de la première personne qui l'a importé, sur tout le site. Si deux invités collent la même playlist, le second n'a aucun morceau à lui, et un grand classique qu'un autre joueur a déjà ramené un jour ne comptera pas non plus.</span></Li>
           <Li><span><strong>Mets-en un peu plus que prévu.</strong> Un titre sans extrait disponible est écarté au lancement. Une dizaine de morceaux chacun laisse de la marge.</span></Li>
           <Li><span><strong>La personne fêtée peut ramener la sienne aussi.</strong> Ses propres morceaux passent alors au milieu des souvenirs des autres, et c'est à la table de les reconnaître.</span></Li>
-          <Li><span><strong>Il faut au moins deux personnes qui ont ramené de la musique</strong> pour que la question « qui a mis ce morceau » apparaisse. Avec une seule, on joue au titre et à l'artiste.</span></Li>
+          <Li><span><strong>Il faut au moins deux personnes qui ont ramené de la musique</strong> pour que la question « qui a mis ce morceau » apparaisse, et au moins trois joueurs : à deux, c'est forcément l'autre. Sinon, on joue au titre et à l'artiste.</span></Li>
         </ul>
         <p>
           Pour copier le bon lien : <Link href="/blind-test-spotify/">côté Spotify</Link>,{" "}
