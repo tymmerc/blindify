@@ -168,7 +168,8 @@ try {
   await duo.join(code2)
   await sleep(2000)
   await h2.getByRole("button", { name: /lancer la partie/i }).click()
-  await h2.getByPlaceholder(/morceau qui tourne/i).waitFor({ timeout: 30000 })
+  // A distance, le champ s'appelle « Titre du morceau » (TheaterGameView).
+  await h2.getByPlaceholder(/titre du morceau/i).waitFor({ timeout: 30000 })
   await sleep(1500)
   check(!/Qui a ajouté/i.test(await text(h2)), "a 2 joueurs, pas de « Qui a ajouté ? »")
   await shot(h2, "4c-manche-a-2-sans-qui-a-ajoute")
