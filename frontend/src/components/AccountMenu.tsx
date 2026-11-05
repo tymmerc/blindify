@@ -44,9 +44,12 @@ export function AccountMenu({ active }: { active?: MenuKey }) {
         aria-label="Mon compte"
         aria-expanded={open}
         onClick={() => setOpen(v => !v)}
-        className="grid h-11 w-11 place-items-center rounded-full border-2 border-[#2e2014] bg-[#ece1c8] text-[#2e2014] shadow-[3px_3px_0_rgba(46,32,20,.18)] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_rgba(46,32,20,.18)]"
+        title="Mon compte"
+        // Discret (Tym, 05/11) : meme gabarit que le « ? » de la FAQ sur /jouer/,
+        // pour que l'ecran du choix respire. La refonte des pages vient apres T7.
+        className="grid h-9 w-9 place-items-center rounded-full border-[1.5px] border-[#2e2014] bg-[#ece1c8] text-[#2e2014] shadow-[2px_2px_0_#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
       >
-        <User className="h-5 w-5" />
+        <User className="h-4 w-4" />
       </button>
 
       {open && (
