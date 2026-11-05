@@ -5,6 +5,7 @@ import { ipRateLimitKey } from "../utils/rateLimitKey";
 import { saveFeedback } from "../services/feedback";
 import { ok, fail } from "../utils/response";
 import { logger } from "../utils/logger";
+import { notifyWrittenFeedback } from "../services/feedbackNotifier";
 
 // Par adresse IP (une IPv6 compte pour son /64, voir utils/rateLimitKey.ts).
 // Une soiree se joue derriere UNE box : douze joueurs qui donnent leur avis
@@ -77,9 +78,15 @@ export function createFeedbackRouter({
     const uaHeader = req.headers["user-agent"];
     try {
       const id = await saveFeedback(parsed.value, typeof uaHeader === "string" ? uaHeader : null);
-      // Jamais le texte du message dans le journal : il peut contenir n'importe quoi.
+      // Jamais le texte du message ni le contact dans le journal : il peut
+      // contenir n'importe quoi, et le contact est une donnee personnelle.
       logger.info("feedback_saved", { id, kind: parsed.value.kind, mode: parsed.value.mode });
       ok(res, { received: true }, 201);
+      const { kind, mode, message, contact } = parsed.value;
+      if (message) {
+        const e2eKey = process.env.E2E_BYPASS_KEY;
+        notifyWrittenFeedback({ kind, mode, message, contact }, Boolean(e2eKey) && req.headers["x-e2e-key"] === e2eKey);
+      }
     } catch (err) {
       logger.error("feedback_failed", { error: err instanceof Error ? err.message : String(err) });
       fail(res, "feedback_failed", "Impossible d'enregistrer ton retour pour l'instant.", 500);

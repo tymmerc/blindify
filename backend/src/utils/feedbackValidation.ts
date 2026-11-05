@@ -8,18 +8,24 @@
  */
 import { validRoomCode } from "./socketValidation";
 
-export const FEEDBACK_KINDS = ["avis", "bug"] as const;
+// « mot » : le message libre demande par Tym en fin de 2e partie ou depuis le
+// lien « Donne ton avis » du pied de page (T24). Toujours un texte, jamais de
+// reponse rapide, et le seul type qui accepte un contact.
+export const FEEDBACK_KINDS = ["avis", "bug", "mot"] as const;
 export const FEEDBACK_ANSWERS = ["oui", "pas_trop"] as const;
 // Les ecrans de resultats ou un joueur est devant son propre ecran. Pas
 // d'ecran central (presentateur d'une partie autour d'une table), pas de
-// streamer tant que le mode reste masque.
-export const FEEDBACK_MODES = ["solo", "defi", "chrono", "buzzer", "friends", "event"] as const;
+// streamer tant que le mode reste masque. « site » : le formulaire ouvert
+// depuis le pied de page, hors de toute partie.
+export const FEEDBACK_MODES = ["solo", "defi", "chrono", "buzzer", "friends", "event", "site"] as const;
 
 export type FeedbackKind = (typeof FEEDBACK_KINDS)[number];
 export type FeedbackAnswer = (typeof FEEDBACK_ANSWERS)[number];
 export type FeedbackMode = (typeof FEEDBACK_MODES)[number];
 
 export const MAX_FEEDBACK_MESSAGE = 1000;
+// Un pseudo Insta ou une adresse e-mail : pas de controle de format, juste une borne.
+export const MAX_FEEDBACK_CONTACT = 120;
 const MAX_SESSION_ID = 2_147_483_647; // INTEGER de PostgreSQL
 const VERSION_PATTERN = /^[A-Za-z0-9._-]{1,40}$/;
 
@@ -31,6 +37,8 @@ export interface FeedbackInput {
   sessionId: number | null;
   gameCode: string | null;
   appVersion: string | null;
+  /** Insta ou e-mail laisse pour une reponse (type « mot » seulement). */
+  contact: string | null;
 }
 
 export type FeedbackParseResult =
@@ -88,6 +96,15 @@ function cleanMessage(value: unknown): string | null | "invalid" {
   return cleaned.length > MAX_FEEDBACK_MESSAGE ? "invalid" : cleaned;
 }
 
+/** Contact facultatif : une seule ligne, sans caractere invisible ; null si vide. */
+function cleanContact(value: unknown): string | null | "invalid" {
+  if (isAbsent(value)) return null;
+  if (typeof value !== "string") return "invalid";
+  const cleaned = cleanFreeText(value).replace(/\s+/g, " ");
+  if (!cleaned) return null;
+  return cleaned.length > MAX_FEEDBACK_CONTACT ? "invalid" : cleaned;
+}
+
 function cleanSessionId(value: unknown): number | null | "invalid" {
   if (isAbsent(value)) return null;
   return typeof value === "number" && Number.isInteger(value) && value > 0 && value <= MAX_SESSION_ID
@@ -125,15 +142,20 @@ export function parseFeedback(body: unknown): FeedbackParseResult {
   // Un avis porte toujours une reponse, un bug jamais (contrainte reprise en base).
   const answer = oneOf(FEEDBACK_ANSWERS, raw.answer);
   if (kind === "avis" && !answer) return refuse("invalid_answer", "Choisis une réponse.");
-  if (kind === "bug" && !isAbsent(raw.answer)) return refuse("invalid_answer", "Un signalement n'a pas de réponse rapide.");
+  if (kind !== "avis" && !isAbsent(raw.answer)) return refuse("invalid_answer", "Un message n'a pas de réponse rapide.");
 
   const message = cleanMessage(raw.message);
   if (message === "invalid") return refuse("invalid_message", `Ton message doit faire ${MAX_FEEDBACK_MESSAGE} caractères au plus.`);
+  if (kind === "mot" && !message) return refuse("invalid_message", "Écris quelques mots avant d'envoyer.");
+  const contact = cleanContact(raw.contact);
+  if (contact === "invalid") return refuse("invalid_contact", `Ton contact doit faire ${MAX_FEEDBACK_CONTACT} caractères au plus.`);
+  if (contact && kind !== "mot") return refuse("invalid_contact", "Un contact ne va qu'avec un message.");
+  if (kind !== "mot" && mode === "site") return refuse("invalid_mode", "Mode de jeu inconnu.");
   const sessionId = cleanSessionId(raw.sessionId);
   if (sessionId === "invalid") return refuse("invalid_session", "Partie inconnue.");
   const gameCode = cleanGameCode(raw.gameCode);
   if (gameCode === "invalid") return refuse("invalid_code", "Code de partie invalide.");
   const appVersion = cleanVersion(raw.appVersion);
 
-  return { ok: true, value: { kind, answer, message, mode, sessionId, gameCode, appVersion } };
+  return { ok: true, value: { kind, answer, message, mode, sessionId, gameCode, appVersion, contact } };
 }

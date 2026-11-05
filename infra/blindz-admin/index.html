@@ -241,7 +241,7 @@
   <div id="v-retours" hidden>
     <div class="ctrl">
       <span class="seg" id="filtre-retours" role="group" aria-label="Type de retour">
-        <button data-f="" aria-pressed="true">tous</button><button data-f="avis">avis</button><button data-f="bug">bugs</button>
+        <button data-f="" aria-pressed="true">tous</button><button data-f="mot">messages</button><button data-f="avis">avis</button><button data-f="bug">bugs</button>
       </span>
       <span class="fen" id="retours-meta"></span>
     </div>
@@ -884,7 +884,7 @@ let filtreRetours = "";
 // Numero de la derniere demande : en changeant vite de filtre, une reponse
 // lente arrivee apres la suivante ne doit pas ecraser l'affichage.
 let demandeRetours = 0;
-const MODES_JEU = { solo:"solo", defi:"défi", chrono:"chrono", buzzer:"un seul tel", friends:"à distance", event:"autour d'une table" };
+const MODES_JEU = { solo:"solo", defi:"défi", chrono:"chrono", buzzer:"un seul tel", friends:"à distance", event:"autour d'une table", site:"lien du site" };
 const modeRetourPill = (m) => ({ solo:"s", defi:"a", chrono:"s", buzzer:"b", friends:"b", event:"v" }[m] || "");
 
 /* Le navigateur en clair (l'agent complet reste en infobulle). */
@@ -898,8 +898,10 @@ function appareil(ua) {
 
 function carteRetour(x) {
   const bug = x.type === "bug";
-  const classe = bug ? "bug" : x.reponse === "oui" ? "oui" : "";
+  const mot = x.type === "mot";
+  const classe = bug ? "bug" : mot || x.reponse === "oui" ? "oui" : "";
   const quoi = bug ? '<span class="pill v">bug</span>'
+    : mot ? '<span class="pill pk">message</span>'
     : `<span class="pill ${x.reponse === "oui" ? "fin" : "abd"}">${x.reponse === "oui" ? "oui" : "pas trop"}</span>`;
   const id = Number(x.session_id);
   const partie = Number.isInteger(id) && id > 0 ? `<button class="lien" data-id="${id}">partie ${id}</button>` : "";
@@ -909,7 +911,7 @@ function carteRetour(x) {
     <div class="meta">${esc(x.le)} · ${quoi} <span class="pill ${modeRetourPill(x.mode)}">${esc(MODES_JEU[x.mode] || x.mode)}</span>
       ${x.game_code ? `<span>code ${esc(x.game_code)}</span>` : ""}${partie}
       <span title="${esc(x.user_agent || "")}">${esc(appareil(x.user_agent))}</span>${x.app_version ? `<span>version ${esc(x.app_version)}</span>` : ""}</div>
-    ${texte}</div>`;
+    ${texte}${x.contact ? `<div class="aide">contact laissé : <span class="mono">${esc(x.contact)}</span></div>` : ""}</div>`;
 }
 
 function rendreRetours(d) {
@@ -920,6 +922,7 @@ function rendreRetours(d) {
     <div class="kpi"><div class="lib">Avis « oui »</div><div class="v">${nb(c.oui)}</div><div class="cmp">${avis ? pct(c.oui, avis) + " % des avis" : "aucun avis"}</div></div>
     <div class="kpi"><div class="lib">Avis « pas trop »</div><div class="v">${nb(c.pas_trop)}</div><div class="cmp">${avis ? pct(c.pas_trop, avis) + " % des avis" : "aucun avis"}</div></div>
     <div class="kpi"><div class="lib">Bugs signalés</div><div class="v">${nb(c.bugs)}</div><div class="cmp">avec ou sans texte</div></div>
+    <div class="kpi"><div class="lib">Messages écrits</div><div class="v">${nb(c.mots || 0)}</div><div class="cmp">bloc de la 2e partie et lien du site</div></div>
   </div>`;
   const liste = d.retours.length
     ? d.retours.map(carteRetour).join("") + (d.tronque ? '<p class="aide">Les 500 plus récents seulement.</p>' : "")

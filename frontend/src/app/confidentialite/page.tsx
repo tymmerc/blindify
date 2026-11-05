@@ -85,6 +85,15 @@ export default function ConfidentialitePage() {
                 corriger les bugs et à améliorer le jeu, et sont effacés automatiquement au bout de 12 mois.
               </Item>
               <Item>
+                <strong>Ton message et ton contact</strong>, seulement si tu écris dans le bloc « Hello, je suis
+                l&apos;étudiant derrière Blindz » (fin de ta 2e partie ou lien « Donne ton avis ») : le texte
+                que tu écris et, si tu le remplis, le pseudo Insta ou l&apos;e-mail que tu laisses. Le contact
+                sert uniquement à te répondre, il n&apos;est jamais affiché ni partagé, et il n&apos;entre dans
+                aucune liste d&apos;envoi. Le message et le contact sont envoyés par mail à l&apos;éditeur pour
+                qu&apos;il les lise, puis gardés 12 mois avec les autres retours et effacés automatiquement.
+                Pour les faire effacer plus tôt, écris à <ContactLink /> en indiquant le contact laissé.
+              </Item>
+              <Item>
                 <strong>Les journaux techniques du serveur.</strong> Comme sur la plupart des sites, notre
                 serveur web (nginx) note chaque requête reçue : adresse IP, date et heure, page demandée,
                 page d'où tu viens et navigateur. Ces journaux servent à la sécurité et à comprendre les

@@ -6,9 +6,13 @@ import { ApiError, clientApi } from "./apiClient"
 
 /** Ecrans de resultats ou le joueur est devant son propre ecran. */
 export type FeedbackMode = "solo" | "defi" | "chrono" | "buzzer" | "friends" | "event"
+/** Le message aux joueurs vient aussi du pied de page, hors partie (« site »). */
+export type NoteMode = FeedbackMode | "site"
 export type FeedbackAnswer = "oui" | "pas_trop"
 
 export const FEEDBACK_MESSAGE_MAX = 1000
+/** Insta ou e-mail laisse pour une reponse (backend : MAX_FEEDBACK_CONTACT). */
+export const FEEDBACK_CONTACT_MAX = 120
 
 export interface FeedbackContext {
   mode: FeedbackMode
@@ -18,10 +22,15 @@ export interface FeedbackContext {
   gameCode?: string | null
 }
 
-export interface FeedbackPayload extends FeedbackContext {
-  kind: "avis" | "bug"
+export interface NoteContext extends Omit<FeedbackContext, "mode"> {
+  mode: NoteMode
+}
+
+export interface FeedbackPayload extends NoteContext {
+  kind: "avis" | "bug" | "mot"
   answer?: FeedbackAnswer
   message?: string
+  contact?: string
   appVersion?: string
 }
 
@@ -29,7 +38,7 @@ export interface FeedbackPayload extends FeedbackContext {
 // deja corrigee. Absent hors d'un depot git, on n'envoie alors rien.
 const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || undefined
 
-const contextFields = ({ mode, sessionId, gameCode }: FeedbackContext) => ({
+const contextFields = ({ mode, sessionId, gameCode }: NoteContext) => ({
   mode,
   ...(sessionId ? { sessionId } : {}),
   ...(gameCode ? { gameCode } : {}),
@@ -61,6 +70,17 @@ export function buildAnswerPayload(context: FeedbackContext, answer: FeedbackAns
 export function buildBugPayload(context: FeedbackContext, message: string): FeedbackPayload {
   const text = message.trim().slice(0, FEEDBACK_MESSAGE_MAX)
   return { kind: "bug", ...(text ? { message: text } : {}), ...contextFields(context) }
+}
+
+/**
+ * Le message aux joueurs (T24) : un texte obligatoire, un contact facultatif.
+ * Rien a envoyer si le texte est vide (le bouton Envoyer reste grise).
+ */
+export function buildNotePayload(context: NoteContext, message: string, contact = ""): FeedbackPayload | null {
+  const text = message.trim().slice(0, FEEDBACK_MESSAGE_MAX)
+  if (!text) return null
+  const who = contact.trim().slice(0, FEEDBACK_CONTACT_MAX)
+  return { kind: "mot", message: text, ...(who ? { contact: who } : {}), ...contextFields(context) }
 }
 
 // Au-dela, on abandonne l'envoi : sur un reseau qui ne repond plus, le bouton

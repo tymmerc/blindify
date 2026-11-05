@@ -138,6 +138,9 @@ export default function SettingsPage() {
             <Link href="/conditions" className="underline decoration-[rgba(46,32,20,.3)] underline-offset-2 transition hover:text-[#2e2014]">
               Conditions d&apos;utilisation
             </Link>
+            <Link href="/avis/" className="underline decoration-[rgba(46,32,20,.3)] underline-offset-2 transition hover:text-[#2e2014]">
+              Donne ton avis
+            </Link>
           </div>
         </Section>
 

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { ApiError, clientApi } from "./apiClient"
-import { FEEDBACK_TIMEOUT_MS, feedbackFailure, multiplayerFeedbackContext, sendFeedback } from "./feedback"
+import { buildNotePayload, FEEDBACK_TIMEOUT_MS, feedbackFailure, multiplayerFeedbackContext, sendFeedback } from "./feedback"
 
 vi.mock("./apiClient", async importOriginal => ({
   ...(await importOriginal<typeof import("./apiClient")>()),
@@ -80,5 +80,20 @@ describe("feedbackFailure", () => {
     expect(feedbackFailure(new ApiError(400, "Retour illisible", "invalid_body"))).toBe("failed")
     expect(feedbackFailure(new DOMException("The operation was aborted.", "AbortError"))).toBe("failed")
     expect(feedbackFailure(new TypeError("Failed to fetch"))).toBe("failed")
+  })
+})
+
+describe("buildNotePayload (message aux joueurs, T24)", () => {
+  it("ne construit rien pour un message vide", () => {
+    expect(buildNotePayload({ mode: "solo" }, "   ")).toBeNull()
+  })
+
+  it("coupe les espaces, borne les longueurs et n'envoie le contact que s'il est rempli", () => {
+    const sans = buildNotePayload({ mode: "site" }, "  salut  ", "   ")
+    expect(sans).toMatchObject({ kind: "mot", mode: "site", message: "salut" })
+    expect(sans).not.toHaveProperty("contact")
+    const avec = buildNotePayload({ mode: "buzzer" }, "x".repeat(1200), "a".repeat(200))
+    expect(avec?.message).toHaveLength(1000)
+    expect(avec?.contact).toHaveLength(120)
   })
 })
