@@ -325,13 +325,15 @@ CREATE TABLE public.game_feedback (
     user_agent text,
     app_version text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
+    contact text,
     CONSTRAINT game_feedback_answer_check CHECK ((answer = ANY (ARRAY['oui'::text, 'pas_trop'::text]))),
     CONSTRAINT game_feedback_answer_kind CHECK (((kind = 'avis'::text) = (answer IS NOT NULL))),
     CONSTRAINT game_feedback_app_version_check CHECK ((char_length(app_version) <= 40)),
+    CONSTRAINT game_feedback_contact_check CHECK ((char_length(contact) <= 120)),
     CONSTRAINT game_feedback_game_code_check CHECK ((char_length(game_code) <= 16)),
-    CONSTRAINT game_feedback_kind_check CHECK ((kind = ANY (ARRAY['avis'::text, 'bug'::text]))),
+    CONSTRAINT game_feedback_kind_check CHECK ((kind = ANY (ARRAY['avis'::text, 'bug'::text, 'mot'::text]))),
     CONSTRAINT game_feedback_message_check CHECK ((char_length(message) <= 1000)),
-    CONSTRAINT game_feedback_mode_check CHECK ((mode = ANY (ARRAY['solo'::text, 'defi'::text, 'chrono'::text, 'buzzer'::text, 'friends'::text, 'event'::text]))),
+    CONSTRAINT game_feedback_mode_check CHECK ((mode = ANY (ARRAY['solo'::text, 'defi'::text, 'chrono'::text, 'buzzer'::text, 'friends'::text, 'event'::text, 'site'::text]))),
     CONSTRAINT game_feedback_user_agent_check CHECK ((char_length(user_agent) <= 300))
 );
 
@@ -594,7 +596,9 @@ CREATE TABLE public.multiplayer_rooms (
     completed_at timestamp without time zone,
     auto_advance boolean DEFAULT false,
     host_plays boolean DEFAULT false,
-    round_duration_ms integer
+    round_duration_ms integer,
+    discord_instance_id text,
+    CONSTRAINT multiplayer_rooms_discord_instance_len CHECK ((char_length(discord_instance_id) <= 128))
 );
 
 
@@ -1519,6 +1523,13 @@ CREATE INDEX idx_game_rounds_owner ON public.game_rounds USING btree (owner_user
 --
 
 CREATE INDEX idx_likes_audio_source ON public.likes USING btree (audio_source_id);
+
+
+--
+-- Name: idx_multiplayer_rooms_discord_instance; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_multiplayer_rooms_discord_instance ON public.multiplayer_rooms USING btree (discord_instance_id) WHERE (discord_instance_id IS NOT NULL);
 
 
 --
