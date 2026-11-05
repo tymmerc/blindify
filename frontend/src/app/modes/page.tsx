@@ -94,7 +94,7 @@ function VinylSleeve({
           </span>
           <span className="mt-2 block text-sm leading-relaxed text-[#6b573f]">{subtitle}</span>
         </span>
-        <span className="block">
+        <span className="mt-5 block">
           <span className="flex flex-wrap gap-2">
             <span
               className="rounded-full border-[1.5px] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em]"
