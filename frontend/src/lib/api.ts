@@ -243,9 +243,6 @@ export const api = {
   async detailedStats() {
     return clientApi.detailedStats()
   },
-  async gameHistory() {
-    return clientApi.gameHistory()
-  },
   async gameHistoryDetailed() {
     return clientApi.gameHistoryDetailed()
   },

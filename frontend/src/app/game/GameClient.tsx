@@ -7,7 +7,6 @@ import type { CurrentUserPayload } from "@/lib/api"
 import type { SoloGameResponse, SoloTrack } from "@/lib/types"
 import { SoloGameClient } from "@/components/game/SoloGameClient"
 import { SoloLoading, SoloProblem } from "@/components/game/SoloStatus"
-import { clearUserDashboardCache } from "@/lib/userData"
 import { DEFAULT_PLAYER_NAME, NICKNAME_KEY, readStored } from "@/lib/soloSetup"
 import { playerErrorText } from "@/lib/errorText"
 
@@ -122,7 +121,6 @@ export default function GameClient() {
           correct: summary.correct,
           bestStreak: summary.bestStreak ?? 0,
         })
-        clearUserDashboardCache()
       } catch (err) {
         console.error("record_solo_result_failed", err)
       }
