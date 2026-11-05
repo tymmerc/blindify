@@ -15,9 +15,12 @@ export function MultiplayerRouter() {
   const modeParam = resolveGameMode(searchParams.get("mode"))
   const effectiveMode = modeParam ?? mode
   const modeConfig = effectiveMode ? GAME_MODES[effectiveMode] : null
-  const intent = searchParams.get("intent")
   const autojoin = searchParams.get("autojoin")
   const initialJoinCode = searchParams.get("code")
+  // Un code dans l'adresse l'emporte sur intent=host (T7) : c'est une salle qui
+  // existe deja. Le serveur dit ensuite qui en est l'hote. Avant, l'adresse de
+  // l'hote, recopiee par un ami ou rouverte apres un F5, recreait une salle.
+  const intent = initialJoinCode ? null : searchParams.get("intent")
   const profileUrl = searchParams.get("profileUrl")
   const nickname = searchParams.get("nickname")
 

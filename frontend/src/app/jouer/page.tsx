@@ -7,6 +7,9 @@ import { api } from "@/lib/api"
 import { recognizeMusicLink } from "@/lib/musicLink"
 import { publicPath } from "@/lib/publicPath"
 import { DiscordHint } from "@/components/DiscordPlay"
+import { findHostedRoom } from "@/lib/hostedRooms"
+import { ApiError } from "@/lib/apiClient"
+import { createRoute, parsePreferredMode, situationFor, type SituationMode } from "@/lib/playSituations"
 
 const NAME_KEY = "blindify_nickname"
 const URL_KEY = "blindify_profile_url"
@@ -46,10 +49,18 @@ function Shell({ dots, index, onBack, wide, children }: { dots: number; index: n
           ))}
         </div>
         <div className="flex flex-1 flex-col justify-center animate-in fade-in slide-in-from-right-4 duration-300 sm:block sm:flex-none">{children}</div>
-        {/* Lien decouvrable par les crawlers (le sitemap ne suffit pas toujours) */}
-        <p className="mt-6 shrink-0 text-center text-[11px] text-[#b3a182]">
-          <a href="/faq/" className="underline hover:text-[#6b573f]">Questions fréquentes</a>
-        </p>
+        {/* La FAQ en petit rond « ? » dans le coin (demande de Tym, 05/11) : le lien
+            texte sous le bouton chargeait l'ecran. Reste un vrai lien, decouvrable
+            par les crawlers (le sitemap ne suffit pas toujours). */}
+        <a
+          href={publicPath("/faq/")}
+          aria-label="Questions fréquentes"
+          title="Questions fréquentes"
+          data-testid="jouer-faq"
+          className="fixed bottom-4 right-4 z-30 flex h-9 w-9 items-center justify-center rounded-full border-[1.5px] border-[#2e2014] bg-[#ece1c8] font-display text-base font-bold text-[#2e2014] shadow-[2px_2px_0_#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb] sm:bottom-6 sm:right-6"
+        >
+          ?
+        </a>
       </div>
     </div>
   )
@@ -67,6 +78,8 @@ export default function EntryWizard() {
   const [code, setCode] = useState("")
   const [codeError, setCodeError] = useState<string | null>(null)
   const [joinParam, setJoinParam] = useState("") // ?join=CODE (scan du QR "Autour d'une table")
+  // ?mode=event : venu d'une page guide (tele, soiree...), on va tout droit au bon mode.
+  const [preferredMode, setPreferredMode] = useState<SituationMode | null>(null)
   const [tuto, setTuto] = useState<null | "spotify" | "deezer">(null)
   const nameRef = useRef<HTMLInputElement>(null)
   const codeRef = useRef<HTMLInputElement>(null)
@@ -82,6 +95,7 @@ export default function EntryWizard() {
     try {
       const j = (new URLSearchParams(window.location.search).get("join") ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "")
       if (j) { setJoinParam(j); setCode(j) }
+      setPreferredMode(parsePreferredMode(new URLSearchParams(window.location.search).get("mode")))
     } catch { /* ignore */ }
     // On ne cree AUCUN compte tant que le pseudo n'est pas connu. Avant, la
     // simple ouverture de la page fabriquait un invite nomme "Joueur" : 97
@@ -174,7 +188,7 @@ export default function EntryWizard() {
     if (going) return
     setGoing(true)
     await ensureName()
-    router.push("/modes")
+    router.push(createRoute(preferredMode, name))
   }
 
   // REJOINDRE : on résout le mode de la room depuis le code, sans jamais voir les modes
@@ -190,9 +204,21 @@ export default function EntryWizard() {
       const roomMode = (room as { mode?: string }).mode || "friends"
       const nick = name.trim() ? `&nickname=${encodeURIComponent(name.trim())}` : ""
       router.push(`/multiplayer?mode=${roomMode}&code=${encodeURIComponent(c)}${nick}`)
-    } catch {
+    } catch (err) {
+      const gone = err instanceof ApiError && err.status === 404
+      // Salle effacee que ce navigateur avait creee : l'ecran de la salle explique
+      // et propose d'en rouvrir une pareille (T7).
+      const mine = gone ? findHostedRoom(c) : null
+      if (mine) {
+        router.push(`/multiplayer?mode=${mine.mode}&code=${encodeURIComponent(c)}`)
+        return
+      }
       setGoing(false)
-      setCodeError("Salle introuvable. Vérifie le code.")
+      setCodeError(
+        gone
+          ? "Cette salle n'existe plus : elle se ferme toute seule si aucune partie n'y est lancée pendant une demi-heure. Demande le nouveau code."
+          : "Salle introuvable. Vérifie le code."
+      )
     }
   }
 
@@ -395,7 +421,11 @@ export default function EntryWizard() {
           <h1 className="font-display text-3xl font-semibold text-[#2e2014] sm:text-4xl">
             Tu veux <em className="font-medium italic text-[#c65133]">jouer</em> comment ?
           </h1>
-          <p className="text-sm text-[#6b573f]">Lance une nouvelle partie, ou rejoins celle d'un ami.</p>
+          <p className="text-sm text-[#6b573f]">
+            {preferredMode
+              ? `Tu crées une partie « ${situationFor(preferredMode).modeName} », ou tu rejoins celle d'un ami.`
+              : "Lance une nouvelle partie, ou rejoins celle d'un ami."}
+          </p>
         </div>
         <div className="mt-10 space-y-3">
           <button
@@ -424,6 +454,17 @@ export default function EntryWizard() {
             <span className="flex items-center gap-3"><LogIn size={18} /> Rejoindre avec un code</span>
             <ArrowRight size={16} />
           </button>
+          {preferredMode ? (
+            <p className="pt-2 text-center text-[12px] text-[#8a7558]">
+              <button
+                type="button"
+                onClick={() => setPreferredMode(null)}
+                className="underline decoration-[1.5px] underline-offset-2 transition hover:text-[#2e2014]"
+              >
+                Voir les autres façons de jouer
+              </button>
+            </p>
+          ) : null}
         </div>
       </Shell>
     )

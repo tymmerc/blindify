@@ -82,6 +82,7 @@ export default function Page() {
       intro="Le principe reste celui d'une soirée normale : chaque invité ramène sa playlist et la partie se fabrique toute seule. Sauf qu'ici il y a quelqu'un à fêter. Voilà comment tourner le blind test vers lui ou vers elle, pour qu'on ne parle pas seulement de musique."
       updated="5 octobre 2026"
       currentHref="/blind-test-anniversaire/"
+      playMode="event"
       jsonLd={[webPageJsonLd(URL, TITLE, DESC, UPDATED), faqJsonLd(FAQ)]}
     >
       <Section tag="L'idée qui marche" title="La playlist souvenirs">

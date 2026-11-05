@@ -51,6 +51,7 @@ export default function Page() {
       intro="C'est le mode Autour d'une table : la télé diffuse la musique et affiche les scores, et chacun répond depuis son téléphone après avoir scanné un QR code. Le jeu lui-même ne demande rien de spécial. Le vrai sujet, c'est de faire arriver l'image et le son sur la télé, alors voilà les solutions possibles, en commençant par la plus simple."
       updated="5 octobre 2026"
       currentHref="/blind-test-tv/"
+      playMode="event"
       jsonLd={[webPageJsonLd(URL, TITLE, DESC, UPDATED), faqJsonLd(FAQ)]}
     >
       <Section tag="L'image" title="Mettre blindz.app sur la télé, ou s'en passer">

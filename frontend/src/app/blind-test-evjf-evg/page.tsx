@@ -52,6 +52,7 @@ export default function Page() {
       intro="Un enterrement de vie de jeune fille ou de garçon, c'est souvent un gîte, une bande qui ne se connaît que par morceaux (les amis d'enfance, ceux de la fac, la sœur, les collègues) et une personne à mettre au centre. Un blind test fait avec la musique de tout ce monde tient très bien dans ce cadre, surtout si on le tourne vers elle."
       updated="5 octobre 2026"
       currentHref="/blind-test-evjf-evg/"
+      playMode="event"
       jsonLd={[webPageJsonLd(URL, TITLE, DESC, UPDATED), faqJsonLd(FAQ)]}
     >
       <Section tag="Le principe" title="Sa vie en chansons, chacun sa part">
