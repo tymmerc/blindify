@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react"
+import { showOwnerQuestion } from "@/lib/ownerQuestion"
 import { motion, AnimatePresence } from "framer-motion"
 import { Pause, Play, Trophy, Volume2, VolumeX, X } from "lucide-react"
 import type { MultiplayerGameState, UserSummary } from "@/lib/types"
@@ -375,7 +376,11 @@ export function TheaterGameView(props: Props) {
               />
             </div>
 
-            {!state?.singleContributor && (
+            {showOwnerQuestion({
+              ownerQuestion: state?.currentTrack?.ownerQuestion,
+              singleContributor: state?.singleContributor,
+              playerCount: Object.keys(state?.players ?? {}).length,
+            }) && (
             <div className="theater-field">
               <label className="theater-flabel">
                 Qui a ajouté ?

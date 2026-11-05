@@ -159,6 +159,8 @@ export type MultiplayerGameState = {
     albumCover?: string | null
     metadata?: Record<string, unknown> | null
     ownerChoices?: number[]
+    /** false : pas de « qui a ajoute ? » cette manche (moins de 3 joueurs, T7). */
+    ownerQuestion?: boolean
     /** Source du morceau : seulement au reveal (caviardee pendant la manche). */
     provider?: string | null
   } | null
