@@ -107,7 +107,8 @@ export default function Page() {
         </ul>
         <p>
           Le déroulé d'une partie et les pièges classiques (playlists privées, manches trop longues) sont dans le{" "}
-          <Link href="/blind-test-soiree/">guide de la soirée</Link>.
+          <Link href="/blind-test-soiree/">guide de la soirée</Link>, et pour trouver le bon lien, dans celui du{" "}
+          <Link href="/blind-test-spotify/">blind test Spotify</Link>.
         </p>
       </Section>
 

@@ -79,7 +79,8 @@ export default function Page() {
           <Li color="#f4ecdb"><span><strong>Fais couper les micros pendant les extraits</strong>, ou demande des écouteurs : sinon la musique de l'un revient dans le micro des autres avec une seconde de retard. On les rallume à la révélation, c'est le moment où on rigole.</span></Li>
         </ul>
         <p>
-          Le détail du mode à distance est dans le guide du <Link href="/blind-test-en-ligne-gratuit/">blind test en ligne gratuit</Link>.
+          Le détail du mode à distance est dans le guide du <Link href="/blind-test-en-ligne-gratuit/">blind test en ligne gratuit</Link>,
+          et pour que chacun trouve le lien de sa playlist, dans celui du <Link href="/blind-test-spotify/">blind test Spotify</Link>.
         </p>
       </Section>
 
