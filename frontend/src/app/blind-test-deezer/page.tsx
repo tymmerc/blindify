@@ -93,8 +93,8 @@ export default function Page() {
           deux services.
         </p>
         <p>
-          Et dans les parties à plusieurs téléphones, en plus du titre et de l'artiste, il faut deviner <strong>qui a mis quoi</strong>.
-          Le guide côté Spotify est ici : <Link href="/blind-test-spotify/">blind test avec ses playlists Spotify</Link>.
+          Et à partir de trois joueurs, en plus du titre et de l'artiste, il faut deviner <strong>qui a mis quoi</strong>.
+          Le guide côté Spotify est ici : <Link href="/blind-test-spotify/">comment faire un blind test sur Spotify</Link>.
         </p>
       </Section>
 

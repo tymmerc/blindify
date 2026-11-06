@@ -6,7 +6,7 @@ export type Guide = { href: string; label: string }
 
 export const GUIDES: readonly Guide[] = [
   { href: "/blind-test-en-ligne-gratuit/", label: "Blind test en ligne gratuit" },
-  { href: "/blind-test-spotify/", label: "Blind test avec Spotify" },
+  { href: "/blind-test-spotify/", label: "Blind test Spotify" },
   { href: "/blind-test-deezer/", label: "Blind test avec Deezer" },
   { href: "/blind-test-soiree/", label: "Blind test en soirée" },
   { href: "/blind-test-anniversaire/", label: "Blind test d'anniversaire" },

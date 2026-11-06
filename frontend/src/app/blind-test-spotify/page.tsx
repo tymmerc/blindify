@@ -5,16 +5,21 @@ import { BLUE, FaqList, GuideShell, Li, Section, Steps, faqJsonLd, howToJsonLd, 
 // Guide "blind test avec Spotify". Les formats de liens et le fonctionnement de
 // l'import viennent du code (profileImportService : /user/{id} et
 // /playlist/{id}, import serveur via l'API publique Spotify, aucune connexion
-// du joueur necessaire).
+// du joueur necessaire ; /jouer importe 50 titres par playlist, 200 playlists
+// au plus pour un profil). « Qui a ajoute ? » : a partir de 3 joueurs
+// (roundOwners.MIN_OWNER_QUESTION_PLAYERS). 12 joueurs par salle.
+// T28 (06/11) : la requete la plus vue dans la Search Console est
+// « comment faire un blind test sur spotify », le titre y repond.
 
 const URL = "https://blindz.app/blind-test-spotify/"
-const TITLE = "Faire un blind test avec ses playlists Spotify"
+const TITLE = "Comment faire un blind test sur Spotify avec ses playlists"
 const DESC =
-  "Un blind test entre amis sur ses playlists Spotify, sans que personne ne se connecte : copier le lien d'une playlist publique ou d'un profil, le coller, jouer."
-const UPDATED = "2026-09-08"
+  "Copie le lien d'une playlist Spotify publique, colle-le sur Blindz et joue avec tes potes. C'est gratuit, sans compte, et personne n'a à se connecter à Spotify."
+const UPDATED = "2026-11-06"
 
 export const metadata: Metadata = {
-  title: "Blind test avec ses playlists Spotify",
+  // Devient « Comment faire un blind test sur Spotify (gratuit) · Blindz » (gabarit du layout).
+  title: "Comment faire un blind test sur Spotify (gratuit)",
   description: DESC,
   alternates: { canonical: URL },
   openGraph: { title: TITLE, description: DESC, url: URL, type: "article", locale: "fr_FR" },
@@ -23,34 +28,38 @@ export const metadata: Metadata = {
 const STEPS = [
   {
     t: "Copie le lien d'une playlist publique",
-    text: "Dans Spotify, ouvre la playlist, touche les trois points, puis Partager et Copier le lien. La playlist doit être publique. Tu peux aussi copier le lien de ton profil : blindz.app prendra tes playlists publiques (jusqu'à 50 titres par playlist).",
+    text: "Dans l'appli Spotify, sur téléphone ou sur ordinateur, ouvre la playlist, touche les trois points, puis Partager et Copier le lien. La playlist doit être publique. Le lien de ton profil marche aussi : Blindz prend alors toutes tes playlists publiques.",
   },
   {
-    t: "Ouvre blindz.app et choisis un pseudo",
-    text: "Sur blindz.app/jouer, tape un pseudo : il n'y a ni compte ni mot de passe, et rien à installer.",
+    t: "Colle-le sur Blindz",
+    text: "Va sur blindz.app/jouer, tape un pseudo, colle le lien et appuie sur Importer ma musique. Pas de compte ni de mot de passe, et l'import se fait de notre côté : tu n'as pas à te connecter à Spotify.",
   },
   {
-    t: "Colle le lien et importe",
-    text: "Colle le lien Spotify dans le champ prévu et appuie sur Importer ma musique. L'import se fait côté serveur, personne n'a besoin de se connecter à Spotify.",
-  },
-  {
-    t: "Crée la partie et invite",
-    text: "Choisis un mode (autour d'une table, un seul téléphone, ou à distance), envoie le code à 6 caractères ou fais scanner le QR code. Chaque joueur colle son propre lien, et la partie est générée avec les morceaux de tout le monde.",
+    t: "Lance la partie et invite tes potes",
+    text: "Choisis comment jouer (autour d'une table, sur un seul téléphone ou à distance), puis envoie le code à 6 caractères ou fais scanner le QR code. Chacun colle son propre lien, et la partie mélange les morceaux de tout le monde.",
   },
 ]
 
 const FAQ = [
   {
+    q: "Ça marche sur téléphone ?",
+    a: "Oui, tout se passe dans le navigateur du téléphone, il n'y a pas d'appli à installer. Sur mobile, Partager puis Copier le lien dans Spotify donne un lien court en spotify.link : colle-le tel quel, il passe.",
+  },
+  {
     q: "Faut-il que tout le monde ait Spotify ?",
     a: "Non. Personne ne se connecte à Spotify : chaque joueur colle simplement un lien public. Un joueur peut venir de Spotify et un autre de Deezer, les morceaux se mélangent dans la même partie. Et si quelqu'un n'a rien à importer, il joue quand même sur les morceaux des autres.",
   },
   {
-    q: "Quels liens Spotify sont acceptés ?",
-    a: "Le lien d'une playlist (open.spotify.com/playlist/…) ou celui d'un profil (open.spotify.com/user/…). Avec un profil, ce sont toutes les playlists publiques de ce profil qui sont importées.",
+    q: "Ma playlist est privée, ou ce sont mes titres likés, je fais comment ?",
+    a: "Spotify ne laisse lire ni les playlists privées ni les titres likés. Pour une playlist privée, ouvre-la dans Spotify, touche les trois points et rends-la publique. Pour les titres likés, mets ceux que tu veux dans une nouvelle playlist publique et colle son lien.",
   },
   {
-    q: "Mes titres likés ne s'importent pas, pourquoi ?",
-    a: "Les titres likés ne sont pas une playlist publique, Spotify ne les expose pas. Crée une playlist, mets-y les morceaux que tu veux, rends-la publique, et colle son lien.",
+    q: "Je peux coller le lien de mon profil Spotify ?",
+    a: "Oui. Avec un lien de profil (open.spotify.com/user/…), Blindz importe toutes les playlists publiques de ce profil. Avec un lien de playlist (open.spotify.com/playlist/…), seulement celle-là. Un lien de morceau ou d'album ne marche pas.",
+  },
+  {
+    q: "On peut jouer à combien ?",
+    a: "Jusqu'à 12 joueurs par salle. À deux, on devine le titre et l'artiste. À partir de trois, il y a une question en plus : qui a ramené ce morceau ?",
   },
   {
     q: "La musique est jouée en entier ?",
@@ -63,21 +72,22 @@ export default function Page() {
     <GuideShell
       tag="Guide Spotify"
       tagColor={BLUE}
-      title={<>Un blind test avec <em className="font-medium italic text-[#cc4830]">vos</em> playlists Spotify</>}
-      intro="Le lien d'une playlist publique, un pseudo, et la partie se génère avec les morceaux de tout le monde, sans que personne ne se connecte à Spotify ni n'installe quoi que ce soit. Voilà comment faire, étape par étape."
-      updated="8 septembre 2026"
+      title={<>Comment faire un blind test avec <em className="font-medium italic text-[#cc4830]">vos</em> playlists Spotify</>}
+      intro="Tu copies le lien d'une playlist publique, tu le colles sur Blindz, et la partie se lance avec la musique de tout le monde. C'est gratuit, il n'y a ni compte à créer ni appli à installer, et personne ne se connecte à Spotify. Ça marche sur téléphone comme sur ordinateur."
+      updated="6 novembre 2026"
       currentHref="/blind-test-spotify/"
+      heroCta
       jsonLd={[webPageJsonLd(URL, TITLE, DESC, UPDATED), howToJsonLd(TITLE, DESC, STEPS), faqJsonLd(FAQ)]}
     >
-      <Section tag="En quatre étapes" title="Deux minutes, montre en main">
+      <Section tag="En trois étapes" title="Deux minutes, montre en main">
         <Steps items={STEPS.map(s => ({ t: s.t, b: s.text }))} />
       </Section>
 
-      <Section tag="Les liens" title="Ce que blindz.app sait lire" tone="ink">
+      <Section tag="Les liens" title="Ce que Blindz sait lire" tone="ink">
         <p>Deux formats de lien :</p>
         <ul>
           <Li color="#d88418"><span><strong>Une playlist</strong> : <code className="font-mono text-[0.95em]">open.spotify.com/playlist/…</code>. Elle doit être publique (dans Spotify : les trois points de la playlist, puis « Rendre publique » si ce n'est pas déjà le cas).</span></Li>
-          <Li color="#d88418"><span><strong>Un profil</strong> : <code className="font-mono text-[0.95em]">open.spotify.com/user/…</code>. blindz.app importe les playlists publiques de ce profil d'un coup (jusqu'à 200 playlists, et 50 titres par playlist). Pratique quand tu ne veux pas choisir.</span></Li>
+          <Li color="#d88418"><span><strong>Un profil</strong> : <code className="font-mono text-[0.95em]">open.spotify.com/user/…</code>. Blindz importe les playlists publiques de ce profil d'un coup (jusqu'à 200 playlists, et 50 titres par playlist). Pratique quand tu ne veux pas choisir.</span></Li>
         </ul>
         <p>
           Les titres likés, les playlists privées et les playlists « collaboratives non publiques » ne passent pas :
@@ -92,8 +102,8 @@ export default function Page() {
           Certains blind tests « Spotify » demandent de se connecter à son compte et génèrent un quiz sur ton propre
           historique. D'autres proposent des packs par genre ou par décennie, les mêmes pour tout le monde.
           Ici, le principe est différent : chacun ramène ses playlists, la partie mélange celles de tous les joueurs
-          présents, et en plus du titre et de l'artiste, il faut deviner <strong>qui a mis quoi</strong>. C'est là que
-          ça devient un jeu de soirée et pas un quiz.
+          présents, et à partir de trois joueurs, en plus du titre et de l'artiste, il faut deviner{" "}
+          <strong>qui a mis quoi</strong>. C'est là que ça devient un jeu de soirée et pas un quiz.
         </p>
         <p>
           Le résultat dépend entièrement de la table : une playlist de rap, une de variété et une d'électro donnent une

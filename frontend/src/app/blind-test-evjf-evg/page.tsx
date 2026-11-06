@@ -74,8 +74,8 @@ export default function Page() {
           <Li><span><strong>« Qui a mis ce morceau »</strong> n'apparaît qu'à partir de deux personnes qui ont ramené de la musique, ce qui ne devrait pas poser de problème à quinze.</span></Li>
         </ul>
         <p>
-          Pour trouver le bon lien : <Link href="/blind-test-spotify/">sur Spotify</Link> ou{" "}
-          <Link href="/blind-test-deezer/">sur Deezer</Link>, les deux se mélangent dans la même partie.
+          Pour trouver le bon lien, voir le guide du <Link href="/blind-test-spotify/">blind test Spotify</Link> ou{" "}
+          celui <Link href="/blind-test-deezer/">sur Deezer</Link>, les deux se mélangent dans la même partie.
         </p>
       </Section>
 
