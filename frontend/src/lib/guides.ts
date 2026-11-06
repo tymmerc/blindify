@@ -15,3 +15,10 @@ export const GUIDES: readonly Guide[] = [
   { href: "/blind-test-entre-collegues/", label: "Blind test entre collègues" },
   { href: "/comparatif-blind-test/", label: "Comparatif des blind tests" },
 ]
+
+// Les articles (tutos) : memes controles que les guides (sitemap, titres,
+// JSON-LD, dates, liens), mais hors du pied de page et du bloc "A lire aussi".
+// On y arrive depuis les pages qui en parlent (T28 : la page Spotify et la FAQ).
+export const ARTICLES: readonly Guide[] = [
+  { href: "/comment-faire-un-blind-test-sur-spotify/", label: "Comment faire un blind test sur Spotify" },
+]
