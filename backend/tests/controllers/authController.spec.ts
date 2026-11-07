@@ -4,6 +4,8 @@ jest.mock("../../src/config/db", () => ({
   pool: { query: jest.fn() },
 }));
 jest.mock("../../src/utils/session", () => ({
+  LONG_SESSION_TTL_MS: 1000 * 60 * 60 * 24 * 365,
+  SESSION_TOKEN_COOKIE: "blindify_session_token",
   createSessionToken: jest.fn(),
   revokeSessionToken: jest.fn(),
   getSessionContext: jest.fn(),
@@ -32,6 +34,9 @@ const mockCreateSessionToken = createSessionToken as jest.Mock;
 const mockRevokeSessionToken = revokeSessionToken as jest.Mock;
 const mockGetSessionContext = getSessionContext as jest.Mock;
 const mockClearSession = clearSession as jest.Mock;
+const ONE_YEAR_MS = 1000 * 60 * 60 * 24 * 365;
+const mockConnect = jest.fn();
+(pool as any).connect = mockConnect;
 
 function mockReq(overrides: any = {}) {
   return {
@@ -191,11 +196,12 @@ describe("authController.register", () => {
 
     await authController.register(req, res);
 
-    expect(mockCreateSessionToken).toHaveBeenCalledWith(5);
+    // T26 : session d'un an, glissante, comme pour un invite.
+    expect(mockCreateSessionToken).toHaveBeenCalledWith(5, ONE_YEAR_MS);
     expect(res.cookie).toHaveBeenCalledWith(
       "blindify_session_token",
       "token-xyz",
-      expect.objectContaining({ httpOnly: true, path: "/" })
+      expect.objectContaining({ httpOnly: true, path: "/", maxAge: ONE_YEAR_MS })
     );
     expect(req.session.userId).toBe(5);
     expect(req.session.sessionToken).toBe("token-xyz");
@@ -486,7 +492,11 @@ describe("authController.logout", () => {
 
     await authController.logout(req, res);
 
-    expect(res.clearCookie).toHaveBeenCalledWith("blindify_session_token", { path: "/" });
+    // Memes options que la pose (domaine compris), sinon le navigateur le garde.
+    expect(res.clearCookie).toHaveBeenCalledWith(
+      "blindify_session_token",
+      expect.objectContaining({ path: "/", httpOnly: true })
+    );
   });
 
   it("should call clearSession", async () => {
@@ -526,5 +536,128 @@ describe("authController.logout", () => {
     expect(mockRevokeSessionToken).toHaveBeenCalledWith("header-tok");
     expect(mockRevokeSessionToken).toHaveBeenCalledWith("session-tok");
     expect(mockRevokeSessionToken).toHaveBeenCalledTimes(2);
+  });
+});
+
+// T26 : un joueur qui revient retrouve ses infos.
+describe("T26 : l'invite devient un compte sans rien perdre", () => {
+  const GUEST = { id: 42, provider: "guest", provider_id: "g-42", username: "océ", email: null, avatar: null, created_at: null };
+
+  it("creer un compte depuis un invite transforme SA ligne (meme id) au lieu d'en creer une", async () => {
+    const req = mockReq({ body: { username: "océ", password: "motdepasse" } });
+    const res = mockRes();
+    mockGetSessionContext.mockResolvedValueOnce({ user: GUEST, sessionToken: "jeton-invite" });
+    mockQuery.mockResolvedValueOnce({ rows: [] }); // pseudo libre
+    mockQuery.mockResolvedValueOnce({ rows: [{ ...GUEST, provider: "local" }] });
+    mockCreateSessionToken.mockResolvedValueOnce({ token: "jeton-compte" });
+
+    await authController.register(req, res);
+
+    const sql = String(mockQuery.mock.calls[1][0]);
+    expect(sql).toContain("UPDATE users SET provider='local'");
+    expect(sql).not.toContain("INSERT");
+    expect(mockQuery.mock.calls[1][1][0]).toBe(42);
+    expect(mockCreateSessionToken).toHaveBeenCalledWith(42, ONE_YEAR_MS);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ keptGuest: true }) })
+    );
+  });
+
+  it("sans invite en cours, l'inscription cree un compte neuf comme avant", async () => {
+    const req = mockReq({ body: { username: "Nouveau", password: "motdepasse" } });
+    const res = mockRes();
+    mockGetSessionContext.mockResolvedValueOnce(null);
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+    mockQuery.mockResolvedValueOnce({ rows: [{ ...GUEST, id: 7, provider: "local", username: "Nouveau" }] });
+    mockCreateSessionToken.mockResolvedValueOnce({ token: "t" });
+
+    await authController.register(req, res);
+
+    expect(String(mockQuery.mock.calls[1][0])).toContain("INSERT INTO users");
+  });
+
+  it("un compte deja connecte qui s'inscrit ne transforme pas son compte", async () => {
+    const req = mockReq({ body: { username: "Autre", password: "motdepasse" } });
+    const res = mockRes();
+    mockGetSessionContext.mockResolvedValueOnce({ user: { ...GUEST, provider: "local" }, sessionToken: "t" });
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+    mockQuery.mockResolvedValueOnce({ rows: [{ ...GUEST, id: 8, provider: "local", username: "Autre" }] });
+    mockCreateSessionToken.mockResolvedValueOnce({ token: "t2" });
+
+    await authController.register(req, res);
+
+    expect(String(mockQuery.mock.calls[1][0])).toContain("INSERT INTO users");
+  });
+
+  it("se connecter depuis un invite : le compte reprend cet invite dans une transaction", async () => {
+    const hash = await bcrypt.hash("motdepasse", 4);
+    const req = mockReq({ body: { username: "Miguel", password: "motdepasse" } });
+    const res = mockRes();
+    const client = { query: jest.fn().mockResolvedValue({ rows: [] }), release: jest.fn() };
+    mockConnect.mockResolvedValueOnce(client);
+    mockQuery.mockResolvedValueOnce({ rows: [{ ...GUEST, id: 9, provider: "local", username: "Miguel", password_hash: hash }] });
+    mockGetSessionContext.mockResolvedValueOnce({ user: GUEST, sessionToken: "jeton-invite" });
+    mockCreateSessionToken.mockResolvedValueOnce({ token: "jeton-compte" });
+
+    await authController.login(req, res);
+
+    const sqls = client.query.mock.calls.map(c => String(c[0]));
+    expect(sqls[0]).toBe("BEGIN");
+    expect(sqls).toContain("COMMIT");
+    expect(sqls.some(q => q.includes("UPDATE game_participants"))).toBe(true);
+    expect(client.query.mock.calls.find(c => String(c[0]).includes("UPDATE game_participants"))?.[1]).toEqual([42, 9]);
+    expect(client.release).toHaveBeenCalled();
+    expect(req.session.userId).toBe(9);
+  });
+
+  it("si la reprise echoue, la connexion passe quand meme et l'invite reste intact", async () => {
+    const hash = await bcrypt.hash("motdepasse", 4);
+    const req = mockReq({ body: { username: "Miguel", password: "motdepasse" } });
+    const res = mockRes();
+    const client = {
+      query: jest.fn(async (sql: string) => {
+        if (sql.includes("game_participants")) throw new Error("boom");
+        return { rows: [] };
+      }),
+      release: jest.fn(),
+    };
+    mockConnect.mockResolvedValueOnce(client);
+    mockQuery.mockResolvedValueOnce({ rows: [{ ...GUEST, id: 9, provider: "local", username: "Miguel", password_hash: hash }] });
+    mockGetSessionContext.mockResolvedValueOnce({ user: GUEST, sessionToken: "jeton-invite" });
+    mockCreateSessionToken.mockResolvedValueOnce({ token: "jeton-compte" });
+
+    await authController.login(req, res);
+
+    expect(client.query.mock.calls.map(c => c[0])).toContain("ROLLBACK");
+    expect(res.status).not.toHaveBeenCalledWith(500);
+    expect(req.session.userId).toBe(9);
+  });
+
+  it("mauvais mot de passe : aucune reprise tentee", async () => {
+    const hash = await bcrypt.hash("motdepasse", 4);
+    const req = mockReq({ body: { username: "Miguel", password: "faux-faux" } });
+    const res = mockRes();
+    mockQuery.mockResolvedValueOnce({ rows: [{ ...GUEST, id: 9, provider: "local", username: "Miguel", password_hash: hash }] });
+
+    await authController.login(req, res);
+
+    expect(mockConnect).not.toHaveBeenCalled();
+    expect(mockGetSessionContext).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(401);
+  });
+
+  it("/me prolonge d'un an et repose le cookie", async () => {
+    const req = mockReq();
+    const res = mockRes();
+    mockGetSessionContext.mockResolvedValueOnce({ user: GUEST, sessionToken: "jeton-invite" });
+
+    await authController.me(req, res);
+
+    expect(mockGetSessionContext).toHaveBeenCalledWith(req, res, expect.objectContaining({ ttlMs: ONE_YEAR_MS }));
+    expect(res.cookie).toHaveBeenCalledWith(
+      "blindify_session_token",
+      "jeton-invite",
+      expect.objectContaining({ maxAge: ONE_YEAR_MS, httpOnly: true })
+    );
   });
 });

@@ -88,8 +88,8 @@ function LoginForm() {
               </h1>
               <p className="mt-1 text-sm text-[#6b573f]">
                 {mode === "login"
-                  ? "Connecte-toi pour retrouver tes stats et tes amis."
-                  : "Un pseudo et un mot de passe, c'est tout."}
+                  ? "Connecte-toi pour retrouver tes parties. Ce que tu viens de jouer sans compte sur ce téléphone rejoint ton compte."
+                  : "Un pseudo et un mot de passe, c'est tout. Tes parties et ta musique de ce téléphone restent à toi."}
               </p>
             </div>
 
