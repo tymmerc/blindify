@@ -202,6 +202,11 @@ export function bootstrapGameState(params: {
   return state;
 }
 
+/** Codes des salles qui ont une partie en memoire (filet anti-blocage). */
+export function liveRoomCodes(): string[] {
+  return Array.from(games.keys());
+}
+
 export function getGameState(roomCode: string): GameState | undefined {
   return games.get(roomCode)?.state;
 }
@@ -699,9 +704,12 @@ export function revealedRoundCeiling(roomCode: string, roomStatus?: string | nul
  * pour que les clients recuperent l'ecran de resultats via /state, sans
  * risquer d'effacer une revanche deja relancee entre-temps.
  */
-export function clearGameIfFinished(roomCode: string): void {
+export function clearGameIfFinished(roomCode: string, only?: GameState): void {
   const ctx = games.get(roomCode);
-  if (ctx && ctx.state.phase === "FINISHED") games.delete(roomCode);
+  if (!ctx || ctx.state.phase !== "FINISHED") return;
+  // `only` : la partie visee par ce nettoyage. Une revanche (autre etat) reste.
+  if (only && ctx.state !== only) return;
+  games.delete(roomCode);
 }
 
 function computeScore(params: {
