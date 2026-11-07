@@ -42,7 +42,7 @@ const memberIds = code => psql(`SELECT rp.user_id FROM room_participants rp JOIN
 // Une salle ouverte par un hote a part (comme le telephone de l'hote le 05/11).
 async function newRoom() {
   const g = await api("/api/auth/guest", { method: "POST", body: { nickname: "Hote" } })
-  const r = await api("/api/rooms", { method: "POST", token: g.data.sessionToken, body: { mode: "friends" } })
+  const r = await api("/api/rooms/create", { method: "POST", token: g.data.sessionToken, body: { mode: "friends" } })
   const code = r.data?.room?.room_code ?? r.data?.room?.roomCode ?? r.data?.roomCode ?? r.data?.room_code
   if (!code) throw new Error(`salle non creee : ${JSON.stringify(r).slice(0, 200)}`)
   return code
@@ -54,7 +54,8 @@ async function joinByLink(page, code, nickname) {
     if (page.__uid && memberIds(code).includes(page.__uid)) return
     await sleep(250)
   }
-  throw new Error(`${nickname} n'est pas entre dans ${code}`)
+  await page.screenshot({ path: path.join(OUT, `echec-${code}.png`) }).catch(() => {})
+  throw new Error(`${nickname} n'est pas entre dans ${code} (${page.url()})`)
 }
 
 const browser = await chromium.launch()
@@ -128,6 +129,10 @@ try {
   await note.waitFor({ timeout: 10000 }).catch(() => {})
   check(await note.isVisible().catch(() => false), "la ligne « Tu es dans Snapchat » s'affiche sur /jouer")
   await shot(sp, "4a-jouer-dans-snapchat")
+  // Comme un vrai joueur : son pseudo d'abord (Snapchat ne connait pas celui de Safari).
+  await sp.locator("input").first().fill(PSEUDO)
+  await sp.getByRole("button", { name: /continuer/i }).click()
+  for (let i = 0; i < 40 && !sp.__uid; i++) await sleep(250)
   const room5 = await newRoom()
   await joinByLink(sp, room5, PSEUDO)
   const snapGuest = sp.__uid
