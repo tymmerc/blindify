@@ -12,6 +12,7 @@ import { openBugReport } from "@/components/BugReportDialog"
 import { MusicLibrary } from "@/components/import/MusicLibrary"
 import { PseudoField } from "@/components/account/PseudoField"
 import { RecentGames } from "@/components/account/RecentGames"
+import { KeepMyInfo } from "@/components/account/KeepMyInfo"
 
 const CORAL = "#c65133"
 
@@ -111,6 +112,12 @@ export function AccountScreen() {
         <Block title="Pseudo">
           <PseudoField initial={pseudo} />
         </Block>
+
+        {user && isGuest && (
+          <Block title="Garder mes infos">
+            <KeepMyInfo pseudo={pseudo} onKept={kept => setData(prev => (prev ? { ...prev, user: kept } : prev))} />
+          </Block>
+        )}
 
         <Block title="Mes dernières parties">
           {data.games === null ? (

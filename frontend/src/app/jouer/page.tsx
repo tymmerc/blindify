@@ -10,6 +10,7 @@ import { DiscordHint } from "@/components/DiscordPlay"
 import { findHostedRoom } from "@/lib/hostedRooms"
 import { ApiError } from "@/lib/apiClient"
 import { createRoute, parsePreferredMode, situationFor, type SituationMode } from "@/lib/playSituations"
+import { InAppBrowserNote } from "@/components/account/InAppBrowserNote"
 
 const NAME_KEY = "blindify_nickname"
 const URL_KEY = "blindify_profile_url"
@@ -236,6 +237,7 @@ export default function EntryWizard() {
             Comment tu t'<em className="font-medium italic text-[#c65133]">appelles</em> ?
           </h1>
           <p className="text-sm text-[#6b573f]">C'est le nom que les autres verront.</p>
+          <InAppBrowserNote className="mx-auto max-w-xs pt-1" />
         </div>
         <div className="mt-10 space-y-6">
           <input
