@@ -47,6 +47,7 @@ import {
 } from "./services/presence";
 import { expireOldInvitations, getAcceptedFriendIds, type ExpiredInvitation } from "./services/social";
 import { registerSocketHandlers, broadcastFriendPresence } from "./socketHandlers";
+import { startStallWatchdog } from "./services/realtimeOrchestrator";
 import { reportGameStartNotifStatus } from "./services/gameStartAnnounce";
 import { logger } from "./utils/logger";
 import { buildAllowedOrigins, matchesAllowedOrigin } from "./utils/origins";
@@ -161,6 +162,8 @@ setInterval(() => {
 const io = initSocket(server, allowedOrigins);
 
 registerSocketHandlers(io, lastKnownUsername);
+// Aucune partie « en cours » qui ne bouge plus (T27).
+startStallWatchdog(io);
 
 app.use(
   helmet({
