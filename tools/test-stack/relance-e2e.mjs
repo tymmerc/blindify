@@ -16,7 +16,7 @@ import { chromium } from "@playwright/test"
 import fs from "node:fs"
 import path from "node:path"
 import { Bot, rng } from "./bot.mjs"
-import { psql, seedUser } from "./testdb.mjs"
+import { forgetOracle, psql, seedUser } from "./testdb.mjs"
 import { APP, newPage, sleep } from "./probe.mjs"
 
 const OUT = process.argv[2] || "/tmp/relance-e2e"
@@ -36,6 +36,9 @@ const RELAUNCH_DELAYS_MS = [0, 0, 1000, 3000, 3000]
 
 /** Remet a zero ce que le bot a vu, pour suivre la partie suivante. */
 function resetBot(bot) {
+  // Les verites sont memorisees par salle et numero de manche : une relance
+  // garde la salle, ses manches changent.
+  forgetOracle(bot.code)
   bot.rounds.clear()
   bot.reveals.clear()
   bot.timeline = {}
@@ -69,6 +72,7 @@ async function followGame(page, bot, n) {
   await until(() => bot.over, ROUNDS * (SECONDS + 15) * 1000, `${tag} : la partie ne s'est pas terminee`)
   ok(`${tag} : ${bot.reveals.size} manches revelees, fin de partie`)
   await page.getByRole("button", { name: "Rejouer" }).waitFor({ timeout: 20000 })
+  await sleep(4000) // le podium s'anime
   await shot(page, `p${n}-3-resultats`)
 }
 
@@ -125,6 +129,14 @@ try {
   const room = psql(`SELECT status FROM multiplayer_rooms WHERE room_code = '${code}'`)
   if (room !== "finished") bad(`salle « ${room} » en base apres la derniere partie, attendu « finished »`)
   else ok("salle « finished » en base apres la derniere partie")
+  // Tom repond juste a chaque manche : ses points comptent dans chaque partie,
+  // relance comprise (une partie sans aucune bonne reponse = reponses perdues).
+  const perGame = psql(`SELECT g.id, count(r.*) FILTER (WHERE r.verdict = 'correct')
+    FROM game_sessions g JOIN game_rounds gr ON gr.session_id = g.id
+    LEFT JOIN round_responses r ON r.round_id = gr.id AND r.user_id = ${Number(tom.id)}
+    WHERE g.room_code = '${code}' GROUP BY g.id ORDER BY g.id`).split("\n").map(l => Number(l.split("|")[1]))
+  if (perGame.some(n => n < ROUNDS - 1)) bad(`bonnes reponses de Tom par partie : ${perGame.join(", ")} (attendu au moins ${ROUNDS - 1} sur ${ROUNDS})`)
+  else ok(`bonnes reponses de Tom par partie, en base : ${perGame.join(", ")}`)
   const stuck = Number(psql(`SELECT count(*) FROM game_sessions WHERE state = 'in_progress'`))
   if (stuck) bad(`${stuck} partie(s) « in_progress » sur la pile`)
   else ok("aucune partie « in_progress » sur la pile")
