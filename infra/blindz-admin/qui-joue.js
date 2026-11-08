@@ -191,6 +191,18 @@
     return cles.map((k) => `${esc(SOURCES[k])} <b class="num">${sources[k]}</b>`).join(" · ") + (unite ? ` <span class="qj-u">${unite}</span>` : "");
   }
 
+  const APPAREILS = { telephone: "téléphone", ordinateur: "ordinateur", tablette: "tablette" };
+  /* Pages d'arrivée (les 4 premières), sites d'origine, appareils. */
+  function lignePages(v) {
+    const top = (dico, n, nom) => Object.entries(dico || {}).sort((a, b) => b[1] - a[1]).slice(0, n)
+      .map(([k, c]) => `${esc(nom ? nom(k) : k)} <b class="num">${c}</b>`).join(" · ");
+    const pages = top(v.pages, 4, (k) => (k === "inconnue" ? "page déjà ouverte" : k));
+    const sites = top(v.sites, 3);
+    const app = top(v.appareils, 3, (k) => APPAREILS[k] || k);
+    return [pages && `<span class="qj-u">arrivée sur</span> ${pages}`, sites && `<span class="qj-u">venus de</span> ${sites}`, app]
+      .filter(Boolean).join(` <span class="qj-u">/</span> `);
+  }
+
   function rendreAvis(a) {
     const quoi = a.type === "bug" ? "bug signalé" : a.type === "mot" ? "message" : a.reponse === "oui" ? "avis : oui" : "avis : pas trop";
     const cl = a.type === "bug" ? "ko" : a.reponse === "oui" || a.type === "mot" ? "ok" : "moyen";
@@ -241,6 +253,7 @@
       [`<b class="num">${v.ont_joue}</b> ont joué`, v.importe_sans_jouer ? `<b class="num">${v.importe_sans_jouer}</b> ont importé sans jouer` : "",
         v.solo ? `<b class="num">${v.solo}</b> solo par lien` : "", v.imports_ko ? `<span class="qj-etat bloquee">${v.imports_ko} import${v.imports_ko > 1 ? "s" : ""} raté${v.imports_ko > 1 ? "s" : ""}</span>` : ""]
         .filter(Boolean).join(" · "),
+      lignePages(v),
     ].filter(Boolean) : [];
     return `<section class="qj-soiree">
       <header><h2>${esc(dateCourte(s.jour))}${s.debut ? ` <span class="qj-plage num">${esc(s.debut)} → ${esc(s.fin)}</span>` : ""}</h2>
