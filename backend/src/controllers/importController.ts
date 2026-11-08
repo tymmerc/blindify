@@ -127,6 +127,15 @@ function isProvider(value: unknown): value is ImportProvider {
   return typeof value === "string" && (PROVIDERS as readonly string[]).includes(value);
 }
 
+/** L'adresse gardee est-elle sur YouTube Music ? (le nom d'hote, jamais une sous-chaine de l'adresse) */
+function isYoutubeMusic(url: string): boolean {
+  try {
+    return new URL(url).hostname === "music.youtube.com";
+  } catch {
+    return false;
+  }
+}
+
 /** Vrai si l'erreur YouTube est partie au joueur (playlist privee, introuvable, API muette...). */
 function failYoutube(res: Response, err: unknown): boolean {
   if (!(err instanceof YoutubeImportError)) return false;
@@ -196,7 +205,7 @@ export const importController = {
       let imageUrl: string | null = null;
       if (parsed.provider === "youtube") {
         // Rien de YouTube n'est garde plus de 30 jours (regles Google) : ni le nom ni l'image de la playlist.
-        label = link.url.includes("music.youtube.com") ? "Playlist YouTube Music" : "Playlist YouTube";
+        label = isYoutubeMusic(link.url) ? "Playlist YouTube Music" : "Playlist YouTube";
         imageUrl = null;
       } else if (parsed.type === "playlist") {
         label = playlists[0]?.name ?? "Playlist";
