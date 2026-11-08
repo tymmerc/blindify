@@ -45,6 +45,9 @@ class Source(unittest.TestCase):
             "https://discord.com/channels/1/2": ("discord_lien", ""),
             "https://123.discordsays.com/?frame_id=x": ("discord_activite", ""),
             "https://blindz.app/faq/": ("interne", ""),
+            # Sous-chaine trompeuse : un autre site, pas Discord ni Bing.
+            "https://discordsays.com.exemple.fr/": ("site", "discordsays.com.exemple.fr"),
+            "https://notbing.com/": ("site", "notbing.com"),
             "https://www.reddit.com/r/x": ("site", "reddit.com"),
             "-": ("direct", ""),
             "": ("direct", ""),

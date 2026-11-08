@@ -76,6 +76,16 @@ def domaine(adresse):
     return hote[4:] if hote.startswith("www.") else hote
 
 
+def sous_domaine_de(hote, nom):
+    """Vrai si hote est nom ou l'un de ses sous-domaines (jamais une simple
+    sous-chaine : « discordsays.com.exemple.fr » n'est pas Discord)."""
+    return hote == nom or hote.endswith("." + nom)
+
+
+def vient_de_discord(referer):
+    return referer not in ("", "-") and sous_domaine_de(domaine(referer), "discordsays.com")
+
+
 def source(referer, page, requete):
     """(source, site) d'une visite d'apres sa premiere page. Fonction pure.
 
@@ -85,7 +95,7 @@ def source(referer, page, requete):
     if "join" in requete or ("code" in requete and "mode" in requete):
         return "invitation", ""
     hote = domaine(referer) if referer not in ("", "-") else ""
-    if page.startswith("/discord") or hote.endswith("discordsays.com"):
+    if page.startswith("/discord") or sous_domaine_de(hote, "discordsays.com"):
         return "discord_activite", ""
     if referer.startswith("android-app://com.google"):
         return "google", ""
@@ -93,13 +103,13 @@ def source(referer, page, requete):
         return "direct", ""
     if re.match(r"^(.+\.)?google\.[a-z.]+$", hote):
         return "google", ""
-    if hote.endswith("bing.com"):
+    if sous_domaine_de(hote, "bing.com"):
         return "bing", ""
     if any(m in hote for m in MOTEURS):
         return "moteur", hote
-    if hote in ("discord.com", "discordapp.com", "discord.gg") or hote.endswith(".discord.com"):
+    if any(sous_domaine_de(hote, d) for d in ("discord.com", "discordapp.com", "discord.gg")):
         return "discord_lien", ""
-    if hote == "blindz.app" or hote.endswith(".blindz.app"):
+    if sous_domaine_de(hote, "blindz.app"):
         return "interne", ""
     return "site", hote
 
@@ -150,7 +160,7 @@ def noter(v, methode, chemin, requete, statut, referer):
     """Ajoute une requete a sa visite (en place : objet local a ce module)."""
     ok = 200 <= statut < 400
     args = parse_qs(requete) if requete else {}
-    if "discordsays.com" in referer:
+    if vient_de_discord(referer):
         v["discord"] = True
     if SONDE.search(chemin):
         v["sonde"] = True
@@ -241,7 +251,7 @@ def cle_de_visite(ip, ua, referer):
     fenetre Discord (frame_id du referer), une par joueur et par lancement.
     Sans frame_id, la requete est « annexe » : elle ne compte pas de visite.
     """
-    if "discordsays.com" in referer:
+    if vient_de_discord(referer):
         fenetre = parse_qs(urlsplit(referer).query).get("frame_id", [""])[0]
         if fenetre:
             return f"discord|{fenetre}", False

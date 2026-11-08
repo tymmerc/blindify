@@ -34,7 +34,7 @@ const D = {
 const A = {
   journaux_du: "2026-10-25T00:00:00Z", journaux_au: "2026-11-08T17:00:00Z",
   jours: { "2026-11-07": { visites: 9, ont_joue: 4, importe_sans_jouer: 1, solo: 0, imports_ko: 2, sources: { google: 3, invitation: 6 },
-             pages: { "/blind-test-spotify/": 3, inconnue: 2, "/<x>/": 1 }, sites: { "reddit.com": 1 }, appareils: { telephone: 7, ordinateur: 2 } },
+             pages: { "/blind-test-spotify/": 3, inconnue: 2, "/<x>/": 1 }, sites: { "forum-exemple": 1 }, appareils: { telephone: 7, ordinateur: 2 } },
            "2026-11-03": { visites: 2, ont_joue: 0, importe_sans_jouer: 0, solo: 0, imports_ko: 0, sources: { direct: 2 } } },
   salles: { "2026-11-07|ABC123": { google: 1, invitation: 2 }, "2026-11-06|ABC123": { direct: 9 } },
 };
@@ -111,7 +111,7 @@ test("rendu : texte des joueurs échappé, jamais de pseudo", () => {
   assert.ok(html.includes("contact laissé"));
   assert.ok(html.includes("2 imports ratés"));
   assert.ok(html.includes("/blind-test-spotify/ <b class=\"num\">3</b>"));
-  assert.ok(html.includes("page déjà ouverte") && html.includes("reddit.com") && html.includes("téléphone"));
+  assert.ok(html.includes("page déjà ouverte") && html.includes("forum-exemple") && html.includes("téléphone"));
   assert.ok(html.includes("/&lt;x&gt;/") && !html.includes("/<x>/"));
 });
 
