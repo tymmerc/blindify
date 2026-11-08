@@ -82,7 +82,8 @@ SELECT json_build_object(
       'id', id, 'mode', mode, 'etat', etat, 'debut', debut, 'fin', fin, 'hote', hote,
       'joueurs', joueurs, 'manches', manches, 'repondues', repondues, 'reponses', reponses,
       'bonnes', bonnes, 'proches', proches, 'devinettes', devinettes, 'devinettes_justes', devinettes_justes,
-      'delai_s', delai_s, 'duree_s', duree_s, 'test', test, 'orpheline', orpheline
+      'delai_s', delai_s, 'duree_s', duree_s, 'test', test, 'orpheline', orpheline,
+      'salle', salle, 'jouees', jouees, 'discord', discord
     ) ORDER BY debut), '[]'::json) FROM (
       SELECT g.id,
              coalesce(g.mode,'?') AS mode,
@@ -104,13 +105,46 @@ SELECT json_build_object(
              CASE WHEN g.ended_at IS NOT NULL THEN EXTRACT(EPOCH FROM g.ended_at - g.started_at)::int END AS duree_s,
              -- Partie de test, partie orpheline (voir en tete de requete).
              (g.id IN (SELECT id FROM parties_test)) AS test,
-             (g.id IN (SELECT id FROM parties_orphelines)) AS orpheline
+             (g.id IN (SELECT id FROM parties_orphelines)) AS orpheline,
+             -- Onglet « Qui joue » (T29) : le code relie la partie aux
+             -- arrivees lues dans les journaux nginx (infra/visites/arrivees.py) ;
+             -- jouees < manches = partie arretee en route.
+             g.room_code AS salle,
+             (SELECT count(*) FROM game_rounds gr WHERE gr.session_id=g.id)::int AS jouees,
+             -- Activite Discord : seulement tant que la salle existe (le
+             -- menage les retire), les journaux prennent le relais ensuite.
+             EXISTS (SELECT 1 FROM multiplayer_rooms m WHERE m.session_id=g.id AND m.discord_instance_id IS NOT NULL) AS discord
       FROM game_sessions g LEFT JOIN users u ON u.id=g.host_user_id
       WHERE g.started_at IS NOT NULL) s),
 
   -- Qui a joué quoi : sert à la fidélité par période.
   'participations', (SELECT coalesce(json_agg(json_build_object('s', p.session_id, 'u', p.user_id, 'score', p.score)), '[]'::json)
       FROM game_participants p),
+
+  -- Onglet « Qui joue » (T29) : les joueurs vus en partie ou qui ont
+  -- importé une playlist, sans pseudo. « Nouveau » se calcule dans le
+  -- navigateur (première partie dans la soirée). liens : playlists importées,
+  -- jamais leur nom ni leur adresse.
+  'joueurs_infos', (SELECT coalesce(json_agg(json_build_object(
+      'u', u.id, 'cree', to_char(u.created_at,'YYYY-MM-DD"T"HH24:MI:SS'),
+      'compte', u.password_hash IS NOT NULL,
+      'liens', (SELECT count(*) FROM imported_links l WHERE l.user_id=u.id)::int,
+      'premier_lien', (SELECT to_char(min(l.created_at),'YYYY-MM-DD"T"HH24:MI:SS') FROM imported_links l WHERE l.user_id=u.id),
+      'test', u.id IN (SELECT id FROM comptes_test)
+    ) ORDER BY u.id), '[]'::json) FROM users u
+    WHERE EXISTS (SELECT 1 FROM game_participants p WHERE p.user_id=u.id)
+       OR EXISTS (SELECT 1 FROM imported_links l WHERE l.user_id=u.id)),
+
+  -- Avis de fin de partie (game_feedback) : oui / pas trop, et le mot
+  -- laissé avec (même ligne, colonne message, PR #118). Le contact n'est
+  -- jamais copié ici : seulement s'il a été laissé.
+  'avis', (SELECT coalesce(json_agg(json_build_object(
+      'id', f.id, 'type', f.kind, 'reponse', f.answer, 'message', f.message, 'mode', f.mode,
+      's', f.session_id, 'salle', f.game_code,
+      'le', to_char(f.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS'),
+      'contact', f.contact IS NOT NULL AND f.contact <> '',
+      'test', f.session_id IS NOT NULL AND f.session_id IN (SELECT id FROM parties_test)
+    ) ORDER BY f.created_at), '[]'::json) FROM game_feedback f),
 
   -- Les morceaux : combien de fois joués, combien de fois trouvés. Le vrai
   -- baromètre de difficulté, et ce que personne ne trouve jamais.
