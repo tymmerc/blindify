@@ -49,6 +49,9 @@ async function createLinksSchema(): Promise<void> {
 export function normalizeLinkUrl(raw: string): string {
   try {
     const u = new URL(raw.trim());
+    // Une playlist YouTube tient dans ?list= : sans lui, toutes les playlists d'un joueur ne feraient qu'une carte.
+    const list = u.searchParams.get("list");
+    if (list && /^(www\.|m\.|music\.)?youtube\.com$/i.test(u.hostname)) return `youtube.com/playlist?list=${list}`;
     u.hash = "";
     u.search = "";
     return `${u.hostname.replace(/^www\./, "")}${u.pathname.replace(/\/+$/, "")}`.toLowerCase();

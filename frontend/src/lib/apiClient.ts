@@ -1,5 +1,6 @@
 import { API_BASE_URL } from "./config"
 import type { FeedbackPayload } from "./feedback"
+import type { YoutubeImportReport } from "./youtubeImport"
 import type {
   GameHistoryEntry,
   MultiplayerParticipant,
@@ -479,7 +480,7 @@ export const clientApi = {
     return request("/api/games/history")
   },
   async importPlaylists(url: string): Promise<{
-    provider: "spotify" | "deezer"
+    provider: "spotify" | "deezer" | "youtube"
     type: "user" | "playlist"
     linkId: number | null
     playlists: Array<{ id: string; name: string; trackCount: number; cover: string | null }>
@@ -498,7 +499,7 @@ export const clientApi = {
       body: JSON.stringify({ provider, playlistId }),
     })
   },
-  async importSyncAll(provider: string, playlistIds: string[], maxTracksPerPlaylist?: number, linkId?: number | null): Promise<{ synced: number; failed: number; total: number }> {
+  async importSyncAll(provider: string, playlistIds: string[], maxTracksPerPlaylist?: number, linkId?: number | null): Promise<{ synced: number; failed: number; total: number; youtube?: YoutubeImportReport }> {
     return request("/api/import/sync-all", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
