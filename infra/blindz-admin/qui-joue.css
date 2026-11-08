@@ -1,0 +1,56 @@
+/* Onglet « Qui joue » (T29) : carnet de soirées. Variables de index.html.
+ * Filets plutôt que cartes, chiffres en mono, couleur réservée aux alertes. */
+.qj { max-width: 760px; }
+.qj .num, .qj b.num { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--txt); }
+.qj-u { color: var(--txt-3); font-size: 12px; }
+.qj p { margin: 0; }
+
+.qj-haut { padding-bottom: 14px; margin-bottom: 4px; border-bottom: 1px solid var(--line-2); display: grid; gap: 10px; }
+.qj-totaux { width: 100%; border-collapse: collapse; font-size: 13px; }
+.qj-totaux th, .qj-totaux td { padding: 5px 0; border-bottom: 1px solid var(--line); text-align: right; background: none; }
+.qj-totaux thead th { font-family: "IBM Plex Mono", monospace; font-size: 10px; text-transform: uppercase; letter-spacing: .1em; color: var(--txt-3); font-weight: 500; }
+.qj-totaux th[scope="row"] { text-align: left; font-weight: 400; color: var(--txt-2); }
+.qj-totaux td { font-family: "IBM Plex Mono", monospace; width: 22%; }
+.qj-totaux tr:last-child th, .qj-totaux tr:last-child td { border-bottom: 0; }
+
+.qj-soiree { padding: 18px 0 10px; border-bottom: 1px solid var(--line-2); }
+.qj-soiree header { display: grid; gap: 3px; margin-bottom: 8px; }
+.qj-soiree h2 { font-size: 1.02rem; text-transform: capitalize; }
+.qj-plage { font-family: "IBM Plex Mono", monospace; font-size: 12px; font-weight: 500; color: var(--txt-3); text-transform: none; margin-left: 6px; }
+.qj-titre { color: var(--txt); }
+.qj-v { color: var(--txt-2); font-size: 13px; }
+.qj-v b.num { color: var(--txt); }
+
+.qj-partie { border-top: 1px solid var(--line); }
+.qj-partie summary { list-style: none; display: grid; grid-template-columns: 3.4em 1fr auto; gap: 8px; align-items: baseline;
+  padding: 9px 0; cursor: pointer; min-height: 44px; }
+.qj-partie summary::-webkit-details-marker { display: none; }
+.qj-partie > summary:hover .qj-mode { color: var(--amber); }
+.qj-partie[open] > summary .qj-mode { color: var(--amber); }
+.qj-h { color: var(--txt-3); font-size: 12.5px; font-weight: 500 !important; }
+.qj-mode { color: var(--txt); }
+.qj-resume { color: var(--txt-2) !important; font-size: 12.5px; font-weight: 500 !important; white-space: nowrap; }
+.qj-detail { padding: 0 0 12px 3.4em; display: grid; gap: 4px; font-size: 13px; color: var(--txt-2); margin-left: 8px; }
+.qj-detail ul, .qj-avis-soiree { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 4px; }
+.qj-avis-soiree { margin: 8px 0 4px; }
+.qj-avis { font-size: 13px; color: var(--txt-2); }
+.qj-serie-liste { padding-left: 3.4em; margin-left: 8px; padding-bottom: 6px; }
+.qj-serie-liste .qj-partie summary { min-height: 40px; padding: 6px 0; }
+@media (max-width: 480px) { .qj-serie-liste { padding-left: 12px; margin-left: 0; } }
+
+.qj-etat, .qj-pastille { font-family: "IBM Plex Mono", monospace; font-size: 10px; text-transform: uppercase; letter-spacing: .06em; white-space: nowrap; }
+.qj-etat { color: var(--warn); margin-left: 4px; }
+.qj-etat.bloquee, .qj-etat.abandon { color: var(--ko); }
+.qj-pastille { margin-right: 6px; color: var(--txt-3); }
+.qj-pastille.ok { color: var(--ok); }
+.qj-pastille.ko { color: var(--ko); }
+.qj-pastille.moyen { color: var(--warn); }
+
+.qj-plus { margin: 16px 0; background: none; border: 1px solid var(--line-2); color: var(--txt-2); border-radius: 6px;
+  padding: 9px 14px; font: inherit; font-size: 13px; cursor: pointer; min-height: 44px; }
+.qj-plus:hover { color: var(--amber); border-color: var(--amber); }
+
+@media (max-width: 480px) {
+  .qj-detail { padding-left: 0; margin-left: 0; }
+  .qj-plage { display: block; margin: 2px 0 0; }
+}

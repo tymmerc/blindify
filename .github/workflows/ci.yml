@@ -176,7 +176,7 @@ jobs:
       # Sans base : la lecture SQL est simulee.
       - name: Tester la cible de l'ensemencement des outils E2E
         if: matrix.node == 22
-        run: node --test tools/seed-library.test.mjs tools/salles-de-test.test.mjs
+        run: node --test tools/seed-library.test.mjs tools/salles-de-test.test.mjs infra/blindz-admin/qui-joue.test.mjs
       # Filtre du rapport de visites (infra/visites/anonymiser.py) : adresses
       # tronquees avant GoAccess, VPS retire. python3 seulement, pas de base.
       - name: Tester l'anonymisation du rapport de visites
