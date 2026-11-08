@@ -1,11 +1,12 @@
 import { Router } from "express";
 import rateLimit from "express-rate-limit";
-import { parseFeedback } from "../utils/feedbackValidation";
+import { parseFeedback, parseFollowUp } from "../utils/feedbackValidation";
 import { ipRateLimitKey } from "../utils/rateLimitKey";
 import { saveFeedback } from "../services/feedback";
 import { ok, fail } from "../utils/response";
 import { logger } from "../utils/logger";
 import { notifyWrittenFeedback } from "../services/feedbackNotifier";
+import { saveFollowUp, signFollowUp, verifyFollowUp } from "../services/feedbackFollowUp";
 
 // Par adresse IP (une IPv6 compte pour son /64, voir utils/rateLimitKey.ts).
 // Une soiree se joue derriere UNE box : douze joueurs qui donnent leur avis
@@ -81,11 +82,13 @@ export function createFeedbackRouter({
       // Jamais le texte du message ni le contact dans le journal : il peut
       // contenir n'importe quoi, et le contact est une donnee personnelle.
       logger.info("feedback_saved", { id, kind: parsed.value.kind, mode: parsed.value.mode });
-      ok(res, { received: true }, 201);
-      const { kind, mode, message, contact } = parsed.value;
+      const { kind, mode, message, contact, answer } = parsed.value;
+      // Un avis sans texte rend son jeton : le joueur peut ajouter un mot
+      // ensuite, sur la meme ligne (POST /api/feedback/suite, T32).
+      const followUp = kind === "avis" && !message ? signFollowUp(id) : undefined;
+      ok(res, { received: true, ...(followUp ? { followUp } : {}) }, 201);
       if (message) {
-        const e2eKey = process.env.E2E_BYPASS_KEY;
-        notifyWrittenFeedback({ kind, mode, message, contact }, Boolean(e2eKey) && req.headers["x-e2e-key"] === e2eKey);
+        notifyWrittenFeedback({ kind, mode, message, contact, ...(answer ? { answer } : {}) }, isE2e(req.headers["x-e2e-key"]));
       }
     } catch (err) {
       logger.error("feedback_failed", { error: err instanceof Error ? err.message : String(err) });
@@ -93,7 +96,44 @@ export function createFeedbackRouter({
     }
   });
 
+  // Le mot ajoute apres Oui ou Pas trop (T32). Derriere les memes limites
+  // que l'envoi de l'avis : router.use ci-dessus vaut pour toutes les routes.
+  router.post("/suite", async (req, res) => {
+    const parsed = parseFollowUp(req.body);
+    if (!parsed.ok) {
+      fail(res, parsed.code, parsed.message, 400);
+      return;
+    }
+    const id = verifyFollowUp(parsed.value.token);
+    if (id === null) {
+      fail(res, "invalid_token", "Avis introuvable.", 400);
+      return;
+    }
+    try {
+      const saved = await saveFollowUp(id, parsed.value.message);
+      if (!saved) {
+        // Deja un texte, avis trop ancien ou efface : on ne remplace rien.
+        fail(res, "follow_up_closed", "Cet avis a déjà son message.", 409);
+        return;
+      }
+      logger.info("feedback_follow_up_saved", { id, mode: saved.mode });
+      ok(res, { received: true }, 200);
+      notifyWrittenFeedback(
+        { kind: "avis", mode: saved.mode, message: parsed.value.message, contact: null, answer: saved.answer },
+        isE2e(req.headers["x-e2e-key"])
+      );
+    } catch (err) {
+      logger.error("feedback_follow_up_failed", { error: err instanceof Error ? err.message : String(err) });
+      fail(res, "feedback_failed", "Impossible d'enregistrer ton retour pour l'instant.", 500);
+    }
+  });
+
   return router;
+}
+
+function isE2e(header: unknown): boolean {
+  const e2eKey = process.env.E2E_BYPASS_KEY;
+  return Boolean(e2eKey) && header === e2eKey;
 }
 
 export default createFeedbackRouter();

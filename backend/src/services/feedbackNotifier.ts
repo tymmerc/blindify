@@ -15,7 +15,7 @@
  *   messages (ils sont deja en base, onglet Retours du tableau de bord).
  */
 import { logger } from "../utils/logger";
-import type { FeedbackKind, FeedbackMode } from "../utils/feedbackValidation";
+import type { FeedbackAnswer, FeedbackKind, FeedbackMode } from "../utils/feedbackValidation";
 import { loadNotifConfig, parisTime, resendTestBase, sendNotifMail, type NotifConfig, type NotifMail, type SendResult } from "./gameStartMail";
 
 export const FEEDBACK_MAIL_WINDOW_MS = 10 * 60_000;
@@ -28,6 +28,8 @@ export type WrittenFeedback = {
   mode: FeedbackMode;
   message: string;
   contact: string | null;
+  /** Oui ou Pas trop, pour un avis explique (T32). */
+  answer?: FeedbackAnswer | null;
   at: number;
 };
 
@@ -44,12 +46,20 @@ const MODE_LABELS: Record<FeedbackMode, string> = {
 const KIND_LABELS: Record<FeedbackKind, string> = {
   mot: "message",
   bug: "bug signalé",
-  avis: "avis « pas trop » expliqué",
+  avis: "avis expliqué",
 };
+
+const ANSWER_LABELS: Record<FeedbackAnswer, string> = {
+  oui: "avis « oui » expliqué",
+  pas_trop: "avis « pas trop » expliqué",
+};
+
+const kindLabel = (item: WrittenFeedback): string =>
+  (item.kind === "avis" && item.answer ? ANSWER_LABELS[item.answer] : KIND_LABELS[item.kind]) ?? item.kind;
 
 function describe(item: WrittenFeedback): string[] {
   return [
-    `${parisTime(item.at)} · ${MODE_LABELS[item.mode] ?? item.mode} · ${KIND_LABELS[item.kind] ?? item.kind}`,
+    `${parisTime(item.at)} · ${MODE_LABELS[item.mode] ?? item.mode} · ${kindLabel(item)}`,
     item.message,
     item.contact ? `Contact laissé : ${item.contact}` : "Pas de contact laissé.",
   ];
