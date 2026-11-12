@@ -97,6 +97,15 @@ INSERT INTO imported_links (user_id, url, normalized_url, provider, times_played
   (5, 'u3', 'n3', NULL,      7);
 
 INSERT INTO user_stats (user_id, total_games) VALUES (1, 5), (3, 50);
+
+-- Onglet « Qui joue » (T29) : code de salle et salle Discord sur 101, deux
+-- avis (un vrai avec un mot et un contact, un sur la partie de test 102).
+UPDATE game_sessions SET room_code = 'ABC123' WHERE id = 101;
+INSERT INTO multiplayer_rooms (room_code, host_user_id, session_id, status, mode, discord_instance_id)
+  VALUES ('ABC123', 1, 101, 'finished', 'friends', 'i-123');
+INSERT INTO game_feedback (kind, answer, message, mode, session_id, game_code, contact, created_at) VALUES
+  ('avis', 'oui',      'trop bien', 'friends', 101, 'ABC123', 'a@exemple.fr', '2026-10-01 20:21+00'),
+  ('avis', 'pas_trop', NULL,        'friends', 102, NULL,     NULL,           '2026-10-01 21:11+00');
 SQL
 )"
 
@@ -140,6 +149,25 @@ egal "$JSON" '.totaux_reels' \
 
 egal "$JSON" '.exclus' '{"comptes_test":7,"parties_test":2,"orphelines":1}' \
   "exclus : comptes de test, parties de test, orphelines"
+
+# Onglet « Qui joue » : salle, manches jouees, salle Discord.
+egal "$JSON" '[.sessions[] | select(.id == 101 or .id == 103) | [.id, .salle, .jouees, .discord]]' \
+  '[[101,"ABC123",2,true],[103,null,0,false]]' \
+  "parties : code de salle, manches jouees, Discord"
+
+# Joueurs vus en partie ou avec une playlist (5 n'a qu'un lien), sans pseudo.
+egal "$JSON" '[.joueurs_infos[] | [.u, .liens, .test, .compte]]' \
+  '[[1,1,false,false],[2,0,false,true],[3,1,true,false],[4,0,true,false],[5,1,true,false],[6,0,false,false],[3339,0,true,false]]' \
+  "joueurs : liens, test, compte"
+egal "$JSON" '[.joueurs_infos[] | has("pseudo")] | any' 'false' \
+  "joueurs : aucun pseudo"
+
+# Avis : le mot laisse, le contact jamais copie (seulement s'il existe), la
+# partie de test marquee.
+egal "$JSON" '[.avis[] | [.reponse, .message, .contact, .test, .s, .le]]' \
+  '[["oui","trop bien",true,false,101,"2026-10-01T20:21:00"],["pas_trop",null,false,true,102,"2026-10-01T21:11:00"]]' \
+  "avis : reponse, mot, contact laisse, test"
+if grep -q 'a@exemple.fr' <<< "$JSON"; then ko "avis : adresse du contact absente du JSON"; else ok "avis : adresse du contact absente du JSON"; fi
 
 echo
 if [ "$ECHECS" -gt 0 ]; then
