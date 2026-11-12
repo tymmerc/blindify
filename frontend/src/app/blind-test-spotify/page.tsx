@@ -92,8 +92,8 @@ export default function Page() {
           Certains blind tests « Spotify » demandent de se connecter à son compte et génèrent un quiz sur ton propre
           historique. D'autres proposent des packs par genre ou par décennie, les mêmes pour tout le monde.
           Ici, le principe est différent : chacun ramène ses playlists, la partie mélange celles de tous les joueurs
-          présents, et en plus du titre et de l'artiste, il faut deviner <strong>qui a mis quoi</strong>. C'est là que
-          ça devient un jeu de soirée et pas un quiz.
+          présents, et à partir de trois joueurs, en plus du titre et de l'artiste, il faut deviner{" "}
+          <strong>qui a mis quoi</strong>. C'est là que ça devient un jeu de soirée et pas un quiz.
         </p>
         <p>
           Le résultat dépend entièrement de la table : une playlist de rap, une de variété et une d'électro donnent une
@@ -107,6 +107,8 @@ export default function Page() {
           sur un seul téléphone à doigt posé, ou à distance avec un code. Le détail est dans le guide{" "}
           <Link href="/blind-test-soiree/">organiser un blind test en soirée</Link>, et si tes potes sont sur Deezer,
           le guide <Link href="/blind-test-deezer/">blind test avec Deezer</Link> explique la même chose de leur côté.
+          Et pour voir aussi comment faire avec l'appli Spotify seule, quelqu'un en animateur, il y a le tuto{" "}
+          <Link href="/comment-faire-un-blind-test-sur-spotify/">comment faire un blind test sur Spotify</Link>.
         </p>
       </Section>
 
