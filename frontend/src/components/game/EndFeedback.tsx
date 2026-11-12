@@ -7,16 +7,20 @@ import {
   buildBugPayload,
   FEEDBACK_MESSAGE_MAX,
   feedbackFailure,
+  followUpText,
   sendFeedback,
+  sendFollowUp,
   type FeedbackAnswer,
   type FeedbackContext,
   type FeedbackFailure,
 } from "@/lib/feedback"
 import { claimGameEnd } from "@/lib/feedbackPrompt"
 import { StudentNote } from "./StudentNote"
+import { DiscordServerLine } from "./DiscordServerLine"
 
 // Petit bloc discret sous les resultats d'une partie : un avis en un geste,
-// et un lien pour decrire un bug. Les reponses vont dans la table
+// suivi d'un champ facultatif pour dire pourquoi (T32), et un lien pour
+// decrire un bug. Les reponses vont dans la table
 // game_feedback, lues par Tym dans l'onglet Retours du tableau de bord.
 //
 // Une seule fois par appareil, a la fin de la 2e partie, le bloc laisse la
@@ -29,10 +33,7 @@ const ANSWERS: ReadonlyArray<{ value: FeedbackAnswer; label: string }> = [
   { value: "pas_trop", label: "Pas trop" },
 ]
 
-const THANKS: Record<FeedbackAnswer, string> = {
-  oui: "Merci, c'est noté.",
-  pas_trop: "Merci de le dire. Si un truc a coincé, raconte-nous juste en dessous.",
-}
+const THANKS = "Merci, c'est noté."
 
 const FAILURE_TEXT: Record<FeedbackFailure, string> = {
   failed: "Ça n'est pas parti. Réessaie dans un instant.",
@@ -84,17 +85,31 @@ export function EndFeedback({ context, className = "" }: EndFeedbackProps) {
           <BugReport context={context} />
         </>
       )}
+      <DiscordServerLine className="mt-3" />
     </section>
   )
 }
 
+// Apres Oui ou Pas trop, un champ s'ouvre tout de suite (T32, demande de Tym
+// du 07/11) : l'avis est deja parti, le texte vient s'y ajouter s'il y en a un.
+const FOLLOW_UP: Record<FeedbackAnswer, { label: string; placeholder: string }> = {
+  oui: { label: "Qu'est-ce qui t'a plu ?", placeholder: "Par exemple : jouer sur nos playlists" },
+  pas_trop: { label: "Qu'est-ce qui a coincé ?", placeholder: "Par exemple : les extraits trop courts" },
+}
+
+const FOLLOW_UP_DONE = "Merci, c'est bien arrivé."
+
 function QuickAnswer({ context, titleId }: { context: FeedbackContext; titleId: string }) {
   const [chosen, setChosen] = useState<FeedbackAnswer | null>(null)
   const [status, setStatus] = useState<SendStatus>("idle")
+  // Pas de jeton rendu (backend plus ancien) : on ne propose pas le champ.
+  const [canWrite, setCanWrite] = useState(true)
   // Leve des le premier clic, avant que React ait redessine les boutons :
   // deux clics tres rapproches n'envoient qu'un avis. Reste leve apres un
   // envoi reussi (un seul avis par ecran), retombe apres un echec.
   const guard = useRef(false)
+  // L'envoi de l'avis en cours : le texte l'attend s'il est tape tres vite.
+  const pending = useRef<Promise<string | null> | null>(null)
   const locked = status === "sending" || status === "sent"
 
   const answer = async (value: FeedbackAnswer) => {
@@ -102,14 +117,22 @@ function QuickAnswer({ context, titleId }: { context: FeedbackContext; titleId: 
     guard.current = true
     setChosen(value)
     setStatus("sending")
+    const sending = sendFeedback(buildAnswerPayload(context, value))
+    pending.current = sending
     try {
-      await sendFeedback(buildAnswerPayload(context, value))
+      const token = await sending
+      setCanWrite(token !== null)
       setStatus("sent")
     } catch (err) {
       guard.current = false
+      pending.current = null
       setStatus(feedbackFailure(err))
     }
   }
+
+  // Le champ s'ouvre au clic, sans attendre la reponse du serveur : le focus
+  // reste dans le geste du joueur (clavier ouvert sur telephone).
+  const showForm = chosen !== null && locked && canWrite
 
   return (
     <div>
@@ -131,10 +154,101 @@ function QuickAnswer({ context, titleId }: { context: FeedbackContext; titleId: 
         </div>
       </div>
       <p aria-live="polite" className="mt-1 min-h-[1.25rem] text-xs text-[#6b573f]">
-        {status === "sent" && chosen ? THANKS[chosen] : null}
+        {status === "sent" ? THANKS : null}
         {isFailure(status) ? <span className="font-semibold text-[#9c2f1d]">{FAILURE_TEXT[status]}</span> : null}
       </p>
+      {showForm && chosen ? <FollowUpForm answer={chosen} pending={pending} /> : null}
     </div>
+  )
+}
+
+function FollowUpForm({ answer, pending }: { answer: FeedbackAnswer; pending: { current: Promise<string | null> | null } }) {
+  const fieldId = useId()
+  const hintId = useId()
+  const fieldRef = useRef<HTMLTextAreaElement>(null)
+  const doneRef = useRef<HTMLParagraphElement>(null)
+  const [text, setText] = useState("")
+  const [status, setStatus] = useState<SendStatus>("idle")
+  // Un double Envoyer ne fait qu'un envoi.
+  const guard = useRef(false)
+  const { label, placeholder } = FOLLOW_UP[answer]
+
+  useEffect(() => {
+    // preventScroll : dans l'iframe Discord, le defilement automatique fait
+    // sauter tout l'ecran de resultats.
+    fieldRef.current?.focus({ preventScroll: true })
+  }, [])
+
+  useEffect(() => {
+    if (status === "sent") doneRef.current?.focus()
+  }, [status])
+
+  const message = followUpText(text)
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    if (guard.current || !message) return
+    guard.current = true
+    setStatus("sending")
+    try {
+      const token = await pending.current
+      if (!token) throw new Error("avis sans jeton")
+      await sendFollowUp(token, message)
+      setStatus("sent")
+    } catch (err) {
+      guard.current = false
+      setStatus(feedbackFailure(err))
+    }
+  }
+
+  if (status === "sent") {
+    return (
+      <p ref={doneRef} tabIndex={-1} className="mt-1 flex items-center gap-1.5 text-sm font-semibold text-[#2e2014] outline-none">
+        <Check aria-hidden className="h-4 w-4 text-[#7d9471] animate-in zoom-in-50 spin-in-12 duration-300" />
+        {FOLLOW_UP_DONE}
+      </p>
+    )
+  }
+
+  return (
+    <form onSubmit={submit} className="mb-2 space-y-2 animate-in slide-in-from-top-1 duration-200">
+      <label htmlFor={fieldId} className="block text-sm font-semibold">
+        {label}
+      </label>
+      <textarea
+        ref={fieldRef}
+        id={fieldId}
+        value={text}
+        onChange={event => setText(event.target.value)}
+        onKeyDown={event => {
+          // Ctrl+Entree ou Cmd+Entree envoie, Entree seule va a la ligne.
+          if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+            event.preventDefault()
+            event.currentTarget.form?.requestSubmit()
+          }
+        }}
+        maxLength={FEEDBACK_MESSAGE_MAX}
+        rows={2}
+        aria-describedby={hintId}
+        placeholder={placeholder}
+        className="w-full resize-none rounded-md border-[1.5px] border-[rgba(46,32,20,.35)] bg-[#efe5d0] px-3 py-2 text-base text-[#2e2014] outline-none placeholder:italic placeholder:text-[#8a7558] focus:border-[#c65133] sm:text-sm"
+      />
+      <p id={hintId} className="flex justify-between gap-3 text-[11px] text-[#6b573f]">
+        <span>Facultatif. Ton avis est déjà compté, ce mot s&apos;y ajoute, sans ton pseudo.</span>
+        <span className="shrink-0 tabular-nums">{text.length}/{FEEDBACK_MESSAGE_MAX}</span>
+      </p>
+      {isFailure(status) ? <p role="alert" className="text-xs font-semibold text-[#9c2f1d]">{FAILURE_TEXT[status]}</p> : null}
+      <div className="flex justify-end">
+        <button
+          type="submit"
+          disabled={status === "sending" || !message}
+          className="inline-flex min-h-[40px] items-center gap-1.5 rounded-md border-[1.5px] border-[#2e2014] bg-[#c65133] px-4 text-sm font-bold text-[#f4ecdb] shadow-[2px_2px_0_#2e2014] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_#2e2014] disabled:opacity-50"
+        >
+          {status === "sending" ? <Loader2 aria-hidden className="h-3.5 w-3.5 animate-spin" /> : null}
+          Envoyer
+        </button>
+      </div>
+    </form>
   )
 }
 

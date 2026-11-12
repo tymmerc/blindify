@@ -455,11 +455,20 @@ export const clientApi = {
     })
   },
   /** Retour de fin de partie (avis rapide ou bug), voir lib/feedback.ts. */
-  async sendFeedback(payload: FeedbackPayload, signal?: AbortSignal): Promise<{ received: boolean }> {
-    return request<{ received: boolean }>("/api/feedback", {
+  async sendFeedback(payload: FeedbackPayload, signal?: AbortSignal): Promise<{ received: boolean; followUp?: string }> {
+    return request<{ received: boolean; followUp?: string }>("/api/feedback", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
+      signal,
+    })
+  },
+  /** Le mot ajoute apres Oui ou Pas trop, sur le meme avis (T32). */
+  async sendFeedbackFollowUp(token: string, message: string, signal?: AbortSignal): Promise<{ received: boolean }> {
+    return request<{ received: boolean }>("/api/feedback/suite", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token, message }),
       signal,
     })
   },

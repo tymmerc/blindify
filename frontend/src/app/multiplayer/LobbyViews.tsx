@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { ConfettiBurst } from "@/components/game/ConfettiBurst"
 import { InstallApp } from "@/components/InstallApp"
 import { EndFeedback } from "@/components/game/EndFeedback"
+import { DiscordServerLine } from "@/components/game/DiscordServerLine"
 import type { GameModeConfig } from "@/lib/gameModes"
 import type { FeedbackContext } from "@/lib/feedback"
 
@@ -542,7 +543,8 @@ export function ResultsView({
         </Button>
       </div>
 
-      {feedback ? <EndFeedback context={feedback} /> : null}
+      {/* Ecran partage (autour d'une table) : pas d'avis, mais le lien du serveur. */}
+      {feedback ? <EndFeedback context={feedback} /> : <DiscordServerLine className="mx-auto max-w-sm text-center" />}
     </section>
   )
 }

@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest"
 
 vi.mock("@/components/game/ConfettiBurst", () => ({ ConfettiBurst: () => null }))
 vi.mock("@/components/InstallApp", () => ({ InstallApp: () => null }))
-vi.mock("@/components/game/EndFeedback", () => ({ EndFeedback: () => null }))
+vi.mock("@/components/game/EndFeedback", () => ({ EndFeedback: () => <div data-testid="end-feedback" /> }))
 vi.mock("@/lib/api", () => ({ api: { roomRounds: vi.fn().mockResolvedValue({ rounds: [], players: [] }) } }))
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }))
 
@@ -44,5 +44,19 @@ describe("ResultsView", () => {
   it("sans fenetre de musique (streamer), pas de bouton", () => {
     render(<ResultsView leaderboard={leaderboard} tracks={[]} currentUserId={1} onReplay={() => {}} isHost />)
     expect(screen.queryByRole("button", { name: /changer la musique/i })).not.toBeInTheDocument()
+  })
+
+  // 08/11 : le lien du serveur Discord est aussi sur l'ecran partage d'une
+  // partie autour d'une table, ou il n'y a pas d'avis a donner.
+  it("ecran partage sans avis : montre quand meme le lien du serveur Discord", () => {
+    render(<ResultsView leaderboard={leaderboard} tracks={[]} currentUserId={1} onReplay={() => {}} isHost feedback={null} />)
+    expect(screen.queryByTestId("end-feedback")).not.toBeInTheDocument()
+    expect(screen.getByRole("link", { name: /serveur Discord de Blindz/ })).toHaveAttribute("href", "https://discord.gg/8pyAtVDFzU")
+  })
+
+  it("avec un avis a donner, le lien vient du bloc d'avis (pas de doublon)", () => {
+    render(<ResultsView leaderboard={leaderboard} tracks={[]} currentUserId={2} onReplay={() => {}} isHost={false} feedback={{ mode: "friends", gameCode: "AB12CD" }} />)
+    expect(screen.getByTestId("end-feedback")).toBeInTheDocument()
+    expect(screen.queryByRole("link", { name: /serveur Discord de Blindz/ })).not.toBeInTheDocument()
   })
 })
