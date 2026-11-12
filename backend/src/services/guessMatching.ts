@@ -15,8 +15,24 @@ const NORMALIZE_SUBS: Record<string, string> = {
   "&": "and",
 };
 
-function normalize(text: string): string {
-  const folded = text
+// Apostrophes droite, typographiques, accent grave et apostrophe modificative.
+const APOSTROPHE_CHARS = "'\u2019\u2018`\u00b4\u02bc";
+const APOSTROPHES = new RegExp(`[${APOSTROPHE_CHARS}]`, "g");
+// Sans drapeau g : .test() sur une regex globale garde lastIndex d'un appel a l'autre.
+const HAS_APOSTROPHE = new RegExp(`[${APOSTROPHE_CHARS}]`);
+
+/**
+ * Deux lectures d'une apostrophe. "split" (historique) la remplace par un
+ * espace : "nothing's" -> "nothing s". "join" colle les morceaux :
+ * "nothing's" -> "nothings", "l'amour" -> "lamour". Sans "join", le « s » ou
+ * le « t » isole devait retrouver un mot tape et « nothing new » etait refuse
+ * pour « Nothing's New » (partie 784, 07/11/2026).
+ */
+type ApostropheMode = "split" | "join";
+
+function normalize(text: string, mode: ApostropheMode = "split"): string {
+  const source = mode === "join" ? text.replace(APOSTROPHES, "") : text;
+  const folded = source
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
@@ -26,8 +42,8 @@ function normalize(text: string): string {
 
 const STOP_WORDS = new Set(["feat", "featuring", "feat.", "ft", "ft.", "with", "and", "x", "feat,", "featuring,"]);
 
-function tokenize(text: string): string[] {
-  return normalize(text)
+function tokenize(text: string, mode: ApostropheMode = "split"): string[] {
+  return normalize(text, mode)
     .split(" ")
     .filter(Boolean)
     .filter(word => !STOP_WORDS.has(word));
@@ -55,6 +71,26 @@ function isWordMatch(word: string, candidates: string[]): boolean {
   return candidates.some(candidate => {
     if (Math.abs(candidate.length - word.length) > tolerance) return false;
     return levenshteinDistance(word, candidate) <= tolerance;
+  });
+}
+
+/**
+ * La saisie valide-t-elle cette variante (titre ou artiste) ? Egalite apres
+ * normalisation, ou chaque mot de la variante retrouve un mot tape (fautes
+ * tolerees par isWordMatch). Chaque lecture de l'apostrophe est essayee a part,
+ * la meme des deux cotes : "split" garde le comportement d'avant
+ * (« rock n roll » pour « Rock'n'Roll »), "join" accepte « dont » pour « Don't ».
+ */
+function matchesVariant(input: string, variant: string): boolean {
+  const modes: ApostropheMode[] =
+    HAS_APOSTROPHE.test(input) || HAS_APOSTROPHE.test(variant) ? ["split", "join"] : ["split"];
+  return modes.some(mode => {
+    if (normalize(variant, mode) === normalize(input, mode)) return true;
+    const inputTokens = tokenize(input, mode);
+    const variantTokens = tokenize(variant, mode);
+    return (
+      inputTokens.length > 0 && variantTokens.length > 0 && variantTokens.every(tok => isWordMatch(tok, inputTokens))
+    );
   });
 }
 
@@ -114,17 +150,8 @@ export function evaluateGuessDetail(
     const titleVars = titleVariants(track.title);
     const artistVars = artistVariants(track.artist);
 
-    const matchesAnyVariant = (input: string, variants: string[]): boolean => {
-      if (!input) return false;
-      const inputTokens = tokenize(input);
-      return variants.some(variant => {
-        const variantTokens = tokenize(variant);
-        return (
-          normalize(variant) === normalize(input) ||
-          (inputTokens.length > 0 && variantTokens.length > 0 && variantTokens.every(tok => isWordMatch(tok, inputTokens)))
-        );
-      });
-    };
+    const matchesAnyVariant = (input: string, variants: string[]): boolean =>
+      input.length > 0 && variants.some(variant => matchesVariant(input, variant));
 
     const titleByTitle = matchesAnyVariant(titleInput, titleVars);
     const titleByArtistField = matchesAnyVariant(artistInput, titleVars);
@@ -147,15 +174,9 @@ export function evaluateGuessDetail(
   const normalizedGuess = normalize(guess);
   const guessProvided = normalizedGuess.length > 0;
 
-  const guessTokens = tokenize(guess);
+  // Saisie vide apres normalisation : aucun mot, rien ne peut valider.
   const anyVariant = (variants: string[]): boolean =>
-    variants.some(variant => {
-      const variantTokens = tokenize(variant);
-      return (
-        (guessProvided && normalize(variant) === normalizedGuess) ||
-        (guessTokens.length > 0 && variantTokens.length > 0 && variantTokens.every(tok => isWordMatch(tok, guessTokens)))
-      );
-    });
+    guessProvided && variants.some(variant => matchesVariant(guess, variant));
 
   const matchedTitle = anyVariant(titleVariants(track.title));
   const matchedArtist = anyVariant(artistVariants(track.artist));

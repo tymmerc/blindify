@@ -44,26 +44,6 @@ export type SoloGameResponse = {
   tracks: SoloTrack[]
 }
 
-export type UserStats = {
-  totalGames: number
-  accuracyRate: number
-  averageReactionTime: number
-  bestStreak: number
-  totalXp: number
-  lastPlayedAt: string | null
-}
-
-export type GameSessionSummary = {
-  id: number
-  mode: string
-  difficulty: string
-  source_provider: MusicProvider | string
-  total_rounds: number
-  started_at: string
-  ended_at: string | null
-  state: string
-}
-
 export type GameHistoryTrack = {
   title: string
   artist: string
@@ -159,6 +139,8 @@ export type MultiplayerGameState = {
     albumCover?: string | null
     metadata?: Record<string, unknown> | null
     ownerChoices?: number[]
+    /** false : pas de « qui a ajoute ? » cette manche (moins de 3 joueurs, T7). */
+    ownerQuestion?: boolean
     /** Source du morceau : seulement au reveal (caviardee pendant la manche). */
     provider?: string | null
   } | null

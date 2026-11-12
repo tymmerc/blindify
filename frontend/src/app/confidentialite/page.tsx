@@ -1,7 +1,7 @@
 import type React from "react"
 import type { Metadata } from "next"
 import Link from "next/link"
-import { ContactLink, Section } from "@/components/legal/LegalBlocks"
+import { ContactLink, ExternalLegalLink, Section } from "@/components/legal/LegalBlocks"
 
 export const metadata: Metadata = {
   alternates: { canonical: "https://blindz.app/confidentialite/" },
@@ -28,7 +28,7 @@ export default function ConfidentialitePage() {
           <h1 className="font-display text-4xl font-semibold md:text-5xl">
             Politique de <em className="font-medium italic text-[#c65133]">confidentialité</em>
           </h1>
-          <p className="text-sm text-[#8a7558]">Dernière mise à jour : 29 octobre 2026</p>
+          <p className="text-sm text-[#8a7558]">Dernière mise à jour : 8 novembre 2026</p>
         </div>
 
         <div className="space-y-6">
@@ -64,6 +64,15 @@ export default function ConfidentialitePage() {
                 Spotify ou Deezer (titre, artiste, extrait). On ne récupère rien de ton compte Spotify ou
                 Deezer, juste ce qui est nécessaire pour construire la partie à partir du lien que tu
                 fournis.
+              </Item>
+              {/* T33 (08/11/2026) : texte propose, a valider par Tym. Exige par Google (regles de l'API YouTube). */}
+              <Item>
+                <strong>Les playlists YouTube</strong> : quand tu colles le lien d&apos;une playlist YouTube ou
+                YouTube Music, notre serveur demande à YouTube (Google) la liste de ses vidéos, avec leur titre et
+                le nom de leur chaîne, par l&apos;API officielle de YouTube. Seul l&apos;identifiant de la playlist
+                part chez Google : ni ton pseudo, ni ton adresse, et aucun compte Google n&apos;est utilisé. On ne
+                garde que les morceaux retrouvés chez Deezer, rien de YouTube. Ce que Google reçoit suit la{" "}
+                <ExternalLegalLink href="https://policies.google.com/privacy">politique de confidentialité de Google</ExternalLegalLink>.
               </Item>
               <Item>
                 <strong>Ton identité Discord</strong>, seulement si tu joues depuis l'Activité Discord (Blindz
@@ -105,10 +114,12 @@ export default function ConfidentialitePage() {
           <Section title="Le mode invité" accent="#7d9471">
             <p>
               Tu peux jouer sans créer de compte. Dans ce cas, on te génère un identifiant anonyme
-              aléatoire, gardé sur ton appareil pendant un an pour que tu retrouves ton pseudo et
-              tes parties quand tu reviens. Aucune donnée personnelle n'est demandée. Si tu vides
-              ton navigateur ou changes d'appareil, cette progression est perdue. Tu peux la
-              supprimer à tout moment depuis les Réglages.
+              aléatoire, gardé sur ton appareil jusqu&apos;à un an après ta dernière visite, pour que tu
+              retrouves ton pseudo et tes parties quand tu reviens. Aucune donnée personnelle n&apos;est
+              demandée. Si tu vides ton navigateur, changes d&apos;appareil ou ouvres Blindz depuis une
+              appli comme Snapchat, cette progression ne te suit pas, sauf si tu choisis un mot de passe
+              dans Mon compte (« Garder mes infos »). Tu peux tout supprimer à tout moment depuis Mon
+              compte.
             </p>
           </Section>
 
@@ -123,9 +134,10 @@ export default function ConfidentialitePage() {
 
           <Section title="Cookies" accent="#c65133">
             <p>
-              Blindz pose un seul cookie : un cookie de session, en httpOnly et secure, qui sert à te
-              garder connecté pendant que tu joues. Pas de cookie de tracking publicitaire, pas d'outil
-              d'analytics tiers, pas de partage avec des régies.
+              Blindz pose deux cookies de session, en httpOnly et secure, qui servent seulement à te
+              reconnaître quand tu reviens : l&apos;un dure 24 heures, l&apos;autre un an après ta dernière
+              visite. Pas de cookie de tracking publicitaire, pas d&apos;outil d&apos;analytics tiers, pas de
+              partage avec des régies.
             </p>
           </Section>
 
@@ -133,6 +145,11 @@ export default function ConfidentialitePage() {
             <p>
               On ne vend pas tes données et on ne les partage pas avec des tiers à des fins commerciales.
               Tes informations restent chez nous, utilisées uniquement pour faire tourner le jeu.
+            </p>
+            {/* T33 (08/11/2026) : texte propose, a valider par Tym. */}
+            <p className="mt-3">
+              Seule exception, technique : pour importer une playlist YouTube, son identifiant est envoyé à
+              Google (YouTube), et rien d&apos;autre.
             </p>
           </Section>
 

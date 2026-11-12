@@ -60,6 +60,12 @@ it("compare aussi les titres japonais et pleine chasse", () => {
 });
 
 describe("pickMatch, version par version", () => {
+  it("« Version originale 1988 » est la version d'origine (playlist YouTube des annees 80, 08/11/2026)", () => {
+    const items = [item(1, "Nuit de folie (Version originale 1988)", 253, "Début de Soirée"), item(2, "Nuit de folie (Version longue)", 380, "Début de Soirée")];
+    expect(pickMatch(items, { title: "Nuit de Folie", artist: "Début de Soiree" })?.id).toBe(1);
+    expect(parseTitle("Titre (Original Version)").qualifiers).toEqual([]);
+  });
+
   it("You Say Run : sans la version originale dans les resultats, aucun extrait (surtout pas Earth-2021)", () => {
     const got = pickMatch(YOU_SAY_RUN_SEARCH, { title: "You Say Run", artist: "Yuki Hayashi", durationMs: 228746 });
     expect(got).toBeNull();

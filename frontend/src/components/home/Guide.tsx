@@ -34,6 +34,8 @@ export function GuideShell({
   updated,
   jsonLd,
   currentHref,
+  playMode,
+  heroCta,
   children,
 }: {
   tag: string
@@ -43,8 +45,13 @@ export function GuideShell({
   updated: string
   jsonLd: object[]
   currentHref: string
+  /** Mode ou mene le bouton « Jouer » (T7) : la page tele va tout droit a « Autour d'une table ». */
+  playMode?: "event" | "friends"
+  /** Bouton « Jouer » aussi sous l'intro, pour les pages ou l'on arrive pret a jouer (T28). */
+  heroCta?: boolean
   children: ReactNode
 }) {
+  const playHref = playMode ? `/jouer/?mode=${playMode}` : "/jouer/"
   return (
     <div className="min-h-screen text-[#2e2014]">
       {jsonLd.map((obj, i) => (
@@ -58,6 +65,13 @@ export function GuideShell({
             {title}
           </h1>
           <p className="mt-6 max-w-[38rem] text-[1.1rem] leading-relaxed sm:text-[1.2rem]">{intro}</p>
+          {heroCta && (
+            <p className="mt-8">
+              <Link href={playHref} className={CTA}>
+                Jouer, c'est gratuit
+              </Link>
+            </p>
+          )}
           <p className="mt-5 font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-[#6b573f]">
             Mis à jour le {updated} · Lecture 4 min
           </p>
@@ -68,7 +82,7 @@ export function GuideShell({
             <Tag color={VERMILION}>Prêt ?</Tag>
             <h2 className="mt-5 font-display text-[2.4rem] font-semibold leading-[1] sm:text-[3.4rem]">On lance ?</h2>
             <div className="mt-8 flex flex-wrap items-center gap-6">
-              <Link href="/jouer/" className={CTA}>
+              <Link href={playHref} className={CTA}>
                 Jouer, c'est gratuit
               </Link>
               <Link

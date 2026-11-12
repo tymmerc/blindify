@@ -35,15 +35,28 @@ esac
 [ "${GO_PROD_CIBLE:-prod}" = prod ] || echo "!! LECTURE DE LA BASE ${BASE} : ce n'est PAS la prod (GO_PROD_CIBLE=${GO_PROD_CIBLE})" >&2
 # Parties vivantes : le filtre garde les salles zombies (24 h et plus) hors du
 # compte, mais couvre une longue soiree ou un streamer (30 manches de 60 s).
-FILTRE="r.status = 'in_progress' AND COALESCE(r.started_at, r.created_at) > now() - interval '3 hours'"
+#
+# Salles ouvertes (05/11, regle de Tym : « avant de push en prod on regarde
+# ABSOLUMENT que personne joue ») : des joueurs dans une salle d'attente
+# comptent aussi. Un redemarrage du backend vide la memoire et les met dehors.
+# Salle « waiting » creee ou rejointe il y a moins de 30 min = quelqu'un est la.
+#
+# Le 05/11 a 18:42:48, une partie a demarre PENDANT la construction de l'image
+# (verifiee avant, pas juste avant) et le redemarrage de 18:43:05 l'a coupee.
+# Dans un script de mise en prod : construire d'abord, puis --une-fois JUSTE
+# avant le « docker compose up -d », sans rien de long entre les deux.
+FILTRE="(r.status = 'in_progress' AND COALESCE(r.started_at, r.created_at) > now() - interval '3 hours')
+  OR (r.status = 'waiting' AND (r.created_at > now() - interval '30 minutes'
+      OR EXISTS (SELECT 1 FROM room_participants p WHERE p.room_id = r.id AND p.joined_at > now() - interval '30 minutes')))"
 en_cours() { lire "SELECT count(*) FROM multiplayer_rooms r WHERE $FILTRE"; }
 # Une salle abandonnee reste in_progress : sa derniere manche dit si quelqu'un
 # joue encore (heures en UTC).
 salles() {
-  lire "SELECT '    ' || r.room_code || ' lancee a ' || to_char(COALESCE(r.started_at, r.created_at), 'HH24:MI')
+  lire "SELECT '    ' || r.room_code || CASE WHEN r.status = 'waiting' THEN ' (salle d''attente)' ELSE '' END
+        || ' lancee a ' || to_char(COALESCE(r.started_at, r.created_at), 'HH24:MI')
         || ', derniere manche a ' || COALESCE(to_char(max(GREATEST(gr.created_at, gr.reveal_at, gr.completed_at)), 'HH24:MI'), 'aucune')
         FROM multiplayer_rooms r LEFT JOIN game_rounds gr ON gr.session_id = r.session_id
-        WHERE $FILTRE GROUP BY r.room_code, r.started_at, r.created_at ORDER BY 1"
+        WHERE $FILTRE GROUP BY r.room_code, r.status, r.started_at, r.created_at ORDER BY 1"
 }
 
 if [ "${1:-}" = --une-fois ]; then
@@ -53,7 +66,7 @@ if [ "${1:-}" = --une-fois ]; then
     [ "${GO_PROD_CIBLE:-prod}" = prod ] || echo "aucune partie en cours sur la base ${BASE}. Ce n'est PAS la prod."
     exit 0
   fi
-  echo "  $n partie(s) en cours sur la base ${BASE} ($(date -u +%H:%M) UTC) :"
+  echo "  $n partie(s) ou salle(s) ouverte(s) sur la base ${BASE} ($(date -u +%H:%M) UTC) :"
   salles
   exit 1
 fi

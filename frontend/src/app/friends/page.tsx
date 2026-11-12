@@ -239,7 +239,7 @@ function FriendsEntryContent() {
         <div className="space-y-3 text-center">
           <h1 className="font-display text-3xl font-semibold text-[#2e2014] sm:text-4xl">Ta <em className="font-medium italic text-[#c65133]">musique</em></h1>
           <p className="text-sm text-[#6b573f]">
-            Colle ton lien de profil Spotify ou Deezer pour jouer avec tes propres playlists.
+            Colle ton lien de profil Spotify ou Deezer, ou d'une playlist YouTube, pour jouer avec tes propres playlists.
           </p>
         </div>
 

@@ -11,6 +11,7 @@ import { useWakeLock } from "@/lib/useWakeLock"
 import { shortGameNotice } from "@/lib/roundCount"
 import { ConfettiBurst } from "./ConfettiBurst"
 import { TheaterGameView } from "./TheaterGameView"
+import { showOwnerQuestion } from "@/lib/ownerQuestion"
 import { SpectatorBadge } from "./SpectatorBadge"
 import { DeezerCredit, SpotifyTrackLink } from "./SourceCredits"
 
@@ -588,6 +589,12 @@ export function MultiplayerGameClient({
       .filter((p): p is typeof sortedPlayersFixed[number] => Boolean(p))
     return resolved.length > 0 ? resolved : sortedPlayersFixed
   }, [currentTrack?.ownerChoices, sortedPlayersFixed])
+
+  const askOwner = showOwnerQuestion({
+    ownerQuestion: currentTrack?.ownerQuestion,
+    singleContributor: state?.singleContributor,
+    playerCount: sortedPlayersFixed.length,
+  })
 
   const handleSubmit = () => {
     if (uiPhase !== "guessing" || disabled || localHasAnswered || justSubmitted) return
@@ -1434,7 +1441,7 @@ export function MultiplayerGameClient({
                             </label>
                           </div>
 
-                          {!state?.singleContributor && (
+                          {askOwner && (
                           <div className="space-y-2 text-xs text-[var(--muted)]">
                             <span className="text-[11px] font-bold uppercase tracking-[0.22em]">Qui a ajouté ce titre ?</span>
                             <div className="flex flex-wrap gap-2">

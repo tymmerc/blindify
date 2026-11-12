@@ -4,6 +4,7 @@
 #   useradd --system --user-group --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin blindz-visites
 #   install -m 755 infra/visites/blindz-visites.sh /usr/local/sbin/blindz-visites
 #   install -D -m 644 infra/visites/anonymiser.py /usr/local/lib/blindz-visites/anonymiser.py
+#   install -D -m 644 infra/visites/arrivees.py /usr/local/lib/blindz-visites/arrivees.py
 #   install -d -m 755 -o blindz-visites -g blindz-visites /opt/dev/blindz/visites
 #   install -m 644 infra/visites/blindz-visites.service infra/visites/blindz-visites.timer /etc/systemd/system/
 #   systemctl daemon-reload && systemctl enable --now blindz-visites.timer

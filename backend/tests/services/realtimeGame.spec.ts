@@ -337,6 +337,50 @@ describe("startNextRound - owner choices", () => {
   });
 });
 
+// T7 (soiree du 01/11, sessions 752 a 754) : a deux, « qui a ajoute ce titre ? »
+// n'a pas de sens, si ce n'est pas toi c'est forcement l'autre.
+describe("startNextRound - « qui a ajoute ? » seulement a 3 joueurs ou plus", () => {
+  const owned: RoundTrack[] = [{ round: 1, trackId: "t1", title: "Song 1", artist: "Artist 1", previewUrl: null, metadata: { owner_user_id: 1 } }];
+  const two = [{ userId: 1, username: "Mae" }, { userId: 2, username: "Manou" }];
+
+  it("a deux joueurs : pas de question, pas de candidats, et la reponse ne rapporte rien", () => {
+    setupGame({ participants: two, tracks: owned });
+    const round = startNextRound(ROOM);
+    expect(round?.currentTrack?.ownerQuestion).toBe(false);
+    expect(round?.currentTrack?.ownerChoices).toEqual([]);
+    // Un vieux client qui envoie quand meme un choix ne marque pas le point.
+    recordAnswer(ROOM, 2, "", 1, "", "");
+    expect(revealRound(ROOM)?.players[2].lastGained).toBe(0);
+  });
+
+  it("la question cachee reste cachee dans l'etat public de la manche", () => {
+    setupGame({ participants: two, tracks: owned });
+    startNextRound(ROOM);
+    expect(gameStateSnapshot(ROOM)?.currentTrack?.ownerQuestion).toBe(false);
+  });
+
+  it("a trois joueurs : la question revient, avec le bonus", () => {
+    setupGame({ tracks: owned });
+    expect(startNextRound(ROOM)?.currentTrack?.ownerQuestion).toBe(true);
+    recordAnswer(ROOM, 2, "", 1, "", "");
+    expect(revealRound(ROOM)?.players[2].lastGained).toBe(1);
+  });
+
+  it("une seule personne a ramene la musique : pas de question non plus", () => {
+    clearGame(ROOM);
+    bootstrapGameState({
+      roomCode: ROOM,
+      hostUserId: 1,
+      tracks: owned,
+      singleContributor: true,
+      participants: [{ userId: 1, username: "A" }, { userId: 2, username: "B" }, { userId: 3, username: "C" }],
+      mode: "friends",
+      config: { roundDurationMs: 20000 },
+    });
+    expect(startNextRound(ROOM)?.currentTrack?.ownerQuestion).toBe(false);
+  });
+});
+
 describe("revealRound - streak tracking", () => {
   beforeEach(() => {
     setupGame({ tracks: makeTracks(3) });

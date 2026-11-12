@@ -79,7 +79,8 @@ export default function Page() {
           <Li color="#f4ecdb"><span><strong>Fais couper les micros pendant les extraits</strong>, ou demande des écouteurs : sinon la musique de l'un revient dans le micro des autres avec une seconde de retard. On les rallume à la révélation, c'est le moment où on rigole.</span></Li>
         </ul>
         <p>
-          Le détail du mode à distance est dans le guide du <Link href="/blind-test-en-ligne-gratuit/">blind test en ligne gratuit</Link>.
+          Le détail du mode à distance est dans le guide du <Link href="/blind-test-en-ligne-gratuit/">blind test en ligne gratuit</Link>,
+          et pour que chacun trouve le lien de sa playlist, dans celui du <Link href="/blind-test-spotify/">blind test Spotify</Link>.
         </p>
       </Section>
 
@@ -91,7 +92,7 @@ export default function Page() {
         </p>
         <ul>
           <Li color="#486090"><span>On colle le lien qu'on veut, pas son compte : une playlist d'une dizaine de morceaux faite pour l'occasion suffit, et le jeu ne voit rien d'autre de ce qu'on écoute. Que chacun fasse la sienne, par contre. Si toute l'équipe colle la même playlist commune, chaque morceau reste au nom du premier qui l'a importé sur blindz.app et les autres n'ont plus rien à eux.</span></Li>
-          <Li color="#486090"><span>On peut aussi jouer sans rien ramener, du moment qu'une personne de la salle a importé de la musique : les autres jouent sur ses morceaux. La question « qui a mis ce morceau » n'arrive qu'à partir de deux personnes qui ont ramené de la musique.</span></Li>
+          <Li color="#486090"><span>On peut aussi jouer sans rien ramener, du moment qu'une personne de la salle a importé de la musique : les autres jouent sur ses morceaux. La question « qui a mis ce morceau » n'arrive qu'à partir de deux personnes qui ont ramené de la musique, et de trois joueurs.</span></Li>
           <Li color="#486090"><span>Il n'y a rien à installer ni à acheter. Ça s'ouvre dans le navigateur, sur les ordinateurs du bureau comme sur les téléphones, donc pas de devis ni d'abonnement à faire valider.</span></Li>
         </ul>
       </Section>

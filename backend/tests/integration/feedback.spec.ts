@@ -192,13 +192,95 @@ describe("POST /api/feedback", () => {
     const res = await post(app.url, { kind: "avis", answer: "oui", mode: "solo", sessionId, appVersion: "abc1234" },
       { "User-Agent": "Mozilla/5.0 (iPhone) jest" });
     expect(res.status).toBe(201);
-    expect(await readJson(res)).toEqual({ success: true, data: { received: true }, error: null });
+    const body = await readJson(res);
+    expect(body).toMatchObject({ success: true, data: { received: true }, error: null });
+    expect((body.data as { followUp?: string }).followUp).toMatch(/^\d+\.[A-Za-z0-9_-]{43}$/);
     const row = await lastFeedback();
     expect(row).toMatchObject({
       kind: "avis", answer: "oui", message: null, mode: "solo", session_id: sessionId,
       game_code: null, user_agent: "Mozilla/5.0 (iPhone) jest", app_version: "abc1234",
     });
     expect(row.created_at).toBeInstanceOf(Date);
+  });
+
+  describe("un mot apres Oui ou Pas trop (POST /suite, T32)", () => {
+    // Sa propre appli : ses envois ne comptent pas dans la limite par adresse
+    // des autres tests.
+    let own: TestApp;
+    beforeAll(async () => { own = await startApp(); });
+    afterAll(async () => { await own.close(); });
+    const suiteUrl = () => `${own.url}/suite`;
+
+    async function giveAnswer(answer: "oui" | "pas_trop"): Promise<string> {
+      const res = await post(own.url, { kind: "avis", answer, mode: "friends", gameCode: roomCode });
+      expect(res.status).toBe(201);
+      return ((await readJson(res)).data as { followUp: string }).followUp;
+    }
+
+    it("ajoute le texte a la meme ligne, sans en creer une autre, et previent Tym", async () => {
+      const token = await giveAnswer("pas_trop");
+      const before = await lastFeedback();
+      (notifyWrittenFeedback as jest.Mock).mockClear();
+      const res = await post(suiteUrl(), { token, message: "  jest: le son a coupe\r\n " });
+      expect(res.status).toBe(200);
+      const after = await lastFeedback();
+      expect(after.id).toBe(before.id);
+      expect(after).toMatchObject({ kind: "avis", answer: "pas_trop", message: "jest: le son a coupe", contact: null, session_id: roomSessionId });
+      expect(notifyWrittenFeedback).toHaveBeenLastCalledWith(
+        { kind: "avis", mode: "friends", message: "jest: le son a coupe", contact: null, answer: "pas_trop" }, false
+      );
+      expect(JSON.stringify((logger.info as jest.Mock).mock.calls)).not.toContain("le son a coupe");
+    });
+
+    it("ne remplace jamais un premier texte", async () => {
+      const token = await giveAnswer("oui");
+      expect((await post(suiteUrl(), { token, message: "jest: premier" })).status).toBe(200);
+      const res = await post(suiteUrl(), { token, message: "jest: second" });
+      expect(res.status).toBe(409);
+      expect((await lastFeedback()).message).toBe("jest: premier");
+    });
+
+    it("refuse un jeton forge, un jeton d'un autre avis ou un avis trop ancien", async () => {
+      const token = await giveAnswer("oui");
+      const [id, sig] = token.split(".");
+      expect((await post(suiteUrl(), { token: `${Number(id) - 1}.${sig}`, message: "jest: x" })).status).toBe(400);
+      expect((await post(suiteUrl(), { token: `${id}.${"A".repeat(43)}`, message: "jest: x" })).status).toBe(400);
+      expect((await post(suiteUrl(), { token: id, message: "jest: x" })).status).toBe(400);
+      await pool.query(`UPDATE game_feedback SET created_at = NOW() - INTERVAL '2 hours' WHERE id = $1`, [Number(id)]);
+      expect((await post(suiteUrl(), { token, message: "jest: trop tard" })).status).toBe(409);
+      const { rows } = await pool.query(`SELECT message FROM game_feedback WHERE id = $1`, [Number(id)]);
+      expect(rows[0].message).toBeNull();
+    });
+
+    it("refuse un texte vide ou trop long, sans rien ecrire", async () => {
+      const token = await giveAnswer("oui");
+      expect((await post(suiteUrl(), { token, message: "   " })).status).toBe(400);
+      expect((await post(suiteUrl(), { token, message: "x".repeat(1001) })).status).toBe(400);
+      expect((await lastFeedback()).message).toBeNull();
+    });
+
+    it("ne rend pas de jeton pour un bug, un mot ou un avis deja ecrit", async () => {
+      for (const body of [
+        { kind: "bug", mode: "solo", message: "jest: bug" },
+        { kind: "mot", mode: "solo", message: "jest: mot" },
+        { kind: "avis", answer: "oui", mode: "solo", message: "jest: deja ecrit" },
+      ]) {
+        const data = (await readJson(await post(own.url, body))).data as { followUp?: string };
+        expect(data.followUp).toBeUndefined();
+      }
+    });
+
+    it("passe par la meme limite d'envois par adresse que l'avis", async () => {
+      const limited = await startApp({ perAddress: 2 });
+      try {
+        const res = await post(limited.url, { kind: "avis", answer: "oui", mode: "friends", gameCode: roomCode });
+        const token = ((await readJson(res)).data as { followUp: string }).followUp;
+        expect((await post(`${limited.url}/suite`, { token, message: "jest: un" })).status).toBe(200);
+        expect((await post(`${limited.url}/suite`, { token, message: "jest: deux" })).status).toBe(429);
+      } finally {
+        await limited.close();
+      }
+    });
   });
 
   it("enregistre un mot avec contact, previent Tym, et ne journalise ni l'un ni l'autre", async () => {

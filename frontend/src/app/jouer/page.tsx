@@ -5,8 +5,13 @@ import { useRouter } from "next/navigation"
 import { ArrowLeft, ArrowRight, Plus, LogIn, Check, ExternalLink, Loader2 } from "lucide-react"
 import { api } from "@/lib/api"
 import { recognizeMusicLink } from "@/lib/musicLink"
+import { YOUTUBE_REFUSAL, youtubeDetail, youtubeSummary, type YoutubeImportReport } from "@/lib/youtubeImport"
 import { publicPath } from "@/lib/publicPath"
 import { DiscordHint } from "@/components/DiscordPlay"
+import { findHostedRoom } from "@/lib/hostedRooms"
+import { ApiError } from "@/lib/apiClient"
+import { createRoute, parsePreferredMode, situationFor, type SituationMode } from "@/lib/playSituations"
+import { InAppBrowserNote } from "@/components/account/InAppBrowserNote"
 
 const NAME_KEY = "blindify_nickname"
 const URL_KEY = "blindify_profile_url"
@@ -46,10 +51,18 @@ function Shell({ dots, index, onBack, wide, children }: { dots: number; index: n
           ))}
         </div>
         <div className="flex flex-1 flex-col justify-center animate-in fade-in slide-in-from-right-4 duration-300 sm:block sm:flex-none">{children}</div>
-        {/* Lien decouvrable par les crawlers (le sitemap ne suffit pas toujours) */}
-        <p className="mt-6 shrink-0 text-center text-[11px] text-[#b3a182]">
-          <a href="/faq/" className="underline hover:text-[#6b573f]">Questions fréquentes</a>
-        </p>
+        {/* La FAQ en petit rond « ? » dans le coin (demande de Tym, 05/11) : le lien
+            texte sous le bouton chargeait l'ecran. Reste un vrai lien, decouvrable
+            par les crawlers (le sitemap ne suffit pas toujours). */}
+        <a
+          href={publicPath("/faq/")}
+          aria-label="Questions fréquentes"
+          title="Questions fréquentes"
+          data-testid="jouer-faq"
+          className="fixed bottom-4 right-4 z-30 flex h-9 w-9 items-center justify-center rounded-full border-[1.5px] border-[#2e2014] bg-[#ece1c8] font-display text-base font-bold text-[#2e2014] shadow-[2px_2px_0_#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb] sm:bottom-6 sm:right-6"
+        >
+          ?
+        </a>
       </div>
     </div>
   )
@@ -63,10 +76,13 @@ export default function EntryWizard() {
   const [importing, setImporting] = useState(false)
   const [synced, setSynced] = useState<number | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
+  const [youtube, setYoutube] = useState<YoutubeImportReport | null>(null)
   const [going, setGoing] = useState(false)
   const [code, setCode] = useState("")
   const [codeError, setCodeError] = useState<string | null>(null)
   const [joinParam, setJoinParam] = useState("") // ?join=CODE (scan du QR "Autour d'une table")
+  // ?mode=event : venu d'une page guide (tele, soiree...), on va tout droit au bon mode.
+  const [preferredMode, setPreferredMode] = useState<SituationMode | null>(null)
   const [tuto, setTuto] = useState<null | "spotify" | "deezer">(null)
   const nameRef = useRef<HTMLInputElement>(null)
   const codeRef = useRef<HTMLInputElement>(null)
@@ -82,6 +98,7 @@ export default function EntryWizard() {
     try {
       const j = (new URLSearchParams(window.location.search).get("join") ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "")
       if (j) { setJoinParam(j); setCode(j) }
+      setPreferredMode(parsePreferredMode(new URLSearchParams(window.location.search).get("mode")))
     } catch { /* ignore */ }
     // On ne cree AUCUN compte tant que le pseudo n'est pas connu. Avant, la
     // simple ouverture de la page fabriquait un invite nomme "Joueur" : 97
@@ -123,13 +140,17 @@ export default function EntryWizard() {
     if (!link) { setStep("action"); return }
     setImporting(true)
     setImportError(null)
+    const isYoutube = found.kind === "ok" && found.provider === "youtube"
+    setYoutube(null)
     try {
       const res = await api.importPlaylists(link)
       const ids = (res.playlists || []).map(pl => pl.id)
       let count = 0
+      let report: YoutubeImportReport | null = null
       if (ids.length) {
         const sync = await api.importSyncAll(res.provider, ids, 50, res.linkId)
         count = sync.synced ?? 0
+        report = sync.youtube ?? null
       }
       // 0 titre = echec silencieux : avant, on affichait fierement "0 titres
       // importes" en vert et on continuait, le joueur croyait avoir sa musique.
@@ -143,15 +164,18 @@ export default function EntryWizard() {
         return
       }
       setSynced(count)
+      setYoutube(report)
       try { localStorage.setItem(URL_KEY, link) } catch { /* ignore */ }
       // Enchaine tout seul sur l'etape suivante (court instant pour voir la confirmation)
       // -> plus besoin d'un 2e clic sur "Continuer".
       setImporting(false)
       // Apres import : en mode normal on avance a l'etape action, en mode join on rejoint direct.
-      setTimeout(() => { if (joinParam) { void handleJoin() } else { setStep("action") } }, 1150)
+      // YouTube : un peu plus long, le temps de lire combien de morceaux on a retrouves.
+      setTimeout(() => { if (joinParam) { void handleJoin() } else { setStep("action") } }, report ? 2600 : 1150)
       return
-    } catch {
-      setImportError("Lien invalide ou profil privé. Vérifie le lien.")
+    } catch (err) {
+      // YouTube : le serveur dit quoi faire (playlist privee, vide, mix, import indisponible).
+      setImportError(isYoutube && err instanceof Error && err.message ? err.message : "Lien invalide ou profil privé. Vérifie le lien.")
     }
     setImporting(false)
   }
@@ -174,7 +198,7 @@ export default function EntryWizard() {
     if (going) return
     setGoing(true)
     await ensureName()
-    router.push("/modes")
+    router.push(createRoute(preferredMode, name))
   }
 
   // REJOINDRE : on résout le mode de la room depuis le code, sans jamais voir les modes
@@ -190,9 +214,21 @@ export default function EntryWizard() {
       const roomMode = (room as { mode?: string }).mode || "friends"
       const nick = name.trim() ? `&nickname=${encodeURIComponent(name.trim())}` : ""
       router.push(`/multiplayer?mode=${roomMode}&code=${encodeURIComponent(c)}${nick}`)
-    } catch {
+    } catch (err) {
+      const gone = err instanceof ApiError && err.status === 404
+      // Salle effacee que ce navigateur avait creee : l'ecran de la salle explique
+      // et propose d'en rouvrir une pareille (T7).
+      const mine = gone ? findHostedRoom(c) : null
+      if (mine) {
+        router.push(`/multiplayer?mode=${mine.mode}&code=${encodeURIComponent(c)}`)
+        return
+      }
       setGoing(false)
-      setCodeError("Salle introuvable. Vérifie le code.")
+      setCodeError(
+        gone
+          ? "Cette salle n'existe plus : elle se ferme toute seule si aucune partie n'y est lancée pendant une demi-heure. Demande le nouveau code."
+          : "Salle introuvable. Vérifie le code."
+      )
     }
   }
 
@@ -210,6 +246,7 @@ export default function EntryWizard() {
             Comment tu t'<em className="font-medium italic text-[#c65133]">appelles</em> ?
           </h1>
           <p className="text-sm text-[#6b573f]">C'est le nom que les autres verront.</p>
+          <InAppBrowserNote className="mx-auto max-w-xs pt-1" />
         </div>
         <div className="mt-10 space-y-6">
           <input
@@ -246,7 +283,8 @@ export default function EntryWizard() {
     const trimmedUrl = url.trim()
     const hasContent = trimmedUrl.length > 0
     // Memes formes que le serveur, liens courts des applis compris (lib/musicLink).
-    const recognized = recognizeMusicLink(trimmedUrl).kind
+    const recognition = recognizeMusicLink(trimmedUrl)
+    const recognized = recognition.kind
     const linkValid = recognized === "ok" || recognized === "short"
     // Tout texte non vide doit etre un lien valide. Champ vide = on peut continuer sans musique.
     const formatError = hasContent && !linkValid
@@ -264,7 +302,7 @@ export default function EntryWizard() {
           <h1 className="font-display text-3xl font-semibold text-[#2e2014] sm:text-4xl">
             Ta <em className="font-medium italic text-[#c65133]">musique</em>
           </h1>
-          <p className="text-sm text-[#6b573f]">Colle ton lien Spotify ou Deezer pour jouer avec tes propres titres.</p>
+          <p className="text-sm text-[#6b573f]">Colle ton lien Spotify, Deezer ou YouTube pour jouer avec tes propres titres.</p>
         </div>
         {/* Sur PC : saisie a gauche, aides/tutos en colonne a droite. Mobile : pile inchangee. */}
         <div className="mt-9 lg:grid lg:grid-cols-[minmax(0,1fr)_320px] lg:grid-rows-[auto_1fr] lg:items-start lg:gap-x-10">
@@ -346,7 +384,13 @@ export default function EntryWizard() {
 
           <div className="mt-5 space-y-4 lg:col-start-1 lg:row-start-2">
           {importError && <p className="text-center text-[12px] font-bold text-[#9c2f1d]">{importError}</p>}
-          {formatError && !importError && <p className="text-center text-[12px] font-bold text-[#9c2f1d]">Lien non reconnu. Mets un lien de playlist ou profil Spotify ou Deezer.</p>}
+          {formatError && !importError && (
+            <p className="text-center text-[12px] font-bold text-[#9c2f1d]">
+              {recognition.kind === "refused"
+                ? YOUTUBE_REFUSAL[recognition.reason]
+                : "Lien non reconnu. Mets un lien de playlist Spotify, Deezer ou YouTube, ou de profil Spotify ou Deezer."}
+            </p>
+          )}
 
           {/* Le bouton SE TRANSFORME en confirmation verte quand l'import reussit (anim) */}
           <button
@@ -364,11 +408,13 @@ export default function EntryWizard() {
               // bouton sert de "Continuer" (sinon on etait coince sur cette etape).
               <span key="done" className="flex items-center gap-2 duration-300 animate-in fade-in zoom-in-95">
                 <Check size={18} className="duration-500 animate-in zoom-in spin-in-45" />
-                {synced} titre{synced > 1 ? "s" : ""} importé{synced > 1 ? "s" : ""} · Continuer
+                {youtube ? youtubeSummary(youtube) : `${synced} titre${synced > 1 ? "s" : ""} importé${synced > 1 ? "s" : ""}`} · Continuer
                 <ArrowRight size={16} />
               </span>
             ) : importing ? (
-              <span className="animate-pulse">Import en cours...</span>
+              <span className="animate-pulse">
+                {recognition.kind === "ok" && recognition.provider === "youtube" ? "On retrouve tes morceaux chez Deezer..." : "Import en cours..."}
+              </span>
             ) : going ? (
               <span>Connexion...</span>
             ) : (
@@ -378,6 +424,9 @@ export default function EntryWizard() {
               </span>
             )}
           </button>
+          {synced !== null && youtube && youtubeDetail(youtube) && (
+            <p className="text-center text-[12px] text-[#6b573f]" role="status">{youtubeDetail(youtube)}</p>
+          )}
           <p className="text-center text-[11px] text-[#8a7558]">
             Pas de lien ? Tu peux continuer : il suffit qu&apos;une personne ramène une playlist (2 joueurs minimum).
           </p>
@@ -395,7 +444,11 @@ export default function EntryWizard() {
           <h1 className="font-display text-3xl font-semibold text-[#2e2014] sm:text-4xl">
             Tu veux <em className="font-medium italic text-[#c65133]">jouer</em> comment ?
           </h1>
-          <p className="text-sm text-[#6b573f]">Lance une nouvelle partie, ou rejoins celle d'un ami.</p>
+          <p className="text-sm text-[#6b573f]">
+            {preferredMode
+              ? `Tu crées une partie « ${situationFor(preferredMode).modeName} », ou tu rejoins celle d'un ami.`
+              : "Lance une nouvelle partie, ou rejoins celle d'un ami."}
+          </p>
         </div>
         <div className="mt-10 space-y-3">
           <button
@@ -424,6 +477,17 @@ export default function EntryWizard() {
             <span className="flex items-center gap-3"><LogIn size={18} /> Rejoindre avec un code</span>
             <ArrowRight size={16} />
           </button>
+          {preferredMode ? (
+            <p className="pt-2 text-center text-[12px] text-[#8a7558]">
+              <button
+                type="button"
+                onClick={() => setPreferredMode(null)}
+                className="underline decoration-[1.5px] underline-offset-2 transition hover:text-[#2e2014]"
+              >
+                Voir les autres façons de jouer
+              </button>
+            </p>
+          ) : null}
         </div>
       </Shell>
     )

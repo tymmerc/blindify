@@ -51,6 +51,7 @@ export default function Page() {
       intro="C'est le mode Autour d'une table : la télé diffuse la musique et affiche les scores, et chacun répond depuis son téléphone après avoir scanné un QR code. Le jeu lui-même ne demande rien de spécial. Le vrai sujet, c'est de faire arriver l'image et le son sur la télé, alors voilà les solutions possibles, en commençant par la plus simple."
       updated="5 octobre 2026"
       currentHref="/blind-test-tv/"
+      playMode="event"
       jsonLd={[webPageJsonLd(URL, TITLE, DESC, UPDATED), faqJsonLd(FAQ)]}
     >
       <Section tag="L'image" title="Mettre blindz.app sur la télé, ou s'en passer">
@@ -106,7 +107,8 @@ export default function Page() {
         </ul>
         <p>
           Le déroulé d'une partie et les pièges classiques (playlists privées, manches trop longues) sont dans le{" "}
-          <Link href="/blind-test-soiree/">guide de la soirée</Link>.
+          <Link href="/blind-test-soiree/">guide de la soirée</Link>, et pour trouver le bon lien, dans celui du{" "}
+          <Link href="/blind-test-spotify/">blind test Spotify</Link>.
         </p>
       </Section>
 

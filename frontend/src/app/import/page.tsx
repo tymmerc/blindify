@@ -20,7 +20,7 @@ export default function ImportPage() {
   const [loading, setLoading] = useState(false)
   const [syncing, setSyncing] = useState<string | null>(null) // playlistId or "__all__"
   const [error, setError] = useState<string | null>(null)
-  const [provider, setProvider] = useState<"spotify" | "deezer" | null>(null)
+  const [provider, setProvider] = useState<"spotify" | "deezer" | "youtube" | null>(null)
   const [playlists, setPlaylists] = useState<ImportedPlaylist[]>([])
   const [notice, setNotice] = useState<string | null>(null)
   const [syncResult, setSyncResult] = useState<{ playlistId: string; synced: number } | null>(null)
@@ -115,7 +115,7 @@ export default function ImportPage() {
             </Link>
             <div className="space-y-1">
               <h1 className="font-display text-3xl font-semibold sm:text-4xl">Importe ta <em className="font-medium italic text-[#c65133]">musique</em></h1>
-              <p className="text-[15px] text-[#6b573f]">Colle ton lien Spotify ou Deezer pour récupérer tes titres.</p>
+              <p className="text-[15px] text-[#6b573f]">Colle ton lien Spotify, Deezer ou YouTube pour récupérer tes titres.</p>
             </div>
           </div>
         </div>

@@ -13,8 +13,9 @@
 // avant, il fallait descendre sous la musique et les reglages pour le trouver.
 
 import { useState, type ReactNode } from "react"
-import { Check, Copy, Crown, Link2 } from "lucide-react"
+import { Check, Copy, Crown, Share2 } from "lucide-react"
 import { api } from "@/lib/api"
+import { updateHostedRoom } from "@/lib/hostedRooms"
 import type { MultiplayerParticipant, MultiplayerRoom } from "@/lib/types"
 
 export const PAPER = "#f4ecdb"
@@ -99,44 +100,82 @@ export function RoomCode({ code, size = "lg" }: { code: string; size?: "xl" | "l
   )
 }
 
-/** Copier le lien / le code. N'affiche "Copie" QUE si la copie a vraiment
- *  reussi (contexte non securise ou permission refusee : on le dit). */
+/** Le texte qui accompagne le lien partage (T7, a valider par Tym). */
+export function inviteText(code: string): string {
+  return `On fait un blind test sur Blindz, viens jouer avec nous ! Le code de la salle : ${code}`
+}
+
+/** Partage natif sur telephone (WhatsApp, SMS...), copie du lien ailleurs. */
+export async function shareInvite(code: string, link: string): Promise<"shared" | "copied" | "cancelled" | "failed"> {
+  const nav = typeof navigator !== "undefined" ? navigator : null
+  const touch = typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches
+  if (nav?.share && touch) {
+    try {
+      await nav.share({ title: "Blindz", text: inviteText(code), url: link })
+      return "shared"
+    } catch (err) {
+      // Le joueur a ferme la feuille de partage : rien a dire.
+      if (err instanceof DOMException && err.name === "AbortError") return "cancelled"
+    }
+  }
+  try {
+    if (!nav?.clipboard) throw new Error("clipboard_unavailable")
+    await nav.clipboard.writeText(link)
+    return "copied"
+  } catch (err) {
+    console.error("lobby_copy_failed", err)
+    return "failed"
+  }
+}
+
+/** « Inviter » (T7) : le 01/11, le lien d'invitation n'a pas servi, une amie
+ *  est entree par l'adresse de la page de l'hote. Un gros bouton qui partage
+ *  le vrai lien, et le code a copier a cote. N'affiche « copie » QUE si la
+ *  copie a vraiment reussi. */
 export function ShareButtons({ code, link }: { code: string; link: string }) {
-  const [copied, setCopied] = useState<"code" | "link" | null>(null)
+  const [done, setDone] = useState<"link" | "code" | null>(null)
   const [failed, setFailed] = useState(false)
-  const copy = async (text: string, what: "code" | "link") => {
+  const flash = (what: "link" | "code" | null, ko: boolean) => {
+    setDone(what)
+    setFailed(ko)
+    setTimeout(() => { setDone(null); setFailed(false) }, ko ? 3000 : 2000)
+  }
+  const invite = async () => {
+    const res = await shareInvite(code, link)
+    if (res === "copied") flash("link", false)
+    else if (res === "failed") flash(null, true)
+  }
+  const copyCode = async () => {
     try {
       if (!navigator.clipboard) throw new Error("clipboard_unavailable")
-      await navigator.clipboard.writeText(text)
-      setCopied(what)
-      setFailed(false)
-      setTimeout(() => setCopied(null), 2000)
+      await navigator.clipboard.writeText(code)
+      flash("code", false)
     } catch (err) {
       console.error("lobby_copy_failed", err)
-      setFailed(true)
-      setTimeout(() => setFailed(false), 3000)
+      flash(null, true)
     }
   }
   const base =
     "flex items-center justify-center gap-2 rounded-md border-2 border-[#2e2014] px-4 py-3 text-sm font-bold shadow-[3px_3px_0_#2e2014] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0_#2e2014]"
   return (
     <div>
-      <div className="grid grid-cols-2 gap-2 sm:gap-3">
+      <div className="grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] gap-2 sm:gap-3">
         <button
           type="button"
-          onClick={() => void copy(link, "link")}
-          className={`${base} ${copied === "link" ? "bg-[#7d9471] text-[#f4ecdb]" : "bg-[#c65133] text-[#f4ecdb]"}`}
+          onClick={() => void invite()}
+          data-testid="lobby-inviter"
+          className={`${base} py-3.5 text-base ${done === "link" ? "bg-[#7d9471] text-[#f4ecdb]" : "bg-[#c65133] text-[#f4ecdb]"}`}
         >
-          {copied === "link" ? <Check size={15} /> : <Link2 size={15} />}
-          {copied === "link" ? "Lien copié" : "Copier le lien"}
+          {done === "link" ? <Check size={16} /> : <Share2 size={16} />}
+          {done === "link" ? "Lien copié" : "Inviter"}
         </button>
         <button
           type="button"
-          onClick={() => void copy(code, "code")}
-          className={`${base} ${copied === "code" ? "bg-[#7d9471] text-[#f4ecdb]" : "bg-[#f4ecdb] text-[#2e2014]"}`}
+          onClick={() => void copyCode()}
+          className={`${base} ${done === "code" ? "bg-[#7d9471] text-[#f4ecdb]" : "bg-[#f4ecdb] text-[#2e2014]"}`}
         >
-          {copied === "code" ? <Check size={15} /> : <Copy size={15} />}
-          {copied === "code" ? "Code copié" : "Copier le code"}
+          {done === "code" ? <Check size={15} /> : <Copy size={15} />}
+          {done === "code" ? "Code copié" : "Copier le code"}
         </button>
       </div>
       {failed ? (
@@ -273,6 +312,8 @@ export function RoundSettings({ room, accent, accentText, readOnly = false }: { 
   const seconds = readOnly ? Math.round((room?.round_duration_ms ?? 20000) / 1000) : ownSeconds
   const save = (payload: { questionCount?: number; roundSeconds?: number }) => {
     if (!room) return
+    // Garde les reglages pour rouvrir la meme salle si elle expire (T7).
+    updateHostedRoom(room.room_code, payload)
     void api.updateRoomConfig(room.room_code, payload).catch(err => console.error("room_config_save_failed", err))
   }
   return (

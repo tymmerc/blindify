@@ -5,6 +5,7 @@ import { Check, ExternalLink, Loader2 } from "lucide-react"
 import { api } from "@/lib/api"
 import { followExternalLink } from "@/lib/externalLink"
 import { recognizeMusicLink, type MusicLinkRecognition } from "@/lib/musicLink"
+import { YOUTUBE_REFUSAL, youtubeDetail, youtubeSummary, type YoutubeImportReport } from "@/lib/youtubeImport"
 
 /**
  * Coller un lien de playlist ou de profil (lobby, « Ta musique » de
@@ -30,11 +31,14 @@ type ProfileImportBlockProps = {
   hideHeader?: boolean
 }
 
-const PROVIDER_NAME = { spotify: "Spotify", deezer: "Deezer" } as const
+const PROVIDER_NAME = { spotify: "Spotify", deezer: "Deezer", youtube: "YouTube" } as const
 
 function recognitionText(r: MusicLinkRecognition): { text: string; tone: "ok" | "warn" } | null {
   if (r.kind === "ok") {
     const name = PROVIDER_NAME[r.provider]
+    if (r.provider === "youtube") {
+      return { text: "Playlist YouTube : on retrouve ses morceaux chez Deezer", tone: "ok" }
+    }
     return r.type === "playlist"
       ? { text: `Playlist ${name}`, tone: "ok" }
       : { text: `Profil ${name} : toutes ses playlists publiques`, tone: "ok" }
@@ -42,8 +46,11 @@ function recognitionText(r: MusicLinkRecognition): { text: string; tone: "ok" | 
   if (r.kind === "short") {
     return { text: `Lien court ${PROVIDER_NAME[r.provider]} : on l'ouvre pour toi à l'import`, tone: "ok" }
   }
+  if (r.kind === "refused") {
+    return { text: YOUTUBE_REFUSAL[r.reason], tone: "warn" }
+  }
   if (r.kind === "unknown") {
-    return { text: "Ce n'est pas un lien de playlist ni de profil Spotify ou Deezer.", tone: "warn" }
+    return { text: "Ce n'est pas un lien de playlist Spotify, Deezer ou YouTube, ni de profil Spotify ou Deezer.", tone: "warn" }
   }
   return null
 }
@@ -59,6 +66,8 @@ export function ProfileImportBlock({ accent = "#c65133", onImportingChange, onIm
   const [error, setError] = useState<string | null>(null)
   const [syncedCount, setSyncedCount] = useState(0)
   const [playlistCount, setPlaylistCount] = useState(0)
+  const [youtube, setYoutube] = useState<YoutubeImportReport | null>(null)
+  const [syncingYoutube, setSyncingYoutube] = useState(false)
 
   const recognition = recognizeMusicLink(url)
   const importable = recognition.kind === "ok" || recognition.kind === "short"
@@ -88,12 +97,15 @@ export function ProfileImportBlock({ accent = "#c65133", onImportingChange, onIm
       }
 
       setPlaylistCount(result.playlists.length)
+      setSyncingYoutube(result.provider === "youtube")
       updateState("syncing")
 
       const ids = result.playlists.map(p => p.id)
-      // Quick import: 10 tracks per playlist (enough for a game)
+      // Quick import: 10 tracks per playlist (enough for a game). YouTube : le
+      // serveur regarde de toute facon les 50 premieres videos.
       const syncResult = await api.importSyncAll(result.provider, ids, 10, result.linkId)
       setSyncedCount(syncResult.synced)
+      setYoutube(syncResult.youtube ?? null)
       updateState("done")
       if (syncResult.synced > 0) onImported?.()
     } catch (err) {
@@ -121,6 +133,7 @@ export function ProfileImportBlock({ accent = "#c65133", onImportingChange, onIm
     setUrl("")
     setSyncedCount(0)
     setPlaylistCount(0)
+    setYoutube(null)
     setError(null)
   }
 
@@ -138,12 +151,18 @@ export function ProfileImportBlock({ accent = "#c65133", onImportingChange, onIm
           </span>
           <div className="min-w-0">
             <p className="m-0 text-[15px] font-bold text-[#2e2014]">
-              {nothing ? "Aucun titre jouable dans ce lien" : `${syncedCount} titre${syncedCount > 1 ? "s" : ""} importé${syncedCount > 1 ? "s" : ""}`}
+              {nothing
+                ? "Aucun titre jouable dans ce lien"
+                : youtube
+                  ? youtubeSummary(youtube)
+                  : `${syncedCount} titre${syncedCount > 1 ? "s" : ""} importé${syncedCount > 1 ? "s" : ""}`}
             </p>
             <p className="m-0 mt-0.5 text-[13px] text-[#2e2014]">
               {nothing
                 ? "Essaie une playlist avec des extraits disponibles (Deezer marche bien)."
-                : `Depuis ${playlistCount} playlist${playlistCount > 1 ? "s" : ""}, gardé${syncedCount > 1 ? "s" : ""} dans ta bibliothèque.`}
+                : youtube
+                  ? youtubeDetail(youtube) ?? "Tout est dans ta bibliothèque, avec les extraits de Deezer."
+                  : `Depuis ${playlistCount} playlist${playlistCount > 1 ? "s" : ""}, gardé${syncedCount > 1 ? "s" : ""} dans ta bibliothèque.`}
             </p>
           </div>
         </div>
@@ -199,7 +218,11 @@ export function ProfileImportBlock({ accent = "#c65133", onImportingChange, onIm
         <div id={hintId} className="min-h-[1.25rem]">
           {busy ? (
             <p className="m-0 flex items-center gap-2 text-[13px] font-semibold text-[#2e2014]" role="status">
-              {state === "loading" ? "On cherche les playlists…" : `Import de ${playlistCount} playlist${playlistCount > 1 ? "s" : ""}…`}
+              {state === "loading"
+                ? "On cherche les playlists…"
+                : syncingYoutube
+                  ? "On retrouve les morceaux chez Deezer, ça prend quelques secondes…"
+                  : `Import de ${playlistCount} playlist${playlistCount > 1 ? "s" : ""}…`}
             </p>
           ) : error ? (
             <p className="m-0 text-[13px] font-bold text-[#9c2f1d]" role="alert">{error}</p>
@@ -221,7 +244,8 @@ export function ProfileImportBlock({ accent = "#c65133", onImportingChange, onIm
         <ul className="m-0 mt-2 list-none space-y-1.5 p-0 text-[13px] leading-snug text-[#2e2014]">
           <li><strong>Spotify</strong> : sur la playlist, « Partager » puis « Copier le lien ».</li>
           <li><strong>Deezer</strong> : sur la playlist, « Partager » puis « Copier le lien », ou l&apos;adresse de la playlist sur deezer.com.</li>
-          <li>La playlist doit être publique.</li>
+          <li><strong>YouTube</strong> et <strong>YouTube Music</strong> : sur la playlist, « Partager » puis « Copier le lien ». Le son vient de Deezer : on y retrouve chaque morceau, ceux qui n&apos;y sont pas sont laissés de côté.</li>
+          <li>La playlist doit être publique (ou non répertoriée pour YouTube).</li>
         </ul>
         <div className="mt-2.5 flex flex-wrap gap-2">
           <a
