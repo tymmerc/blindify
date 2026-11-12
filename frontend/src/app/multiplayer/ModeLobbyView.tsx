@@ -1792,7 +1792,12 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         onEditMusic={openMusic}
         onReplay={() => runExclusive(restartingRef, async () => {
           if (!room || !isHost) return
+          // Les resultats d'avant, pour y revenir si la revanche ne part pas.
+          const previousTracks = tracks
+          const previousState = gameState
           try {
+            setError(null)
+            setErrorAction(null)
             setView("playing")
             dispatchLobby({ type: "playing" })
             const { tracks: newTracks, gameState: newState } = await api.startMultiplayerGame(room.room_code, { source: "library" })
@@ -1800,16 +1805,14 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
             if (newState) setGameState(newState)
           } catch (err) {
             console.error("replay_failed", err)
-            // Fallback: reset to lobby
-            autoStartGameRef.current = false
-            autoHostTriggered.current = false
-            setView("landing")
-            setRoom(null)
-            setParticipants([])
-            setTracks([])
-            setGameState(null)
-            setFlowStarted(false)
-            dispatchLobby({ type: "reset" })
+            // T27 : on reste dans la salle. Avant, un echec renvoyait l'hote a
+            // l'accueil sans sa salle, et tout le monde devait en recreer une.
+            // Le serveur a remis la salle en attente : « Rejouer » relance.
+            setTracks(previousTracks)
+            setGameState(previousState)
+            setError(err instanceof ApiError && err.message ? err.message : friendlyError(mode, "start"))
+            setView("results")
+            dispatchLobby({ type: "results" })
           }
         })}
       />

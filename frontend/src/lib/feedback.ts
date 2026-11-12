@@ -94,13 +94,32 @@ export function feedbackFailure(err: unknown): FeedbackFailure {
   return err instanceof ApiError && err.status === 429 ? "rate_limited" : "failed"
 }
 
-/** Envoie un retour, abandonne s'il n'a pas de reponse dans le delai. */
-export async function sendFeedback(payload: FeedbackPayload, timeoutMs = FEEDBACK_TIMEOUT_MS): Promise<void> {
+async function withTimeout<T>(run: (signal: AbortSignal) => Promise<T>, timeoutMs: number): Promise<T> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
-    await clientApi.sendFeedback(payload, controller.signal)
+    return await run(controller.signal)
   } finally {
     clearTimeout(timer)
   }
+}
+
+/**
+ * Envoie un retour, abandonne s'il n'a pas de reponse dans le delai. Pour un
+ * avis sans texte, rend le jeton qui permet d'y ajouter un mot (T32), sinon null.
+ */
+export async function sendFeedback(payload: FeedbackPayload, timeoutMs = FEEDBACK_TIMEOUT_MS): Promise<string | null> {
+  const res = await withTimeout(signal => clientApi.sendFeedback(payload, signal), timeoutMs)
+  return typeof res?.followUp === "string" && res.followUp ? res.followUp : null
+}
+
+/** Texte a ajouter a un avis : nettoye et borne ; null s'il est vide. */
+export function followUpText(message: string): string | null {
+  const text = message.trim().slice(0, FEEDBACK_MESSAGE_MAX)
+  return text || null
+}
+
+/** Ajoute un mot a l'avis deja envoye (meme ligne cote serveur). */
+export async function sendFollowUp(token: string, message: string, timeoutMs = FEEDBACK_TIMEOUT_MS): Promise<void> {
+  await withTimeout(signal => clientApi.sendFeedbackFollowUp(token, message, signal), timeoutMs)
 }

@@ -57,6 +57,12 @@ describe("buildFeedbackMail", () => {
     expect(mail.text).toContain("Lien « Donne ton avis » du site");
   });
 
+  it("dit si l'avis explique etait un Oui ou un Pas trop (T32)", () => {
+    expect(buildFeedbackMail([item({ kind: "avis", answer: "oui" })]).text).toContain("À distance · avis « oui » expliqué");
+    expect(buildFeedbackMail([item({ kind: "avis", answer: "pas_trop" })]).text).toContain("avis « pas trop » expliqué");
+    expect(buildFeedbackMail([item({ kind: "avis" })]).text).toContain("avis expliqué");
+  });
+
   it("au pluriel, compte aussi les messages en trop", () => {
     const mail = buildFeedbackMail([item(), item({ kind: "bug" })], 3);
     expect(mail.subject).toBe("Blindz : 5 joueurs t'ont écrit");

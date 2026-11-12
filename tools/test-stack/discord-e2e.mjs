@@ -321,6 +321,39 @@ try {
   if (await launcher.frame.getByRole("button", { name: /rejouer/i }).isVisible().catch(() => false)) ok("podium de la nouvelle hôte : « Rejouer » disponible")
   else bad("podium de la nouvelle hôte : « Rejouer » introuvable")
   await shot(third.page, "06-podium-joueur-webkit")
+
+  // 10. Un mot apres Oui ou Pas trop (T32, 07/11) : le champ s'ouvre deja
+  // focalise, le texte part au clavier sur la MEME ligne game_feedback, sans
+  // recharger l'iframe. Puis le lien du serveur Discord ne navigue pas dedans.
+  const tag = `t32-${Date.now().toString(36)}`
+  const avis = third.frame.getByRole("region", { name: /ça s'est bien passé/i })
+  await avis.scrollIntoViewIfNeeded().catch(() => {})
+  await avis.getByRole("button", { name: "Pas trop" }).click({ timeout: 10000 })
+  const champ = avis.getByRole("textbox", { name: "Qu'est-ce qui a coincé ?" })
+  await champ.waitFor({ timeout: 10000 })
+  const focused = await activityFrame(third.page)?.evaluate(() => document.activeElement?.getAttribute("placeholder") ?? "").catch(() => "")
+  if (focused?.includes("extraits")) ok("avis WebKit : « Qu'est-ce qui a coincé ? » ouvert et focalisé tout de suite")
+  else bad(`avis WebKit : le champ n'a pas le focus (${focused || "rien"})`)
+  await sleep(600)
+  await shot(third.page, "07-avis-pas-trop-champ-webkit")
+  await third.page.keyboard.type(`le son a coupé (${tag})`)
+  await avis.getByRole("button", { name: "Envoyer" }).click({ timeout: 10000 })
+  await avis.getByText("Merci, c'est bien arrivé.").waitFor({ timeout: 10000 }).then(() => ok("avis WebKit : texte envoyé, merci affiché")).catch(() => bad("avis WebKit : pas de merci après Envoyer"))
+  await shot(third.page, "08-avis-pas-trop-merci-webkit")
+  const lignes = psql(`SELECT kind || '|' || answer || '|' || mode FROM game_feedback WHERE game_code=${q(code)} AND answer='pas_trop'`).split("\n").filter(Boolean)
+  const avecTexte = psql(`SELECT count(*) FROM game_feedback WHERE game_code=${q(code)} AND message LIKE ${q(`%${tag}%`)}`)
+  if (lignes.length === 1 && lignes[0] === "avis|pas_trop|friends" && avecTexte === "1") ok("en base : un seul avis « pas trop », avec son texte")
+  else bad(`en base : ${lignes.length} avis « pas trop » (${lignes.join(", ")}), ${avecTexte} avec le texte`)
+
+  const avant = third.page.context().pages().length
+  const lien = third.frame.getByRole("link", { name: /serveur Discord de Blindz/ })
+  if (await lien.isVisible().catch(() => false)) ok("lien du serveur Discord visible sur le podium")
+  else bad("lien du serveur Discord absent du podium")
+  await lien.click({ timeout: 5000 }).catch(() => {})
+  await sleep(1500)
+  const frameUrl = activityFrame(third.page)?.url() ?? ""
+  if (frameUrl.includes("/discord/") && third.page.context().pages().length === avant) ok("lien du serveur : l'iframe reste sur l'Activité, aucun onglet ouvert")
+  else bad(`lien du serveur : l'iframe a navigué (${frameUrl}) ou un onglet s'est ouvert`)
 } catch (e) {
   bad(`arrêt : ${String(e?.message ?? e).split("\n")[0]}`)
   for (const p of players) await shot(p.page, `erreur-${p.tag}`).catch(() => {})
