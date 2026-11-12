@@ -80,6 +80,8 @@ export function SiteFooter() {
           </span>
           <nav aria-label="Pied de page" className="flex flex-wrap gap-5">
             <Link href="/faq/" className="transition hover:text-[#d88418]">FAQ</Link>
+            {/* Le formulaire du message de Tym (T24), ouvert a tout moment. */}
+            <Link href="/avis/" className="transition hover:text-[#d88418]">Donne ton avis</Link>
             <Link href="/mentions-legales/" className="transition hover:text-[#d88418]">Mentions légales</Link>
             <Link href="/confidentialite/" className="transition hover:text-[#d88418]">Confidentialité</Link>
             <Link href="/conditions/" className="transition hover:text-[#d88418]">Conditions</Link>

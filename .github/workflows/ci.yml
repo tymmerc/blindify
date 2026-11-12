@@ -176,12 +176,17 @@ jobs:
       # Sans base : la lecture SQL est simulee.
       - name: Tester la cible de l'ensemencement des outils E2E
         if: matrix.node == 22
-        run: node --test tools/seed-library.test.mjs tools/salles-de-test.test.mjs
+        run: node --test tools/seed-library.test.mjs tools/salles-de-test.test.mjs infra/blindz-admin/qui-joue.test.mjs
       # Filtre du rapport de visites (infra/visites/anonymiser.py) : adresses
       # tronquees avant GoAccess, VPS retire. python3 seulement, pas de base.
       - name: Tester l'anonymisation du rapport de visites
         if: matrix.node == 22
         run: bash infra/visites/anonymiser.test.sh
+      # Arrivees de l'onglet « Qui joue » (infra/visites/arrivees.py) : sources,
+      # salles, jour de jeu en heure de Paris, rien de personnel en sortie.
+      - name: Tester les arrivees de l'onglet Qui joue
+        if: matrix.node == 22
+        run: python3 -m unittest infra/visites/arrivees_test.py
       - run: npm test -- --coverage
         working-directory: backend
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

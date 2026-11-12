@@ -19,7 +19,7 @@ import streamerRoutes from "./routes/streamer";
 import { checkTwitchConfig } from "./services/twitchReader";
 import reportsRoutes from "./routes/reports";
 import feedbackRoutes from "./routes/feedback";
-import { ensureFeedbackSchema, FEEDBACK_PURGE_SQL } from "./services/feedback";
+import { CONTACT_PURGE_SQL, ensureFeedbackSchema, FEEDBACK_PURGE_SQL } from "./services/feedback";
 import statsRoutes from "./routes/stats";
 import audioSourcesRoutes from "./routes/audioSources";
 import friendsRoutes from "./routes/friends";
@@ -47,6 +47,7 @@ import {
 } from "./services/presence";
 import { expireOldInvitations, getAcceptedFriendIds, type ExpiredInvitation } from "./services/social";
 import { registerSocketHandlers, broadcastFriendPresence } from "./socketHandlers";
+import { startStallWatchdog } from "./services/realtimeOrchestrator";
 import { reportGameStartNotifStatus } from "./services/gameStartAnnounce";
 import { logger } from "./utils/logger";
 import { buildAllowedOrigins, matchesAllowedOrigin } from "./utils/origins";
@@ -161,6 +162,8 @@ setInterval(() => {
 const io = initSocket(server, allowedOrigins);
 
 registerSocketHandlers(io, lastKnownUsername);
+// Aucune partie « en cours » qui ne bouge plus (T27).
+startStallWatchdog(io);
 
 app.use(
   helmet({
@@ -448,6 +451,8 @@ async function runJanitor(): Promise<void> {
      WHERE started_at < NOW() - INTERVAL '400 days'`);
   // Retours de fin de partie : 12 mois, comme annonce sur /confidentialite.
   await step("old_feedback", FEEDBACK_PURGE_SQL);
+  // Contact laisse avec un message (T24) : 12 mois aussi, meme promesse.
+  await step("old_feedback_contact", CONTACT_PURGE_SQL);
   // Plus d'etape "dead_guest_tracks" : le filtre epargne desormais tout invite
   // qui possede de la musique, donc il n'y a plus rien a detacher. Detacher
   // puis supprimer revenait a effacer le joueur pour contourner sa propre

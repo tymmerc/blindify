@@ -1,0 +1,12 @@
+# Import des playlists YouTube : ce qu'il faut savoir (T33)
+
+1. C'est faisable et dans les règles : on lit la playlist avec l'API officielle de Google (YouTube Data API v3, `playlistItems.list`), qui donne le titre de chaque vidéo et le nom de la chaîne. On ne télécharge ni ne joue jamais le son ou la vidéo de YouTube : le son reste l'extrait Deezer, comme pour Spotify.
+2. Liens reconnus : `youtube.com/playlist?list=…`, `music.youtube.com/playlist?list=…`, `youtube.com/watch?v=…&list=…`, `youtu.be/…?list=…`, `m.youtube.com`, et les liens du bouton Partager des applis (avec `?si=…`). Aucune redirection à suivre, tout est dans l'adresse.
+3. Les playlists « non répertoriées » passent. Ne passent pas, avec un message clair : les playlists privées, les « J'aime » et « À regarder plus tard » (privés chez YouTube), les mix automatiques (« Mix », liste en RD…), et une vidéo seule sans playlist.
+4. Pour chaque vidéo, on nettoie le titre (« (Official Video) », « [Clip officiel] », « Lyrics », « ft. », chaînes « - Topic » et « VEVO »), puis on cherche le morceau dans Deezer avec la règle stricte de Spotify : jamais un autre morceau ni une autre version. Ce qui n'est pas retrouvé est écarté et le joueur le voit (« 42 morceaux sur 50 retrouvés »).
+5. Règle Google des 30 jours : on ne garde rien de YouTube. En base il n'y a que le morceau Deezer retrouvé. Le nom de la playlist YouTube n'est pas stocké, la bibliothèque affiche « Playlist YouTube ».
+6. Règle Google sur les textes : nos Conditions doivent dire qu'importer depuis YouTube revient à accepter les conditions de YouTube, et la page Confidentialité doit renvoyer vers celle de Google. Les textes proposés sont dans la PR.
+7. Coût : rien. Quota gratuit de 10 000 unités par jour ; lire 50 vidéos coûte 1 unité, une playlist de 200 morceaux en coûte 5. Ça laisse environ 2 000 imports par jour. Pas de facturation à activer pour une simple clé.
+8. Ce que tu dois créer (10 min) : sur console.cloud.google.com, un projet « Blindz », activer « YouTube Data API v3 », puis Identifiants > Créer des identifiants > Clé API. Restreins-la tout de suite : API autorisée = YouTube Data API v3 seulement ; application = adresses IP, celles du VPS (IPv4 et IPv6, je te les donne).
+9. La clé va dans le `.env` du serveur sous `YOUTUBE_API_KEY`, jamais dans le dépôt, jamais affichée. Sans clé, l'import YouTube dit simplement qu'il n'est pas disponible pour l'instant, le reste du jeu ne bouge pas.
+10. À savoir : Google peut couper une clé qui ne sert pas pendant 90 jours d'affilée.

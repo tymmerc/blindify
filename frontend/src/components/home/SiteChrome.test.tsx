@@ -33,6 +33,12 @@ describe("SiteChrome : mention beta", () => {
     expect(opened).toHaveBeenCalledTimes(1)
   })
 
+  it("le pied de page ouvre le formulaire « Donne ton avis » (T24)", () => {
+    render(<SiteFooter />)
+    const nav = screen.getByRole("navigation", { name: "Pied de page" })
+    expect(within(nav).getByRole("link", { name: "Donne ton avis" })).toHaveAttribute("href", expect.stringMatching(/^\/avis\/?$/))
+  })
+
   it("le pied de page renvoie vers les conditions d'utilisation (T17a)", () => {
     render(<SiteFooter />)
     const nav = screen.getByRole("navigation", { name: "Pied de page" })

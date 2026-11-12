@@ -32,6 +32,10 @@ BASE=/var/lib/blindz-visites
 DEST_DIR=/opt/dev/blindz/visites
 URL_PUBLIQUE=https://dev.tymmerc.eu/blindz/visites/
 ANONYMISER=/usr/local/lib/blindz-visites/anonymiser.py
+# Onglet « Qui joue » de l'administration : d'ou arrivent les joueurs, en
+# comptes par jour et par salle, sans adresse (voir l'en-tete du script).
+ARRIVEES=/usr/local/lib/blindz-visites/arrivees.py
+ARRIVEES_JSON="$DEST_DIR/arrivees.json"
 # Treize mois d'historique, la duree que la CNIL retient pour la mesure
 # d'audience. Les adresses arrivent deja tronquees (anonymiser.py).
 JOURS_GARDES=395
@@ -49,8 +53,27 @@ flock -n 8 || { echo "deja en cours, passage ignore" >&2; exit 0; }
 code="$(curl -s -o /dev/null -m 15 -w '%{http_code}' "$URL_PUBLIQUE" || true)"
 if [ "$code" != "401" ]; then
   echo "ECHEC : $URL_PUBLIQUE repond $code sans mot de passe (401 attendu), rapport retire" >&2
-  rm -f "$DEST_DIR/index.html"
+  rm -f "$DEST_DIR/index.html" "$ARRIVEES_JSON"
   exit 1
+fi
+
+# Arrivees : les 14 jours de journaux, du plus ancien au plus recent (.14.gz
+# ... .2.gz, .1, courant). Un echec n'empeche pas le rapport GoAccess, mais
+# le passage finit en erreur (visible dans journalctl -u blindz-visites).
+echec_arrivees=0
+tous=()
+for i in $(seq 14 -1 2); do
+  if [ -f "$JOURNAL.$i.gz" ]; then tous+=("$JOURNAL.$i.gz"); fi
+done
+for f in "$JOURNAL.1" "$JOURNAL"; do
+  if [ -f "$f" ]; then tous+=("$f"); fi
+done
+if [ "${#tous[@]}" -gt 0 ]; then
+  PYTHONDONTWRITEBYTECODE=1 python3 "$ARRIVEES" --etat "$BASE/arrivees.json" \
+    --sortie "$ARRIVEES_JSON" "${tous[@]}" || {
+    echo "ECHEC des arrivees (onglet Qui joue), ancien fichier garde" >&2
+    echec_arrivees=1
+  }
 fi
 
 journaux=()
@@ -73,7 +96,7 @@ trap 'rm -f "$lignes" "$tmp"' EXIT
 cat "${journaux[@]}" | python3 "$ANONYMISER" > "$lignes"
 if [ ! -s "$lignes" ]; then
   echo "aucune ligne de visiteur dans les journaux, base et rapport inchanges"
-  exit 0
+  exit "$echec_arrivees"
 fi
 
 # "-" : GoAccess lit l'entree standard comme un tube (sans inode), meme
@@ -93,3 +116,4 @@ rm -f "$lignes"
 chmod 644 "$tmp"
 mv -f "$tmp" "$DEST_DIR/index.html"
 trap - EXIT
+exit "$echec_arrivees"

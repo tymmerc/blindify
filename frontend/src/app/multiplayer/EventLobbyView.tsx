@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowRight, Fingerprint, MonitorSpeaker, Smartphone } from "lucide-react"
+import { ArrowRight, Fingerprint, MonitorSpeaker, Smartphone, Volume2 } from "lucide-react"
 import { QRCodeSVG } from "qrcode.react"
 import { useWakeLock } from "@/lib/useWakeLock"
 import { MusicLibrary } from "@/components/import/MusicLibrary"
@@ -11,12 +11,31 @@ import { publicPath } from "@/lib/publicPath"
 import type { LobbyRendererProps } from "./lobbyTypes"
 import { LobbyDock } from "./LobbyDock"
 import { RecentPlayers } from "./RecentPlayers"
-import { BLOCK, CARD, Label, LaunchButton, LaunchDock, Panel, RoomCode, Roster, RoundSettings } from "./lobbyKit"
+import { BLOCK, CARD, Label, LaunchButton, LaunchDock, Panel, RoomCode, Roster, RoundSettings, ShareButtons } from "./lobbyKit"
 
 const ACCENT = "#e0a32e"
 // Le serveur refuse de lancer sous 2 joueurs qui repondent (roomsController
 // need_more_players), meme si la config front du mode dit 1.
 const MIN_ANSWERING = 2
+
+/** Le son (T7) : le 01/11, un seul telephone a joue la musique pour trois
+ *  pendant 1 h 45. Les telephones des joueurs restent muets (pas d'echo), donc
+ *  on dit a l'hote, avant de lancer, comment faire entendre toute la table. */
+export function SoundTip({ hostPlays }: { hostPlays: boolean }) {
+  return (
+    <div
+      className="flex items-start gap-3 rounded-md border-2 border-[#2e2014] bg-[#f4ecdb] p-3 text-sm text-[#2e2014]"
+      data-testid="lobby-son"
+    >
+      <Volume2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+      <p className="m-0">
+        {hostPlays
+          ? "La musique sort seulement de ton téléphone, ceux des autres restent muets. Pour que toute la table entende, branche-le sur une enceinte ou mets le son sur la télé."
+          : "La musique sort de cet écran, les téléphones des joueurs restent muets. S'il est branché sur une télé, vérifie que le son passe bien par elle."}
+      </p>
+    </div>
+  )
+}
 
 /* ─── Entree : l'hote choisit sa facon de jouer ─── */
 function Choice({
@@ -79,14 +98,14 @@ function EventEntry({
         <Choice
           tag="Chacun son tel"
           title="Je joue aussi"
-          desc="Tu réponds avec les autres et tu gères la partie."
+          desc="Tu réponds avec les autres et tu gères la partie. La musique sort de ton téléphone."
           icon={<Smartphone className="h-5 w-5 text-[#2e2014]" />}
           onClick={() => onHost(true)}
         />
         <Choice
           tag="Chacun son tel"
           title="Je présente seulement"
-          desc="Ton tel au centre de la table : musique et résultats. Tu ne réponds pas."
+          desc="Ton tel ou ton ordi au centre, ou branché sur la télé : musique et résultats. Tu ne réponds pas."
           icon={<MonitorSpeaker className="h-5 w-5 text-[#2e2014]" />}
           onClick={() => onHost(false)}
         />
@@ -240,6 +259,12 @@ function EventHostLobby(props: LobbyRendererProps) {
             <RoomCode code={code} size="xl" />
             <p className="mb-0 mt-3 text-center text-[11px] font-bold uppercase tracking-[0.22em]">Code de la salle</p>
             <p className="m-0 mt-1 break-all text-center text-sm">{shortUrl}</p>
+            {/* Pour ceux qui ne sont pas encore la : le lien part par message (T7). */}
+            {code ? (
+              <div className="mx-auto mt-4 max-w-[24rem]">
+                <ShareButtons code={code} link={joinUrl} />
+              </div>
+            ) : null}
           </div>
           <div className="min-w-0 self-stretch border-t-2 border-dashed border-[#2e2014]/40 pt-4 lg:border-l-2 lg:border-t-0 lg:pl-8 lg:pt-0">
             <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.18em]">À table · {n}</p>
@@ -263,6 +288,9 @@ function EventHostLobby(props: LobbyRendererProps) {
         {/* 2. LA PARTIE : la regie */}
         <Panel fill label="La partie" dot={ACCENT} testId="lobby-partie" className="min-w-0">
           <RoundSettings room={props.room} accent={ACCENT} accentText="#2e2014" />
+          <div className="mt-4">
+            <SoundTip hostPlays={!presenter} />
+          </div>
           <LaunchDock>
             <LaunchButton
               onStart={props.onStart}

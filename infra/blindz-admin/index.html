@@ -6,6 +6,7 @@
 <meta name="robots" content="noindex, nofollow">
 <title>Blindz · administration</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500&display=swap">
+<link rel="stylesheet" href="qui-joue.css">
 <style>
   :root {
     color-scheme: dark;
@@ -220,12 +221,18 @@
   </div>
 
   <nav class="onglets" role="tablist">
-    <button role="tab" id="t-vue" aria-selected="true">Vue d'ensemble</button>
+    <button role="tab" id="t-joue" aria-selected="true">Qui joue</button>
+    <button role="tab" id="t-vue" aria-selected="false">Vue d'ensemble</button>
     <button role="tab" id="t-retours" aria-selected="false">Retours</button>
     <button role="tab" id="t-base" aria-selected="false">Base de données</button>
   </nav>
 
-  <div id="v-vue">
+  <!-- Carnet de soirees (T29), rendu par qui-joue.js. -->
+  <div id="v-joue">
+    <div id="qui-joue"><p class="vide">Chargement des données...</p></div>
+  </div>
+
+  <div id="v-vue" hidden>
     <div class="ctrl">
       <span class="seg" id="periode" role="group" aria-label="Période">
         <button data-p="7">7 j</button><button data-p="30" aria-pressed="true">30 j</button><button data-p="90">90 j</button><button data-p="0">tout</button>
@@ -241,7 +248,7 @@
   <div id="v-retours" hidden>
     <div class="ctrl">
       <span class="seg" id="filtre-retours" role="group" aria-label="Type de retour">
-        <button data-f="" aria-pressed="true">tous</button><button data-f="avis">avis</button><button data-f="bug">bugs</button>
+        <button data-f="" aria-pressed="true">tous</button><button data-f="mot">messages</button><button data-f="avis">avis</button><button data-f="bug">bugs</button>
       </span>
       <span class="fen" id="retours-meta"></span>
     </div>
@@ -284,6 +291,7 @@
 </div>
 <div class="tip" id="tip"></div>
 
+<script src="qui-joue.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 const frag = (h) => { const t = document.createElement("template"); t.innerHTML = h.trim(); return t.content; };
@@ -296,9 +304,9 @@ const C = { verm:"#cc4830", amber:"#d88418", sage:"#789084", blue:"#486090", ok:
 const API = "api";
 
 /* ============================== onglets ============================== */
-const VUES = ["vue", "retours", "base"];
+const VUES = ["joue", "vue", "retours", "base"];
 function vue(nom) {
-  const actif = VUES.includes(nom) ? nom : "vue";
+  const actif = VUES.includes(nom) ? nom : "joue";
   for (const v of VUES) {
     $("v-" + v).hidden = v !== actif;
     $("t-" + v).setAttribute("aria-selected", String(v === actif));
@@ -638,7 +646,9 @@ async function chargerDonnees() {
     $("maj").textContent = "Statistiques du " + D.genere_le.replace("T", " à ") + " · santé et erreurs en direct";
     try { const p = localStorage.getItem("blindz-admin-periode"); if (p != null) { periode = Number(p); document.querySelectorAll("#periode button").forEach(b => b.setAttribute("aria-pressed", String(Number(b.dataset.p) === periode))); } } catch {}
     rendre();
+    QuiJoue.donnees(D);
   } catch (e) {
+    $("qui-joue").innerHTML = '<div class="err">Impossible de charger les statistiques : ' + esc(e.message) + '</div>';
     $("vue").innerHTML = '<div class="err">Impossible de charger les statistiques : ' + esc(e.message) + '<br>Relancer <span class="mono">/opt/blindify/tools/gen-stats.sh</span> sur le serveur.</div>';
     $("maj").textContent = "erreur de chargement";
   }
@@ -884,7 +894,7 @@ let filtreRetours = "";
 // Numero de la derniere demande : en changeant vite de filtre, une reponse
 // lente arrivee apres la suivante ne doit pas ecraser l'affichage.
 let demandeRetours = 0;
-const MODES_JEU = { solo:"solo", defi:"défi", chrono:"chrono", buzzer:"un seul tel", friends:"à distance", event:"autour d'une table" };
+const MODES_JEU = { solo:"solo", defi:"défi", chrono:"chrono", buzzer:"un seul tel", friends:"à distance", event:"autour d'une table", site:"lien du site" };
 const modeRetourPill = (m) => ({ solo:"s", defi:"a", chrono:"s", buzzer:"b", friends:"b", event:"v" }[m] || "");
 
 /* Le navigateur en clair (l'agent complet reste en infobulle). */
@@ -898,8 +908,10 @@ function appareil(ua) {
 
 function carteRetour(x) {
   const bug = x.type === "bug";
-  const classe = bug ? "bug" : x.reponse === "oui" ? "oui" : "";
+  const mot = x.type === "mot";
+  const classe = bug ? "bug" : mot || x.reponse === "oui" ? "oui" : "";
   const quoi = bug ? '<span class="pill v">bug</span>'
+    : mot ? '<span class="pill pk">message</span>'
     : `<span class="pill ${x.reponse === "oui" ? "fin" : "abd"}">${x.reponse === "oui" ? "oui" : "pas trop"}</span>`;
   const id = Number(x.session_id);
   const partie = Number.isInteger(id) && id > 0 ? `<button class="lien" data-id="${id}">partie ${id}</button>` : "";
@@ -909,7 +921,7 @@ function carteRetour(x) {
     <div class="meta">${esc(x.le)} · ${quoi} <span class="pill ${modeRetourPill(x.mode)}">${esc(MODES_JEU[x.mode] || x.mode)}</span>
       ${x.game_code ? `<span>code ${esc(x.game_code)}</span>` : ""}${partie}
       <span title="${esc(x.user_agent || "")}">${esc(appareil(x.user_agent))}</span>${x.app_version ? `<span>version ${esc(x.app_version)}</span>` : ""}</div>
-    ${texte}</div>`;
+    ${texte}${x.contact ? `<div class="aide">contact laissé : <span class="mono">${esc(x.contact)}</span></div>` : ""}</div>`;
 }
 
 function rendreRetours(d) {
@@ -920,6 +932,7 @@ function rendreRetours(d) {
     <div class="kpi"><div class="lib">Avis « oui »</div><div class="v">${nb(c.oui)}</div><div class="cmp">${avis ? pct(c.oui, avis) + " % des avis" : "aucun avis"}</div></div>
     <div class="kpi"><div class="lib">Avis « pas trop »</div><div class="v">${nb(c.pas_trop)}</div><div class="cmp">${avis ? pct(c.pas_trop, avis) + " % des avis" : "aucun avis"}</div></div>
     <div class="kpi"><div class="lib">Bugs signalés</div><div class="v">${nb(c.bugs)}</div><div class="cmp">avec ou sans texte</div></div>
+    <div class="kpi"><div class="lib">Messages écrits</div><div class="v">${nb(c.mots || 0)}</div><div class="cmp">bloc de la 2e partie et lien du site</div></div>
   </div>`;
   const liste = d.retours.length
     ? d.retours.map(carteRetour).join("") + (d.tronque ? '<p class="aide">Les 500 plus récents seulement.</p>' : "")
@@ -962,9 +975,10 @@ document.querySelectorAll("#filtre-retours button").forEach(btn => btn.onclick =
 });
 
 /* ================================ init ================================ */
-if (location.hash === "#base" || location.hash === "#retours") vue(location.hash.slice(1));
+if (["#vue", "#base", "#retours"].includes(location.hash)) vue(location.hash.slice(1));
 chargerSante(); setInterval(chargerSante, 60000);
 chargerDonnees();
+QuiJoue.chargerArrivees();
 </script>
 </body>
 </html>

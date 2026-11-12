@@ -5,13 +5,24 @@ import { logger } from "../utils/logger";
 import { isDeezerId, isSpotifyId } from "../utils/providerIds";
 import { isIsrc } from "./previewMatch";
 import { ShortLinkError, normalizeShortLink, resolveShortLink, type ResolveOptions } from "./shortLinkResolver";
+import {
+  examinedFor,
+  fetchYoutubePlaylistInfo,
+  fetchYoutubeVideos,
+  isYoutubeHost,
+  matchYoutubeVideos,
+  youtubePlaylistId,
+  type YoutubeMatchReport,
+} from "./youtubeImportService";
 
 // ---------------------------------------------------------------------------
 // URL Parsing
 // ---------------------------------------------------------------------------
 
+export type ImportProvider = "spotify" | "deezer" | "youtube";
+
 export interface ParsedUrl {
-  provider: "spotify" | "deezer";
+  provider: ImportProvider;
   type: "user" | "playlist";
   id: string;
 }
@@ -26,6 +37,7 @@ export interface ParsedUrl {
  *   https://www.deezer.com/fr/profile/{userId}
  *   https://www.deezer.com/playlist/{playlistId}
  *   https://www.deezer.com/fr/playlist/{playlistId}
+ *   https://www.youtube.com/playlist?list={id}, music.youtube.com, youtu.be/...?list= (youtubeImportService)
  */
 export function parseProfileUrl(raw: string): ParsedUrl | null {
   const trimmed = raw.trim();
@@ -38,6 +50,11 @@ export function parseProfileUrl(raw: string): ParsedUrl | null {
   // Web links only: with a non-special scheme (x://, javascript://) a "\" stays
   // in the pathname, and axios later turns it into "/" (path traversal on the API).
   if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+
+  if (isYoutubeHost(url)) {
+    const id = youtubePlaylistId(url);
+    return id ? { provider: "youtube", type: "playlist", id } : null;
+  }
 
   const host = url.hostname.replace(/^www\./, "");
   const segments = url.pathname.split("/").filter(Boolean);
@@ -87,7 +104,8 @@ export async function parseProfileLink(raw: string, options?: ResolveOptions): P
   const short = normalizeShortLink(trimmed);
   if (short === null) {
     const parsed = parseProfileUrl(trimmed);
-    return parsed ? { parsed, url: trimmed } : null;
+    if (!parsed) return null;
+    return { parsed, url: parsed.provider === "youtube" ? canonicalYoutubeUrl(trimmed, parsed.id) : trimmed };
   }
   const arrival = await resolveShortLink(short, options);
   const parsed = parseProfileUrl(arrival);
@@ -99,6 +117,15 @@ export async function parseProfileLink(raw: string, options?: ResolveOptions): P
   kept.search = "";
   kept.hash = "";
   return { parsed, url: kept.toString() };
+}
+
+/**
+ * L'adresse gardee pour une playlist YouTube : la liste seule, sans la video
+ * ni le ?si= du partage. YouTube Music reste YouTube Music.
+ */
+function canonicalYoutubeUrl(raw: string, listId: string): string {
+  const music = /^(https?:\/\/)?music\.youtube\.com\//i.test(raw.trim());
+  return `https://${music ? "music" : "www"}.youtube.com/playlist?list=${encodeURIComponent(listId)}`;
 }
 
 // A broken escape ("%E0%A4%A") makes decodeURIComponent throw; callers run
@@ -130,6 +157,8 @@ export interface ImportedTrack {
   externalId: string;
   provider: "spotify" | "deezer";
   durationMs: number | null;
+  /** D'ou vient le morceau quand ce n'est pas son fournisseur (playlist YouTube retrouvee chez Deezer). */
+  importSource?: "youtube";
   /** Identifiant de l'enregistrement (Spotify) : retrouve l'extrait exact sur Deezer. */
   isrc?: string | null;
 }
@@ -171,6 +200,11 @@ export async function getSpotifyClientToken(): Promise<string> {
 // ---------------------------------------------------------------------------
 
 export async function fetchPublicPlaylists(parsed: ParsedUrl): Promise<PublicPlaylist[]> {
+  if (parsed.provider === "youtube") {
+    // Leve YoutubeImportError (privee, introuvable, mix...) : le message va au joueur.
+    const info = await fetchYoutubePlaylistInfo(parsed.id);
+    return [{ id: info.id, name: info.name, trackCount: info.itemCount, cover: info.cover }];
+  }
   if (parsed.type === "playlist") {
     return fetchSinglePlaylistInfo(parsed);
   }
@@ -314,11 +348,40 @@ async function searchDeezerPlaylist(name: string): Promise<PublicPlaylist[]> {
 // Fetch Playlist Tracks
 // ---------------------------------------------------------------------------
 
+export interface YoutubeImport {
+  tracks: ImportedTrack[];
+  report: YoutubeMatchReport;
+}
+
+/**
+ * Les morceaux d'une playlist YouTube retrouves chez Deezer : ce sont des
+ * morceaux Deezer (titre, artiste et pochette de Deezer), rien de YouTube.
+ * `requested` : titres demandes par playlist ; on regarde au moins 50 videos.
+ */
+export async function fetchYoutubeTracks(playlistId: string, requested?: number): Promise<YoutubeImport> {
+  const videos = await fetchYoutubeVideos(playlistId);
+  const { tracks, report } = await matchYoutubeVideos(videos, examinedFor(requested));
+  return {
+    report,
+    tracks: tracks.map(t => ({
+      title: t.title,
+      artist: t.artist,
+      album: null,
+      cover: t.albumCover,
+      externalId: String(t.id),
+      provider: "deezer",
+      durationMs: t.duration ? t.duration * 1000 : null,
+      importSource: "youtube",
+    })),
+  };
+}
+
 export async function fetchPlaylistTracks(
-  provider: "spotify" | "deezer",
+  provider: ImportProvider,
   playlistId: string,
   maxTracks?: number,
 ): Promise<ImportedTrack[]> {
+  if (provider === "youtube") return (await fetchYoutubeTracks(playlistId, maxTracks)).tracks;
   const limit = maxTracks ?? 500;
   if (provider === "spotify") {
     return fetchSpotifyPlaylistTracks(playlistId, limit);

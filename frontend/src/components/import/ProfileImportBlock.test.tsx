@@ -54,8 +54,37 @@ describe("ProfileImportBlock", () => {
   it("lien inconnu : le dit, sans envoyer", () => {
     render(<ProfileImportBlock hideHeader />)
     fireEvent.change(field(), { target: { value: "https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC" } })
-    expect(screen.getByText(/pas un lien de playlist ni de profil/i)).toBeInTheDocument()
+    expect(screen.getByText(/pas un lien de playlist spotify, deezer ou youtube/i)).toBeInTheDocument()
     expect(importButton()).toBeDisabled()
+  })
+
+  it("playlist YouTube : reconnue, envoyee sans la video ni le ?si=, et le compte rendu honnete", async () => {
+    mocks.importPlaylists.mockResolvedValue({ provider: "youtube", linkId: 9, playlists: [{ id: "PLabc" }] })
+    mocks.importSyncAll.mockResolvedValue({ synced: 42, youtube: { playlistSize: 80, examined: 50, found: 42, notFound: 8, unchecked: 0 } })
+    render(<ProfileImportBlock hideHeader />)
+    fireEvent.change(field(), { target: { value: "https://youtu.be/dQw4w9WgXcQ?list=PLabc&si=partage" } })
+    expect(screen.getByText(/playlist youtube : on retrouve ses morceaux chez deezer/i)).toBeInTheDocument()
+    fireEvent.click(importButton())
+    await waitFor(() => expect(mocks.importPlaylists).toHaveBeenCalledWith("https://www.youtube.com/playlist?list=PLabc"))
+    expect(await screen.findByText("42 morceaux sur 50 retrouvés")).toBeInTheDocument()
+    expect(screen.getByText(/pas chez deezer avec un extrait.*les 50 premiers de la playlist/i)).toBeInTheDocument()
+    expect(mocks.importSyncAll).toHaveBeenCalledWith("youtube", ["PLabc"], 10, 9)
+  })
+
+  it("lien d'une video YouTube : dit qu'il faut la playlist, sans envoyer", () => {
+    render(<ProfileImportBlock hideHeader />)
+    fireEvent.change(field(), { target: { value: "https://www.youtube.com/watch?v=dQw4w9WgXcQ" } })
+    expect(screen.getByText(/lien d'une vidéo.*list=/i)).toBeInTheDocument()
+    expect(importButton()).toBeDisabled()
+    expect(mocks.importPlaylists).not.toHaveBeenCalled()
+  })
+
+  it("erreur YouTube du serveur (playlist privee) : son message, tel quel", async () => {
+    mocks.importPlaylists.mockRejectedValue(new Error("Cette playlist YouTube est privée. Passe-la en publique ou non répertoriée, puis réessaie."))
+    render(<ProfileImportBlock hideHeader />)
+    fireEvent.change(field(), { target: { value: "https://www.youtube.com/playlist?list=PLprive" } })
+    fireEvent.click(importButton())
+    expect(await screen.findByRole("alert")).toHaveTextContent(/playlist youtube est privée/i)
   })
 
   it("import : progression en clair puis le resultat, et on peut en importer un autre", async () => {
@@ -82,10 +111,10 @@ describe("ProfileImportBlock", () => {
     expect(field()).toHaveValue(PLAYLIST)
   })
 
-  it("« Où trouver ton lien ? » : les etapes pour Spotify et Deezer", () => {
+  it("« Où trouver ton lien ? » : les etapes pour Spotify, Deezer et YouTube", () => {
     render(<ProfileImportBlock hideHeader />)
     fireEvent.click(screen.getByText(/où trouver ton lien/i))
-    expect(screen.getAllByText(/copier le lien/i)).toHaveLength(2)
+    expect(screen.getAllByText(/copier le lien/i)).toHaveLength(3)
     expect(screen.getByRole("link", { name: /ouvrir spotify/i })).toBeInTheDocument()
     expect(screen.getByRole("link", { name: /ouvrir deezer/i })).toBeInTheDocument()
   })

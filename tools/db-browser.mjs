@@ -141,10 +141,13 @@ const server = http.createServer(async (req, res) => {
       if (!etat[0].existe) return json(res, 200, { table: false })
       if (!etat[0].lisible) return json(res, 200, { table: true, lisible: false })
       const type = url.searchParams.get("type")
-      const filtre = type === "avis" || type === "bug" ? type : null
+      const filtre = type === "avis" || type === "bug" || type === "mot" ? type : null
       const { rows: retours } = await lire(
         `SELECT id, kind AS type, answer AS reponse, message, mode, session_id, game_code,
                 user_agent, app_version,
+                -- Colonne de la migration 007 (T24) : lue par to_jsonb pour
+                -- rester lisible sur une base qui ne l'a pas encore.
+                to_jsonb(game_feedback) ->> 'contact' AS contact,
                 to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI') AS le
          FROM game_feedback
          WHERE $1::text IS NULL OR kind = $1
@@ -155,7 +158,8 @@ const server = http.createServer(async (req, res) => {
         `SELECT count(*)::int AS total,
                 count(*) FILTER (WHERE answer = 'oui')::int AS oui,
                 count(*) FILTER (WHERE answer = 'pas_trop')::int AS pas_trop,
-                count(*) FILTER (WHERE kind = 'bug')::int AS bugs
+                count(*) FILTER (WHERE kind = 'bug')::int AS bugs,
+                count(*) FILTER (WHERE kind = 'mot')::int AS mots
          FROM game_feedback`
       )
       return json(res, 200, { table: true, lisible: true, filtre, compte: compte[0], retours, tronque: retours.length >= MAX_LIGNES })

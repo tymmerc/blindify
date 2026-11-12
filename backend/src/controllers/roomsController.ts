@@ -11,7 +11,7 @@ import { startRoundAndBroadcast } from "../services/realtimeOrchestrator";
 import { GameMode, type RoundTrack } from "../types/game";
 import { initStreamerGame } from "../services/streamerOrchestrator";
 import { maxStreamerGames, streamerModeEnabled } from "../services/streamerConfig";
-import { activeStreamerGames, hostStreamerState } from "../services/streamerGame";
+import { activeStreamerGames, clearStreamerGame, hostStreamerState } from "../services/streamerGame";
 import { startTwitch } from "../services/streamerTwitch";
 import { cleanChannel } from "../services/twitchChat";
 import { streamerStartRefusal } from "./streamerController";
@@ -92,6 +92,40 @@ function publicTrackRows(rows: Array<Record<string, unknown>>, revealedUpTo: num
 
 /** Un autre lancement a pris la salle pendant le tirage. */
 class StartConflictError extends Error {}
+
+/** Texte montre a l'hote quand la partie n'a pas pu partir (a valider par Tym). */
+const START_FAILED_MESSAGE = "La partie n'a pas pu démarrer. Relance-la, la salle reste ouverte.";
+
+/** Clot en base une partie qui ne tourne plus, sans toucher une partie finie. */
+async function abandonSession(sessionId: number): Promise<void> {
+  await pool.query(
+    `UPDATE game_sessions SET state='abandoned', ended_at=COALESCE(ended_at, NOW())
+     WHERE id=$1 AND state='in_progress'`,
+    [sessionId]
+  );
+}
+
+/**
+ * Lancement rate APRES la creation de la partie en base (T27) : on defait
+ * tout. La partie est close (« abandoned »), la salle repasse en attente et
+ * l'hote peut relancer sans recreer de salle. Sans ca, la salle et la partie
+ * restaient « in_progress » sans rien qui tourne, et attendre-parties.sh les
+ * comptait comme une vraie partie.
+ */
+async function abortStartedGame(room: { id: number; room_code: string }, sessionId: number, streamer: boolean): Promise<void> {
+  if (streamer) clearStreamerGame(room.room_code);
+  else clearGame(room.room_code);
+  try {
+    await abandonSession(sessionId);
+    await pool.query(
+      `UPDATE multiplayer_rooms SET status='waiting', session_id=NULL, started_at=NULL
+       WHERE id=$1 AND session_id=$2`,
+      [room.id, sessionId]
+    );
+  } catch (err) {
+    logger.error("start_abort_failed", { roomCode: room.room_code, sessionId, error: err });
+  }
+}
 
 // Verrou du lancement, par salle : un double clic, deux onglets ou deux
 // requetes en meme temps ne tirent pas deux parties. Verrou consultatif de
@@ -711,6 +745,15 @@ export const roomsController = {
           fail(res, "room_conflict", "La salle a été modifiée par un autre joueur. Réessaie.", 409);
           return;
         }
+        // La partie d'avant ne tourne plus en memoire : si elle est encore
+        // « in_progress » en base (lancement casse, serveur redemarre), elle
+        // est close ici. Une partie finie dont l'ecriture est en route passe
+        // ensuite « finished » (persistGameResults), comme prevu.
+        if (room.session_id) {
+          await abandonSession(room.session_id).catch(err =>
+            logger.error("previous_session_abandon_failed", { roomCode: room.room_code, sessionId: room.session_id, error: err })
+          );
+        }
         room.status = "waiting";
         room.session_id = null;
       } else {
@@ -1210,6 +1253,8 @@ export const roomsController = {
       // ci-dessus prend plusieurs secondes, d'autres lancements ont pu passer.
       const lateRefusal = streamerStartRefusal(room.room_code);
       if (lateRefusal) {
+        // La partie existe deja en base : on la defait, la salle reste ouverte.
+        await abortStartedGame(room, session.id, true);
         fail(res, lateRefusal.code, lateRefusal.message, lateRefusal.status);
         return;
       }
@@ -1230,18 +1275,26 @@ export const roomsController = {
       }));
       // En « Toi tout seul », le public ne repond pas : pas de chat a lire.
       const chatChannel = subMode === "solo" ? null : twitchChannel;
-      const state = initStreamerGame(io, {
-        roomCode: room.room_code,
-        hostUserId: room.host_user_id,
-        rounds: streamerRounds,
-        subMode,
-        requestedRounds: room.question_count,
-        shortReason,
-        sessionId: session.id,
-        // « Temps pour repondre » du lobby : la phase du public.
-        timings: { chatMs: roundDurationMs },
-        twitchChannel: chatChannel,
-      });
+      let state: ReturnType<typeof initStreamerGame>;
+      try {
+        state = initStreamerGame(io, {
+          roomCode: room.room_code,
+          hostUserId: room.host_user_id,
+          rounds: streamerRounds,
+          subMode,
+          requestedRounds: room.question_count,
+          shortReason,
+          sessionId: session.id,
+          // « Temps pour repondre » du lobby : la phase du public.
+          timings: { chatMs: roundDurationMs },
+          twitchChannel: chatChannel,
+        });
+      } catch (err) {
+        logger.error("streamer_start_failed", { roomCode: room.room_code, sessionId: session.id, error: err });
+        await abortStartedGame(room, session.id, true);
+        fail(res, "start_failed", START_FAILED_MESSAGE, 500);
+        return;
+      }
       if (chatChannel) {
         try {
           startTwitch(io, room.room_code, chatChannel);
@@ -1268,34 +1321,46 @@ export const roomsController = {
       return;
     }
 
-    bootstrapGameState({
-      roomCode: room.room_code,
-      hostUserId: room.host_user_id,
-      hostPlays: room.mode === GameMode.EVENT && room.host_plays === true,
-      singleContributor,
-      mode: session.mode as GameMode,
-      tracks: roundTracks,
-      requestedRounds: room.question_count,
-      shortReason,
-      participants: participantIds.map(id => ({
-        userId: id,
-        username: usernameMap.get(id) ?? null,
-        avatar: avatarMap.get(id) ?? null,
-      })),
-      config: {
-        autoAdvance: room.auto_advance ?? false,
-        roundDurationMs,
-      },
-      sessionId: session.id,
-    });
+    try {
+      bootstrapGameState({
+        roomCode: room.room_code,
+        hostUserId: room.host_user_id,
+        hostPlays: room.mode === GameMode.EVENT && room.host_plays === true,
+        singleContributor,
+        mode: session.mode as GameMode,
+        tracks: roundTracks,
+        requestedRounds: room.question_count,
+        shortReason,
+        participants: participantIds.map(id => ({
+          userId: id,
+          username: usernameMap.get(id) ?? null,
+          avatar: avatarMap.get(id) ?? null,
+        })),
+        config: {
+          autoAdvance: room.auto_advance ?? false,
+          roundDurationMs,
+        },
+        sessionId: session.id,
+      });
 
-    // Start round 1 immediately in a server-authoritative way
-    // Pre-roll : la 1re manche demarre 3s plus tard pour laisser passer le
-    // decompte 3-2-1 (avant, la musique jouait PENDANT le decompte). Le chrono
-    // et l'audio partent donc ensemble, a la fin du decompte.
-    startRoundAndBroadcast(io, room.room_code, {
-      startAt: Date.now() + FIRST_ROUND_PREROLL_MS,
-    });
+      // Start round 1 immediately in a server-authoritative way
+      // Pre-roll : la 1re manche demarre 3s plus tard pour laisser passer le
+      // decompte 3-2-1 (avant, la musique jouait PENDANT le decompte). Le chrono
+      // et l'audio partent donc ensemble, a la fin du decompte.
+      const firstRound = startRoundAndBroadcast(io, room.room_code, {
+        startAt: Date.now() + FIRST_ROUND_PREROLL_MS,
+      });
+      // La manche 1 doit etre en jeu, chrono pose : sinon personne ne verrait
+      // jamais de reveal (T27). On defait et l'hote relance.
+      if (!firstRound || firstRound.phase !== "GUESSING" || !firstRound.timing.revealAt) {
+        throw new Error("first_round_not_started");
+      }
+    } catch (err) {
+      logger.error("game_start_failed", { roomCode: room.room_code, sessionId: session.id, error: err });
+      await abortStartedGame(room, session.id, false);
+      fail(res, "start_failed", START_FAILED_MESSAGE, 500);
+      return;
+    }
 
     // Mail a Tym si c'est une vraie partie a plusieurs (T18). Rend la main
     // tout de suite : rien ne ralentit ni ne bloque le lancement.

@@ -1,13 +1,17 @@
 import { act, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { EndFeedback } from "./EndFeedback"
 import { ApiError, clientApi } from "@/lib/apiClient"
 import { buildAnswerPayload, buildBugPayload } from "@/lib/feedback"
+import { GAMES_KEY, PROMPT_SHOWN_KEY, resetPromptMemory } from "@/lib/feedbackPrompt"
+import { NOTE_INTRO } from "./StudentNote"
+import { DISCORD_SERVER_TEXT } from "./DiscordServerLine"
+import { setExternalLinkOpener } from "@/lib/externalLink"
 
 vi.mock("@/lib/apiClient", async importOriginal => ({
   ...(await importOriginal<typeof import("@/lib/apiClient")>()),
-  clientApi: { sendFeedback: vi.fn() },
+  clientApi: { sendFeedback: vi.fn(), sendFeedbackFollowUp: vi.fn() },
 }))
 
 /** Envoi qui reste en vol jusqu'a ce que le test le termine. */
@@ -20,6 +24,7 @@ function pendingSend() {
 }
 
 const send = vi.mocked(clientApi.sendFeedback)
+const followUp = vi.mocked(clientApi.sendFeedbackFollowUp)
 
 describe("EndFeedback", () => {
   beforeEach(() => {
@@ -52,7 +57,7 @@ describe("EndFeedback", () => {
     expect(screen.getByRole("button", { name: "Pas trop" })).toBeEnabled()
 
     await user.click(screen.getByRole("button", { name: "Pas trop" }))
-    expect(await screen.findByText(/Si un truc a coincé/)).toBeInTheDocument()
+    expect(await screen.findByText("Merci, c'est noté.")).toBeInTheDocument()
     expect(send).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "avis", answer: "pas_trop", gameCode: "AB12CD" }), expect.any(AbortSignal))
   })
 
@@ -151,6 +156,148 @@ describe("EndFeedback", () => {
     expect(send).toHaveBeenCalledWith(expect.not.objectContaining({ message: expect.anything() }), expect.any(AbortSignal))
     expect(await screen.findByText("Merci, on regarde ça.")).toBeInTheDocument()
   })
+  describe("un mot apres Oui ou Pas trop (T32)", () => {
+    beforeEach(() => {
+      send.mockResolvedValue({ received: true, followUp: "12.signe" })
+      followUp.mockReset()
+      followUp.mockResolvedValue({ received: true })
+    })
+
+    it("apres Oui, ouvre un champ deja focalise, et le texte s'ajoute au meme avis", async () => {
+      const user = userEvent.setup()
+      render(<EndFeedback context={{ mode: "friends", gameCode: "AB12CD" }} />)
+      await user.click(screen.getByRole("button", { name: "Oui" }))
+
+      const field = screen.getByRole("textbox", { name: "Qu'est-ce qui t'a plu ?" })
+      expect(field).toHaveFocus()
+      expect(field).toHaveAttribute("maxLength", "1000")
+      expect(screen.getByRole("button", { name: "Envoyer" })).toBeDisabled()
+      await user.type(field, "  les playlists de chacun  ")
+      await user.click(screen.getByRole("button", { name: "Envoyer" }))
+
+      expect(await screen.findByText("Merci, c'est bien arrivé.")).toHaveFocus()
+      expect(followUp).toHaveBeenCalledWith("12.signe", "les playlists de chacun", expect.any(AbortSignal))
+      // L'avis n'est parti qu'une fois, le texte ne cree pas un deuxieme avis.
+      expect(send).toHaveBeenCalledTimes(1)
+      expect(screen.queryByRole("textbox", { name: "Qu'est-ce qui t'a plu ?" })).not.toBeInTheDocument()
+    })
+
+    it("apres Pas trop, demande ce qui a coince, et Ctrl+Entree envoie", async () => {
+      const user = userEvent.setup()
+      render(<EndFeedback context={{ mode: "event", gameCode: "AB12CD" }} />)
+      await user.click(screen.getByRole("button", { name: "Pas trop" }))
+
+      const field = screen.getByRole("textbox", { name: "Qu'est-ce qui a coincé ?" })
+      expect(field).toHaveFocus()
+      await user.keyboard("le son{Enter}a coupé{Control>}{Enter}{/Control}")
+      expect(await screen.findByText("Merci, c'est bien arrivé.")).toBeInTheDocument()
+      expect(followUp).toHaveBeenCalledWith("12.signe", "le son\na coupé", expect.any(AbortSignal))
+    })
+
+    it("le champ s'ouvre avant la reponse du serveur ; un texte tape vite attend l'avis", async () => {
+      let finish = () => {}
+      send.mockImplementation(() => new Promise(resolve => {
+        finish = () => resolve({ received: true, followUp: "13.signe" })
+      }))
+      const user = userEvent.setup()
+      render(<EndFeedback context={{ mode: "solo", sessionId: 3 }} />)
+      await user.click(screen.getByRole("button", { name: "Oui" }))
+
+      const field = screen.getByRole("textbox", { name: "Qu'est-ce qui t'a plu ?" })
+      expect(field).toHaveFocus()
+      await user.type(field, "top")
+      await user.click(screen.getByRole("button", { name: "Envoyer" }))
+      expect(followUp).not.toHaveBeenCalled()
+
+      await act(async () => finish())
+      expect(await screen.findByText("Merci, c'est bien arrivé.")).toBeInTheDocument()
+      expect(followUp).toHaveBeenCalledWith("13.signe", "top", expect.any(AbortSignal))
+    })
+
+    it("le texte est facultatif : sans rien ecrire, l'avis reste compte", async () => {
+      const user = userEvent.setup()
+      render(<EndFeedback context={{ mode: "chrono" }} />)
+      await user.click(screen.getByRole("button", { name: "Oui" }))
+      expect(await screen.findByText("Merci, c'est noté.")).toBeInTheDocument()
+      expect(screen.getByText(/Facultatif/)).toBeInTheDocument()
+      await user.type(screen.getByRole("textbox", { name: "Qu'est-ce qui t'a plu ?" }), "   ")
+      expect(screen.getByRole("button", { name: "Envoyer" })).toBeDisabled()
+      expect(followUp).not.toHaveBeenCalled()
+    })
+
+    it("un echec du texte se dit et laisse reessayer, sans renvoyer l'avis", async () => {
+      followUp.mockRejectedValueOnce(new Error("reseau"))
+      const user = userEvent.setup()
+      render(<EndFeedback context={{ mode: "buzzer" }} />)
+      await user.click(screen.getByRole("button", { name: "Pas trop" }))
+      await user.type(screen.getByRole("textbox", { name: "Qu'est-ce qui a coincé ?" }), "trop dur")
+      await user.click(screen.getByRole("button", { name: "Envoyer" }))
+      expect(await screen.findByRole("alert")).toHaveTextContent(/n'est pas parti/)
+
+      await user.click(screen.getByRole("button", { name: "Envoyer" }))
+      expect(await screen.findByText("Merci, c'est bien arrivé.")).toBeInTheDocument()
+      expect(followUp).toHaveBeenCalledTimes(2)
+      expect(send).toHaveBeenCalledTimes(1)
+    })
+
+    it("un double Envoyer n'envoie le texte qu'une fois", async () => {
+      let finish = () => {}
+      followUp.mockImplementation(() => new Promise(resolve => {
+        finish = () => resolve({ received: true })
+      }))
+      const user = userEvent.setup()
+      render(<EndFeedback context={{ mode: "solo" }} />)
+      await user.click(screen.getByRole("button", { name: "Oui" }))
+      await user.type(screen.getByRole("textbox", { name: "Qu'est-ce qui t'a plu ?" }), "bien")
+      const envoyer = screen.getByRole("button", { name: "Envoyer" })
+      await act(async () => {
+        envoyer.click()
+        envoyer.click()
+      })
+      await act(async () => finish())
+      expect(followUp).toHaveBeenCalledTimes(1)
+    })
+
+    it("sans jeton rendu par le serveur, ne propose pas de champ", async () => {
+      send.mockResolvedValue({ received: true })
+      const user = userEvent.setup()
+      render(<EndFeedback context={{ mode: "solo" }} />)
+      await user.click(screen.getByRole("button", { name: "Oui" }))
+      expect(await screen.findByText("Merci, c'est noté.")).toBeInTheDocument()
+      expect(screen.queryByRole("textbox")).not.toBeInTheDocument()
+    })
+
+    it("garde le lien Signaler un bug a cote du champ", async () => {
+      const user = userEvent.setup()
+      render(<EndFeedback context={{ mode: "solo" }} />)
+      await user.click(screen.getByRole("button", { name: "Oui" }))
+      expect(screen.getByRole("button", { name: "Signaler un bug" })).toBeInTheDocument()
+    })
+  })
+
+  describe("le lien du serveur Discord (08/11)", () => {
+    afterEach(() => setExternalLinkOpener(null))
+
+    it("est la a chaque fin de partie, dans un nouvel onglet", () => {
+      render(<EndFeedback context={{ mode: "solo" }} />)
+      const link = screen.getByRole("link", { name: new RegExp(DISCORD_SERVER_TEXT) })
+      expect(link).toHaveAttribute("href", "https://discord.gg/8pyAtVDFzU")
+      expect(link).toHaveAttribute("target", "_blank")
+      expect(link).toHaveAttribute("rel", "noopener noreferrer")
+    })
+
+    it("dans l'Activite Discord, passe par le SDK au lieu de naviguer dans l'iframe", () => {
+      const opener = vi.fn()
+      setExternalLinkOpener(opener)
+      render(<EndFeedback context={{ mode: "friends", gameCode: "AB12CD" }} />)
+      const link = screen.getByRole("link", { name: new RegExp(DISCORD_SERVER_TEXT) })
+      const click = new MouseEvent("click", { bubbles: true, cancelable: true })
+      link.dispatchEvent(click)
+      expect(click.defaultPrevented).toBe(true)
+      expect(opener).toHaveBeenCalledWith("https://discord.gg/8pyAtVDFzU")
+    })
+  })
+
 })
 
 describe("buildBugPayload", () => {
@@ -167,5 +314,95 @@ describe("buildAnswerPayload", () => {
     const payload = buildAnswerPayload({ mode: "solo", sessionId: 0 }, "pas_trop")
     expect(payload).toMatchObject({ kind: "avis", answer: "pas_trop", mode: "solo" })
     expect(payload).not.toHaveProperty("sessionId")
+  })
+})
+
+describe("EndFeedback : le message de Tym en fin de 2e partie (T24)", () => {
+  beforeEach(() => {
+    send.mockReset()
+    send.mockResolvedValue({ received: true })
+    localStorage.removeItem(PROMPT_SHOWN_KEY)
+    localStorage.removeItem(GAMES_KEY)
+    resetPromptMemory()
+  })
+
+  it("garde le Oui / Pas trop a la 1re partie, montre le message a la 2e, puis plus jamais", () => {
+    const first = render(<EndFeedback context={{ mode: "solo" }} />)
+    expect(screen.getByRole("button", { name: "Oui" })).toBeInTheDocument()
+    expect(screen.queryByText(NOTE_INTRO)).not.toBeInTheDocument()
+    first.unmount()
+
+    const second = render(<EndFeedback context={{ mode: "buzzer" }} />)
+    expect(screen.getByText(NOTE_INTRO)).toBeInTheDocument()
+    expect(screen.getByRole("textbox", { name: "Ton message" })).toBeVisible()
+    expect(screen.queryByRole("button", { name: "Oui" })).not.toBeInTheDocument()
+    expect(screen.getByRole("region", { name: "Un mot pour l'étudiant derrière Blindz" })).toBeInTheDocument()
+    second.unmount()
+
+    render(<EndFeedback context={{ mode: "chrono" }} />)
+    expect(screen.queryByText(NOTE_INTRO)).not.toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Oui" })).toBeInTheDocument()
+  })
+
+  it("ne compte qu'une partie par ecran, meme si l'ecran se redessine", () => {
+    const view = render(<EndFeedback context={{ mode: "solo" }} />)
+    view.rerender(<EndFeedback context={{ mode: "solo" }} />)
+    view.rerender(<EndFeedback context={{ mode: "solo" }} />)
+    expect(localStorage.getItem(GAMES_KEY)).toBe("1")
+    expect(screen.queryByText(NOTE_INTRO)).not.toBeInTheDocument()
+  })
+
+  it("sans stockage, montre quand meme le message a la 2e partie de la session", () => {
+    const spy = vi.spyOn(window, "localStorage", "get").mockImplementation(() => {
+      throw new Error("SecurityError")
+    })
+    try {
+      render(<EndFeedback context={{ mode: "friends", gameCode: "AB12CD" }} />).unmount()
+      render(<EndFeedback context={{ mode: "chrono" }} />)
+      expect(screen.getByText(NOTE_INTRO)).toBeInTheDocument()
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it("un ecran de fin demonte puis remonte pour la meme partie ne compte qu'une fois (solo, vu sur la pile)", () => {
+    // Derniere manche du solo : l'ecran de fin apparait 120 ms, disparait sous
+    // la fenetre du resultat, puis revient apres « Terminer ».
+    render(<EndFeedback context={{ mode: "solo", sessionId: 31 }} />).unmount()
+    render(<EndFeedback context={{ mode: "solo", sessionId: 31 }} />)
+    expect(localStorage.getItem(GAMES_KEY)).toBe("1")
+    expect(screen.queryByText(NOTE_INTRO)).not.toBeInTheDocument()
+  })
+
+  it("garde le message affiche si l'ecran de la 2e partie est remonte", () => {
+    render(<EndFeedback context={{ mode: "solo", sessionId: 1 }} />).unmount()
+    render(<EndFeedback context={{ mode: "solo", sessionId: 2 }} />).unmount()
+    render(<EndFeedback context={{ mode: "solo", sessionId: 2 }} />)
+    expect(screen.getByText(NOTE_INTRO)).toBeInTheDocument()
+    expect(localStorage.getItem(GAMES_KEY)).toBe("2")
+  })
+
+  it("dans la meme salle, la partie suivante compte bien (apres la fenetre de remontage)", () => {
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_000_000)
+    try {
+      render(<EndFeedback context={{ mode: "friends", gameCode: "AB12CD" }} />).unmount()
+      now.mockReturnValue(1_000_000 + 4 * 60_000)
+      render(<EndFeedback context={{ mode: "friends", gameCode: "AB12CD" }} />)
+      expect(screen.getByText(NOTE_INTRO)).toBeInTheDocument()
+    } finally {
+      now.mockRestore()
+    }
+  })
+
+  it("le message part avec le contexte de la partie", async () => {
+    localStorage.setItem(GAMES_KEY, "1")
+    const user = userEvent.setup()
+    render(<EndFeedback context={{ mode: "solo", sessionId: 7 }} />)
+    await user.type(screen.getByRole("textbox", { name: "Ton message" }), "génial")
+    await user.click(screen.getByRole("button", { name: "Envoyer" }))
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "mot", mode: "solo", sessionId: 7, message: "génial" }),
+      expect.any(AbortSignal)
+    )
   })
 })

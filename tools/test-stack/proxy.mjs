@@ -10,6 +10,7 @@
 //   /discord-stub/*        -> faux Discord : echange du code OAuth2, utilisateur,
 //                             et qui est dans quel salon (pour le harnais)
 //   /short-link-stub/*     -> faux hebergeur des liens courts des applis
+//   /youtube-stub/*        -> fausse API YouTube Data v3 (playlists, playlistItems)
 //                             (link.deezer.com, spotify.link...), redirections seules
 //   /resend-stub           -> faux Resend : le mail de debut de partie (T18) y
 //                             arrive au lieu de partir ; GET /resend-stub/mails
@@ -150,6 +151,43 @@ function deezerStub(req, res) {
   return json({ error: { type: "DataException", message: "no data", code: 800 } })
 }
 
+/* ─── Fausse API YouTube ────────────────────────────────────────────────
+ * Le backend de test y est branche via YOUTUBE_API_BASE (cle factice). Une
+ * playlist "PLpile<N>" donne 12 videos tirees du catalogue a partir de N
+ * (titres facon YouTube : « Artiste - Titre (Clip officiel) », chaine VEVO),
+ * plus 2 morceaux que le faux Deezer ne connait pas et une video supprimee.
+ * "PLpilePrive" est privee, "PLpileVide" est vide. On ne joue jamais rien de
+ * YouTube : le son reste celui du faux Deezer. */
+const YT_KEY = "cle-de-la-pile-de-test"
+const youtubeVideos = n => [
+  ...playlistTracks(n).map((t, i) => ({ snippet: { title: i % 2 ? `${t.artist} - ${t.title} (Clip officiel)` : `${t.artist} - ${t.title} [Official Video]`, videoOwnerChannelTitle: `${t.artist.replace(/\s+/g, "")}VEVO` } })),
+  { snippet: { title: "Personne Connue - Morceau absent (Official Video)", videoOwnerChannelTitle: "PersonneConnueVEVO" } },
+  { snippet: { title: "Deleted video" } },
+  { snippet: { title: "Groupe Fantome - Titre perdu (Lyrics)", videoOwnerChannelTitle: "une chaine de paroles" } },
+]
+
+function youtubeStub(req, res) {
+  const u = new URL(req.url, "http://x")
+  const p = u.pathname.replace(/^\/youtube-stub/, "")
+  if (STUB_LOG) fs.appendFile(STUB_LOG, `${new Date().toISOString()} youtube ${p}${u.search.replace(/key=[^&]*/, "key=***")}\n`, () => {})
+  const json = (body, code = 200) => { res.writeHead(code, { "Content-Type": "application/json" }); res.end(JSON.stringify(body)) }
+  const fail = (code, reason) => json({ error: { code, errors: [{ reason }] } }, code)
+  if (u.searchParams.get("key") !== YT_KEY) return fail(400, "keyInvalid")
+  const id = u.searchParams.get(p === "/playlists" ? "id" : "playlistId") ?? ""
+  const n = Number((id.match(/^PLpile(\d+)$/) || [])[1])
+  if (p === "/playlists") {
+    if (id === "PLpileVide") return json({ items: [{ id, snippet: { title: "Playlist vide" }, contentDetails: { itemCount: 0 } }] })
+    if (!Number.isFinite(n)) return json({ items: [] }) // privee ou introuvable : YouTube ne dit pas laquelle
+    return json({ items: [{ id, snippet: { title: `Playlist YouTube de test ${n}`, thumbnails: { medium: { url: null } } }, contentDetails: { itemCount: 15 } }] })
+  }
+  if (p === "/playlistItems") {
+    if (id === "PLpilePrive") return fail(403, "playlistItemsNotAccessible")
+    if (!Number.isFinite(n)) return fail(404, "playlistNotFound")
+    return json({ items: youtubeVideos(n) })
+  }
+  return fail(404, "notFound")
+}
+
 /* ─── Faux Discord ──────────────────────────────────────────────────────
  * Le backend de test y est branche via DISCORD_API_BASE : l'echange du code
  * OAuth2 et la lecture de l'utilisateur, comme chez Discord mais sans reseau.
@@ -272,6 +310,7 @@ function route(req, res) {
   if (url.split("?")[0] === "/discord-harness.html") return sendFile(req, res, path.join(HERE, "discord-harness.html"))
   if (url.startsWith("/deezer-stub/")) return deezerStub(req, res)
   if (url.startsWith("/short-link-stub/")) return shortLinkStub(req, res)
+  if (url.startsWith("/youtube-stub/")) return youtubeStub(req, res)
   if (url === "/resend-stub" || url.startsWith("/resend-stub/")) return resendStub(req, res)
   if (url.startsWith("/twitch-irc-stub/")) { ircStub(req, res); return }
   if (url.startsWith("/blindify/api/") || url.startsWith("/blindify/socket.io/")) return toBackend(req, res)

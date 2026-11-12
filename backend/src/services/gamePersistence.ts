@@ -246,11 +246,15 @@ export async function persistGameResults(state: GameState, sessionId: number | u
     // La room sort de "in_progress" en base : sans ca, elle servait le corrige
     // via /state pour toujours et s'accumulait en zombie (440 en prod avant ce
     // fix). Le "rejouer" la repasse en waiting puis in_progress normalement.
+    // Seulement si la salle porte encore CETTE partie : une revanche lancee
+    // pendant cette ecriture (relance a 0 s, T27) ne doit pas passer « finie »
+    // (le corrige serait servi par /state en pleine partie).
     await pool.query(
       `UPDATE multiplayer_rooms
        SET status = 'finished', completed_at = COALESCE(completed_at, NOW())
-       WHERE room_code = $1 AND status = 'in_progress'`,
-      [roomCode],
+       WHERE room_code = $1 AND status = 'in_progress'
+         AND (session_id IS NULL OR session_id = $2)`,
+      [roomCode, sessionId],
     );
     logger.info("multiplayer_game_persisted", { roomCode, sessionId, players: players.length });
   } catch (err) {

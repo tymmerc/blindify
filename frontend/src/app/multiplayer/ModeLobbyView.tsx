@@ -18,6 +18,7 @@ import { useSpectatorCount } from "./hooks/useSpectatorCount"
 import { SpectatorBadge } from "@/components/game/SpectatorBadge"
 import { useLobbyRps } from "./hooks/useLobbyRps"
 import { ProfileImportBlock } from "@/components/import/ProfileImportBlock"
+import { MusicLibrary } from "@/components/import/MusicLibrary"
 import { Button } from "@/components/ui/button"
 import { useServerTime } from "@/hooks/useServerTime"
 import { useMode } from "@/contexts/ModeContext"
@@ -39,6 +40,9 @@ import { LateJoinerView } from "@/components/game/LateJoinerView"
 import { arrivalNotice, isLateJoiner } from "@/lib/lateJoin"
 import { useLateArrivals } from "./hooks/useLateArrivals"
 import { useStreamerFeed } from "./hooks/useStreamerFeed"
+import { ExpiredRoomView } from "./ExpiredRoomView"
+import { lobbyAddress } from "@/lib/roomAddress"
+import { findHostedRoom, forgetHostedRoom, rememberHostedRoom, type HostedRoom } from "@/lib/hostedRooms"
 
 // Entree dans un salon : un essai sans reponse au bout de 8 s est abandonne et
 // relance, trois essais en tout. Rejouer le join est sans risque (le backend
@@ -132,6 +136,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   const [error, setError] = useState<string | null>(null)
   const [errorAction, setErrorAction] = useState<{ label: string; onClick: () => void } | null>(null)
   const [showMusicImport, setShowMusicImport] = useState(false)
+  const [musicRefresh, setMusicRefresh] = useState(0)
   const [view, setView] = useState<LobbyViewState>("landing")
   // Deja entre dans la salle : un retour a "landing" (partie perdue cote
   // serveur, Rejouer en echec) n'a pas d'ecran d'entree dans Discord.
@@ -174,6 +179,8 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   // Code d'erreur structure du dernier join (ex: "room_in_progress") : les vues
   // s'en servent pour afficher un ecran adapte plutot qu'un bandeau generique.
   const [errorCode, setErrorCode] = useState<string | null>(null)
+  // Salle effacee par le serveur (404 au join, T7) : on l'explique au lieu d'un bandeau sec.
+  const [expiredCode, setExpiredCode] = useState<string | null>(null)
   const autoJoinedCodesRef = useRef<Set<string>>(new Set())
   const [importing, setImporting] = useState(false)
   // Bandeau d'erreur transitoire (room:error socket, resync...) - auto-efface.
@@ -984,7 +991,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
   )
 
   const handleCreateRoom = useCallback(
-    async (hostPlays?: boolean) => {
+    async (hostPlays?: boolean, preset?: Pick<HostedRoom, "questionCount" | "roundSeconds">) => {
       if (!requireSession()) return
       if (!canHostNow && lobby.status !== "waiting") return
       if (lobby.status === "creating") return
@@ -993,13 +1000,33 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         dispatchLobby({ type: "creating" })
         setFlowStarted(true)
         autoStartGameRef.current = false
-        const { room: created } = await api.createRoom({ questionCount: 10, nickname: initialNickname || undefined, mode, hostPlays })
+        const questionCount = preset?.questionCount ?? 10
+        const { room: fresh } = await api.createRoom({ questionCount, nickname: initialNickname || undefined, mode, hostPlays })
+        let created = fresh
+        // Salle rouverte apres expiration : meme temps de reponse que l'ancienne.
+        // Applique AVANT d'afficher le lobby (les reglages lisent la salle au montage).
+        if (preset?.roundSeconds) {
+          try {
+            await api.updateRoomConfig(fresh.room_code, { roundSeconds: preset.roundSeconds })
+            created = { ...fresh, round_duration_ms: preset.roundSeconds * 1000 }
+          } catch (cfgErr) {
+            console.error("recreate_config_failed", cfgErr)
+          }
+        }
+        rememberHostedRoom({
+          code: created.room_code,
+          mode,
+          hostPlays: created.host_plays === true,
+          questionCount: created.question_count ?? questionCount,
+          roundSeconds: Math.round((created.round_duration_ms ?? 20000) / 1000),
+        })
+        setExpiredCode(null)
+        setErrorCode(null)
         // Le code dans l'URL : un F5 de l'hote passe alors par le flux de rejoin
         // au lieu de le renvoyer au choix de role en perdant sa salle.
+        // Sans le role ni le pseudo (T7) : recopiee par un ami, elle le fait entrer comme invite.
         try {
-          const url = new URL(window.location.href)
-          url.searchParams.set("code", created.room_code)
-          window.history.replaceState(null, "", url.toString())
+          window.history.replaceState(null, "", lobbyAddress(window.location.href, created.room_code))
         } catch { /* URL API indisponible : tant pis, pas bloquant */ }
         setRoom(created)
         setGameState(null)
@@ -1074,6 +1101,11 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         )
         if (signal.aborted) return
         setErrorCode(null)
+        if (surface !== "discord") {
+          try {
+            window.history.replaceState(null, "", lobbyAddress(window.location.href, joined.room_code))
+          } catch { /* pas bloquant */ }
+        }
         setRoom(joined)
         setGameState(null)
         setView("waiting")
@@ -1113,6 +1145,15 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         console.error("join_room_failed", err)
         const code = err instanceof ApiError ? err.code ?? null : null
         setErrorCode(code)
+        // Salle effacee : un ecran qui l'explique (et qui propose d'en rouvrir une), pas un bandeau.
+        if (code === "room_not_found") {
+          setExpiredCode(normalizedCode)
+          setError(null)
+          // "reset" et non "error" : le bandeau d'erreur reprendrait lobby.message.
+          dispatchLobby({ type: "reset" })
+          setFlowStarted(false)
+          return
+        }
         const message = err instanceof RequestTimeoutError
           ? "Le serveur ne répond pas. Vérifie ton réseau, puis appuie sur « Rejoindre la partie »."
           : err instanceof ApiError && err.message ? err.message : friendlyError(mode, "join")
@@ -1138,6 +1179,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       resolveViewFromState,
       stickyResults,
       viewToLobbyAction,
+      surface,
     ]
   )
 
@@ -1537,6 +1579,18 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     )
   }
 
+  // Discord a son propre ecran « Ta musique » ; ailleurs, la fenetre ci-dessous.
+  const openMusic = onEditMusic ?? (() => setShowMusicImport(true))
+
+  // L'hote revient sur une salle effacee qu'il avait creee ici : on la rouvre pareille.
+  const expiredHosted = expiredCode ? findHostedRoom(expiredCode) : null
+  const reopenable = expiredHosted && expiredHosted.mode === mode ? expiredHosted : null
+  const handleRecreate = () => {
+    if (!reopenable || !expiredCode) return
+    const oldCode = expiredCode
+    void handleCreateRoom(reopenable.hostPlays, reopenable).then(() => forgetHostedRoom(oldCode))
+  }
+
   const lobbyProps: LobbyRendererProps = {
     mode,
     modeConfig,
@@ -1735,9 +1789,15 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         // sur ce meme podium (la partie est finie, l'etat le dit). On y reste
         // jusqu'au Rejouer de l'hote, le bouton grise le dit deja.
         onReturn={onLeave ? undefined : () => router.replace("/modes")}
+        onEditMusic={openMusic}
         onReplay={() => runExclusive(restartingRef, async () => {
           if (!room || !isHost) return
+          // Les resultats d'avant, pour y revenir si la revanche ne part pas.
+          const previousTracks = tracks
+          const previousState = gameState
           try {
+            setError(null)
+            setErrorAction(null)
             setView("playing")
             dispatchLobby({ type: "playing" })
             const { tracks: newTracks, gameState: newState } = await api.startMultiplayerGame(room.room_code, { source: "library" })
@@ -1745,21 +1805,26 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
             if (newState) setGameState(newState)
           } catch (err) {
             console.error("replay_failed", err)
-            // Fallback: reset to lobby
-            autoStartGameRef.current = false
-            autoHostTriggered.current = false
-            setView("landing")
-            setRoom(null)
-            setParticipants([])
-            setTracks([])
-            setGameState(null)
-            setFlowStarted(false)
-            dispatchLobby({ type: "reset" })
+            // T27 : on reste dans la salle. Avant, un echec renvoyait l'hote a
+            // l'accueil sans sa salle, et tout le monde devait en recreer une.
+            // Le serveur a remis la salle en attente : « Rejouer » relance.
+            setTracks(previousTracks)
+            setGameState(previousState)
+            setError(err instanceof ApiError && err.message ? err.message : friendlyError(mode, "start"))
+            setView("results")
+            dispatchLobby({ type: "results" })
           }
         })}
       />
     ) : loadingGame ? (
       loadingGame
+    ) : view === "landing" && expiredCode && surface !== "discord" ? (
+      <ExpiredRoomView
+        code={expiredCode}
+        hosted={reopenable}
+        recreating={lobby.status === "creating"}
+        onRecreate={handleRecreate}
+      />
     ) : (
       <>
         {selectedLobby}
@@ -1795,20 +1860,26 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         {content}
       </div>
 
-      {/* Raccourci "j'ai changé d'avis" : l'ajout de musique se fait normalement a
-          l'etape 2 du wizard. Si l'hote n'en a pas mis et que le lancement bloque,
-          on lui ouvre le menu d'import ici, sans quitter ni recreer la salle. */}
+      {/* « Ta musique » par-dessus la salle (T7) : le 01/11, pour changer de
+          musique entre deux parties, une bande a quitte sa salle, importe dans
+          /jouer/, puis recree une salle. Ici on importe ou on coche, la salle et
+          les joueurs restent, la partie suivante prend la nouvelle musique. Sert
+          aussi quand le lancement bloque faute de musique. */}
       {showMusicImport ? (
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center bg-[#2e2014]/40 p-4"
           onClick={() => setShowMusicImport(false)}
         >
           <div
-            className="w-full max-w-md rounded-md border-2 border-[#2e2014] bg-[#f4ecdb] p-5 shadow-[6px_6px_0_rgba(46,32,20,.25)]"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Ta musique"
+            data-testid="musique-salle"
+            className="max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-md border-2 border-[#2e2014] bg-[#f4ecdb] p-5 shadow-[6px_6px_0_rgba(46,32,20,.25)]"
             onClick={e => e.stopPropagation()}
           >
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="m-0 font-display text-lg font-semibold text-[#2e2014]">Ajoute ta musique</h3>
+              <h3 className="m-0 font-display text-lg font-semibold text-[#2e2014]">Ta musique</h3>
               <button
                 type="button"
                 onClick={() => setShowMusicImport(false)}
@@ -1819,20 +1890,26 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
               </button>
             </div>
             <p className="mb-4 text-sm text-[#6b573f]">
-              Colle ton lien Spotify ou Deezer. Une fois importé, ferme et relance la partie.
+              Colle un lien Spotify, Deezer ou YouTube, ou coche les playlists qui doivent passer. Tu restes dans la salle avec les autres : la prochaine partie prendra ta nouvelle musique.
             </p>
-            <ProfileImportBlock
-              accent={mode === "event" ? "#e0a32e" : mode === "streamer" ? "#7d9471" : "#c65133"}
-              initialUrl={initialProfileUrl ?? undefined}
-              onImportingChange={setImporting}
-              hideHeader
-            />
+            <div className="max-h-[220px] overflow-y-auto pr-1">
+              <MusicLibrary accent={accentColor ?? "#c65133"} refreshSignal={musicRefresh} />
+            </div>
+            <div className="mt-4 border-t-2 border-dotted border-[rgba(46,32,20,.35)] pt-4">
+              <ProfileImportBlock
+                accent={mode === "event" ? "#e0a32e" : mode === "streamer" ? "#7d9471" : "#c65133"}
+                initialUrl={initialProfileUrl ?? undefined}
+                onImportingChange={setImporting}
+                onImported={() => setMusicRefresh(x => x + 1)}
+                hideHeader
+              />
+            </div>
             <button
               type="button"
               onClick={() => { setShowMusicImport(false); setError(null); setErrorAction(null) }}
               className="mt-4 w-full rounded-md border-2 border-[#2e2014] bg-[#ece1c8] px-4 py-2.5 text-sm font-bold text-[#2e2014] transition hover:bg-[#e0d4ba]"
             >
-              C'est bon, revenir au lobby
+              C'est bon, revenir à la salle
             </button>
           </div>
         </div>

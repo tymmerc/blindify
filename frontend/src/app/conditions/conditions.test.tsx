@@ -23,7 +23,7 @@ describe("Page /conditions/", () => {
     expect(sectionText("Ton comportement")).toMatch(/pseudo/)
     expect(sectionText("L'âge pour jouer")).toMatch(/15 ans/)
     expect(sectionText("Ton compte Discord")).toMatch(/Applications autorisées/)
-    expect(sectionText("Les marques")).toMatch(/Spotify, Deezer et Discord/)
+    expect(sectionText("Les marques")).toMatch(/Spotify, Deezer, Discord et YouTube/)
     expect(sectionText("Changements et droit applicable")).toMatch(/droit français/)
   })
 
@@ -47,5 +47,11 @@ describe("Page /conditions/", () => {
   it("n'a aucun tiret cadratin", () => {
     const { container } = render(<ConditionsPage />)
     expect(container.textContent).not.toContain("—")
+  })
+
+  it("import YouTube : renvoie aux conditions de YouTube (exige par Google), rien n'est lu de YouTube", () => {
+    render(<ConditionsPage />)
+    expect(screen.getByRole("link", { name: /conditions d'utilisation de youtube/i })).toHaveAttribute("href", "https://www.youtube.com/t/terms")
+    expect(sectionText("La musique, en écoute privée")).toMatch(/ne lit\s+jamais le son ni les vidéos de YouTube/)
   })
 })

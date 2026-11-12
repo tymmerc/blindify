@@ -45,6 +45,11 @@ trap 'echo "  RETOUR ARRIERE : $RETOUR"' ERR
 echo "  site actuel sauvegarde : $SAUVE"
 echo "  retour arriere : $RETOUR"
 
+echo "── 0 bis. Personne ne joue (regle de Tym du 05/11) ──"
+# Le front ne redemarre rien, mais il remplace les fichiers servis : un joueur
+# en pleine partie peut charger un morceau de page qui n'existe plus.
+bash scripts/attendre-parties.sh
+
 echo "── 1. Reconstruction du front (export statique, Node 22) ──"
 # Le front de dev tourne dans le meme dossier : on l'arrete pendant la construction.
 systemctl stop blindify-dev-frontend

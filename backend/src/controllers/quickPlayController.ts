@@ -8,6 +8,8 @@ import {
   type ImportedTrack,
 } from "../services/profileImportService";
 import { deezerPreviewService } from "../services/deezerPreviewService";
+import { YoutubeImportError } from "../services/youtubeImportService";
+import type { ImportProvider } from "../services/profileImportService";
 
 function shuffle<T>(arr: T[]): T[] {
   const copy = [...arr];
@@ -24,7 +26,7 @@ function shuffle<T>(arr: T[]): T[] {
  * exhausting one before moving to the next.
  */
 async function pickRandomTracks(
-  provider: "spotify" | "deezer",
+  provider: ImportProvider,
   playlistIds: string[],
   count: number,
 ): Promise<ImportedTrack[]> {
@@ -162,6 +164,11 @@ export const quickPlayController = {
         },
       });
     } catch (err) {
+      // Playlist YouTube privee, introuvable, mix, API muette : le message dit quoi faire.
+      if (err instanceof YoutubeImportError) {
+        fail(res, err.code, err.message, err.status);
+        return;
+      }
       logger.error("quick_play_failed", { url, error: err });
       fail(res, "quick_play_failed", "Erreur lors de la préparation du jeu. Réessaie.", 500);
     }

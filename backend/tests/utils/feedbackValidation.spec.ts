@@ -1,6 +1,6 @@
 // Validation du corps de POST /api/feedback, sans base : chaque champ est borne
 // avant d'atteindre la requete SQL.
-import { MAX_FEEDBACK_MESSAGE, parseFeedback } from "../../src/utils/feedbackValidation";
+import { MAX_FEEDBACK_CONTACT, MAX_FEEDBACK_MESSAGE, parseFeedback } from "../../src/utils/feedbackValidation";
 
 const avis = { kind: "avis", answer: "oui", mode: "solo" };
 const bug = { kind: "bug", mode: "friends", message: "Le son a coupé à la manche 3" };
@@ -15,7 +15,7 @@ describe("parseFeedback", () => {
   it("accepte un avis rapide minimal", () => {
     expect(parseFeedback(avis)).toEqual({
       ok: true,
-      value: { kind: "avis", answer: "oui", message: null, mode: "solo", sessionId: null, gameCode: null, appVersion: null },
+      value: { kind: "avis", answer: "oui", message: null, mode: "solo", sessionId: null, gameCode: null, appVersion: null, contact: null },
     });
   });
 
@@ -25,7 +25,7 @@ describe("parseFeedback", () => {
       ok: true,
       value: {
         kind: "bug", answer: null, message: "Le son a coupé à la manche 3", mode: "friends",
-        sessionId: 42, gameCode: "AB12CD", appVersion: "3f9c2e1",
+        sessionId: 42, gameCode: "AB12CD", appVersion: "3f9c2e1", contact: null,
       },
     });
   });
@@ -109,5 +109,58 @@ describe("parseFeedback", () => {
       expect(parseFeedback({ ...avis, appVersion })).toMatchObject({ ok: true, value: { kind: "avis", appVersion: null } });
     }
     expect(parseFeedback({ ...avis, appVersion: "v1.2.3-rc_1" })).toMatchObject({ ok: true, value: { appVersion: "v1.2.3-rc_1" } });
+  });
+});
+
+describe("parseFeedback : le message aux joueurs (type mot, T24)", () => {
+  const mot = { kind: "mot", mode: "friends", message: "  Trop bien, mais le son est fort  " };
+
+  it("accepte un message sans contact, texte nettoye des espaces", () => {
+    const r = parseFeedback(mot);
+    expect(r.ok && r.value).toMatchObject({ kind: "mot", answer: null, message: "Trop bien, mais le son est fort", contact: null });
+  });
+
+  it("accepte un contact Insta ou e-mail, sans controle de format, sur une ligne", () => {
+    const insta = parseFeedback({ ...mot, contact: "  @tym.blindz " });
+    expect(insta.ok && insta.value.contact).toBe("@tym.blindz");
+    const mail = parseFeedback({ ...mot, contact: "moi@exemple.fr" });
+    expect(mail.ok && mail.value.contact).toBe("moi@exemple.fr");
+    const lignes = parseFeedback({ ...mot, contact: "insta\n\n  @moi\u202E" });
+    expect(lignes.ok && lignes.value.contact).toBe("insta @moi");
+  });
+
+  it("un contact vide ou fait d'espaces devient null", () => {
+    const r = parseFeedback({ ...mot, contact: "   " });
+    expect(r.ok && r.value.contact).toBeNull();
+  });
+
+  it("borne le contact a 120 caracteres", () => {
+    expect(parseFeedback({ ...mot, contact: "a".repeat(MAX_FEEDBACK_CONTACT) }).ok).toBe(true);
+    expect(refusal({ ...mot, contact: "a".repeat(MAX_FEEDBACK_CONTACT + 1) })).toBe("invalid_contact");
+    expect(refusal({ ...mot, contact: 42 })).toBe("invalid_contact");
+  });
+
+  it("exige un message de 1 a 1000 caracteres", () => {
+    expect(refusal({ ...mot, message: "" })).toBe("invalid_message");
+    expect(refusal({ ...mot, message: "  \u200B " })).toBe("invalid_message");
+    expect(refusal({ kind: "mot", mode: "solo" })).toBe("invalid_message");
+    expect(parseFeedback({ ...mot, message: "x" }).ok).toBe(true);
+    expect(parseFeedback({ ...mot, message: "x".repeat(MAX_FEEDBACK_MESSAGE) }).ok).toBe(true);
+    expect(refusal({ ...mot, message: "x".repeat(MAX_FEEDBACK_MESSAGE + 1) })).toBe("invalid_message");
+  });
+
+  it("refuse une reponse rapide sur un message", () => {
+    expect(refusal({ ...mot, answer: "oui" })).toBe("invalid_answer");
+  });
+
+  it("refuse un contact sur un avis ou un bug", () => {
+    expect(refusal({ ...avis, contact: "@moi" })).toBe("invalid_contact");
+    expect(refusal({ ...bug, contact: "@moi" })).toBe("invalid_contact");
+  });
+
+  it("accepte le mode site (pied de page) pour un message seulement", () => {
+    expect(parseFeedback({ ...mot, mode: "site" }).ok).toBe(true);
+    expect(refusal({ ...avis, mode: "site" })).toBe("invalid_mode");
+    expect(refusal({ ...bug, mode: "site" })).toBe("invalid_mode");
   });
 });
