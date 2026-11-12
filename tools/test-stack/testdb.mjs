@@ -48,6 +48,11 @@ export function oracle(roomCode, round) {
   if (v) ORACLE.set(key, v)
   return v
 }
+/** Oublie les verites d'une salle : apres une relance, ses manches changent. */
+export function forgetOracle(roomCode) {
+  for (const key of ORACLE.keys()) if (key.startsWith(`${roomCode}:`)) ORACLE.delete(key)
+}
+
 function oracleFromDb(roomCode, round) {
   const r = rows(`SELECT gr.correct_title, gr.correct_artist, coalesce(a.user_id::text,''), coalesce(a.metadata->>'k','')
     FROM multiplayer_rooms m JOIN game_rounds gr ON gr.session_id = m.session_id

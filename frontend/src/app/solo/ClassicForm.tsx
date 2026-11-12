@@ -20,7 +20,7 @@ export function ClassicForm({ settings, onJump }: { settings: SoloSettings; onJu
   return (
     <FormCard
       title="Blind test classique"
-      intro="Colle le lien d'un profil ou d'une playlist Spotify ou Deezer. On tire des morceaux au hasard, à toi de trouver le titre et l'artiste."
+      intro="Colle le lien d'un profil ou d'une playlist Spotify ou Deezer, ou d'une playlist YouTube. On tire des morceaux au hasard, à toi de trouver le titre et l'artiste."
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <MusicLinkField id="playlist-url" link={link} />

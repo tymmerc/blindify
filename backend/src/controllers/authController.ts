@@ -4,35 +4,64 @@ import type { Request, Response } from "express";
 import { pool } from "../config/db";
 import type { AuthenticatedUser } from "../types/user";
 import {
+  LONG_SESSION_TTL_MS,
+  SESSION_TOKEN_COOKIE,
   clearSession,
   createSessionToken,
   getSessionContext,
   revokeSessionToken,
 } from "../utils/session";
+import { absorbGuest } from "../services/guestTakeover";
 import { fail, ok } from "../utils/response";
 import { logger } from "../utils/logger";
 
 const BCRYPT_ROUNDS = 10;
-// Session invite longue duree : l'app "se souvient" du joueur sans compte.
-const GUEST_SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 365; // 1 an
+// Session longue duree, invite comme compte : l'app "se souvient" du joueur.
+// Glissante depuis T26 (chaque passage repousse d'un an, voir session.ts).
+const GUEST_SESSION_TTL_MS = LONG_SESSION_TTL_MS;
 
 function frontendBaseUrl(): string {
   const raw = process.env.FRONTEND_URL || "http://localhost:3000";
   return raw.replace(/\/$/, "");
 }
 
-function setSessionCookie(res: Response, token: string, maxAgeMs = 1000 * 60 * 60 * 24): void {
+function sessionCookieOptions() {
   const frontend = frontendBaseUrl();
   const isHttps = frontend.startsWith("https://");
   const isProd = process.env.NODE_ENV === "production";
-  res.cookie("blindify_session_token", token, {
+  return {
     httpOnly: true,
     secure: process.env.COOKIE_SECURE ? process.env.COOKIE_SECURE === "true" : isProd && isHttps,
-    sameSite: isHttps ? "none" : "lax",
+    sameSite: (isHttps ? "none" : "lax") as "none" | "lax",
     domain: process.env.COOKIE_DOMAIN || (isProd ? "tymmerc.eu" : undefined),
     path: "/",
-    maxAge: maxAgeMs,
-  });
+  };
+}
+
+function setSessionCookie(res: Response, token: string, maxAgeMs = LONG_SESSION_TTL_MS): void {
+  res.cookie(SESSION_TOKEN_COOKIE, token, { ...sessionCookieOptions(), maxAge: maxAgeMs });
+}
+
+// Un cookie pose avec un domaine ne s'efface qu'avec ce meme domaine : avant
+// T26, clearCookie sans domaine laissait le cookie en place en prod.
+function clearSessionCookie(res: Response): void {
+  res.clearCookie(SESSION_TOKEN_COOKIE, sessionCookieOptions());
+}
+
+// L'invite de la session en cours, s'il y en a un. Sert de preuve : seul ce
+// navigateur detient sa session.
+async function currentGuestId(req: Request): Promise<number | null> {
+  const context = await getSessionContext(req, undefined, { autoExtend: false });
+  return context && context.user.provider === "guest" ? context.user.id : null;
+}
+
+async function startSession(req: Request, res: Response, userId: number): Promise<string> {
+  const session = await createSessionToken(userId, LONG_SESSION_TTL_MS);
+  if (!req.session) req.session = {};
+  req.session.userId = userId;
+  req.session.sessionToken = session.token;
+  setSessionCookie(res, session.token);
+  return session.token;
 }
 
 export const authController = {
@@ -62,23 +91,32 @@ export const authController = {
       }
 
       const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
-      const providerId = crypto.randomUUID();
 
-      const { rows } = await pool.query<AuthenticatedUser>(
-        `INSERT INTO users (provider, provider_id, username, email, avatar, password_hash)
-         VALUES ('local', $1, $2, NULL, NULL, $3)
-         RETURNING id, provider, provider_id, username, email, avatar, created_at`,
-        [providerId, cleanUsername, passwordHash]
-      );
+      // T26 : un invite qui cree son compte GARDE tout. On transforme sa
+      // ligne au lieu d'en creer une neuve : meme id, donc parties, scores,
+      // badges et musique restent a lui sans rien recopier.
+      const guestId = await currentGuestId(req);
+      const { rows } = guestId
+        ? await pool.query<AuthenticatedUser>(
+            `UPDATE users SET provider='local', username=$2, password_hash=$3
+             WHERE id=$1 AND provider='guest'
+             RETURNING id, provider, provider_id, username, email, avatar, created_at`,
+            [guestId, cleanUsername, passwordHash]
+          )
+        : await pool.query<AuthenticatedUser>(
+            `INSERT INTO users (provider, provider_id, username, email, avatar, password_hash)
+             VALUES ('local', $1, $2, NULL, NULL, $3)
+             RETURNING id, provider, provider_id, username, email, avatar, created_at`,
+            [crypto.randomUUID(), cleanUsername, passwordHash]
+          );
       const user = rows[0];
+      if (!user) {
+        fail(res, "register_failed", "Impossible de créer le compte", 500);
+        return;
+      }
 
-      const session = await createSessionToken(user.id);
-      if (!req.session) req.session = {};
-      req.session.userId = user.id;
-      req.session.sessionToken = session.token;
-
-      setSessionCookie(res, session.token, 1000 * 60 * 60 * 24);
-      ok(res, { user, sessionToken: session.token });
+      const sessionToken = await startSession(req, res, user.id);
+      ok(res, { user, sessionToken, keptGuest: Boolean(guestId) });
     } catch (error) {
       logger.error("register_failed", { error });
       fail(res, "register_failed", "Impossible de créer le compte", 500);
@@ -115,16 +153,29 @@ export const authController = {
         return;
       }
 
-      const session = await createSessionToken(user.id);
-      if (!req.session) req.session = {};
-      req.session.userId = user.id;
-      req.session.sessionToken = session.token;
+      // T26 : connexion depuis un navigateur ou l'on jouait en invite. Le
+      // compte reprend ce qu'a fait cet invite-la (et lui seul).
+      const guestId = await currentGuestId(req);
+      if (guestId && guestId !== user.id) {
+        const client = await pool.connect();
+        try {
+          await client.query("BEGIN");
+          await absorbGuest(client, guestId, user.id);
+          await client.query("COMMIT");
+        } catch (error) {
+          await client.query("ROLLBACK").catch(() => {});
+          // La connexion passe quand meme : l'invite reste intact, rien n'est perdu.
+          logger.error("guest_takeover_failed", { error, guestId, userId: user.id });
+        } finally {
+          client.release();
+        }
+      }
 
-      setSessionCookie(res, session.token, 1000 * 60 * 60 * 24);
+      const sessionToken = await startSession(req, res, user.id);
 
       // Don't return password_hash
       const { password_hash: _, ...safeUser } = user;
-      ok(res, { user: safeUser, sessionToken: session.token });
+      ok(res, { user: safeUser, sessionToken });
     } catch (error) {
       logger.error("login_failed", { error });
       fail(res, "login_failed", "Impossible de se connecter", 500);
@@ -168,8 +219,10 @@ export const authController = {
   },
 
   async me(req: Request, res: Response): Promise<void> {
-    const context = await getSessionContext(req, res, { autoExtend: true });
+    const context = await getSessionContext(req, res, { autoExtend: true, ttlMs: LONG_SESSION_TTL_MS });
     if (!context) return;
+    // Le cookie suit l'echeance glissante de la session (un an apres ce passage).
+    if (context.sessionToken) setSessionCookie(res, context.sessionToken);
     ok(res, { user: context.user });
   },
 
@@ -221,7 +274,7 @@ export const authController = {
 
     // Compte supprimé : on invalide la session côté serveur et le cookie client.
     clearSession(req);
-    res.clearCookie("blindify_session_token", { path: "/" });
+    clearSessionCookie(res);
     ok(res, { deleted: true });
   },
 
@@ -236,7 +289,7 @@ export const authController = {
         await revokeSessionToken(req.session.sessionToken);
       }
       clearSession(req);
-      res.clearCookie("blindify_session_token", { path: "/" });
+      clearSessionCookie(res);
       ok(res, { success: true });
     } catch (error) {
       logger.error("logout_failed", { error });

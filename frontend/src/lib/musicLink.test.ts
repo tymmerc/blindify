@@ -44,8 +44,35 @@ describe("recognizeMusicLink", () => {
   })
 
   it.each([
+    ["https://www.youtube.com/playlist?list=PLZt2YpN30WNWSgtys4Uif2zjXnY29Yj3N", "https://www.youtube.com/playlist?list=PLZt2YpN30WNWSgtys4Uif2zjXnY29Yj3N"],
+    ["youtube.com/playlist?list=PLabc_-1&si=partage", "https://www.youtube.com/playlist?list=PLabc_-1"],
+    ["https://m.youtube.com/playlist?list=PLabc", "https://www.youtube.com/playlist?list=PLabc"],
+    ["https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PLabc&index=3", "https://www.youtube.com/playlist?list=PLabc"],
+    ["https://youtu.be/dQw4w9WgXcQ?list=PLabc&si=x", "https://www.youtube.com/playlist?list=PLabc"],
+    ["https://music.youtube.com/playlist?list=OLAK5uy_kXyz&si=y", "https://music.youtube.com/playlist?list=OLAK5uy_kXyz"],
+    ["https://music.youtube.com/browse/VLPLabc", "https://music.youtube.com/playlist?list=PLabc"],
+    ["https://music.youtube.com/playlist?list=RDCLAK5uy_abc", "https://music.youtube.com/playlist?list=RDCLAK5uy_abc"],
+  ])("playlist YouTube : %s", (raw, url) => {
+    expect(recognizeMusicLink(raw)).toEqual({ kind: "ok", provider: "youtube", type: "playlist", url })
+  })
+
+  it.each([
+    ["https://www.youtube.com/watch?v=dQw4w9WgXcQ", "video"],
+    ["https://youtu.be/dQw4w9WgXcQ?si=x", "video"],
+    ["https://www.youtube.com/shorts/abc", "video"],
+    ["https://www.youtube.com/watch?v=abc&list=RDabc", "mix"],
+    ["https://music.youtube.com/playlist?list=LM", "private"],
+    ["https://www.youtube.com/playlist?list=WL", "private"],
+    ["https://www.youtube.com/playlist?list=LL", "private"],
+  ])("lien YouTube refuse tout de suite, avec la raison : %s", (raw, reason) => {
+    expect(recognizeMusicLink(raw)).toEqual({ kind: "refused", provider: "youtube", reason })
+  })
+
+  it.each([
     "https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC",
-    "https://www.youtube.com/watch?v=x",
+    "https://www.youtube.com/@orelsan",
+    "https://youtube.com.evil.com/playlist?list=PLabc",
+    "https://www.youtube.com/playlist?list=<x>",
     "bonjour",
   ])("non reconnu : %s", raw => {
     expect(recognizeMusicLink(raw)).toEqual({ kind: "unknown" })

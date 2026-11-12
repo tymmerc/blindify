@@ -21,6 +21,33 @@ type SessionData = NonNullable<Request["session"]>;
 
 const DEFAULT_SESSION_TTL = 1000 * 60 * 60 * 24; // 24h
 
+// Session longue, glissante : invite comme compte. Un joueur qui revient des
+// jours plus tard, dans le meme navigateur, doit retrouver son pseudo, sa
+// musique et ses parties (T26). Chaque passage repousse l'echeance d'un an.
+export const LONG_SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 365;
+
+// Cookie httpOnly qui porte le jeton de session brut (pose par authController).
+// Le cookie de cookie-session (blindify_session) ne dure que 24 h et n'est
+// jamais renouvele tant que son contenu ne change pas : seul, il faisait
+// oublier tout invite au bout d'un jour.
+export const SESSION_TOKEN_COOKIE = "blindify_session_token";
+
+export function parseCookieHeader(header: string | string[] | undefined): Record<string, string> {
+  if (!header) return {};
+  const raw = Array.isArray(header) ? header.join(";") : header;
+  return raw.split(";").reduce<Record<string, string>>((acc, part) => {
+    const [key, ...rest] = part.trim().split("=");
+    if (!key) return acc;
+    const value = rest.join("=");
+    try {
+      acc[key] = decodeURIComponent(value || "");
+    } catch {
+      acc[key] = value || "";
+    }
+    return acc;
+  }, {});
+}
+
 // Hache un token de session en SHA-256 hex.
 // On stocke ce hash en base (jamais le token brut) : une fuite de la table
 // user_sessions ne donne donc pas de sessions valides. Le token brut ne vit
@@ -75,9 +102,15 @@ export async function createSessionToken(userId: number, ttlMs = DEFAULT_SESSION
   return { ...rows[0], token };
 }
 
+// Repousse l'echeance, sans jamais la raccourcir. Avant T26, chaque appel a
+// /api/auth/me ramenait une session invite d'un an a 24 h : vu en prod le
+// 05/11, toutes les sessions expiraient un jour apres le dernier passage.
 export async function extendSessionToken(token: string, ttlMs = DEFAULT_SESSION_TTL): Promise<void> {
   const expiresAt = new Date(Date.now() + ttlMs);
-  await pool.query(`UPDATE user_sessions SET expires_at=$2 WHERE token=$1`, [hashToken(token), expiresAt]);
+  await pool.query(
+    `UPDATE user_sessions SET expires_at=GREATEST(expires_at, $2) WHERE token=$1`,
+    [hashToken(token), expiresAt]
+  );
 }
 
 export async function revokeSessionToken(token: string): Promise<void> {
@@ -126,25 +159,35 @@ export async function getSessionContext(
 
   if (!userId) {
     const authHeader = req.headers.authorization?.trim();
-    if (authHeader && authHeader.startsWith("Bearer ")) {
-      const candidate = authHeader.slice(7);
-      if (candidate) {
-        const sessionRow = await querySessionByToken(candidate);
-        if (!sessionRow) {
-          if (res) fail(res, "unauthorized", "Session expirée ou invalide", 401);
-          return null;
-        }
-        if (sessionRow.expires_at && new Date(sessionRow.expires_at) <= new Date()) {
-          await revokeSessionToken(candidate);
-          if (res) fail(res, "unauthorized", "Session expirée", 401);
-          return null;
-        }
+    const bearer = authHeader && authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+    if (bearer) {
+      const sessionRow = await querySessionByToken(bearer);
+      if (!sessionRow) {
+        if (res) fail(res, "unauthorized", "Session expirée ou invalide", 401);
+        return null;
+      }
+      if (sessionRow.expires_at && new Date(sessionRow.expires_at) <= new Date()) {
+        await revokeSessionToken(bearer);
+        if (res) fail(res, "unauthorized", "Session expirée", 401);
+        return null;
+      }
+      userId = sessionRow.user_id;
+      // On conserve le token BRUT cote session, pas le hash renvoye par la
+      // base, car extendSessionToken re-hache en interne.
+      sessionToken = bearer;
+      session.userId = userId;
+      session.sessionToken = bearer;
+    } else {
+      // Sans Bearer, le cookie longue duree prend le relais du cookie de 24 h.
+      // Un jeton de cookie perime ou inconnu n'est pas une erreur : le joueur
+      // est simplement « personne » et le front lui recree un invite.
+      const fromCookie = parseCookieHeader(req.headers.cookie)[SESSION_TOKEN_COOKIE] ?? "";
+      const sessionRow = fromCookie ? await querySessionByToken(fromCookie) : null;
+      if (sessionRow && (!sessionRow.expires_at || new Date(sessionRow.expires_at) > new Date())) {
         userId = sessionRow.user_id;
-        // On conserve le token BRUT (candidate) cote session, pas le hash
-        // renvoye par la base, car extendSessionToken re-hache en interne.
-        sessionToken = candidate;
+        sessionToken = fromCookie;
         session.userId = userId;
-        session.sessionToken = candidate;
+        session.sessionToken = fromCookie;
       }
     }
   } else if (typeof session.sessionToken === "string") {

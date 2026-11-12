@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 import Link from "next/link"
-import { ContactLink, DiscordSupportLink, Section } from "@/components/legal/LegalBlocks"
+import { ContactLink, DiscordSupportLink, ExternalLegalLink, Section } from "@/components/legal/LegalBlocks"
 
 // Conditions d'utilisation (T17a, 29/10/2026). Discord demande une URL publique
 // de « Terms of Service » pour verifier l'appli. On n'y ecrit que ce qui est vrai
@@ -34,7 +34,7 @@ export default function ConditionsPage() {
           <h1 className="font-display text-4xl font-semibold md:text-5xl">
             Conditions <em className="font-medium italic text-[#c65133]">d&apos;utilisation</em>
           </h1>
-          <p className="text-sm text-[#8a7558]">Dernière mise à jour : 29 octobre 2026</p>
+          <p className="text-sm text-[#8a7558]">Dernière mise à jour : 8 novembre 2026</p>
         </div>
 
         <div className="space-y-6">
@@ -65,6 +65,14 @@ export default function ConditionsPage() {
               Blindz n&apos;héberge aucune musique. Les extraits de 30 secondes sont fournis par Deezer, y
               compris pour les playlists importées depuis Spotify, qui ne sert qu&apos;à lire la liste des
               morceaux. Pour importer une playlist, elle doit être publique.
+            </p>
+            {/* T33 (08/11/2026) : texte propose, a valider par Tym. La phrase sur les conditions de YouTube est exigee par Google. */}
+            <p className="mt-3">
+              Une playlist YouTube ou YouTube Music sert aussi seulement à lire la liste des morceaux : on
+              retrouve chacun chez Deezer, et ceux qui n&apos;y sont pas sont laissés de côté. Blindz ne lit
+              jamais le son ni les vidéos de YouTube. En important une playlist YouTube, tu acceptes aussi
+              les{" "}
+              <ExternalLegalLink href="https://www.youtube.com/t/terms">conditions d&apos;utilisation de YouTube</ExternalLegalLink>.
             </p>
             <p className="mt-3">
               L&apos;écoute des extraits est réservée à un usage privé, entre amis ou en famille. Tu ne peux
@@ -122,7 +130,7 @@ export default function ConditionsPage() {
 
           <Section title="Les marques" accent="#c65133">
             <p>
-              Spotify, Deezer et Discord sont des marques qui appartiennent à leurs propriétaires. Blindz est
+              Spotify, Deezer, Discord et YouTube sont des marques qui appartiennent à leurs propriétaires. Blindz est
               un projet indépendant : il n&apos;est ni lié à ces services, ni soutenu par eux. Les titres, les
               pochettes et les extraits restent la propriété de leurs ayants droit.
             </p>

@@ -49,6 +49,14 @@ const FAQ: Array<{ q: string; a: string; more?: ReactNode }> = [
   {
     q: "Comment faire un blind test avec mes propres playlists, pas des playlists imposées ?",
     a: "C'est exactement le principe de blindz.app : chaque joueur colle le lien de son profil Spotify ou Deezer (ou d'une playlist publique), et la partie est générée uniquement à partir de VOS musiques. Pas de playlists toutes faites \"années 80\" ou \"hits du moment\" : vous jouez sur les morceaux que vous écoutez vraiment, et une partie du jeu consiste à deviner qui a ramené quel titre.",
+    // T28 : le tuto pas a pas, cote Spotify.
+    more: (
+      <p className="flex flex-wrap gap-x-6 gap-y-3">
+        <Link href="/comment-faire-un-blind-test-sur-spotify/" className={MORE_LINK}>
+          Le tuto : faire un blind test sur Spotify
+        </Link>
+      </p>
+    ),
   },
   {
     q: "Faut-il créer un compte pour jouer ?",

@@ -42,6 +42,8 @@ const NEUTRAL_QUALIFIERS: RegExp[] = [
   /\bremaster/, // "Remastered 2011", "2009 Remaster", "Remasterise 2020"
   /^(explicit|clean|mono|stereo)( version)?$/,
   /^(single|album|original|radio|lp)( version| edit| mix)?$/,
+  // "Nuit de folie (Version originale 1988)" : c'est la version d'origine.
+  /^(version originale|original version)( \d{4})?$/,
 ];
 
 // "(...)", "[...]", et les crochets pleine chasse des titres japonais.

@@ -26,11 +26,16 @@ export const api = {
     return clientApi.currentUser(opts)
   },
   async ensureUserSession(nickname?: string, opts?: { signal?: AbortSignal }): Promise<CurrentUserPayload | null> {
+    // Un invite neuf seulement quand le serveur dit « personne » (401). Sur une
+    // coupure reseau ou une erreur serveur, on ne sait pas qui est la : en
+    // creer un aurait separe le joueur de ses parties (T26). L'appelant
+    // reessaie, comme apres un 429.
     try {
       const existing = await clientApi.currentUser(opts)
       if (existing) return existing
     } catch (err) {
       console.error("ensure_session_check_failed", err)
+      return null
     }
 
     try {

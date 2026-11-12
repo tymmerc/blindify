@@ -41,3 +41,13 @@ export function DiscordSupportLink({ children = "le serveur Discord de Blindz" }
     </a>
   )
 }
+
+/** Lien vers la page d'un autre service (conditions de YouTube, confidentialite de Google). */
+export function ExternalLegalLink({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer" className={LINK}>
+      {children}
+      <span className="sr-only"> (s&apos;ouvre dans un nouvel onglet)</span>
+    </a>
+  )
+}

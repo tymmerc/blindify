@@ -159,3 +159,33 @@ export function parseFeedback(body: unknown): FeedbackParseResult {
 
   return { ok: true, value: { kind, answer, message, mode, sessionId, gameCode, appVersion, contact } };
 }
+
+export interface FollowUpInput {
+  token: string;
+  message: string;
+}
+
+export type FollowUpParseResult =
+  | { ok: true; value: FollowUpInput }
+  | { ok: false; code: string; message: string };
+
+/**
+ * Le mot ajoute apres Oui ou Pas trop (T32) : le jeton rendu avec l'avis et
+ * un texte, nettoye et borne comme les autres messages. Le jeton lui-meme est
+ * verifie par services/feedbackFollowUp.ts.
+ */
+export function parseFollowUp(body: unknown): FollowUpParseResult {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    return { ok: false, code: "invalid_body", message: "Retour illisible." };
+  }
+  const raw = body as Record<string, unknown>;
+  if (typeof raw.token !== "string" || !raw.token) {
+    return { ok: false, code: "invalid_token", message: "Avis introuvable." };
+  }
+  const message = cleanMessage(raw.message);
+  if (message === "invalid") {
+    return { ok: false, code: "invalid_message", message: `Ton message doit faire ${MAX_FEEDBACK_MESSAGE} caractères au plus.` };
+  }
+  if (!message) return { ok: false, code: "invalid_message", message: "Écris quelques mots avant d'envoyer." };
+  return { ok: true, value: { token: raw.token, message } };
+}

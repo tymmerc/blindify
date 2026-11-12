@@ -25,7 +25,7 @@ export interface StoredLink {
   setUrl: (value: string) => void
   /** Lien deja connu (ecran d'entree) : on affiche une confirmation plutot que le champ. */
   showInput: boolean
-  provider: "Deezer" | "Spotify"
+  provider: "Deezer" | "Spotify" | "YouTube"
   startEditing: () => void
 }
 
@@ -46,7 +46,7 @@ export function useStoredLink(): StoredLink {
     url,
     setUrl,
     showInput: editing || !fromStore,
-    provider: /deezer/i.test(url) ? "Deezer" : "Spotify",
+    provider: /deezer/i.test(url) ? "Deezer" : /youtu\.?be/i.test(url) ? "YouTube" : "Spotify",
     startEditing: () => setEditing(true),
   }
 }

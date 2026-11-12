@@ -80,7 +80,7 @@ export default function Page() {
           partie du jeu consiste à deviner qui a mis quoi.
         </p>
         <p>
-          Les guides pour copier le bon lien : <Link href="/blind-test-spotify/">côté Spotify</Link> et{" "}
+          Les guides pour copier le bon lien : <Link href="/blind-test-spotify/">blind test Spotify</Link> et{" "}
           <Link href="/blind-test-deezer/">côté Deezer</Link>. Les deux se mélangent dans la même partie.
         </p>
         <p>
