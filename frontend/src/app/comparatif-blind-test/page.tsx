@@ -261,7 +261,7 @@ export default function Page() {
           la partie est générée avec les morceaux de tout le monde. Un point pour le titre, un pour l'artiste, un pour
           « qui a mis quoi ». Trois façons de jouer à plusieurs : autour d'une table (écran central + QR codes), un seul téléphone à
           doigt posé, à distance avec un code ; plus un mode solo et un mode pour jouer avec sa communauté en stream. Gratuit, sans pub, sans compte, jusqu'à 12 joueurs par salle.{" "}
-          <Link href="/faq/">Notre FAQ</Link>.
+          <Link href="/faq/">Notre FAQ</Link>, et le pas-à-pas du <Link href="/blind-test-spotify/">blind test Spotify</Link>.
         </p>
       </Section>
 
