@@ -59,7 +59,7 @@ export default function Page() {
             <span><strong>Un pseudo.</strong> On ne te demande ni adresse mail ni mot de passe : tu le tapes et tu joues. Ton historique de parties reste un an sans compte, tant que tu restes sur le même navigateur.</span>
           </Li>
           <Li>
-            <span><strong>Un lien.</strong> Celui de ton profil Spotify ou Deezer, ou d'une playlist publique. C'est de là que viennent les morceaux. Il faut juste que ce soit public : les titres likés sur Spotify ne le sont pas, mets-les dans une playlist publique avant.</span>
+            <span><strong>Un lien.</strong> Celui de ton profil Spotify ou Deezer, ou d'une playlist publique. C'est de là que viennent les morceaux. Il faut juste que ce soit public : les titres likés sur Spotify ne le sont pas, mets-les dans une playlist publique avant. Le pas-à-pas est dans le guide du <Link href="/blind-test-spotify/">blind test Spotify</Link>.</span>
           </Li>
         </ul>
       </Section>

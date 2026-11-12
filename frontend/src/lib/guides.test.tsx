@@ -4,7 +4,7 @@ import fs from "node:fs"
 import path from "node:path"
 import type { Metadata } from "next"
 import type { ComponentType } from "react"
-import { GUIDES } from "@/lib/guides"
+import { ARTICLES, GUIDES } from "@/lib/guides"
 import sitemap from "@/app/sitemap"
 
 // Les guides sont des pages statiques sans logique : on verifie ici ce qui
@@ -27,6 +27,9 @@ const LIMIT_EXCEPTIONS: Record<string, { title: number; desc: number }> = {
   "/comparatif-blind-test/": { title: 66, desc: 200 },
 }
 const MONTHS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"]
+
+// Les controles de contenu valent pour les guides et pour les articles.
+const PAGES = [...GUIDES, ...ARTICLES]
 
 type PageModule = { default: ComponentType; metadata: Metadata }
 
@@ -58,15 +61,15 @@ describe("guides", () => {
   })
 
   it("liens et libelles uniques, avec la barre finale de l'export statique", () => {
-    expect(new Set(GUIDES.map(g => g.href)).size).toBe(GUIDES.length)
-    expect(new Set(GUIDES.map(g => g.label)).size).toBe(GUIDES.length)
-    for (const g of GUIDES) expect(g.href).toMatch(/^\/[a-z0-9-]+\/$/)
+    expect(new Set(PAGES.map(g => g.href)).size).toBe(PAGES.length)
+    expect(new Set(PAGES.map(g => g.label)).size).toBe(PAGES.length)
+    for (const g of PAGES) expect(g.href).toMatch(/^\/[a-z0-9-]+\/$/)
   })
 
   it("chaque guide a sa page et figure dans le sitemap", () => {
     const urls = sitemap().map(e => e.url)
     expect(new Set(urls).size).toBe(urls.length)
-    for (const g of GUIDES) {
+    for (const g of PAGES) {
       expect(fs.existsSync(pageFileFor(g.href)), g.href).toBe(true)
       expect(urls, g.href).toContain(SITE + g.href)
     }
@@ -74,7 +77,7 @@ describe("guides", () => {
 
   it("URL canonique, titre et description propres a chaque page, aux bonnes longueurs", async () => {
     const seen = { title: new Set<string>(), og: new Set<string>(), desc: new Set<string>() }
-    for (const g of GUIDES) {
+    for (const g of PAGES) {
       const { mod, unmount } = await renderGuide(g.href)
       unmount()
       const { alternates, openGraph } = mod.metadata
@@ -96,7 +99,7 @@ describe("guides", () => {
   })
 
   it("un seul H1, pas de tiret cadratin, JSON-LD lisible avec une FAQ non vide et visible", async () => {
-    for (const g of GUIDES) {
+    for (const g of PAGES) {
       const { container, jsonLd, unmount } = await renderGuide(g.href)
       const text = container.textContent ?? ""
       expect(container.querySelectorAll("h1").length, g.href).toBe(1)
@@ -116,7 +119,7 @@ describe("guides", () => {
   })
 
   it("les liens internes de chaque guide menent a une page qui existe", async () => {
-    for (const g of GUIDES) {
+    for (const g of PAGES) {
       const { container, unmount } = await renderGuide(g.href)
       const hrefs = [...container.querySelectorAll("a[href]")].map(a => a.getAttribute("href")!)
       const internal = hrefs.filter(h => h.startsWith("/") && !h.startsWith("//"))
@@ -128,7 +131,7 @@ describe("guides", () => {
 
   it("la date de mise a jour est la meme sur la page, dans le JSON-LD et dans le sitemap", async () => {
     const lastModified = new Map(sitemap().map(e => [e.url, e.lastModified]))
-    for (const g of GUIDES) {
+    for (const g of PAGES) {
       const { container, jsonLd, unmount } = await renderGuide(g.href)
       const shown = visibleDate(container.textContent ?? "")
       unmount()
