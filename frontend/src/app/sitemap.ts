@@ -11,6 +11,8 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: "https://blindz.app/faq/", lastModified: new Date("2026-10-29"), changeFrequency: "monthly", priority: 0.8 },
     { url: "https://blindz.app/blind-test-en-ligne-gratuit/", lastModified: new Date("2026-10-28"), changeFrequency: "monthly", priority: 0.8 },
     { url: "https://blindz.app/blind-test-spotify/", lastModified: new Date("2026-09-08"), changeFrequency: "monthly", priority: 0.8 },
+    // Tuto (T28) : a cote de la page Spotify, qui ne bouge pas.
+    { url: "https://blindz.app/comment-faire-un-blind-test-sur-spotify/", lastModified: new Date("2026-11-06"), changeFrequency: "monthly", priority: 0.7 },
     { url: "https://blindz.app/blind-test-deezer/", lastModified: new Date("2026-09-08"), changeFrequency: "monthly", priority: 0.8 },
     { url: "https://blindz.app/blind-test-soiree/", lastModified: new Date("2026-10-05"), changeFrequency: "monthly", priority: 0.8 },
     // Pages par occasion (05/10/2026). La liste des guides est dans lib/guides ;
