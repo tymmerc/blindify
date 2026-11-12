@@ -14,6 +14,7 @@ const apiMock = vi.hoisted(() => ({
   detailedStats: vi.fn(),
   logout: vi.fn(),
   deleteAccount: vi.fn(),
+  register: vi.fn(),
 }))
 vi.mock("@/lib/api", () => ({ api: apiMock }))
 vi.mock("@/components/import/MusicLibrary", () => ({ MusicLibrary: () => <p>Bibliothèque</p> }))
@@ -114,5 +115,58 @@ describe("écran Mon compte", () => {
     apiMock.gameHistoryDetailed.mockRejectedValue(new Error("500"))
     render(<AccountScreen />)
     expect(await screen.findByText("Impossible de charger tes parties pour l'instant.")).toBeInTheDocument()
+  })
+})
+
+// T26 : un invité garde ses infos en choisissant un mot de passe.
+describe("Garder mes infos", () => {
+  it("propose à un invité de garder ses infos, puis le montre connecté sous le même pseudo", async () => {
+    localStorage.setItem(NICKNAME_KEY, "océ")
+    apiMock.checkAuth.mockResolvedValue({ user: { ...guest.user, username: "océ" } })
+    apiMock.register.mockResolvedValue({ user: { ...guest.user, username: "océ", provider: "local" }, sessionToken: "t" })
+    render(<AccountScreen />)
+
+    const pseudo = await screen.findByPlaceholderText("Pseudo pour te connecter")
+    expect(pseudo).toHaveValue("océ")
+    fireEvent.change(screen.getByPlaceholderText(/Mot de passe/), { target: { value: "motdepasse" } })
+    fireEvent.click(screen.getByRole("button", { name: "Garder mes infos" }))
+
+    await waitFor(() => expect(apiMock.register).toHaveBeenCalledWith("océ", "motdepasse"))
+    expect(await screen.findByText("Connecté en tant que", { exact: false })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Garder mes infos" })).toBeNull()
+  })
+
+  it("refuse un mot de passe trop court sans appeler le serveur", async () => {
+    localStorage.setItem(NICKNAME_KEY, "Fannou")
+    apiMock.checkAuth.mockResolvedValue(guest)
+    render(<AccountScreen />)
+    fireEvent.change(await screen.findByPlaceholderText(/Mot de passe/), { target: { value: "court" } })
+    fireEvent.click(screen.getByRole("button", { name: "Garder mes infos" }))
+    expect(await screen.findByRole("alert")).toHaveTextContent("au moins 8 caractères")
+    expect(apiMock.register).not.toHaveBeenCalled()
+  })
+
+  it("explique un pseudo déjà pris", async () => {
+    const { ApiError } = await import("@/lib/apiClient")
+    localStorage.setItem(NICKNAME_KEY, "Miguel")
+    apiMock.checkAuth.mockResolvedValue(guest)
+    apiMock.register.mockRejectedValue(new ApiError(409, "pris", "username_taken"))
+    render(<AccountScreen />)
+    fireEvent.change(await screen.findByPlaceholderText(/Mot de passe/), { target: { value: "motdepasse" } })
+    fireEvent.click(screen.getByRole("button", { name: "Garder mes infos" }))
+    expect(await screen.findByRole("alert")).toHaveTextContent("déjà pris")
+  })
+
+  it("n'apparaît ni pour un compte ni pour un visiteur sans session", async () => {
+    apiMock.checkAuth.mockResolvedValue(local)
+    const { unmount } = render(<AccountScreen />)
+    expect(await screen.findByText("Connecté en tant que", { exact: false })).toBeInTheDocument()
+    expect(screen.queryByText("Garder mes infos")).toBeNull()
+    unmount()
+
+    apiMock.checkAuth.mockResolvedValue(null)
+    render(<AccountScreen />)
+    expect(await screen.findByText("Pas encore de partie ici.", { exact: false })).toBeInTheDocument()
+    expect(screen.queryByText("Garder mes infos")).toBeNull()
   })
 })
