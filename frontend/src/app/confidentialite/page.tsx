@@ -105,10 +105,12 @@ export default function ConfidentialitePage() {
           <Section title="Le mode invité" accent="#7d9471">
             <p>
               Tu peux jouer sans créer de compte. Dans ce cas, on te génère un identifiant anonyme
-              aléatoire, gardé sur ton appareil pendant un an pour que tu retrouves ton pseudo et
-              tes parties quand tu reviens. Aucune donnée personnelle n'est demandée. Si tu vides
-              ton navigateur ou changes d'appareil, cette progression est perdue. Tu peux la
-              supprimer à tout moment depuis les Réglages.
+              aléatoire, gardé sur ton appareil jusqu&apos;à un an après ta dernière visite, pour que tu
+              retrouves ton pseudo et tes parties quand tu reviens. Aucune donnée personnelle n&apos;est
+              demandée. Si tu vides ton navigateur, changes d&apos;appareil ou ouvres Blindz depuis une
+              appli comme Snapchat, cette progression ne te suit pas, sauf si tu choisis un mot de passe
+              dans Mon compte (« Garder mes infos »). Tu peux tout supprimer à tout moment depuis Mon
+              compte.
             </p>
           </Section>
 
@@ -123,9 +125,10 @@ export default function ConfidentialitePage() {
 
           <Section title="Cookies" accent="#c65133">
             <p>
-              Blindz pose un seul cookie : un cookie de session, en httpOnly et secure, qui sert à te
-              garder connecté pendant que tu joues. Pas de cookie de tracking publicitaire, pas d'outil
-              d'analytics tiers, pas de partage avec des régies.
+              Blindz pose deux cookies de session, en httpOnly et secure, qui servent seulement à te
+              reconnaître quand tu reviens : l&apos;un dure 24 heures, l&apos;autre un an après ta dernière
+              visite. Pas de cookie de tracking publicitaire, pas d&apos;outil d&apos;analytics tiers, pas de
+              partage avec des régies.
             </p>
           </Section>
 
