@@ -1,7 +1,7 @@
 import type React from "react"
 import type { Metadata } from "next"
 import Link from "next/link"
-import { ContactLink, Section } from "@/components/legal/LegalBlocks"
+import { ContactLink, ExternalLegalLink, Section } from "@/components/legal/LegalBlocks"
 
 export const metadata: Metadata = {
   alternates: { canonical: "https://blindz.app/confidentialite/" },
@@ -28,7 +28,7 @@ export default function ConfidentialitePage() {
           <h1 className="font-display text-4xl font-semibold md:text-5xl">
             Politique de <em className="font-medium italic text-[#c65133]">confidentialité</em>
           </h1>
-          <p className="text-sm text-[#8a7558]">Dernière mise à jour : 29 octobre 2026</p>
+          <p className="text-sm text-[#8a7558]">Dernière mise à jour : 8 novembre 2026</p>
         </div>
 
         <div className="space-y-6">
@@ -64,6 +64,15 @@ export default function ConfidentialitePage() {
                 Spotify ou Deezer (titre, artiste, extrait). On ne récupère rien de ton compte Spotify ou
                 Deezer, juste ce qui est nécessaire pour construire la partie à partir du lien que tu
                 fournis.
+              </Item>
+              {/* T33 (08/11/2026) : texte propose, a valider par Tym. Exige par Google (regles de l'API YouTube). */}
+              <Item>
+                <strong>Les playlists YouTube</strong> : quand tu colles le lien d&apos;une playlist YouTube ou
+                YouTube Music, notre serveur demande à YouTube (Google) la liste de ses vidéos, avec leur titre et
+                le nom de leur chaîne, par l&apos;API officielle de YouTube. Seul l&apos;identifiant de la playlist
+                part chez Google : ni ton pseudo, ni ton adresse, et aucun compte Google n&apos;est utilisé. On ne
+                garde que les morceaux retrouvés chez Deezer, rien de YouTube. Ce que Google reçoit suit la{" "}
+                <ExternalLegalLink href="https://policies.google.com/privacy">politique de confidentialité de Google</ExternalLegalLink>.
               </Item>
               <Item>
                 <strong>Ton identité Discord</strong>, seulement si tu joues depuis l'Activité Discord (Blindz
@@ -136,6 +145,11 @@ export default function ConfidentialitePage() {
             <p>
               On ne vend pas tes données et on ne les partage pas avec des tiers à des fins commerciales.
               Tes informations restent chez nous, utilisées uniquement pour faire tourner le jeu.
+            </p>
+            {/* T33 (08/11/2026) : texte propose, a valider par Tym. */}
+            <p className="mt-3">
+              Seule exception, technique : pour importer une playlist YouTube, son identifiant est envoyé à
+              Google (YouTube), et rien d&apos;autre.
             </p>
           </Section>
 

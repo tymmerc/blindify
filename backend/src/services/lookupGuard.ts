@@ -27,6 +27,8 @@ export const START_LIMITS = {
 
 export type LookupStop = "budget" | "deadline" | "breaker";
 
+export type LookupLimits = typeof START_LIMITS;
+
 export class LookupGuard {
   private left: number;
   private readonly deadline: number;
@@ -38,9 +40,17 @@ export class LookupGuard {
   /** Recherches sans reponse (delai depasse ou erreur). */
   failures = 0;
 
-  constructor(maxLookups: number, now: number = Date.now()) {
+  /**
+   * overrides : d'autres bornes que celles du lancement (l'import YouTube a
+   * les siennes). Lues a chaque appel, comme START_LIMITS, que les tests reglent.
+   */
+  constructor(maxLookups: number, now: number = Date.now(), private readonly overrides: Partial<LookupLimits> = {}) {
     this.left = Math.max(0, maxLookups);
-    this.deadline = now + START_LIMITS.deadlineMs;
+    this.deadline = now + this.limits.deadlineMs;
+  }
+
+  private get limits(): LookupLimits {
+    return { ...START_LIMITS, ...this.overrides };
   }
 
   remainingMs(): number {
@@ -49,7 +59,7 @@ export class LookupGuard {
 
   /** Delai accorde a une recherche : le delai unitaire, ou le temps qui reste s'il est plus court. */
   timeoutMs(): number {
-    return Math.max(0, Math.min(START_LIMITS.lookupTimeoutMs, this.remainingMs()));
+    return Math.max(0, Math.min(this.limits.lookupTimeoutMs, this.remainingMs()));
   }
 
   /** Reserve une recherche ; faux si l'echeance, le disjoncteur ou le budget l'interdit. */
@@ -75,7 +85,7 @@ export class LookupGuard {
   failed(): void {
     this.failures += 1;
     this.consecutiveFailures += 1;
-    if (this.consecutiveFailures >= START_LIMITS.breakerFailures) this.stoppedBy = "breaker";
+    if (this.consecutiveFailures >= this.limits.breakerFailures) this.stoppedBy = "breaker";
   }
 
   /** Vrai si des titres n'ont pas pu etre verifies : c'est Deezer ou nos bornes, pas les playlists. */

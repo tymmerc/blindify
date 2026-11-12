@@ -5,7 +5,14 @@ import { getSessionContext } from "../utils/session";
 import { ok, fail } from "../utils/response";
 import { logger } from "../utils/logger";
 import { profileLinkOrFail } from "./profileLink";
-import { fetchPublicPlaylists, fetchPlaylistTracks, type ImportedTrack } from "../services/profileImportService";
+import {
+  fetchPublicPlaylists,
+  fetchPlaylistTracks,
+  fetchYoutubeTracks,
+  type ImportProvider,
+  type ImportedTrack,
+} from "../services/profileImportService";
+import { YoutubeImportError, type YoutubeMatchReport } from "../services/youtubeImportService";
 import { upsertLink, claimLegacyTracks, ownLinkId } from "./linksController";
 import axios from "axios";
 import { deezerPreviewService } from "../services/deezerPreviewService";
@@ -60,7 +67,7 @@ export async function upsertTrack(
       track.cover,
       track.durationMs,
       JSON.stringify({
-        import_source: track.provider,
+        import_source: track.importSource ?? track.provider,
         playlist_id: playlistId,
         album: track.album,
         isrc: track.isrc ?? null,
@@ -114,6 +121,61 @@ function preResolveInBackground(userId: number): void {
   })();
 }
 
+const PROVIDERS: readonly ImportProvider[] = ["spotify", "deezer", "youtube"];
+
+function isProvider(value: unknown): value is ImportProvider {
+  return typeof value === "string" && (PROVIDERS as readonly string[]).includes(value);
+}
+
+/** L'adresse gardee est-elle sur YouTube Music ? (le nom d'hote, jamais une sous-chaine de l'adresse) */
+function isYoutubeMusic(url: string): boolean {
+  try {
+    return new URL(url).hostname === "music.youtube.com";
+  } catch {
+    return false;
+  }
+}
+
+/** Vrai si l'erreur YouTube est partie au joueur (playlist privee, introuvable, API muette...). */
+function failYoutube(res: Response, err: unknown): boolean {
+  if (!(err instanceof YoutubeImportError)) return false;
+  fail(res, err.code, err.message, err.status);
+  return true;
+}
+
+/** Les titres d'une playlist, et pour YouTube ce qu'on a retrouve chez Deezer. */
+async function playlistTracks(
+  provider: ImportProvider,
+  playlistId: string,
+  limit?: number,
+): Promise<{ tracks: ImportedTrack[]; youtube: YoutubeMatchReport | null }> {
+  if (provider === "youtube") {
+    const { tracks, report } = await fetchYoutubeTracks(playlistId, limit);
+    return { tracks, youtube: report };
+  }
+  return { tracks: await fetchPlaylistTracks(provider, playlistId, limit), youtube: null };
+}
+
+/** Aucun morceau retrouve : Deezer ne les a pas, ou Deezer n'a pas repondu. */
+function youtubeNothingMessage(report: YoutubeMatchReport): string {
+  return report.unchecked > 0
+    ? "On n'a pas pu chercher les morceaux de cette playlist pour l'instant. Réessaie dans un moment."
+    : `Aucun des ${report.examined} morceaux de cette playlist n'a été retrouvé avec un extrait. Essaie une autre playlist.`;
+}
+
+/** Plusieurs playlists YouTube (jamais aujourd'hui : un lien = une playlist) : on additionne. */
+function addReports(a: YoutubeMatchReport | null, b: YoutubeMatchReport | null): YoutubeMatchReport | null {
+  if (!a || !b) return a ?? b;
+  return {
+    playlistSize: a.playlistSize + b.playlistSize,
+    examined: a.examined + b.examined,
+    found: a.found + b.found,
+    notFound: a.notFound + b.notFound,
+    unchecked: a.unchecked + b.unchecked,
+    stoppedBy: a.stoppedBy ?? b.stoppedBy,
+  };
+}
+
 export const importController = {
   /**
    * POST /api/import/playlists
@@ -141,7 +203,11 @@ export const importController = {
       // sinon on retombe sur la premiere playlist ou un libelle generique.
       let label: string | null = null;
       let imageUrl: string | null = null;
-      if (parsed.type === "playlist") {
+      if (parsed.provider === "youtube") {
+        // Rien de YouTube n'est garde plus de 30 jours (regles Google) : ni le nom ni l'image de la playlist.
+        label = isYoutubeMusic(link.url) ? "Playlist YouTube Music" : "Playlist YouTube";
+        imageUrl = null;
+      } else if (parsed.type === "playlist") {
         label = playlists[0]?.name ?? "Playlist";
         imageUrl = playlists[0]?.cover ?? null;
       } else {
@@ -179,6 +245,7 @@ export const importController = {
         notice: "Seules les playlists publiques sont récupérées.",
       });
     } catch (err) {
+      if (failYoutube(res, err)) return;
       logger.error("import_playlists_failed", { url, error: err });
       fail(res, "import_failed", "Impossible de récupérer les playlists. Vérifie l'URL et réessaie.", 500);
     }
@@ -197,14 +264,18 @@ export const importController = {
       fail(res, "missing_params", "provider et playlistId requis.");
       return;
     }
-    if (provider !== "spotify" && provider !== "deezer") {
-      fail(res, "invalid_provider", "Provider doit être 'spotify' ou 'deezer'.");
+    if (!isProvider(provider)) {
+      fail(res, "invalid_provider", "Provider doit être 'spotify', 'deezer' ou 'youtube'.");
       return;
     }
 
     try {
-      const tracks = await fetchPlaylistTracks(provider, playlistId);
+      const { tracks, youtube } = await playlistTracks(provider, playlistId);
       if (tracks.length === 0) {
+        if (youtube) {
+          fail(res, "youtube_none_found", youtubeNothingMessage(youtube), 422, { youtube });
+          return;
+        }
         fail(res, "empty_playlist", "Aucun titre trouvé dans cette playlist.");
         return;
       }
@@ -221,11 +292,12 @@ export const importController = {
       }
 
       logImportIsrc(provider, tracks);
-      ok(res, { synced, failed: tracks.length - synced, total: tracks.length });
+      ok(res, { synced, failed: tracks.length - synced, total: tracks.length, ...(youtube ? { youtube } : {}) });
 
       // Pre-resolve a batch of Deezer previews in background
       preResolveInBackground(context.user.id);
     } catch (err) {
+      if (failYoutube(res, err)) return;
       logger.error("import_sync_failed", { provider, playlistId, error: err });
       fail(res, "sync_failed", "Erreur lors de la synchronisation des titres.", 500);
     }
@@ -244,8 +316,13 @@ export const importController = {
       fail(res, "missing_params", "provider et playlistIds requis.");
       return;
     }
-    if (provider !== "spotify" && provider !== "deezer") {
-      fail(res, "invalid_provider", "Provider doit être 'spotify' ou 'deezer'.");
+    if (!isProvider(provider)) {
+      fail(res, "invalid_provider", "Provider doit être 'spotify', 'deezer' ou 'youtube'.");
+      return;
+    }
+    // Un lien YouTube est une seule playlist ; au-dela, ce n'est pas notre front.
+    if (provider === "youtube" && playlistIds.length > 1) {
+      fail(res, "too_many_playlists", "Une seule playlist YouTube à la fois.");
       return;
     }
 
@@ -260,9 +337,12 @@ export const importController = {
       let synced = 0;
       let total = 0;
       let withIsrc = 0;
+      let youtube: YoutubeMatchReport | null = null;
 
       for (const playlistId of playlistIds) {
-        const tracks = await fetchPlaylistTracks(provider, playlistId, perPlaylistLimit);
+        const fetched = await playlistTracks(provider, playlistId, perPlaylistLimit);
+        youtube = addReports(youtube, fetched.youtube);
+        const tracks = fetched.tracks;
         for (const track of tracks) {
           const key = `${track.provider}:${track.externalId}`;
           if (seen.has(key)) continue;
@@ -280,16 +360,21 @@ export const importController = {
       }
 
       if (total === 0) {
+        if (youtube) {
+          fail(res, "youtube_none_found", youtubeNothingMessage(youtube), 422, { youtube });
+          return;
+        }
         fail(res, "empty_playlists", "Aucun titre trouvé dans ces playlists.");
         return;
       }
 
       logger.info("import_isrc", { provider, total, withIsrc });
-      ok(res, { synced, failed: total - synced, total });
+      ok(res, { synced, failed: total - synced, total, ...(youtube ? { youtube } : {}) });
 
       // Pre-resolve a batch of Deezer previews in background
       preResolveInBackground(context.user.id);
     } catch (err) {
+      if (failYoutube(res, err)) return;
       logger.error("import_sync_all_failed", { provider, error: err });
       fail(res, "sync_failed", "Erreur lors de la synchronisation des titres.", 500);
     }
