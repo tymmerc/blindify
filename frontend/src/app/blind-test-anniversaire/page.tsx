@@ -106,8 +106,8 @@ export default function Page() {
           <Li><span><strong>Il faut au moins deux personnes qui ont ramené de la musique</strong> pour que la question « qui a mis ce morceau » apparaisse, et au moins trois joueurs : à deux, c'est forcément l'autre. Sinon, on joue au titre et à l'artiste.</span></Li>
         </ul>
         <p>
-          Pour copier le bon lien : <Link href="/blind-test-spotify/">côté Spotify</Link>,{" "}
-          <Link href="/blind-test-deezer/">côté Deezer</Link>. La playlist doit être publique, c'est la cause numéro un
+          Pour copier le bon lien, il y a le guide du <Link href="/blind-test-spotify/">blind test Spotify</Link> et{" "}
+          celui <Link href="/blind-test-deezer/">côté Deezer</Link>. La playlist doit être publique, c'est la cause numéro un
           de « mon lien ne marche pas ».
         </p>
       </Section>

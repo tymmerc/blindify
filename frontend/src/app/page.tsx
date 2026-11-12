@@ -291,6 +291,18 @@ export default function HomePage() {
               </li>
             ))}
           </ol>
+          <p className="mt-10 max-w-[40rem] text-[1.05rem] leading-relaxed">
+            Où trouver le lien, que faire d'une playlist privée, comment ça se passe sur téléphone : tout est dans le
+            guide du{" "}
+            <Link href="/blind-test-spotify/" className="border-b-2 border-[#f4ecdb] font-semibold hover:border-[#2e2014]">
+              blind test Spotify
+            </Link>{" "}
+            et dans celui pour{" "}
+            <Link href="/blind-test-deezer/" className="border-b-2 border-[#f4ecdb] font-semibold hover:border-[#2e2014]">
+              Deezer
+            </Link>
+            .
+          </p>
         </div>
       </section>
 

@@ -6,6 +6,7 @@ import {
   gameStateSnapshot,
   getGameState,
   getSessionId,
+  liveRoomCodes,
   redactedGuessingTrack,
   revealRound,
   startNextRound,
@@ -33,10 +34,10 @@ export function clearAdvanceTimer(roomCode: string): void {
 
 export function scheduleForcedAdvance(io: IOServer, roomCode: string, revealedRound: number): void {
   clearAdvanceTimer(roomCode);
-  if (finishedRooms.has(roomCode)) return;
+  if (isGameOver(roomCode)) return;
   const timer = setTimeout(() => {
     advanceTimers.delete(roomCode);
-    if (finishedRooms.has(roomCode)) return;
+    if (isGameOver(roomCode)) return;
     const current = gameStateSnapshot(roomCode);
     // N'avance que si on est TOUJOURS sur le reveal de la meme manche
     // (sinon le chemin "tous prets" est deja passe par la).
@@ -88,12 +89,12 @@ export function scheduleReveal(io: IOServer, roomCode: string, revealAt: number,
   const existing = revealTimers.get(roomCode);
   if (existing) clearTimeout(existing);
   // Don't schedule if game is already finished or cleaned up
-  if (finishedRooms.has(roomCode)) return;
+  if (isGameOver(roomCode)) return;
   const delay = Math.max(0, revealAt - Date.now());
   logger.debug(`scheduling reveal for ${roomCode} (round ${round}) in ${delay}ms`);
   const timer = setTimeout(() => {
     revealTimers.delete(roomCode);
-    if (finishedRooms.has(roomCode)) return;
+    if (isGameOver(roomCode)) return;
     const current = getGameState(roomCode);
     // Manche deja revelee, ou une autre manche que la sienne : jamais deux
     // revelations. Jamais pendant une pause de l'hote non plus (la reprise
@@ -144,14 +145,27 @@ export function broadcastState(io: IOServer, roomCode: string): GameState | unde
   return emitState(io, roomCode);
 }
 
-const finishedRooms = new Set<string>();
+// Parties deja passees par le game over. Le garde vise la PARTIE (son etat en
+// memoire), pas la salle : avant le 07/11, c'etait un Set de codes de salle
+// vide 10 s apres la fin, et une revanche lancee dans ces 10 s n'avait ni
+// minuteur de reveal ni filet anti-AFK. Sa manche 1 ne se revelait jamais
+// (salle 9SXZ6U, partie 777, le 06/11). Une revanche a un etat neuf, donc
+// elle n'est pas concernee ; WeakSet : rien a nettoyer.
+const finishedGames = new WeakSet<GameState>();
+
+/** La partie EN COURS dans cette salle est-elle deja finie (game over passe) ? */
+function isGameOver(roomCode: string): boolean {
+  const state = getGameState(roomCode);
+  return state !== undefined && finishedGames.has(state);
+}
 
 export function broadcastGameOver(io: IOServer, roomCode: string) {
   // Guard against double emission
-  if (finishedRooms.has(roomCode)) return;
+  if (isGameOver(roomCode)) return;
+  const live = getGameState(roomCode);
   const snapshot = gameStateSnapshot(roomCode);
-  if (!snapshot) return;
-  finishedRooms.add(roomCode);
+  if (!live || !snapshot) return;
+  finishedGames.add(live);
   emitGameOver(io, snapshot);
   // Persist final scores/stats before the in-memory state is dropped.
   void persistGameResults(snapshot, getSessionId(roomCode));
@@ -160,11 +174,9 @@ export function broadcastGameOver(io: IOServer, roomCode: string) {
   clearGraceTimer(roomCode);
   // L'etat FINISHED reste en memoire une minute : les clients recuperent
   // l'ecran de resultats via /state (playlist complete) pendant cette fenetre.
-  // clearGameIfFinished ne touche pas une revanche relancee entre-temps.
-  setTimeout(() => clearGameIfFinished(roomCode), 60_000).unref?.();
-  // Clean up the guard after a short delay to avoid memory leak.
-  // unref so this housekeeping timer never keeps the process alive.
-  setTimeout(() => finishedRooms.delete(roomCode), 10_000).unref?.();
+  // clearGameIfFinished ne touche que CETTE partie : ni une revanche en cours,
+  // ni l'ecran de resultats d'une revanche deja finie.
+  setTimeout(() => clearGameIfFinished(roomCode, live), 60_000).unref?.();
 }
 
 export function clearRevealTimer(roomCode: string) {
@@ -185,7 +197,7 @@ export function clearGraceTimer(roomCode: string): void {
 
 function scheduleGraceCheck(io: IOServer, roomCode: string, round: number, until: number): void {
   clearGraceTimer(roomCode);
-  if (finishedRooms.has(roomCode)) return;
+  if (isGameOver(roomCode)) return;
   const timer = setTimeout(() => {
     graceTimers.delete(roomCode);
     // Grace d'une manche deja passee (revelee par son minuteur) : rien a faire.
@@ -259,4 +271,48 @@ function finishReveal(io: IOServer, roomCode: string, revealed: GameState): void
     // Pas pendant une pause : game:resume le pose a la reprise.
     scheduleForcedAdvance(io, roomCode, revealed.currentRound);
   }
+}
+
+// Filet anti-blocage (T27). Une manche avance par deux minuteurs : le reveal
+// (fin du chrono) puis le filet anti-AFK (manche suivante). Si l'un manque,
+// la partie reste « en cours » sans bouger, comme la 777 du 06/11. Toutes les
+// STALL_CHECK_MS, on repose ce qui manque, sans jamais doubler un minuteur
+// present ni toucher une partie en pause ou finie.
+const STALL_CHECK_MS = 5_000;
+// Marge apres l'heure du reveal : le minuteur normal passe toujours avant.
+const STALL_MARGIN_MS = 5_000;
+
+/** Un passage du filet ; rend les salles debloquees (pour les tests). */
+export function unstickGames(io: IOServer, now = Date.now()): string[] {
+  const nudged: string[] = [];
+  for (const roomCode of liveRoomCodes()) {
+    const state = getGameState(roomCode);
+    if (!state || state.paused || isGameOver(roomCode)) continue;
+    if (state.phase === "GUESSING" && !revealTimers.has(roomCode)) {
+      const revealAt = state.timing.revealAt;
+      if (!revealAt || now < revealAt + STALL_MARGIN_MS) continue;
+      logger.warn("partie_debloquee", { roomCode, round: state.currentRound, phase: "GUESSING" });
+      if (revealRoundNow(io, roomCode)) emitState(io, roomCode);
+      nudged.push(roomCode);
+    } else if (state.phase === "REVEAL" && !advanceTimers.has(roomCode)) {
+      logger.warn("partie_debloquee", { roomCode, round: state.currentRound, phase: "REVEAL" });
+      scheduleForcedAdvance(io, roomCode, state.currentRound);
+      nudged.push(roomCode);
+    }
+  }
+  return nudged;
+}
+
+let stallWatchdog: NodeJS.Timeout | null = null;
+
+export function startStallWatchdog(io: IOServer): void {
+  if (stallWatchdog) return;
+  stallWatchdog = setInterval(() => {
+    try {
+      unstickGames(io);
+    } catch (err) {
+      logger.error("stall_watchdog_failed", { error: err });
+    }
+  }, STALL_CHECK_MS);
+  stallWatchdog.unref?.();
 }
