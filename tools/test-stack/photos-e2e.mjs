@@ -153,6 +153,10 @@ try {
   await page.waitForSelector("[data-testid=photo-picker] img", { timeout: 15000 })
   check(true, "« Mon compte » montre la photo")
   await shot(page, "compte-photo-clair")
+  await page.emulateMedia({ colorScheme: "dark" })
+  await sleep(500)
+  await shot(page, "compte-photo-sombre")
+  await page.emulateMedia({ colorScheme: "light" })
 
   for (const b of bots) b.socket?.disconnect()
 } catch (err) {
