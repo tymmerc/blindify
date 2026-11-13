@@ -271,7 +271,7 @@ function BuzzerContent() {
       <div className={`${frame} flex flex-col px-6 py-8`}>
         <img src={publicPath("/logo-mark.png")} alt="Blindz" className="mb-4 h-10 w-10 object-contain dark:hidden" />
         <img src={publicPath("/logo-mark-nuit.png")} alt="Blindz" className="mb-4 h-10 w-10 object-contain hidden dark:block" />
-        <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-[#5b7d99]">Un seul tel</p>
+        <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-[#5b7d99] dark:text-acier-txt">Un seul tel</p>
         <h1 className="font-display text-3xl font-semibold leading-tight">Tous les doigts sur ce téléphone.</h1>
         <p className="mt-1 text-sm text-ink-2">
           La musique démarre quand tout le monde tient sa zone. Le premier qui lâche prend le tel,
@@ -328,7 +328,7 @@ function BuzzerContent() {
           </div>
         </div>
 
-        {error && <p className="mt-4 rounded-md border-2 border-[#b3261e] bg-[#b3261e]/10 px-3 py-2 text-sm font-semibold text-[#7a1712]">{error}</p>}
+        {error && <p className="mt-4 rounded-md border-2 border-[#b3261e] dark:border-rouge-txt bg-[#b3261e]/10 px-3 py-2 text-sm font-semibold text-[#7a1712] dark:text-rouge-txt">{error}</p>}
 
         <div className="mt-auto flex flex-col gap-2 pt-6">
           <button
@@ -351,7 +351,7 @@ function BuzzerContent() {
     const ranked = [...players].sort((a, b) => b.score - a.score)
     return (
       <div className={`${frame} flex flex-col items-center px-6 py-10`}>
-        <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-[#5b7d99]">Fin de la face</p>
+        <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-[#5b7d99] dark:text-acier-txt">Fin de la face</p>
         <h1 className="mt-1 font-display text-4xl font-bold">{ranked[0]?.score ? ranked[0].name : "Personne n'a marqué…"}</h1>
         <div className="mt-6 w-full max-w-sm space-y-2">
           {ranked.map((p, i) => (

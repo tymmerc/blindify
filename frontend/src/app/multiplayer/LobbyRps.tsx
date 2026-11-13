@@ -1,5 +1,6 @@
 "use client"
 
+import { accentTexte } from "@/lib/accentText"
 import { Swords } from "lucide-react"
 import type { RpsMove, RpsScoreEntry, RpsIncoming, RpsActive, RpsResult } from "./hooks/useLobbyRps"
 
@@ -71,7 +72,7 @@ export function LobbyRps({
             <span className="mx-2 text-2xl align-middle">{MOVE_EMOJI[result.bMove]}</span>
             <span className="font-bold">{nameFor(result.b)}</span>
           </p>
-          <p className="m-0 mt-1 text-sm font-bold" style={{ color: accent }}>
+          <p className="m-0 mt-1 text-sm font-bold" style={{ color: accentTexte(accent) }}>
             {result.winnerUserId == null ? "Égalité !" : `${nameFor(result.winnerUserId)} gagne 🏆`}
           </p>
         </div>
@@ -158,7 +159,7 @@ export function LobbyRps({
             {scoreboard.map(s => (
               <span key={s.userId} className="text-xs text-ink">
                 {s.userId === currentUserId ? "Toi" : s.username || `J${s.userId}`}
-                <span className="ml-1 font-bold" style={{ color: accent }}>{s.wins}</span>
+                <span className="ml-1 font-bold" style={{ color: accentTexte(accent) }}>{s.wins}</span>
               </span>
             ))}
           </div>

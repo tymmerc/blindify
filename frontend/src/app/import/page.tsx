@@ -215,7 +215,7 @@ export default function ImportPage() {
           )}
 
           {notice && playlists.length > 0 && (
-            <div className="rounded-md border-[1.5px] border-gold bg-[rgb(var(--c-gold)/.12)] px-4 py-3 text-sm font-bold text-[#8a6a14]">
+            <div className="rounded-md border-[1.5px] border-gold bg-[rgb(var(--c-gold)/.12)] px-4 py-3 text-sm font-bold text-[#8a6a14] dark:text-gold-txt">
               {notice}
             </div>
           )}
@@ -241,7 +241,7 @@ export default function ImportPage() {
               {syncAllResult ? (
                 <div className="flex items-center gap-4 rounded-md border-[1.5px] border-sage bg-[rgb(var(--c-sage)/.14)] px-5 py-4">
                   <div className="flex-1">
-                    <p className="text-sm font-bold text-[#4f6a45]">
+                    <p className="text-sm font-bold text-[#4f6a45] dark:text-sage-deep-txt">
                       {syncAllResult.synced} titre{syncAllResult.synced > 1 ? "s" : ""} importé{syncAllResult.synced > 1 ? "s" : ""} depuis {playlists.length} playlist{playlists.length > 1 ? "s" : ""}
                     </p>
                     <p className="text-xs text-sourd">Le jeu piochera au hasard dans tous ces titres.</p>
@@ -313,7 +313,7 @@ export default function ImportPage() {
                         </div>
                         <div className="mt-3 flex gap-2">
                           {isSynced ? (
-                            <div className="flex w-full items-center justify-center gap-2 rounded-md border-[1.5px] border-sage bg-[rgb(var(--c-sage)/.14)] px-3 py-2 text-xs font-bold text-[#4f6a45]">
+                            <div className="flex w-full items-center justify-center gap-2 rounded-md border-[1.5px] border-sage bg-[rgb(var(--c-sage)/.14)] px-3 py-2 text-xs font-bold text-[#4f6a45] dark:text-sage-deep-txt">
                               {syncResult.synced} titres importés
                             </div>
                           ) : (

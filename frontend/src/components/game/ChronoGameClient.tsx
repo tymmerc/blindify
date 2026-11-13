@@ -1,5 +1,6 @@
 "use client"
 
+import { accentTexte } from "@/lib/accentText"
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { useRouter } from "next/navigation"
 import type { SoloTrack } from "@/lib/types"
@@ -253,7 +254,7 @@ export function ChronoGameClient({ tracks, durationSeconds, onGameComplete }: Ch
           <p className="text-[11px] font-bold uppercase tracking-[0.3em] text-sourd">Prépare-toi</p>
           <div
             className="font-display text-8xl font-bold tabular-nums"
-            style={{ color: ACCENT }}
+            style={{ color: accentTexte(ACCENT) }}
           >
             {countdownValue}
           </div>
@@ -273,7 +274,7 @@ export function ChronoGameClient({ tracks, durationSeconds, onGameComplete }: Ch
       <div className="grid min-h-screen place-items-center px-4">
         <div className="w-full max-w-md space-y-6 rounded-md border-2 border-line bg-paper-deep p-8 shadow-[4px_4px_0_rgb(var(--c-shadow)/.18)]">
           <div className="text-center space-y-2">
-            <p className="text-[11px] font-bold uppercase tracking-[0.3em]" style={{ color: ACCENT }}>
+            <p className="text-[11px] font-bold uppercase tracking-[0.3em]" style={{ color: accentTexte(ACCENT) }}>
               Chrono terminé
             </p>
             <h2 className="font-display text-3xl font-bold text-ink">{points} pts</h2>
@@ -405,7 +406,7 @@ export function ChronoGameClient({ tracks, durationSeconds, onGameComplete }: Ch
                 variant="outline"
                 disabled={!guessTitle.trim() && !guessArtist.trim()}
                 className="flex-1 justify-center rounded-xl border-2 py-2.5 text-sm font-semibold transition disabled:opacity-40"
-                style={{ borderColor: ACCENT, color: ACCENT }}
+                style={{ borderColor: ACCENT, color: accentTexte(ACCENT) }}
               >
                 Valider
               </Button>

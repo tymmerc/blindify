@@ -1,5 +1,6 @@
 "use client"
 
+import { accentTexte } from "@/lib/accentText"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { ArrowLeft, PartyPopper, ShieldCheck, Share2, ChevronDown, Music } from "lucide-react"
@@ -271,7 +272,7 @@ export function ResultsView({
         .res-pop { animation: res-pop .6s cubic-bezier(.22,1,.36,1) backwards }
       `}</style>
       <div className="flex flex-col items-center gap-2 text-center">
-        <p className="res-rise flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.3em]" style={{ color: accent, animationDelay: "0.05s" }}>
+        <p className="res-rise flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.3em]" style={{ color: accentTexte(accent), animationDelay: "0.05s" }}>
           <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full" style={{ background: accent }} />
           Fin de la face · Résultats
         </p>
@@ -335,9 +336,9 @@ export function ResultsView({
                 </div>
                 <div
                   className={`flex w-full flex-row items-center gap-3 rounded-md border-2 px-4 py-3 text-left text-ink md:w-48 md:flex-col md:justify-end md:px-4 md:pb-4 md:pt-5 md:text-center ${height}`}
-                  style={{ borderColor, backgroundColor: "rgb(var(--c-paper))", boxShadow: rank === 1 ? `4px 4px 0 ${accent}` : "4px 4px 0 rgba(46,32,20,.18)" }}
+                  style={{ borderColor, backgroundColor: "rgb(var(--c-paper))", boxShadow: rank === 1 ? `4px 4px 0 ${accent}` : "4px 4px 0 rgb(var(--c-shadow) / .18)" }}
                 >
-                  <div className="font-display text-2xl font-black md:text-4xl" style={{ color: rank === 1 ? accent : "#8a7558" }}>
+                  <div className="font-display text-2xl font-black md:text-4xl" style={{ color: rank === 1 ? accentTexte(accent) : "rgb(var(--c-sourd))" }}>
                     {rank}
                   </div>
                   <div className="min-w-0 flex-1 md:flex-none">
@@ -536,7 +537,7 @@ export function ResultsView({
           onClick={onReplay}
           disabled={!isHost}
           className="gap-2 rounded-full border-2 bg-transparent px-4 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50"
-          style={{ borderColor: accent, color: accent }}
+          style={{ borderColor: accent, color: accentTexte(accent) }}
         >
           <ShieldCheck className="h-4 w-4" />
           {isHost ? "Rejouer" : "L'hôte peut relancer"}

@@ -26,8 +26,9 @@ type Tab = "chat" | "rps"
 type Pose = "idle" | "fight" | "punch" | "strike"
 type Player = { userId: number; username: string | null }
 
-const INK = "#2e2014"
-const CARD = "#ece1c8"
+// Variables CSS pures : framer-motion sait les animer (il lit leur valeur calculee).
+const INK = "var(--ink-block)"
+const CARD = "var(--paper-deep)"
 // La transformation bulle -> panneau : un ressort sans rebond (un rebond
 // deformerait le texte pendant la mise a l'echelle).
 const MORPH = { type: "spring" as const, stiffness: 430, damping: 40, mass: 0.9 }
@@ -263,7 +264,7 @@ export function LobbyDock({
                 gauche, les ciseaux a droite. */}
             <motion.span aria-hidden className="pointer-events-none absolute" variants={impactV} initial="idle" animate={pose}>
               <svg width="26" height="26" viewBox="0 0 26 26">
-                <path d="M13 1l2.6 7.2L23 6l-4.7 5.8L25 15l-7.3.9L18 23l-5-5.2L8 23l.3-7.1L1 15l6.7-3.2L3 6l7.4 2.2z" fill={accent} stroke={INK} strokeWidth="1.5" strokeLinejoin="round" />
+                <path d="M13 1l2.6 7.2L23 6l-4.7 5.8L25 15l-7.3.9L18 23l-5-5.2L8 23l.3-7.1L1 15l6.7-3.2L3 6l7.4 2.2z" fill={accent} stroke="var(--line)" strokeWidth="1.5" strokeLinejoin="round" />
               </svg>
             </motion.span>
             <motion.span aria-hidden className="absolute flex" variants={chatV} initial="idle" animate={pose}>

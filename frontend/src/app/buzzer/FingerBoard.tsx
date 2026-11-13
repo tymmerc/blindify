@@ -150,27 +150,27 @@ export function FingerBoard({
           className="relative flex flex-col items-center justify-center overflow-hidden rounded-xl border-2 border-line transition-colors duration-200"
           style={{
             background: p.eliminated
-              ? "#d8cdb4"
+              ? "rgb(var(--c-paper-strong))"
               : holding
                 ? held[i] ? "#b3261e" : "#7a1712"
-                : held[i] ? p.color: "#ece1c8",
+                : held[i] ? p.color: "rgb(var(--c-paper-deep))",
             opacity: p.eliminated ? 0.45 : 1,
           }}
         >
           <span
             className="font-display text-xl font-bold"
-            style={{ color: holding ? "#f4ecdb" : held[i] ? "#f4ecdb" : "#2e2014" }}
+            style={{ color: holding ? "#f4ecdb" : held[i] ? "#f4ecdb" : "rgb(var(--c-ink))" }}
           >
             {p.name}
           </span>
-          <span className="mt-1 text-[11px] font-bold uppercase tracking-[0.18em]" style={{ color: holding ? "#f4ecdb" : "#6b573f" }}>
+          <span className="mt-1 text-[11px] font-bold uppercase tracking-[0.18em]" style={{ color: holding ? "#f4ecdb" : held[i] ? "#6b573f" : "rgb(var(--c-ink-2))" }}>
             {p.eliminated ? "Éliminé cette manche" : holding ? "LÂCHE POUR RÉPONDRE" : held[i] ? "Tiens bon…" : "Pose ton doigt ici"}
           </span>
         </div>
       ))}
       {phase === "countdown" && countdown !== null && (
         <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center">
-          <span className="font-display text-[7rem] font-bold leading-none text-ink drop-shadow-[3px_3px_0_#f4ecdb]">
+          <span className="font-display text-[7rem] font-bold leading-none text-ink drop-shadow-[3px_3px_0_rgb(var(--c-paper))]">
             {countdown}
           </span>
         </div>

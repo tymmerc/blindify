@@ -1,5 +1,6 @@
 "use client"
 
+import { accentTexte } from "@/lib/accentText"
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import type { MultiplayerGameState, UserSummary } from "@/lib/types"
 import { Button } from "@/components/ui/button"
@@ -276,10 +277,10 @@ export function MultiplayerGameClient({
   const timerProgress = isPlaying ? Math.max(0, Math.min(100, (remaining / totalSeconds) * 100)) : 100
   const timerColor = isPlaying
     ? remaining > 10
-      ? "#2e2014"
+      ? "rgb(var(--c-ink))"
       : remaining > 5
-        ? "#e0a32e"
-        : "#9c2f1d"
+        ? "rgb(var(--c-gold-txt))"
+        : "rgb(var(--c-rouge-txt))"
     : accent
 
   const hasInput = guessTitle.trim().length > 0 || guessArtist.trim().length > 0
@@ -293,9 +294,9 @@ export function MultiplayerGameClient({
     "--ink": "rgb(var(--c-ink))",
     "--muted": "rgb(var(--c-sourd))",
     "--accent": accent,
-    "--success": "#7d9471",
-    "--warn": "#e0a32e",
-    "--error": "#9c2f1d",
+    "--success": "rgb(var(--c-sage))",
+    "--warn": "rgb(var(--c-gold))",
+    "--error": "rgb(var(--c-rouge-txt))",
   } as CSSProperties
 
   useEffect(() => {
@@ -691,6 +692,13 @@ export function MultiplayerGameClient({
     return "#9c2f1d"
   }
 
+  // En texte : les variantes lisibles (la sauge et l'or clairs passaient sous 3:1 sur papier).
+  const verdictTextColor = (verdict: string | null | undefined) => {
+    if (verdict === "correct") return "rgb(var(--c-sage-deep-txt))"
+    if (verdict === "close") return "rgb(var(--c-gold-deep-txt))"
+    return "rgb(var(--c-rouge-txt))"
+  }
+
   const verdictLabel = (verdict: string | null | undefined) => {
     if (verdict === "correct") return "Trouvé"
     if (verdict === "close") return "Presque"
@@ -831,7 +839,7 @@ export function MultiplayerGameClient({
               animate={{ scale: 1, opacity: 1 }}
               transition={{ duration: 0.35, ease: [0.2, 0.8, 0.2, 1] }}
               className="font-display text-[9rem] font-bold leading-none sm:text-[13rem]"
-              style={{ color: accent }}
+              style={{ color: accentTexte(accent) }}
             >
               {introCount}
             </motion.span>
@@ -988,7 +996,7 @@ export function MultiplayerGameClient({
                       <div className="relative flex flex-col items-center gap-8 py-6 w-full max-w-2xl">
                         <ConfettiBurst />
                         <div className="flex h-16 w-16 items-center justify-center rounded-full" style={{ background: `${accent}22` }}>
-                          <Trophy className="h-8 w-8" style={{ color: accent }} />
+                          <Trophy className="h-8 w-8" style={{ color: accentTexte(accent) }} />
                         </div>
                         <h2 className="text-center font-display text-5xl font-semibold">Partie terminée</h2>
                         {/* Podium top 3 */}
@@ -1011,7 +1019,7 @@ export function MultiplayerGameClient({
                             </div>
                             {/* 1st place */}
                             <div className="flex w-36 flex-col items-center">
-                              <Crown className="mb-2 h-8 w-8" style={{ color: accent }} />
+                              <Crown className="mb-2 h-8 w-8" style={{ color: accentTexte(accent) }} />
                               {sortedPlayersFixed[0].avatar ? (
                                 <img src={sortedPlayersFixed[0].avatar} alt={sortedPlayersFixed[0].username ?? "1er joueur"} className="mb-2 h-16 w-16 rounded-full object-cover border-2 border-line" style={{ boxShadow: `0 0 0 3px ${accent}` }} />
                               ) : (
@@ -1021,7 +1029,7 @@ export function MultiplayerGameClient({
                               )}
                               <div className="flex h-36 w-full flex-col items-center justify-center rounded-t-md border-2 border-line" style={{ background: `${accent}2b`, boxShadow: "4px 4px 0 rgb(var(--c-shadow) / .18)" }}>
                                 <span className="font-display text-xl font-bold">{sortedPlayersFixed[0].username || "?"}</span>
-                                <span className="font-display text-3xl font-bold" style={{ color: accent }}>{sortedPlayersFixed[0].score}</span>
+                                <span className="font-display text-3xl font-bold" style={{ color: accentTexte(accent) }}>{sortedPlayersFixed[0].score}</span>
                                 <span className="text-sm text-[var(--muted)]">{Math.round(sortedPlayersFixed[0].accuracy ?? 0)}%</span>
                               </div>
                             </div>
@@ -1045,7 +1053,7 @@ export function MultiplayerGameClient({
                           <div className="flex items-center justify-center gap-6 mt-4">
                             {sortedPlayersFixed.slice(0, 2).map((p, idx) => (
                               <div key={p.userId} className="flex flex-col items-center gap-2">
-                                {idx === 0 && <Crown className="h-6 w-6" style={{ color: accent }} />}
+                                {idx === 0 && <Crown className="h-6 w-6" style={{ color: accentTexte(accent) }} />}
                                 <div className="flex h-28 w-28 flex-col items-center justify-center rounded-md border-2 border-line shadow-[4px_4px_0_rgb(var(--c-shadow)/.18)]"
                                   style={{ background: idx === 0 ? `${accent}2b` : "var(--surface-strong)" }}>
                                   <span className="font-display text-lg font-semibold">{p.username || "?"}</span>
@@ -1081,11 +1089,11 @@ export function MultiplayerGameClient({
                           animate={{ y: 0, opacity: 1 }}
                           transition={{ duration: 0.4, delay: 0.15 }}
                         >
-                          <p className="text-sm font-bold uppercase tracking-[0.32em]" style={{ color: accent }}>La réponse était</p>
+                          <p className="text-sm font-bold uppercase tracking-[0.32em]" style={{ color: accentTexte(accent) }}>La réponse était</p>
                           <h2 className="mt-3 font-display text-5xl font-semibold">{currentTrack.title}</h2>
                           <p className="mt-2 font-display text-2xl italic text-ink-2">{currentTrack.artist}</p>
                           {trackOwnerUsername && (
-                            <p className="mt-3 text-base text-[var(--muted)]">Proposé par <span className="font-semibold" style={{ color: accent }}>{trackOwnerUsername}</span></p>
+                            <p className="mt-3 text-base text-[var(--muted)]">Proposé par <span className="font-semibold" style={{ color: accentTexte(accent) }}>{trackOwnerUsername}</span></p>
                           )}
                           {/* Lien retour Spotify (guidelines) : la reponse, donc reveal seulement. */}
                           <SpotifyTrackLink provider={currentTrack.provider} trackId={currentTrack.trackId} className="mt-4" />
@@ -1107,7 +1115,7 @@ export function MultiplayerGameClient({
                               }}
                             >
                               <span className="flex h-6 w-6 items-center justify-center rounded-full border border-line text-[10px] font-bold"
-                                style={{ background: idx === 0 ? accent : "#f4ecdb", color: idx === 0 ? "#f4ecdb" : "var(--muted)" }}>
+                                style={{ background: idx === 0 ? accent : "rgb(var(--c-paper))", color: idx === 0 ? "rgb(var(--c-on-ink))" : "var(--muted)" }}>
                                 {idx + 1}
                               </span>
                               {p.avatar ? (
@@ -1132,14 +1140,14 @@ export function MultiplayerGameClient({
                             className="absolute top-[30%] flex h-20 w-20 items-center justify-center rounded-full border-2 border-line bg-paper shadow-[3px_3px_0_rgb(var(--c-shadow))] transition-transform hover:scale-110"
                             title="Lancer la musique"
                           >
-                            <Play className="h-10 w-10" style={{ color: accent }} />
+                            <Play className="h-10 w-10" style={{ color: accentTexte(accent) }} />
                           </button>
                         )}
                         <div className="text-center">
                           <p className="text-base font-bold uppercase tracking-[0.32em] text-[var(--muted)]">
                             {isPlaying ? "Extrait en cours" : "Réponses verrouillées"}
                           </p>
-                          <p className="mt-3 font-display text-6xl font-bold" style={{ color: accent }}>
+                          <p className="mt-3 font-display text-6xl font-bold" style={{ color: accentTexte(accent) }}>
                             {displayAnsweredCount} / {playerCount}
                           </p>
                           <p className="mt-2 text-base text-[var(--muted)]">réponses reçues</p>
@@ -1151,7 +1159,7 @@ export function MultiplayerGameClient({
                           {sortedPlayersFixed.map(p => (
                             <div key={p.userId} className="flex items-center gap-1.5 rounded-full border-[1.5px] px-3 py-1.5 text-sm"
                               style={{
-                                borderColor: p.hasAnswered ? "var(--success)" : "#2e2014",
+                                borderColor: p.hasAnswered ? "var(--success)" : "rgb(var(--c-line))",
                                 background: p.hasAnswered ? "rgba(125,148,113,0.18)" : "var(--surface-strong)",
                               }}>
                               {p.avatar ? (
@@ -1200,11 +1208,11 @@ export function MultiplayerGameClient({
                         animate={{ y: 0, opacity: 1 }}
                         transition={{ duration: 0.4, delay: 0.15 }}
                       >
-                        <p className="text-[10px] font-bold uppercase tracking-[0.32em]" style={{ color: accent }}>La réponse était</p>
+                        <p className="text-[10px] font-bold uppercase tracking-[0.32em]" style={{ color: accentTexte(accent) }}>La réponse était</p>
                         <h2 className={`mt-2 ${isLargeUI ? "text-4xl" : "text-3xl"} font-display font-semibold`}>{currentTrack.title}</h2>
                         <p className={`mt-1 ${isLargeUI ? "text-lg" : "text-base"} font-display italic text-ink-2`}>{currentTrack.artist}</p>
                         {trackOwnerUsername && (
-                          <p className="mt-1 text-xs text-[var(--muted)]">Proposé par <span style={{ color: accent }}>{trackOwnerUsername}</span></p>
+                          <p className="mt-1 text-xs text-[var(--muted)]">Proposé par <span style={{ color: accentTexte(accent) }}>{trackOwnerUsername}</span></p>
                         )}
                         <SpotifyTrackLink provider={currentTrack.provider} trackId={currentTrack.trackId} className="mt-3" />
                       </motion.div>
@@ -1243,10 +1251,10 @@ export function MultiplayerGameClient({
                           return (
                             <div key={p.userId} className="flex items-center justify-between gap-2 rounded-md border-[1.5px] border-[rgb(var(--c-line)/.25)] bg-[var(--surface-strong)] px-3 py-1.5 text-xs">
                               <span className="shrink-0 font-bold">{p.username || `J${p.userId}`}</span>
-                              <span className="min-w-0 flex-1 truncate text-right" style={{ color: answered ? verdictColor(p.lastVerdict) : "var(--muted)", fontStyle: answered ? "normal" : "italic" }}>
+                              <span className="min-w-0 flex-1 truncate text-right" style={{ color: answered ? verdictTextColor(p.lastVerdict) : "var(--muted)", fontStyle: answered ? "normal" : "italic" }}>
                                 {answered ? `« ${p.lastGuess} »` : p.hasAnswered ? "a passé" : "pas de réponse"}
                               </span>
-                              <span className="shrink-0 font-bold" style={{ color: (p.lastGained ?? 0) > 0 ? "#5d7252" : "var(--muted)" }}>
+                              <span className="shrink-0 font-bold" style={{ color: (p.lastGained ?? 0) > 0 ? "rgb(var(--c-sage-deep-txt))" : "var(--muted)" }}>
                                 +{p.lastGained ?? 0}
                               </span>
                             </div>
@@ -1265,7 +1273,7 @@ export function MultiplayerGameClient({
                           disabled={disabled || player?.isReady}
                           variant="outline"
                           className="rounded-full border-2 bg-paper px-5 py-2 text-sm font-bold shadow-[3px_3px_0_rgb(var(--c-shadow)/.25)]"
-                          style={{ borderColor: "rgb(var(--c-line))", color: accent }}
+                          style={{ borderColor: "rgb(var(--c-line))", color: accentTexte(accent) }}
                         >
                           {player?.isReady
                             ? `En attente (${readyCount}/${playerCount})`
@@ -1309,7 +1317,7 @@ export function MultiplayerGameClient({
                               className="absolute left-[50px] top-1/2 -translate-x-1/2 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full border-2 border-line bg-paper shadow-[2px_2px_0_rgb(var(--c-shadow))] transition-transform hover:scale-110"
                               title="Lancer la musique"
                             >
-                              <Play className="h-6 w-6" style={{ color: accent }} />
+                              <Play className="h-6 w-6" style={{ color: accentTexte(accent) }} />
                             </button>
                           )}
                           <div className="flex flex-1 flex-col gap-2">
@@ -1321,12 +1329,12 @@ export function MultiplayerGameClient({
                                 </>
                               ) : manualPlayRequired && isAudioPhase ? (
                                 <>
-                                  <Play className="h-3 w-3" style={{ color: accent }} />
+                                  <Play className="h-3 w-3" style={{ color: accentTexte(accent) }} />
                                   <span>Cliquer pour lancer</span>
                                 </>
                               ) : isLocked ? (
                                 <>
-                                  <Lock className="h-3 w-3" style={{ color: accent }} />
+                                  <Lock className="h-3 w-3" style={{ color: accentTexte(accent) }} />
                                   <span>Reveal dans {remaining}s</span>
                                 </>
                               ) : (
@@ -1351,7 +1359,7 @@ export function MultiplayerGameClient({
                             {isPlaying ? (
                               <span className="h-2.5 w-2.5 animate-pulse rounded-full" style={{ background: accent }} />
                             ) : isLocked ? (
-                              <Lock className="h-3.5 w-3.5" style={{ color: accent }} />
+                              <Lock className="h-3.5 w-3.5" style={{ color: accentTexte(accent) }} />
                             ) : (
                               <span className="h-2 w-2 rounded-full" style={{ background: accent }} />
                             )}
@@ -1361,7 +1369,7 @@ export function MultiplayerGameClient({
                               </span>
                               <motion.span
                                 key={state?.currentRound ?? 0}
-                                initial={{ scale: 1.35, color: accent }}
+                                initial={{ scale: 1.35, color: accentTexte(accent) }}
                                 animate={{ scale: 1, color: "var(--muted)" }}
                                 transition={{ duration: 0.5, ease: [0.2, 0.8, 0.2, 1] }}
                                 className="ml-2 inline-block text-[var(--muted)]"
@@ -1395,7 +1403,7 @@ export function MultiplayerGameClient({
                               transition={{ duration: 0.3 }}
                             >
                               <div className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-line" style={{ background: `${accent}22` }}>
-                                <Lock className="h-6 w-6" style={{ color: accent }} />
+                                <Lock className="h-6 w-6" style={{ color: accentTexte(accent) }} />
                               </div>
                               <p className="font-display text-lg font-semibold">C'est noté</p>
                               <p className="text-sm text-[var(--muted)]">Reveal dans {remaining}s</p>
@@ -1479,9 +1487,9 @@ export function MultiplayerGameClient({
                                     sourceGuess === p.userId ? "-translate-y-0.5 scale-105" : ""
                                   }`}
                                   style={{
-                                    color: sourceGuess === p.userId ? "#f4ecdb" : "var(--ink)",
-                                    background: sourceGuess === p.userId ? accent : "#f4ecdb",
-                                    boxShadow: sourceGuess === p.userId ? `4px 4px 0 #2e2014` : "none",
+                                    color: sourceGuess === p.userId ? "rgb(var(--c-on-ink))" : "var(--ink)",
+                                    background: sourceGuess === p.userId ? accent : "rgb(var(--c-paper))",
+                                    boxShadow: sourceGuess === p.userId ? "4px 4px 0 rgb(var(--c-shadow))" : "none",
                                   }}
                                 >
                                   {p.avatar ? (
@@ -1494,7 +1502,7 @@ export function MultiplayerGameClient({
                                     <span
                                       className="flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-bold"
                                       style={{
-                                        background: sourceGuess === p.userId ? "#f4ecdb" : "var(--surface)",
+                                        background: sourceGuess === p.userId ? "rgb(var(--c-on-ink))" : "var(--surface)",
                                         color: sourceGuess === p.userId ? accent : "var(--muted)",
                                       }}
                                     >
@@ -1519,17 +1527,17 @@ export function MultiplayerGameClient({
                             disabled={localHasAnswered || disabled}
                             className="relative w-full rounded-md py-3 text-base font-bold transition disabled:opacity-60"
                             style={{
-                              background: localHasAnswered ? "var(--surface-strong)" : "#2e2014",
-                              color: localHasAnswered ? "var(--muted)" : "#f4ecdb",
+                              background: localHasAnswered ? "var(--surface-strong)" : "rgb(var(--c-ink-block))",
+                              color: localHasAnswered ? "var(--muted)" : "rgb(var(--c-on-ink))",
                               border: "2px solid rgb(var(--c-line))",
-                              boxShadow: hasInput && !localHasAnswered ? "4px 4px 0 rgba(46,32,20,.3)" : "none",
+                              boxShadow: hasInput && !localHasAnswered ? "4px 4px 0 rgb(var(--c-shadow) / .3)" : "none",
                             }}
                             whileTap={!localHasAnswered ? { scale: 0.93 } : undefined}
                             animate={localHasAnswered ? { scale: [1.06, 1], transition: { duration: 0.3 } } : undefined}
                           >
                             {localHasAnswered ? (
                               <span className="flex items-center justify-center gap-2">
-                                <Check className="h-4 w-4" style={{ color: accent }} />
+                                <Check className="h-4 w-4" style={{ color: accentTexte(accent) }} />
                                 Notée
                               </span>
                             ) : (
@@ -1565,7 +1573,7 @@ export function MultiplayerGameClient({
                 className={panelClassName}
               >
                 <div className="flex items-center justify-between">
-                  <h3 className="text-[11px] font-bold uppercase tracking-[0.3em]" style={{ color: accent }}>Face B · Classement</h3>
+                  <h3 className="text-[11px] font-bold uppercase tracking-[0.3em]" style={{ color: accentTexte(accent) }}>Face B · Classement</h3>
                   <span className="text-xs text-[var(--muted)]">Manche {state?.currentRound}</span>
                 </div>
 
@@ -1612,7 +1620,7 @@ export function MultiplayerGameClient({
                 <ConfettiBurst />
                 <div className="text-center">
                   <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full border-2 border-line" style={{ background: `${accent}22` }}>
-                    <Trophy className="h-6 w-6" style={{ color: accent }} />
+                    <Trophy className="h-6 w-6" style={{ color: accentTexte(accent) }} />
                   </div>
                   <h3 className="font-display text-xl font-semibold">Partie terminée</h3>
                   <p className="mt-1 text-xs text-[var(--muted)]">
@@ -1631,13 +1639,13 @@ export function MultiplayerGameClient({
                       </div>
                     </div>
                     <div className="flex w-24 flex-col items-center">
-                      <Crown className="mb-1 h-4 w-4" style={{ color: accent }} />
+                      <Crown className="mb-1 h-4 w-4" style={{ color: accentTexte(accent) }} />
                       <div
                         className="flex h-24 w-full flex-col items-center justify-center rounded-t-md border-2 border-line"
                         style={{ background: `${accent}2b`, boxShadow: "3px 3px 0 rgb(var(--c-shadow) / .18)" }}
                       >
                         <span className="font-display text-sm font-semibold">{sortedPlayersFixed[0].username || "?"}</span>
-                        <span className="font-display text-base font-bold" style={{ color: accent }}>{sortedPlayersFixed[0].score}</span>
+                        <span className="font-display text-base font-bold" style={{ color: accentTexte(accent) }}>{sortedPlayersFixed[0].score}</span>
                         <span className="text-[10px] text-[var(--muted)]">{Math.round(sortedPlayersFixed[0].accuracy ?? 0)}%</span>
                       </div>
                     </div>
@@ -1656,13 +1664,13 @@ export function MultiplayerGameClient({
                   <div className="mt-5 flex items-center justify-center gap-4">
                     {sortedPlayersFixed.map((p, idx) => (
                       <div key={p.userId} className="flex flex-col items-center gap-1.5">
-                        {idx === 0 && <Crown className="h-4 w-4" style={{ color: accent }} />}
+                        {idx === 0 && <Crown className="h-4 w-4" style={{ color: accentTexte(accent) }} />}
                         {idx === 1 && <div className="h-4" />}
                         <div
                           className="flex h-20 w-24 flex-col items-center justify-center rounded-md border-2 border-line"
                           style={{
                             background: idx === 0 ? `${accent}2b` : "var(--surface-strong)",
-                            boxShadow: idx === 0 ? "3px 3px 0 rgba(46,32,20,.18)" : "none",
+                            boxShadow: idx === 0 ? "3px 3px 0 rgb(var(--c-shadow) / .18)" : "none",
                           }}
                         >
                           <span className="font-display text-sm font-semibold">{p.username || "?"}</span>
@@ -1677,7 +1685,7 @@ export function MultiplayerGameClient({
                 )}
 
                 {/* Full leaderboard */}
-                <p className="mt-5 text-[11px] font-bold uppercase tracking-[0.3em]" style={{ color: accent }}>Face B · Classement final</p>
+                <p className="mt-5 text-[11px] font-bold uppercase tracking-[0.3em]" style={{ color: accentTexte(accent) }}>Face B · Classement final</p>
                 <div className="mt-2">
                   {sortedPlayersFixed.map((p, idx) => (
                     <div key={p.userId} className="flex items-baseline gap-2.5 py-1.5 text-sm">
@@ -1731,7 +1739,7 @@ export function MultiplayerGameClient({
             >
               {/* Scoreboard */}
               <div className="border-b-2 border-line px-4 py-3">
-                <p className="text-[10px] font-bold uppercase tracking-[0.3em]" style={{ color: accent }}>Face B · Classement</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.3em]" style={{ color: accentTexte(accent) }}>Face B · Classement</p>
                 <div className="mt-2 space-y-1">
                   {sortedPlayersFixed.map((p, idx) => (
                     <div

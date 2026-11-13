@@ -58,10 +58,10 @@ export function RecentPlayers({
   if (shown.length === 0) return null
 
   const dark = tone === "dark"
-  const line = dark ? "#6b573f" : "rgba(46,32,20,.4)"
-  const chipBorder = dark ? "#e9dcc0" : "#2e2014"
+  const line = dark ? "#6b573f" : "rgb(var(--c-line) / .4)"
+  const chipBorder = dark ? "#e9dcc0" : "rgb(var(--c-line))"
   // Sur l'or de la table, un bouton or disparaitrait : il passe a l'encre.
-  const btnBg = dark ? accent : "#2e2014"
+  const btnBg = dark ? accent : "rgb(var(--c-ink-block))"
 
   return (
     <div className="mt-4 border-t-2 border-dashed pt-3" style={{ borderColor: line }}>

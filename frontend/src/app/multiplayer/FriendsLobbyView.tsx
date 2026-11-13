@@ -1,5 +1,6 @@
 "use client"
 
+import { accentTexte } from "@/lib/accentText"
 import Link from "next/link"
 import { useState } from "react"
 import { Loader2 } from "lucide-react"
@@ -235,7 +236,7 @@ function DiscordEntering() {
   return (
     <div className="grid min-h-[40vh] place-items-center px-6 text-center">
       <p className="m-0 flex items-center gap-3 text-sm" role="status">
-        <Loader2 className="h-5 w-5 shrink-0 animate-spin" style={{ color: ACCENT }} aria-hidden />
+        <Loader2 className="h-5 w-5 shrink-0 animate-spin" style={{ color: accentTexte(ACCENT) }} aria-hidden />
         On entre dans la salle du salon…
       </p>
     </div>

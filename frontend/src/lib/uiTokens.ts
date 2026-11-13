@@ -2,10 +2,10 @@ import type { GameMode } from "@/lib/gameModes"
 
 export const surfaces = {
   background: "rgb(var(--c-paper))",
-  card: "#ece1c8",
+  card: "rgb(var(--c-paper-deep))",
   border: "rgb(var(--c-line) / 0.22)",
-  text: "#2e2014",
-  muted: "#6b573f",
+  text: "rgb(var(--c-ink))",
+  muted: "rgb(var(--c-ink-2))",
 }
 
 export const accents: Record<GameMode, string> = {
@@ -16,7 +16,7 @@ export const accents: Record<GameMode, string> = {
 
 export const glow = {
   none: "0 0 0 0 transparent",
-  subtle: "4px 4px 0 rgba(46,32,20,0.18)",
+  subtle: "4px 4px 0 rgb(var(--c-shadow) / 0.18)",
   focus: (accent: string) => `0 0 0 2px ${accent}`,
 }
 

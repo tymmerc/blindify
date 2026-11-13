@@ -18,8 +18,8 @@ import { api } from "@/lib/api"
 import { updateHostedRoom } from "@/lib/hostedRooms"
 import type { MultiplayerParticipant, MultiplayerRoom } from "@/lib/types"
 
-export const PAPER = "#f4ecdb"
-export const INK = "#2e2014"
+export const PAPER = "rgb(var(--c-paper))"
+export const INK = "rgb(var(--c-ink))"
 
 /** Cadre sans fond : pour les blocs de couleur, le fond passe par `style`.
  *  Deux classes bg-[...] sur le meme element, c'est l'ordre du CSS genere qui

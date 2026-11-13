@@ -54,7 +54,7 @@ export function useStoredLink(): StoredLink {
 export function MusicLinkField({ id, link }: { id: string; link: StoredLink }) {
   if (!link.showInput) {
     return (
-      <div className="flex items-center justify-between gap-3 rounded-md border-[1.5px] border-sage bg-[#eef1e8] px-4 py-3">
+      <div className="flex items-center justify-between gap-3 rounded-md border-[1.5px] border-sage bg-[#eef1e8] dark:bg-sage/15 px-4 py-3">
         <span className="flex items-center gap-2 text-sm font-semibold text-ink">
           <span aria-hidden className="text-base text-sage-deep-txt">✓</span> Ta musique : {link.provider}
         </span>

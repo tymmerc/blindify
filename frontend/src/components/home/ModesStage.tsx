@@ -92,7 +92,7 @@ function Scene({ mode, opacity }: { mode: ModeKey; opacity: number }) {
       className="absolute inset-0 h-full w-full"
       style={{ opacity }}
       fill="none"
-      stroke="#2e2014"
+      stroke="var(--line)"
       strokeWidth="3"
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -100,20 +100,20 @@ function Scene({ mode, opacity }: { mode: ModeKey; opacity: number }) {
       {mode === "table" && (
         <>
           {/* Ecran central */}
-          <rect x="90" y="30" width="220" height="130" rx="8" fill="#ece1c8" />
+          <rect x="90" y="30" width="220" height="130" rx="8" fill="var(--paper-deep)" />
           <path d="M170 160 v18 M230 160 v18 M150 178 h100" />
           {/* Onde qui joue */}
           <path d="M120 95 q10 -30 20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0" stroke="#cc4830" />
           {/* QR stylise */}
-          <g fill="#2e2014" stroke="none">
-            <rect x="262" y="42" width="34" height="34" rx="2" fill="none" stroke="#2e2014" strokeWidth="3" />
+          <g fill="var(--line)" stroke="none">
+            <rect x="262" y="42" width="34" height="34" rx="2" fill="none" stroke="var(--line)" strokeWidth="3" />
             <rect x="268" y="48" width="8" height="8" /><rect x="284" y="48" width="6" height="6" />
             <rect x="268" y="62" width="6" height="6" /><rect x="280" y="60" width="10" height="10" />
           </g>
           {/* Trois telephones autour de la table */}
-          <rect x="40" y="200" width="54" height="86" rx="10" fill="#f4ecdb" />
-          <rect x="173" y="212" width="54" height="86" rx="10" fill="#f4ecdb" />
-          <rect x="306" y="200" width="54" height="86" rx="10" fill="#f4ecdb" />
+          <rect x="40" y="200" width="54" height="86" rx="10" fill="var(--paper)" />
+          <rect x="173" y="212" width="54" height="86" rx="10" fill="var(--paper)" />
+          <rect x="306" y="200" width="54" height="86" rx="10" fill="var(--paper)" />
           <circle cx="67" cy="240" r="9" fill="#cc4830" stroke="none" />
           <circle cx="200" cy="252" r="9" fill="#cc4830" stroke="none" />
           <circle cx="333" cy="240" r="9" fill="#486090" stroke="none" />
@@ -122,8 +122,8 @@ function Scene({ mode, opacity }: { mode: ModeKey; opacity: number }) {
       {mode === "untel" && (
         <>
           {/* Un grand telephone a plat */}
-          <rect x="100" y="20" width="200" height="260" rx="22" fill="#f4ecdb" />
-          <rect x="116" y="40" width="168" height="222" rx="12" fill="#ece1c8" />
+          <rect x="100" y="20" width="200" height="260" rx="22" fill="var(--paper)" />
+          <rect x="116" y="40" width="168" height="222" rx="12" fill="var(--paper-deep)" />
           {/* Cinq zones : quatre doigts poses, un qui vient de lacher */}
           <circle cx="160" cy="95" r="22" fill="#d88418" stroke="none" />
           <circle cx="240" cy="95" r="22" fill="#d88418" stroke="none" />
@@ -138,17 +138,17 @@ function Scene({ mode, opacity }: { mode: ModeKey; opacity: number }) {
       {mode === "distance" && (
         <>
           {/* Trois ecrans eloignes */}
-          <rect x="24" y="40" width="96" height="66" rx="8" fill="#f4ecdb" />
-          <rect x="280" y="30" width="96" height="66" rx="8" fill="#f4ecdb" />
-          <rect x="150" y="200" width="96" height="66" rx="8" fill="#f4ecdb" />
+          <rect x="24" y="40" width="96" height="66" rx="8" fill="var(--paper)" />
+          <rect x="280" y="30" width="96" height="66" rx="8" fill="var(--paper)" />
+          <rect x="150" y="200" width="96" height="66" rx="8" fill="var(--paper)" />
           <circle cx="72" cy="73" r="8" fill="#486090" stroke="none" />
           <circle cx="328" cy="63" r="8" fill="#486090" stroke="none" />
           <circle cx="198" cy="233" r="8" fill="#486090" stroke="none" />
           {/* Liens pointilles vers le code */}
           <path d="M120 80 L170 130 M280 70 L230 130 M198 200 L198 165" stroke="#486090" strokeDasharray="5 7" />
           {/* Le code a 6 caracteres */}
-          <rect x="128" y="118" width="144" height="46" rx="6" fill="#ece1c8" />
-          <text x="200" y="149" textAnchor="middle" fontFamily="ui-monospace, monospace" fontSize="22" fontWeight="700" fill="#2e2014" stroke="none" letterSpacing="4">
+          <rect x="128" y="118" width="144" height="46" rx="6" fill="var(--paper-deep)" />
+          <text x="200" y="149" textAnchor="middle" fontFamily="ui-monospace, monospace" fontSize="22" fontWeight="700" fill="var(--ink)" stroke="none" letterSpacing="4">
             K7X2QA
           </text>
         </>

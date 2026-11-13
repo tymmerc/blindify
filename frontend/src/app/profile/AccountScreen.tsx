@@ -1,5 +1,6 @@
 "use client"
 
+import { accentTexte } from "@/lib/accentText"
 import { useEffect, useState, type ReactNode } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -106,7 +107,7 @@ export function AccountScreen() {
         </Link>
 
         <h1 className="mt-6 font-display text-[2.4rem] font-semibold leading-none sm:text-5xl">
-          Mon <em className="font-medium italic" style={{ color: CORAL }}>compte</em>
+          Mon <em className="font-medium italic" style={{ color: accentTexte(CORAL) }}>compte</em>
         </h1>
         {data.stats && <p className="mt-3 font-mono text-[13px] text-ink-2">{data.stats}</p>}
 

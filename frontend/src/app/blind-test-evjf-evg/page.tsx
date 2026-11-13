@@ -94,8 +94,8 @@ export default function Page() {
           EVG à quinze dépasse vite. Deux façons de s'en sortir :
         </p>
         <ul>
-          <Li color="#2e2014"><span><strong>Les binômes.</strong> Un téléphone pour deux, avec un pseudo commun (« Julie et Sam »). Vingt-deux personnes tiennent dans une salle, et devoir se mettre d'accord avant de taper fait partie du jeu.</span></Li>
-          <Li color="#2e2014"><span><strong>Deux salles.</strong> Deux écrans, deux codes, chacune son classement. Pratique si le groupe se partage de toute façon entre deux pièces.</span></Li>
+          <Li color="var(--line)"><span><strong>Les binômes.</strong> Un téléphone pour deux, avec un pseudo commun (« Julie et Sam »). Vingt-deux personnes tiennent dans une salle, et devoir se mettre d'accord avant de taper fait partie du jeu.</span></Li>
+          <Li color="var(--line)"><span><strong>Deux salles.</strong> Deux écrans, deux codes, chacune son classement. Pratique si le groupe se partage de toute façon entre deux pièces.</span></Li>
         </ul>
         <p>
           Dans les deux cas, regarde le nombre de manches : chacune ne joue le morceau que d'une personne, alors avec

@@ -1,5 +1,6 @@
 "use client"
 
+import { accentTexte } from "@/lib/accentText"
 import { Suspense, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import type { Mode } from "@/contexts/ModeContext"
@@ -114,7 +115,7 @@ function VinylSleeve({
                 className={`text-[10px] font-bold uppercase tracking-[0.14em] transition-opacity duration-200 ${
                   picking || discOut ? "opacity-100" : "opacity-0 group-hover:opacity-100"
                 }`}
-                style={{ color: accent }}
+                style={{ color: accentTexte(accent) }}
               >
                 {picking ? "Sélectionné ✓" : "Créer →"}
               </span>

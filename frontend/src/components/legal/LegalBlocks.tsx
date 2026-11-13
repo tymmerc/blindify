@@ -20,7 +20,7 @@ export function Section({ title, accent, children }: SectionProps) {
       style={{ borderLeft: `6px solid ${accent}` }}
     >
       <h2 className="mb-3 text-[11px] font-bold uppercase tracking-[0.22em] text-ink-2">{title}</h2>
-      <div className="space-y-1 text-[15px] leading-relaxed text-[#4a3a28]">{children}</div>
+      <div className="space-y-1 text-[15px] leading-relaxed text-[#4a3a28] dark:text-ink-2">{children}</div>
     </div>
   )
 }

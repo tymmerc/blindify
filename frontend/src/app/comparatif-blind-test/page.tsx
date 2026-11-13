@@ -267,11 +267,11 @@ export default function Page() {
 
       <Section tag="Quand choisir blindz.app" title="Ce qu'on fait que les autres ne font pas" tone="amber">
         <ul>
-          <Li color="#2e2014"><span><strong>Les playlists de tous les joueurs, mélangées</strong> : chacun colle son lien Spotify ou Deezer, sans se connecter, et la partie se joue sur la musique de toute la bande.</span></Li>
-          <Li color="#2e2014"><span><strong>Deviner qui a mis quoi</strong> : un point de plus pour qui trouve lequel de ses potes a ramené le morceau. C'est ce qui fait rire la table.</span></Li>
-          <Li color="#2e2014"><span><strong>Autour d'une table</strong> : la télé ou un PC diffuse la musique, chacun répond sur son téléphone en scannant un QR code, jusqu'à 12 joueurs.</span></Li>
-          <Li color="#2e2014"><span><strong>Rien à préparer</strong> : pas de pack à choisir, pas de quiz à écrire. Un pseudo, un lien, et la partie est prête.</span></Li>
-          <Li color="#2e2014"><span><strong>Vraiment gratuit</strong> : sans pub, sans abonnement, sans compte, sur iPhone, Android et PC.</span></Li>
+          <Li color="var(--line)"><span><strong>Les playlists de tous les joueurs, mélangées</strong> : chacun colle son lien Spotify ou Deezer, sans se connecter, et la partie se joue sur la musique de toute la bande.</span></Li>
+          <Li color="var(--line)"><span><strong>Deviner qui a mis quoi</strong> : un point de plus pour qui trouve lequel de ses potes a ramené le morceau. C'est ce qui fait rire la table.</span></Li>
+          <Li color="var(--line)"><span><strong>Autour d'une table</strong> : la télé ou un PC diffuse la musique, chacun répond sur son téléphone en scannant un QR code, jusqu'à 12 joueurs.</span></Li>
+          <Li color="var(--line)"><span><strong>Rien à préparer</strong> : pas de pack à choisir, pas de quiz à écrire. Un pseudo, un lien, et la partie est prête.</span></Li>
+          <Li color="var(--line)"><span><strong>Vraiment gratuit</strong> : sans pub, sans abonnement, sans compte, sur iPhone, Android et PC.</span></Li>
         </ul>
         <p>
           Une information fausse ou dépassée dans ce comparatif ? Écrivez-nous depuis la page{" "}

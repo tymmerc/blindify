@@ -5,6 +5,7 @@
  * OBS en une minute (#obs), vers lequel pointe le lobby. Page publique : un
  * streamer peut la lire avant de creer sa salle.
  */
+import { accentTexte } from "@/lib/accentText"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { liveLabel } from "@/lib/streamerLive"
@@ -40,9 +41,9 @@ export default function StreamerEntryPage() {
       <div className="mx-auto flex max-w-5xl flex-col gap-8">
         <header className="flex flex-wrap items-start justify-between gap-3">
           <div className="space-y-2">
-            <p className="text-[11px] font-bold uppercase tracking-[0.32em]" style={{ color: ACCENT }}>Avec ta communauté</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.32em]" style={{ color: accentTexte(ACCENT) }}>Avec ta communauté</p>
             <h1 className="font-display text-4xl font-semibold leading-tight md:text-5xl">
-              Un blind test en live avec ton <em className="font-medium italic" style={{ color: ACCENT }}>chat</em>
+              Un blind test en live avec ton <em className="font-medium italic" style={{ color: accentTexte(ACCENT) }}>chat</em>
             </h1>
             <p className="max-w-2xl text-base text-ink-2">
               Tu joues ta musique, l&apos;overlay l&apos;envoie dans le stream, et ton public répond depuis son téléphone sur {liveLabel()},

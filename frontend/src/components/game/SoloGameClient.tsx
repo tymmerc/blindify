@@ -1337,9 +1337,9 @@ export function SoloGameClient({
                 width: 48px;
                 height: 48px;
                 border-radius: 50%;
-                border: 2px solid #2e2014;
-                background: #f4ecdb;
-                color: #2e2014;
+                border:2px solid rgb(var(--c-line));
+                background:rgb(var(--c-paper));
+                color:rgb(var(--c-ink));
                 display: grid;
                 place-items: center;
                 cursor: pointer;
@@ -1351,9 +1351,9 @@ export function SoloGameClient({
                 width: 64px;
                 height: 64px;
                 border-radius: 50%;
-                background: #f4ecdb;
-                border: 2px solid #2e2014;
-                box-shadow: 3px 3px 0 rgba(46, 32, 20, 0.3);
+                background:rgb(var(--c-paper));
+                border:2px solid rgb(var(--c-line));
+                box-shadow:3px 3px 0 rgb(var(--c-shadow) / 0.3);
                 display: flex;
                 align-items: center;
                 justify-content: center;
@@ -1483,7 +1483,7 @@ export function SoloGameClient({
                     className="rounded-full border-[1.5px] px-2 py-[2px] text-[10px] font-bold uppercase tracking-[0.14em]"
                     style={{
                       borderColor: stateColor,
-                      color: item.state === "pending" ? "#8a7558" : stateColor,
+                      color: item.state === "pending" ? "rgb(var(--c-sourd))" : stateColor,
                     }}
                   >
                     {badgeLabel}
@@ -1643,7 +1643,7 @@ const SliderStyles = () => (
       gap: 8px;
     }
     .solo-slider .solo-volume-icon {
-      color: #8a7558;
+      color:rgb(var(--c-sourd));
       width: var(--icon-size);
       height: auto;
       margin-right: var(--icon-margin);
@@ -1652,7 +1652,7 @@ const SliderStyles = () => (
       appearance: none;
       width: var(--slider-width);
       height: var(--slider-height);
-      background: var(--slider-bg);
+      background:var(--slider-bg);
       overflow: hidden;
       border-radius: var(--slider-border-radius);
       transition: height var(--level-transition-duration);
@@ -1662,7 +1662,7 @@ const SliderStyles = () => (
       appearance: none;
       width: 0;
       height: 0;
-      box-shadow: -200px 0 0 200px var(--level-color);
+      box-shadow:-200px 0 0 200px var(--level-color);
     }
     .solo-slider:hover .solo-level {
       height: calc(var(--slider-height) * 1.7);

@@ -118,7 +118,7 @@ const TONES: Record<Tone, { bg: string; text: string; tagColor: string; light: b
   deep: { bg: "bg-paper-deep", text: "text-ink", tagColor: BLUE, light: false, rule: "border-[rgb(var(--c-line)/.18)]" },
   ink: { bg: "bg-ink-block", text: "text-on-ink", tagColor: AMBER, light: true, rule: "border-[rgb(var(--c-on-ink)/.22)]" },
   blue: { bg: "bg-acier", text: "text-on-ink", tagColor: CREAM, light: true, rule: "border-[rgb(var(--c-on-ink)/.45)]" },
-  amber: { bg: "bg-ambre", text: "text-ink", tagColor: INK, light: false, rule: "border-[rgb(var(--c-line)/.3)]" },
+  amber: { bg: "reste-clair bg-ambre", text: "text-ink", tagColor: INK, light: false, rule: "border-[rgb(var(--c-line)/.3)]" },
 }
 
 export function Section({ id, tag, title, tone = "paper", children }: { id?: string; tag: string; title: ReactNode; tone?: Tone; children: ReactNode }) {

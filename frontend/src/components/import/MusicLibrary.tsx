@@ -199,7 +199,7 @@ export function MusicLibrary({ accent, refreshSignal, onLinksChange, emptyText =
                   {showTracks ? (
                     <div className="max-h-48 overflow-y-auto rounded-md border-[1.5px] border-[rgb(var(--c-line)/.25)] bg-paper-deep p-2">
                       {detail.tracks.map((t, i) => (
-                        <p key={i} className="m-0 truncate py-0.5 text-xs text-[#4a3a26]">
+                        <p key={i} className="m-0 truncate py-0.5 text-xs text-[#4a3a26] dark:text-ink-2">
                           <span className="font-semibold">{t.title}</span> · {t.artist}
                         </p>
                       ))}

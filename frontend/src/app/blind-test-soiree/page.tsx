@@ -109,10 +109,10 @@ export default function Page() {
           plus de cinq doigts à la fois). Les règles :
         </p>
         <ul>
-          <Li color="#2e2014"><span>Chacun pose un doigt sur sa zone de l'écran. La musique ne démarre que quand toutes les zones sont tenues.</span></Li>
-          <Li color="#2e2014"><span>Le premier qui lâche prend le téléphone, se cache des autres, et tape sa réponse.</span></Li>
-          <Li color="#2e2014"><span>S'il se plante, on passe au deuxième qui a lâché, sans révéler le titre. Titre et artiste : 3 points, l'un des deux seulement : 1 point. Parties de 5, 10 ou 15 manches.</span></Li>
-          <Li color="#2e2014"><span>Ici on joue sur la musique importée sur ce téléphone, ou sur le fonds commun de tout ce que les joueurs de blindz.app ont déjà ramené si rien n'est importé. Pas de « qui a mis quoi » dans ce mode : un seul tel, une seule bibliothèque.</span></Li>
+          <Li color="var(--line)"><span>Chacun pose un doigt sur sa zone de l'écran. La musique ne démarre que quand toutes les zones sont tenues.</span></Li>
+          <Li color="var(--line)"><span>Le premier qui lâche prend le téléphone, se cache des autres, et tape sa réponse.</span></Li>
+          <Li color="var(--line)"><span>S'il se plante, on passe au deuxième qui a lâché, sans révéler le titre. Titre et artiste : 3 points, l'un des deux seulement : 1 point. Parties de 5, 10 ou 15 manches.</span></Li>
+          <Li color="var(--line)"><span>Ici on joue sur la musique importée sur ce téléphone, ou sur le fonds commun de tout ce que les joueurs de blindz.app ont déjà ramené si rien n'est importé. Pas de « qui a mis quoi » dans ce mode : un seul tel, une seule bibliothèque.</span></Li>
         </ul>
       </Section>
 

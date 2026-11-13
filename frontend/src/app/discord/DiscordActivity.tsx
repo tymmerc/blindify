@@ -1,5 +1,6 @@
 "use client"
 
+import { accentTexte } from "@/lib/accentText"
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react"
 import { DiscordSDK } from "@discord/embedded-app-sdk"
 import { Loader2 } from "lucide-react"
@@ -163,7 +164,7 @@ export function DiscordActivity({ search, createSdk = defaultCreateSdk, apiBaseU
     return (
       <Shell title="Blindz dans ton salon">
         <div className="flex items-center gap-3 text-sm text-ink-2">
-          <Loader2 className="h-5 w-5 shrink-0 animate-spin" style={{ color: ACCENT }} aria-hidden />
+          <Loader2 className="h-5 w-5 shrink-0 animate-spin" style={{ color: accentTexte(ACCENT) }} aria-hidden />
           <p className="m-0">Un instant…</p>
         </div>
       </Shell>
@@ -214,7 +215,7 @@ export function DiscordActivity({ search, createSdk = defaultCreateSdk, apiBaseU
     return (
       <Shell title="Blindz dans ton salon">
         <div className="flex items-center gap-3 text-sm text-ink-2">
-          <Loader2 className="h-5 w-5 shrink-0 animate-spin" style={{ color: ACCENT }} aria-hidden />
+          <Loader2 className="h-5 w-5 shrink-0 animate-spin" style={{ color: accentTexte(ACCENT) }} aria-hidden />
           <p className="m-0" role="status">{STEP_COPY[state.step]}</p>
         </div>
       </Shell>

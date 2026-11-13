@@ -52,8 +52,8 @@ export function LobbyChat({
 
   // Color-code each non-me sender by hashing user_id to one of the analog accents
   const senderColor = (userId: number, isMe: boolean): string => {
-    if (isMe) return "#c65133"
-    const palette = ["#5d7252", "#a87714", "#6b573f"]
+    if (isMe) return "rgb(var(--c-terra-txt))"
+    const palette = ["rgb(var(--c-sage-deep-txt))", "rgb(var(--c-gold-deep-txt))", "rgb(var(--c-ink-2))"]
     return palette[Math.abs(userId) % palette.length]
   }
 

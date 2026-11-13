@@ -44,6 +44,13 @@
   --c-acier-txt: 72 96 144; /* #486090 bleu acier en texte */
   --c-shadow: 46 32 20; /* #2e2014 ombres dures */
 
+  color-scheme: light;
+}
+
+/* Valeurs derivees : recalculees aussi dans un bloc .reste-clair (sinon elles
+   garderaient la valeur calculee sur :root, celle du theme sombre). */
+:root,
+.reste-clair {
   --app-bg: rgb(var(--c-paper));
   --app-surface: rgb(var(--c-paper-deep));
   --app-surface-strong: rgb(var(--c-paper-deep));
@@ -70,7 +77,6 @@
   --paper: rgb(var(--c-paper));
   --paper-deep: rgb(var(--c-paper-deep));
   --on-ink: rgb(var(--c-on-ink));
-  color-scheme: light;
 }
 
 html[data-theme="dark"] {
@@ -440,7 +446,8 @@ html[data-theme="dark"] body::after {
 }
 
 /* ========== App Styles (tokens legacy --ma-*) ========== */
-:root {
+:root,
+.reste-clair {
   --ma-bg: rgb(var(--c-paper));
   --ma-surface: rgb(var(--c-paper-deep));
   --ma-surface-card: rgb(var(--c-paper-deep));
