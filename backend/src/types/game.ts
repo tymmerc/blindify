@@ -84,6 +84,8 @@ export type RevealStep = "answer" | "scores"
 export interface RoundPacing {
   step: RevealStep
   endsAt: number
+  /** Duree de l'ecran (ms), pour la barre qui se vide. */
+  ms: number
 }
 
 export interface GameState {

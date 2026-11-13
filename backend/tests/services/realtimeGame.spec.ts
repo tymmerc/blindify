@@ -457,7 +457,7 @@ describe("rythme du reveal (T38)", () => {
   it("reponse, puis classement, puis manche suivante", () => {
     revealRound(ROOM);
     expect(nextRevealStep(ROOM, 1_000)).toBe("scores");
-    expect(getGameState(ROOM)?.pacing).toEqual({ step: "scores", endsAt: 1_000 + ROUND_PACING.scoresMs });
+    expect(getGameState(ROOM)?.pacing).toEqual({ step: "scores", endsAt: 1_000 + ROUND_PACING.scoresMs, ms: ROUND_PACING.scoresMs });
     expect(nextRevealStep(ROOM, 2_000)).toBe("next");
     // L'appelant lance la manche suivante : l'ecran du reveal disparait.
     const next = startNextRound(ROOM)!;

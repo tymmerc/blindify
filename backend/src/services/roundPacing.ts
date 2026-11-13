@@ -11,8 +11,8 @@
  * C'est le SEUL endroit ou regler ces durees.
  */
 export const ROUND_PACING = {
-  /** La reponse et ce que chacun a tape. */
-  answerMs: 5_000,
+  /** La reponse et ce que chacun a tape (les lignes arrivent une par une : 5 s etait trop court pour lire). */
+  answerMs: 8_000,
   /** Le classement. */
   scoresMs: 5_000,
   /** Le 3-2-1 : la manche suivante part a la fin (musique et chrono). */
@@ -26,11 +26,13 @@ export type RoundPacing = {
   step: RevealStep;
   /** Heure serveur (ms) de la fin de cet ecran. */
   endsAt: number;
+  /** Duree de l'ecran (ms) : les clients en tirent la barre qui se vide. */
+  ms: number;
 };
 
 /** Premier ecran apres la revelation d'une manche. */
 export function answerStep(now: number): RoundPacing {
-  return { step: "answer", endsAt: now + ROUND_PACING.answerMs };
+  return { step: "answer", endsAt: now + ROUND_PACING.answerMs, ms: ROUND_PACING.answerMs };
 }
 
 /**
@@ -39,6 +41,6 @@ export function answerStep(now: number): RoundPacing {
  * le podium) : la reponse mene directement a la fin de partie.
  */
 export function stepAfter(current: RoundPacing | null | undefined, now: number, lastRound: boolean): RoundPacing | "next" {
-  if (current?.step === "answer" && !lastRound) return { step: "scores", endsAt: now + ROUND_PACING.scoresMs };
+  if (current?.step === "answer" && !lastRound) return { step: "scores", endsAt: now + ROUND_PACING.scoresMs, ms: ROUND_PACING.scoresMs };
   return "next";
 }

@@ -93,6 +93,10 @@ export type MultiplayerPlayerState = {
   hasAnswered: boolean
   isReady: boolean
   lastGuess?: string
+  /** Au reveal : le titre et l'artiste tapes, et le pari « qui a ajoute ? » (userId). */
+  lastGuessTitle?: string | null
+  lastGuessArtist?: string | null
+  lastSourceGuess?: number | null
   lastVerdict?: "correct" | "close" | "wrong"
   /** Au reveal (T38) : le titre, l'artiste, le « de qui » de sa reponse etaient-ils justes ? */
   lastTitleOk?: boolean
@@ -239,6 +243,8 @@ export type RevealStep = "answer" | "scores"
 export interface RoundPacing {
   step: RevealStep
   endsAt: number
+  /** Duree de l'ecran (ms), pour la barre qui se vide. */
+  ms: number
 }
 
 export interface GameState {

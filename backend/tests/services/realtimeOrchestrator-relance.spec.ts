@@ -240,8 +240,8 @@ describe("rythme du reveal (T38)", () => {
     jest.advanceTimersByTime(PREROLL_MS + ROUND_MS + 50 + 2_000);
     expect(advanceRevealStep(io, room)).toBe(true);
     expect(step()).toBe("scores");
-    // Le minuteur de la reponse aurait fini ici : il ne doit pas sauter le classement.
-    jest.advanceTimersByTime(ROUND_PACING.answerMs - 2_000 + 500);
+    // Le classement dure son temps a lui, a partir du « Suivant ».
+    jest.advanceTimersByTime(ROUND_PACING.scoresMs - 500);
     expect(step()).toBe("scores");
     expect(getGameState(room)?.currentRound).toBe(1);
     expect(advanceRevealStep(io, room)).toBe(true);
