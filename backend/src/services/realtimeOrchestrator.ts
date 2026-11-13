@@ -8,11 +8,14 @@ import {
   getSessionId,
   liveRoomCodes,
   redactedGuessingTrack,
+  replaceRoundPreview,
   revealRound,
   startNextRound,
+  upcomingTracks,
   type GameState,
 } from "./realtimeGame";
 import { persistGameResults, persistRoundResponses } from "./gamePersistence";
+import { PREVIEW_LOOKAHEAD_ROUNDS, freshPreview, previewNeedsRefresh } from "./roundPreviews";
 
 const revealTimers = new Map<string, NodeJS.Timeout>();
 // Filet anti-blocage : la manche suivante part meme si un joueur AFK n'envoie
@@ -138,7 +141,35 @@ export function startRoundAndBroadcast(
   if (state.timing.revealAt) {
     scheduleReveal(io, roomCode, state.timing.revealAt, state.currentRound);
   }
+  void refreshRoundPreviews(io, roomCode);
   return state;
+}
+
+/**
+ * T35 : les liens Deezer meurent ~15 min apres leur creation, les manches sont
+ * preparees au lancement. A chaque debut de manche (et a la reprise d'une
+ * pause), on redemande le lien de la manche en cours et des 2 suivantes s'il
+ * mourra avant d'avoir servi. Les suivantes ont donc leur lien neuf bien avant
+ * leur tour ; la manche en cours (lien deja vieux, longue pause) recoit le
+ * sien en cours de route, par un etat diffuse : les clients relancent le son.
+ * Ne bloque jamais la partie : un echec garde l'ancien lien.
+ */
+export async function refreshRoundPreviews(io: IOServer, roomCode: string): Promise<void> {
+  try {
+    const due = upcomingTracks(roomCode, PREVIEW_LOOKAHEAD_ROUNDS).filter(t => previewNeedsRefresh(t.previewUrl));
+    await Promise.all(due.map(async track => {
+      const url = await freshPreview(track.audioSourceId);
+      if (!url) {
+        logger.warn("preview_not_refreshed", { roomCode, round: track.round });
+        return;
+      }
+      if (url === track.previewUrl) return;
+      if (replaceRoundPreview(roomCode, track, url)) emitState(io, roomCode);
+    }));
+  } catch (err) {
+    // Appele en arriere-plan (void) : jamais de rejet non gere.
+    logger.error("preview_refresh_round_failed", { roomCode, error: err });
+  }
 }
 
 export function broadcastState(io: IOServer, roomCode: string): GameState | undefined {
