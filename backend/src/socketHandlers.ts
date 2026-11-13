@@ -28,6 +28,7 @@ import {
   clearAdvanceTimer,
   clearGraceTimer,
   clearRevealTimer,
+  refreshRoundPreviews,
   revealRoundNow,
   scheduleForcedAdvance,
   scheduleReveal,
@@ -678,6 +679,7 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
           timing: state.timing,
         });
         scheduleReveal(io, roomCode, state.timing.revealAt, state.currentRound);
+        void refreshRoundPreviews(io, roomCode);
       } else if (state.phase === "FINISHED") {
         logger.debug(`game:ready game finished for ${roomCode}`);
         broadcastState(io, roomCode);
@@ -770,6 +772,23 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
       if (snapshot) {
         socket.emit("game:state", snapshot);
       }
+    });
+
+    // T35 : le navigateur n'arrive pas a jouer l'extrait de la manche (lien
+    // Deezer expire, 403). Il le redemande une fois par manche : lien neuf
+    // diffuse a toute la table si le sien mourait, sinon l'etat a jour pour
+    // lui seul (il a pu manquer un lien deja rafraichi). Seulement pour un
+    // socket deja dans la salle (room:join a verifie l'acces).
+    socket.on("game:preview:refresh", async (payload: { roomCode?: unknown; round?: unknown }) => {
+      const roomCode = validRoomCode(payload?.roomCode);
+      const round = toIntOrNull(payload?.round);
+      if (!roomCode || round === null || !socket.rooms.has(roomCode)) return;
+      if (!allowEvent(socket.id, "preview", 3, 10_000)) return;
+      const state = getRealtimeState(roomCode);
+      if (!state || state.phase !== "GUESSING" || state.currentRound !== round) return;
+      await refreshRoundPreviews(io, roomCode);
+      const snapshot = gameStateSnapshot(roomCode);
+      if (snapshot) socket.emit("game:state", snapshot);
     });
 
     // Compteur de spectateurs (T18), redemande par le client a l'abonnement.
@@ -916,6 +935,8 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
         scheduleForcedAdvance(io, roomCode, state.currentRound);
       }
       broadcastState(io, roomCode);
+      // Une longue pause a pu faire expirer les liens (T35).
+      void refreshRoundPreviews(io, roomCode);
     });
 
     socket.on("game:leave", async ({ roomCode }: { roomCode: string }) => {
@@ -1013,6 +1034,7 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
               } else if (resumed.phase === "REVEAL") {
                 scheduleForcedAdvance(io, roomCode, resumed.currentRound);
               }
+              void refreshRoundPreviews(io, roomCode);
             }
           }
         }

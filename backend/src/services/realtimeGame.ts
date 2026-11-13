@@ -439,6 +439,30 @@ export function startNextRound(roomCode: string, opts?: { forceRound?: number; s
   return ctx.state;
 }
 
+/**
+ * Les pistes dont le lien va servir bientot (T35) : la manche en cours tant
+ * qu'elle n'est pas revelee, puis les `lookahead` suivantes.
+ */
+export function upcomingTracks(roomCode: string, lookahead: number): RoundTrack[] {
+  const ctx = games.get(roomCode);
+  if (!ctx || ctx.state.phase === "FINISHED") return [];
+  const from = ctx.state.phase === "GUESSING" ? ctx.state.currentRound : ctx.state.currentRound + 1;
+  const to = ctx.state.currentRound + lookahead;
+  return ctx.tracks.filter(t => t.round >= from && t.round <= to);
+}
+
+/**
+ * Pose un lien frais sur une piste de la partie en cours. Rien si la partie a
+ * change entre-temps (revanche). Rend true si c'est la manche en cours : les
+ * joueurs doivent recevoir l'etat a jour.
+ */
+export function replaceRoundPreview(roomCode: string, track: RoundTrack, previewUrl: string): boolean {
+  const ctx = games.get(roomCode);
+  if (!ctx || !ctx.tracks.includes(track)) return false;
+  track.previewUrl = previewUrl;
+  return ctx.state.currentTrack === track;
+}
+
 export function recordAnswer(
   roomCode: string,
   userId: number,
