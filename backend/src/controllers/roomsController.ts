@@ -25,6 +25,7 @@ import {
   type ProviderFilter,
 } from "../services/trackResolution";
 import { topUpPlayable } from "../services/roundTopUp";
+import { alternateOwners, heardTonight } from "../services/roundOrder";
 import { LOOKUPS_PER_ROUND, LookupGuard } from "../services/lookupGuard";
 
 // Code de salle : utils/roomCode.ts (partage avec la salle d'un salon Discord).
@@ -911,11 +912,15 @@ export const roomsController = {
     // disjoncteur si Deezer ne repond plus.
     const rejectedKeys = new Set<string>();
     const guard = new LookupGuard(Math.max(room.question_count, musicContributorIds.length) * LOOKUPS_PER_ROUND);
+    // Deja joues ce soir devant quelqu'un de la salle : ils ne reviennent que
+    // s'il ne reste pas assez de morceaux jamais joues (T37).
+    const staleKeys = await heardTonight(Array.from(new Set([room.host_user_id, ...participantRows.map(p => p.user_id)])));
     const collect = async (pid: number, desired: number, opts: CollectOptions): Promise<AudioSourceRow[]> => {
       const batch = await collectPlayableBatch(pid, desired, {
         ...opts,
         excludeKeys: [...(opts.excludeKeys ?? []), ...rejectedKeys],
         guard,
+        staleKeys,
       });
       batch.rejectedKeys.forEach(key => rejectedKeys.add(key));
       return batch.playable;
@@ -1045,6 +1050,7 @@ export const roomsController = {
             excludeKeys,
             drawLimit,
             guard,
+            staleKeys,
             ...linkOpts(pid),
           }),
       });
@@ -1095,8 +1101,9 @@ export const roomsController = {
       }
       if (!progressed) break;
     }
-    // Re-melange : sans ca l'ordre de passage suivrait le cycle des joueurs.
-    sources = shuffle(picked);
+    // Ordre de passage : au hasard, mais jamais deux manches de suite du meme
+    // joueur (T37 ; le re-melange d'avant en donnait 2 a 4 par partie).
+    sources = alternateOwners(picked, src => String(src.user_id ?? "commun"));
 
     // Ajuster le nombre de rounds à ce qui est réellement disponible (borné par la demande)
     const effectiveRounds = Math.max(1, sources.length);

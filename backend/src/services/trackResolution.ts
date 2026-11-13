@@ -110,7 +110,7 @@ export async function fetchAudioSources(
   userId: number,
   provider: ProviderFilter,
   count: number,
-  opts: { linkIds?: number[]; excludeKeys?: string[] } = {}
+  opts: { linkIds?: number[]; excludeKeys?: string[]; staleKeys?: string[] } = {}
 ): Promise<AudioSourceRow[]> {
   const extraConds: string[] = [];
   const params: unknown[] = [userId];
@@ -136,11 +136,18 @@ export async function fetchAudioSources(
     extraConds.push(`COALESCE(s.external_id, s.id::text) <> ALL($${params.length}::text[])`);
   }
 
+  // Deja joues ce soir : tires en dernier, seulement s'il manque des jamais joues.
+  let order = "RANDOM()";
+  if (opts.staleKeys?.length) {
+    params.push(opts.staleKeys);
+    order = `(COALESCE(s.external_id, s.id::text) = ANY($${params.length}::text[])), RANDOM()`;
+  }
+
   params.push(count);
   const { rows } = await pool.query<AudioSourceRow>(
     `SELECT s.id, ua.user_id AS user_id, s.provider, s.external_id, s.title, s.artist, s.album_cover, s.audio_url, s.duration_ms, s.metadata, ua.link_id AS link_id
      ${from} ${extraConds.map(cond => `AND ${cond}`).join(" ")}
-     ORDER BY RANDOM()
+     ORDER BY ${order}
      LIMIT $${params.length}`,
     params
   );
@@ -168,6 +175,8 @@ export type CollectOptions = {
   drawLimit?: number;
   /** Bornes des recherches Deezer du lancement (budget, echeance, disjoncteur). Defaut : un garde neuf sans budget. */
   guard?: LookupGuard;
+  /** Cles deja jouees ce soir (heardTonight) : prises seulement s'il ne reste pas assez de jamais joues. */
+  staleKeys?: string[];
 };
 
 /** Ce qu'un tirage a donne : les titres jouables, ceux sans extrait, et le travail fait. */
@@ -296,18 +305,27 @@ export async function collectPlayableBatch(
   const candidates = await fetchAudioSources(userId, providerFilter, candidateLimit, {
     linkIds: opts.linkIds,
     excludeKeys: opts.excludeKeys,
+    staleKeys: opts.staleKeys,
   });
 
   // Hydrate / rafraichit les previews via Deezer (re-fetch si manquante OU
   // expiree), dans la limite permise. Ceux au-dela ne sont ni joues ni ecartes.
-  // On s'arrete des que le compte est atteint.
-  const { tried: toHydrate, lookups } = await hydrateWithinBudget(
-    candidates,
-    opts.guard ?? new LookupGuard(Number.POSITIVE_INFINITY),
-    desiredCount
-  );
+  // On s'arrete des que le compte est atteint. Les morceaux deja joues ce soir
+  // passent apres : sinon leur extrait encore frais les ferait passer devant.
+  const guard = opts.guard ?? new LookupGuard(Number.POSITIVE_INFINITY);
+  const stale = new Set(opts.staleKeys ?? []);
+  const fresh = candidates.filter(source => !stale.has(sourceKey(source)));
+  const replays = candidates.filter(source => stale.has(sourceKey(source)));
+  const first = await hydrateWithinBudget(fresh, guard, desiredCount);
+  const found = new Set(first.tried.filter(source => Boolean(source.audio_url)).map(sourceKey)).size;
+  const second = replays.length && found < desiredCount
+    ? await hydrateWithinBudget(replays, guard, desiredCount - found)
+    : { tried: [], lookups: 0 };
+  const toHydrate = [...first.tried, ...second.tried];
+  const lookups = first.lookups + second.lookups;
 
-  const playable = shuffle(toHydrate.filter((source) => Boolean(source.audio_url)));
+  const playableOf = (tried: AudioSourceRow[]) => shuffle(tried.filter(source => Boolean(source.audio_url)));
+  const playable = [...playableOf(first.tried), ...playableOf(second.tried)];
   const playableKeys = new Set(playable.map(sourceKey));
   const rejectedKeys = Array.from(new Set(
     toHydrate.filter(source => !source.audio_url).map(sourceKey).filter(key => !playableKeys.has(key))
