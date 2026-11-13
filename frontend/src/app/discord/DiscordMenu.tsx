@@ -50,7 +50,7 @@ export function DiscordMenu({ onDeleted }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-ink-block/40 p-4" onClick={() => stage !== "deleting" && setStage("closed")}>
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-scrim/40 p-4" onClick={() => stage !== "deleting" && setStage("closed")}>
       <section
         role="dialog"
         aria-label="Réglages"

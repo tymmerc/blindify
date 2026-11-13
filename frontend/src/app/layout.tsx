@@ -109,11 +109,12 @@ export default function RootLayout({
       <head>
         <script
           dangerouslySetInnerHTML={{
-            // En tete : retire le script que le proxy de Discord insere dans le
-            // <head>, avant que React n'hydrate (lib/discord/headCleanup.ts),
-            // puis pose le theme clair ou sombre avant le premier affichage (lib/theme.ts).
-            __html: `${DISCORD_HEAD_CLEANUP}
-            ${THEME_HEAD_SCRIPT}
+            // En tete : pose le theme clair ou sombre avant le premier affichage
+            // (lib/theme.ts, ne leve jamais), puis retire le script que le proxy
+            // de Discord insere dans le <head>, avant que React n'hydrate
+            // (lib/discord/headCleanup.ts).
+            __html: `${THEME_HEAD_SCRIPT}
+            ${DISCORD_HEAD_CLEANUP}
             /* Tue tout ancien service worker PWA qui sert un cache perime et empeche les MAJ. */
             if ("serviceWorker" in navigator) {
               navigator.serviceWorker.getRegistrations().then(function(rs){

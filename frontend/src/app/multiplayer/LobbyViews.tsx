@@ -314,7 +314,7 @@ export function ResultsView({
             // prenait presque un ecran entier). Desktop garde la hauteur d'origine.
             const height = rank === 1 ? "min-h-[5rem] md:min-h-[13rem]" : rank === 2 ? "min-h-[4.5rem] md:min-h-[11rem]" : "min-h-[4.5rem] md:min-h-[10rem]"
             const colOrder = rank === 1 ? "md:order-2" : rank === 2 ? "md:order-1" : "md:order-3"
-            const borderColor = rank === 1 ? accent : "#2e2014"
+            const borderColor = rank === 1 ? accent : "rgb(var(--c-line))"
             return (
               <div key={entry!.userId} className={`res-rise flex flex-row items-center gap-3 md:flex-col ${colOrder}`} style={{ animationDelay: `${0.75 + idx * 0.15}s` }}>
                 <div

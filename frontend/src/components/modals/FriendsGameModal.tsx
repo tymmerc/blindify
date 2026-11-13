@@ -50,7 +50,7 @@ export function FriendsGameModal({
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-40 grid place-items-center bg-ink-block/25 px-6" onClick={onClose}>
+    <div className="fixed inset-0 z-40 grid place-items-center bg-scrim/25 px-6" onClick={onClose}>
       <div
         className="w-full max-w-lg rounded-md border-2 border-line bg-paper p-6 text-ink shadow-[6px_6px_0_rgb(var(--c-shadow)/.25)]"
         onClick={e => e.stopPropagation()}

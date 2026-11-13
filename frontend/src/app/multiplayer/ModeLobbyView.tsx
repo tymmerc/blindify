@@ -1868,7 +1868,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
           aussi quand le lancement bloque faute de musique. */}
       {showMusicImport ? (
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-ink-block/40 p-4"
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-scrim/40 p-4"
           onClick={() => setShowMusicImport(false)}
         >
           <div

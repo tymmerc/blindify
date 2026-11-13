@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from "vitest"
-import { THEME_HEAD_SCRIPT, changerChoix, lireChoix, resoudreTheme, themeDiscord } from "./theme"
+import { THEME_HEAD_SCRIPT, changerChoix, choixActuel, lireChoix, resoudreTheme, themeDiscord } from "./theme"
 
 describe("resoudreTheme", () => {
   it("un choix force gagne sur Discord et sur l'appareil", () => {
@@ -53,10 +53,35 @@ describe("THEME_HEAD_SCRIPT", () => {
     expect(jouerScript("?theme=darker&frame_id=f", false)).toBe("dark")
     expect(jouerScript("", false)).toBe("dark")
   })
+  it("suit Discord meme si le stockage de session est bloque", () => {
+    const orig = Object.getOwnPropertyDescriptor(window, "sessionStorage")!
+    Object.defineProperty(window, "sessionStorage", { configurable: true, get: () => { throw new Error("bloque") } })
+    try {
+      expect(jouerScript("?theme=dark&frame_id=f", false)).toBe("dark")
+    } finally {
+      Object.defineProperty(window, "sessionStorage", orig)
+    }
+  })
   it("le choix garde gagne, et changerChoix l'ecrit", () => {
     changerChoix("clair")
     expect(jouerScript("?theme=dark", true)).toBe("light")
     changerChoix("auto")
     expect(localStorage.getItem("blindz-theme")).toBeNull()
+  })
+})
+
+describe("changerChoix sans stockage", () => {
+  it("le choix vaut pour la page meme si localStorage est bloque", () => {
+    const orig = Object.getOwnPropertyDescriptor(window, "localStorage")!
+    Object.defineProperty(window, "localStorage", { configurable: true, get: () => { throw new Error("bloque") } })
+    try {
+      window.matchMedia = (() => ({ matches: false })) as unknown as typeof window.matchMedia
+      expect(changerChoix("sombre")).toBe("dark")
+      expect(choixActuel()).toBe("sombre")
+      expect(document.documentElement.getAttribute("data-theme")).toBe("dark")
+    } finally {
+      Object.defineProperty(window, "localStorage", orig)
+      changerChoix("auto")
+    }
   })
 })

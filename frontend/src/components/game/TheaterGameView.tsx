@@ -146,7 +146,7 @@ export function TheaterGameView(props: Props) {
 
 
   return (
-    <div className="theater-root relative min-h-screen overflow-hidden" style={{ background: "transparent", color: INK }}>
+    <div className="theater-root relative min-h-screen overflow-hidden" style={{ background: "transparent", color: "rgb(var(--c-ink))" }}>
       <style jsx global>{theaterStyles}</style>
 
       {/* minmax(0, 1fr) : sans ca, la colonne unique de la grille prend la

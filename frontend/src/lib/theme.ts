@@ -19,6 +19,10 @@ export const THEME_EVENT = "blindz-theme"
 
 const CHOIX: readonly ThemeChoice[] = ["auto", "clair", "sombre"]
 
+// Dernier choix de cette page : sert quand le stockage est bloque (iframe
+// Discord partitionnee, navigation privee), sinon le clic ne ferait rien.
+let choixMemoire: ThemeChoice | null = null
+
 export function lireChoix(valeur: string | null | undefined): ThemeChoice {
   return CHOIX.includes(valeur as ThemeChoice) ? (valeur as ThemeChoice) : "auto"
 }
@@ -46,6 +50,7 @@ function stockage(type: "local" | "session"): Storage | null {
 
 export function choixActuel(): ThemeChoice {
   if (typeof window === "undefined") return "auto"
+  if (choixMemoire) return choixMemoire
   try {
     return lireChoix(stockage("local")?.getItem(THEME_STORAGE_KEY))
   } catch {
@@ -55,7 +60,8 @@ export function choixActuel(): ThemeChoice {
 
 function discordActuel(): ResolvedTheme | null {
   try {
-    return themeDiscord(stockage("session")?.getItem(DISCORD_THEME_KEY))
+    // L'adresse d'abord : le stockage de session peut etre bloque dans l'iframe.
+    return themeDiscord(new URLSearchParams(window.location.search).get("theme")) ?? themeDiscord(stockage("session")?.getItem(DISCORD_THEME_KEY))
   } catch {
     return null
   }
@@ -79,12 +85,13 @@ export function appliquerTheme(): ResolvedTheme {
 }
 
 export function changerChoix(choix: ThemeChoice): ResolvedTheme {
+  choixMemoire = choix
   try {
     const s = stockage("local")
     if (choix === "auto") s?.removeItem(THEME_STORAGE_KEY)
     else s?.setItem(THEME_STORAGE_KEY, choix)
   } catch {
-    // Navigation privee ou stockage bloque : le choix vaut pour cette page.
+    // Navigation privee ou stockage bloque : choixMemoire le garde pour cette page.
   }
   return appliquerTheme()
 }
@@ -94,7 +101,7 @@ export function changerChoix(choix: ThemeChoice): ResolvedTheme {
  * import possible avant l'hydratation). theme.test.ts verifie qu'ils
  * s'accordent. Ne touche qu'a data-theme et au stockage de session.
  */
-export const THEME_HEAD_SCRIPT = `(function(){
+export const THEME_HEAD_SCRIPT = `(function(){ try {
   var d = document.documentElement, c = null, q = null, s = null;
   try { c = localStorage.getItem("${THEME_STORAGE_KEY}"); } catch (e) {}
   try {
@@ -102,10 +109,11 @@ export const THEME_HEAD_SCRIPT = `(function(){
     if (q && /^[a-z]{3,16}$/.test(q)) sessionStorage.setItem("${DISCORD_THEME_KEY}", q);
     s = sessionStorage.getItem("${DISCORD_THEME_KEY}");
   } catch (e) {}
+  var dt = (q && /^[a-z]{3,16}$/.test(q)) ? q : s;
   var sombre;
   if (c === "sombre") sombre = true;
   else if (c === "clair") sombre = false;
-  else if (s && /^[a-z]{3,16}$/.test(s)) sombre = s !== "light";
+  else if (dt && /^[a-z]{3,16}$/.test(dt)) sombre = dt !== "light";
   else sombre = !!(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
   d.setAttribute("data-theme", sombre ? "dark" : "light");
-})();`
+} catch (e) {} })();`

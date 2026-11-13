@@ -60,6 +60,7 @@ const config: Config = {
         "sage-deep-txt": tok("sage-deep-txt"),
         "acier": tok("acier"),
         "acier-txt": tok("acier-txt"),
+        scrim: tok("scrim"),
         // Couleurs nommees historiques, branchees sur les memes jetons.
         background: tok("paper"),
         foreground: tok("ink"),

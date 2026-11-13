@@ -243,7 +243,7 @@ function ModeSelectionContent() {
           {showHelp ? "Fermer" : "Comment ça marche ?"}
         </button>
         {showHelp && (
-          <div className="fixed inset-0 z-50 flex items-end justify-start bg-ink-block/20 p-6" onClick={() => setShowHelp(false)}>
+          <div className="fixed inset-0 z-50 flex items-end justify-start bg-scrim/20 p-6" onClick={() => setShowHelp(false)}>
             <div
               className="w-full max-w-md space-y-4 border-2 border-line bg-paper p-6 shadow-[6px_6px_0_rgb(var(--c-shadow)/.25)]"
               onClick={e => e.stopPropagation()}

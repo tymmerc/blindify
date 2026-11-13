@@ -1,7 +1,7 @@
 "use client"
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react"
-import { THEME_EVENT, appliquerTheme, changerChoix, choixActuel, themeActuel, type ResolvedTheme, type ThemeChoice } from "@/lib/theme"
+import { THEME_EVENT, THEME_STORAGE_KEY, appliquerTheme, changerChoix, choixActuel, themeActuel, type ResolvedTheme, type ThemeChoice } from "@/lib/theme"
 
 interface ThemeContextValue {
   /** Ce que la personne a choisi (auto par defaut). */
@@ -31,7 +31,7 @@ export function ThemeProvider({ children }: { readonly children: ReactNode }) {
     mq?.addEventListener?.("change", appareil)
     // Un autre onglet a change le choix.
     const onglet = (e: StorageEvent) => {
-      if (e.key === null || e.key === "blindz-theme") {
+      if (e.key === null || e.key === THEME_STORAGE_KEY) {
         setChoix(choixActuel())
         appliquerTheme()
       }

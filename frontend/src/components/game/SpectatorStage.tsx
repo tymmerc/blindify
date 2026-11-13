@@ -139,7 +139,7 @@ export function SpectatorStage({ game, members, clockOffset, now }: SpectatorSta
       <section className="flex flex-col items-center gap-5 rounded-md border-2 border-line bg-paper-deep p-5 shadow-[4px_4px_0_rgb(var(--c-shadow)/.18)]">
         <div className="flex w-full items-center justify-between gap-3">
           <Label dot={revealed ? SAGE : TERRA}>Manche {game.currentRound} / {game.totalRounds}</Label>
-          <span className="font-display text-2xl font-bold tabular-nums" style={{ color: left !== null && left <= 5 ? TERRA : "#2e2014" }}>
+          <span className="font-display text-2xl font-bold tabular-nums" style={{ color: left !== null && left <= 5 ? TERRA : "rgb(var(--c-ink))" }}>
             {game.paused ? "Pause" : revealed ? "Révélation" : left !== null ? `${left} s` : ""}
           </span>
         </div>

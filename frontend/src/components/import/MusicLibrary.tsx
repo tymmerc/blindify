@@ -137,7 +137,7 @@ export function MusicLibrary({ accent, refreshSignal, onLinksChange, emptyText =
 
       {/* Detail : stats sans spoiler, mosaique floutee, titres derriere un clic */}
       {(detail || detailLoading) && (
-        <div className="fixed inset-0 z-[70] flex items-end justify-center bg-ink-block/40 p-4 sm:items-center" onClick={() => setDetail(null)}>
+        <div className="fixed inset-0 z-[70] flex items-end justify-center bg-scrim/40 p-4 sm:items-center" onClick={() => setDetail(null)}>
           <div
             className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-md border-2 border-line bg-paper p-5 shadow-[6px_6px_0_rgb(var(--c-shadow)/.3)]"
             onClick={e => e.stopPropagation()}

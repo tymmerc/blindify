@@ -43,6 +43,7 @@
   --c-acier: 72 96 144; /* #486090 bleu acier en fond */
   --c-acier-txt: 72 96 144; /* #486090 bleu acier en texte */
   --c-shadow: 46 32 20; /* #2e2014 ombres dures */
+  --c-scrim: 46 32 20; /* #2e2014 voile sous une fenetre modale */
 
   color-scheme: light;
 }
@@ -102,6 +103,7 @@ html[data-theme="dark"] {
   --c-sage-deep-txt: 168 192 155;
   --c-acier-txt: 147 170 219;
   --c-shadow: 10 6 4;
+  --c-scrim: 0 0 0;
   color-scheme: dark;
 }
 

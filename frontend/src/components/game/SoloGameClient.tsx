@@ -1199,8 +1199,8 @@ export function SoloGameClient({
         <div
           className="rounded-md border-2 bg-paper-deep p-6"
           style={{
-            borderColor: feedbackSignal ? accentColor : "#2e2014",
-            boxShadow: feedbackSignal ? `4px 4px 0 ${accentColor}` : "4px 4px 0 rgba(46,32,20,.18)",
+            borderColor: feedbackSignal ? accentColor : "rgb(var(--c-line))",
+            boxShadow: feedbackSignal ? `4px 4px 0 ${accentColor}` : "4px 4px 0 rgb(var(--c-shadow) / .18)",
             transition: `box-shadow ${ROUND_FEEDBACK_MS}ms ease, border-color ${ROUND_FEEDBACK_MS}ms ease`,
           }}
         >
@@ -1500,7 +1500,7 @@ export function SoloGameClient({
     </div>
     <SliderStyles />
     {resultDialog ? (
-      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-ink-block/30 px-4">
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-scrim/30 px-4">
         <div className="w-full max-w-lg rounded-md border-2 border-line bg-paper p-6 shadow-[6px_6px_0_rgb(var(--c-shadow)/.25)]">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">

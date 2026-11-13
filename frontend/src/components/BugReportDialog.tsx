@@ -76,7 +76,7 @@ export function BugReportDialog() {
 
   return (
     <div
-      className="fixed inset-0 z-[60] grid place-items-center bg-[rgb(var(--c-ink-block)/.5)] px-4"
+      className="fixed inset-0 z-[60] grid place-items-center bg-[rgb(var(--c-scrim)/.5)] px-4"
       onMouseDown={close}
     >
       <div
