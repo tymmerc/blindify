@@ -37,7 +37,7 @@ jest.mock("../../src/utils/session", () => ({
 jest.mock("../../src/services/profileImportService", () => ({
   ...jest.requireActual("../../src/services/profileImportService"),
   fetchPublicPlaylists: jest.fn(),
-  fetchPlaylistTracks: jest.fn(),
+  fetchPlaylistTracksChecked: jest.fn(),
 }));
 jest.mock("../../src/services/deezerPreviewService", () => {
   const searchTrack = jest.fn(async (title: string) => ({ preview: `https://extraits.test/${encodeURIComponent(title)}.mp3` }));
@@ -60,7 +60,7 @@ import { resolveTestDatabaseUrl } from "../testDatabase";
 import { pool } from "../../src/config/db";
 import { initSocket } from "../../src/socket";
 import { getSessionContext } from "../../src/utils/session";
-import { fetchPlaylistTracks, fetchPublicPlaylists, type ImportedTrack } from "../../src/services/profileImportService";
+import { fetchPlaylistTracksChecked, fetchPublicPlaylists, type ImportedTrack } from "../../src/services/profileImportService";
 import { ensureLinksSchema } from "../../src/controllers/linksController";
 import { bySmallestLibrary, ensureUserTracksSchema, linkTrackToUser } from "../../src/services/userTracks";
 import { DEAD_GUEST_FILTER } from "../../src/services/deadGuests";
@@ -119,10 +119,10 @@ const PLAYLISTS = new Map<string, number[]>([
 const externalIds = (playlistId: string) => (PLAYLISTS.get(playlistId) ?? []).map(n => `${RUN}-${n}`);
 
 const mockSession = getSessionContext as jest.MockedFunction<typeof getSessionContext>;
-const mockTracks = fetchPlaylistTracks as jest.MockedFunction<typeof fetchPlaylistTracks>;
+const mockTracks = fetchPlaylistTracksChecked as jest.MockedFunction<typeof fetchPlaylistTracksChecked>;
 const mockPlaylists = fetchPublicPlaylists as jest.MockedFunction<typeof fetchPublicPlaylists>;
 
-mockTracks.mockImplementation(async (_provider, playlistId) => (PLAYLISTS.get(playlistId) ?? []).map(track));
+mockTracks.mockImplementation(async (_provider, playlistId) => ({ tracks: (PLAYLISTS.get(playlistId) ?? []).map(track), complete: true }));
 mockPlaylists.mockImplementation(async parsed => [
   { id: parsed.id, name: `Playlist ${parsed.id}`, trackCount: PLAYLISTS.get(parsed.id)?.length ?? 0, cover: null },
 ]);

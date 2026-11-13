@@ -235,10 +235,14 @@ async function fetchSinglePlaylistInfo(parsed: ParsedUrl): Promise<PublicPlaylis
       }];
     } catch (err) {
       logger.error("spotify_playlist_info_failed", { id: parsed.id, error: err });
-      // Fallback: try to find the playlist on Deezer via oEmbed name
+      // Privee ou supprimee : rien a importer.
+      if ((err as { response?: { status?: number } } | null)?.response?.status === 404) return [];
+      // Spotify lent ou en panne (503, delai) : on garde la playlist du joueur,
+      // l'import des titres retentera. Avant, on cherchait une playlist du meme
+      // nom chez Deezer (celle d'un inconnu), rendue sous le fournisseur
+      // « spotify » : l'import partait en 400 (soiree du 12/11, T37).
       const name = await getSpotifyPlaylistName(parsed.id);
-      if (name) return searchDeezerPlaylist(name);
-      return [];
+      return [{ id: parsed.id, name: name ?? "Playlist", trackCount: 0, cover: null }];
     }
   }
 
@@ -324,26 +328,6 @@ async function getSpotifyPlaylistName(playlistId: string): Promise<string | null
   }
 }
 
-async function searchDeezerPlaylist(name: string): Promise<PublicPlaylist[]> {
-  try {
-    const { data } = await axios.get(`${DEEZER_API}/search/playlist`, {
-      params: { q: name, limit: 3 },
-      timeout: 10_000,
-    });
-    if (data?.error || !data?.data) return [];
-    return (data.data as any[])
-      .filter((p: any) => p?.id && p?.nb_tracks > 0)
-      .map((p: any) => ({
-        id: String(p.id),
-        name: p.title ?? "Playlist",
-        trackCount: p.nb_tracks ?? 0,
-        cover: p.picture_medium ?? null,
-      }));
-  } catch {
-    return [];
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Fetch Playlist Tracks
 // ---------------------------------------------------------------------------
@@ -382,9 +366,31 @@ export async function fetchPlaylistTracks(
   maxTracks?: number,
 ): Promise<ImportedTrack[]> {
   if (provider === "youtube") return (await fetchYoutubeTracks(playlistId, maxTracks)).tracks;
-  const limit = maxTracks ?? 500;
+  return (await fetchPlaylistTracksChecked(provider, playlistId, maxTracks)).tracks;
+}
+
+/** Plafond de titres lus par playlist. */
+export const PLAYLIST_TRACKS_MAX = 500;
+
+export interface CheckedTracks {
+  tracks: ImportedTrack[];
+  /** Faux si une page n'a pas pu etre lue : la liste peut manquer des titres. */
+  complete: boolean;
+}
+
+/**
+ * Les titres d'une playlist Spotify ou Deezer, en disant si tout a ete lu
+ * (jusqu'a `maxTracks`). Spotify leve a la moindre page en echec ; Deezer rend
+ * ce qu'il a lu.
+ */
+export async function fetchPlaylistTracksChecked(
+  provider: "spotify" | "deezer",
+  playlistId: string,
+  maxTracks?: number,
+): Promise<CheckedTracks> {
+  const limit = maxTracks ?? PLAYLIST_TRACKS_MAX;
   if (provider === "spotify") {
-    return fetchSpotifyPlaylistTracks(playlistId, limit);
+    return { tracks: await fetchSpotifyPlaylistTracks(playlistId, limit), complete: true };
   }
   return fetchDeezerPlaylistTracks(playlistId, limit);
 }
@@ -421,15 +427,19 @@ async function fetchSpotifyPlaylistTracks(playlistId: string, maxTracks = 500): 
   return tracks;
 }
 
-async function fetchDeezerPlaylistTracks(playlistId: string, maxTracks = 500): Promise<ImportedTrack[]> {
+async function fetchDeezerPlaylistTracks(playlistId: string, maxTracks: number): Promise<CheckedTracks> {
   const tracks: ImportedTrack[] = [];
+  let complete = true;
   const pageSize = Math.min(maxTracks, 100);
   let cursor: string | null = `${DEEZER_API}/playlist/${encodeURIComponent(playlistId)}/tracks?limit=${pageSize}`;
 
   while (cursor && tracks.length < maxTracks) {
     try {
       const { data } = await axios.get(cursor, { timeout: 15_000 }) as { data: { data?: any[]; error?: any; next?: string | null } };
-      if (data?.error) break;
+      if (data?.error) {
+        complete = false;
+        break;
+      }
       for (const item of data?.data ?? []) {
         if (tracks.length >= maxTracks) break;
         if (!item?.id || !item.title) continue;
@@ -445,9 +455,10 @@ async function fetchDeezerPlaylistTracks(playlistId: string, maxTracks = 500): P
       }
       cursor = data?.next ?? null;
     } catch {
+      complete = false;
       break;
     }
   }
 
-  return tracks;
+  return { tracks, complete };
 }

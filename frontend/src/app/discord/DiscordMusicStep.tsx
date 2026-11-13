@@ -44,8 +44,8 @@ export function DiscordMusicStep({ mode, onContinue, entering = false, error = n
         Ta musique <em className="text-[#c65133]">pour ce soir</em>
       </h1>
       <p className="mb-5 mt-3 text-[15px] leading-snug">
-        La partie pioche dans la musique de chaque joueur du salon. Colle le lien d&apos;une playlist Spotify, Deezer ou YouTube, ou coche
-        ce que tu as déjà amené.
+        La partie pioche dans la musique de chaque joueur du salon. Colle le lien d&apos;une playlist Spotify, Deezer ou YouTube, ou choisis
+        une de celles que tu as déjà amenées.
       </p>
 
       <section className={`${CARD} p-4 sm:p-5`}>

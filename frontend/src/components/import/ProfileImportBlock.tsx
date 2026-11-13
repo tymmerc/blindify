@@ -109,7 +109,7 @@ export function ProfileImportBlock({ accent = "#c65133", onImportingChange, onIm
       updateState("done")
       if (syncResult.synced > 0) onImported?.()
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erreur lors de l'import.")
+      setError(err instanceof Error && err.message ? err.message : "L'import n'a pas abouti. Réessaie dans un instant.")
       updateState("idle")
     }
   }

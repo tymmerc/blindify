@@ -7,10 +7,12 @@ import { logger } from "../utils/logger";
 import { profileLinkOrFail } from "./profileLink";
 import {
   fetchPublicPlaylists,
-  fetchPlaylistTracks,
+  fetchPlaylistTracksChecked,
   fetchYoutubeTracks,
+  PLAYLIST_TRACKS_MAX,
   type ImportProvider,
   type ImportedTrack,
+  type ParsedUrl,
 } from "../services/profileImportService";
 import { YoutubeImportError, type YoutubeMatchReport } from "../services/youtubeImportService";
 import { upsertLink, claimLegacyTracks, ownLinkId } from "./linksController";
@@ -143,18 +145,82 @@ function failYoutube(res: Response, err: unknown): boolean {
   return true;
 }
 
-/** Les titres d'une playlist, et pour YouTube ce qu'on a retrouve chez Deezer. */
+/**
+ * Les titres d'une playlist, et pour YouTube ce qu'on a retrouve chez Deezer.
+ * `complete` : tout a ete lu (jusqu'a la limite) et verifie ; sinon il peut
+ * manquer des titres, et le reimport ne retire rien de la carte.
+ */
 async function playlistTracks(
   provider: ImportProvider,
   playlistId: string,
   limit?: number,
-): Promise<{ tracks: ImportedTrack[]; youtube: YoutubeMatchReport | null }> {
+): Promise<{ tracks: ImportedTrack[]; youtube: YoutubeMatchReport | null; complete: boolean }> {
   if (provider === "youtube") {
     const { tracks, report } = await fetchYoutubeTracks(playlistId, limit);
-    return { tracks, youtube: report };
+    return { tracks, youtube: report, complete: report.unchecked === 0 };
   }
-  return { tracks: await fetchPlaylistTracks(provider, playlistId, limit), youtube: null };
+  const { tracks, complete } = await fetchPlaylistTracksChecked(provider, playlistId, limit);
+  return { tracks, youtube: null, complete };
 }
+
+/**
+ * Reimport d'une carte : ses morceaux qui ne sont plus dans la playlist la
+ * quittent (cles « fournisseur:identifiant » de l'import qui vient d'aboutir).
+ * Meme regle que le retrait d'une carte : on detache les liens de CE joueur,
+ * et la colonne historique s'il etait le premier importeur (sinon la
+ * migration 005 rejouee au demarrage recreerait le lien).
+ */
+async function pruneCard(userId: number, linkId: number, keptKeys: string[]): Promise<number> {
+  const { rowCount } = await pool.query(
+    `WITH gone AS (
+       DELETE FROM user_audio_sources ua
+       USING audio_sources a
+       WHERE a.id = ua.audio_source_id AND ua.user_id = $1 AND ua.link_id = $2
+         AND (a.provider || ':' || a.external_id) <> ALL($3::text[])
+       RETURNING ua.audio_source_id
+     )
+     UPDATE audio_sources SET user_id = NULL, link_id = NULL
+     WHERE user_id = $1 AND id IN (SELECT audio_source_id FROM gone)`,
+    [userId, linkId, keptKeys]
+  );
+  return rowCount ?? 0;
+}
+
+/** Le service ne repond pas (delai, coupure, 5xx, quota) : rien a reprocher au lien. */
+function serviceDown(err: unknown): boolean {
+  const e = err as { isAxiosError?: boolean; response?: { status?: number } } | null;
+  if (!e?.isAxiosError) return false;
+  const status = e.response?.status;
+  return status === undefined || status === 429 || status >= 500;
+}
+
+const SERVICE_DOWN: Record<ImportProvider, { code: string; message: string }> = {
+  spotify: {
+    code: "spotify_unavailable",
+    message: "Spotify ne répond pas en ce moment. Réessaie dans une minute, ou colle le lien Deezer de la même playlist.",
+  },
+  deezer: { code: "deezer_unavailable", message: "Deezer ne répond pas en ce moment. Réessaie dans une minute." },
+  youtube: { code: "youtube_unavailable", message: "YouTube ne répond pas en ce moment. Réessaie dans une minute." },
+};
+
+/** Ce que le joueur lit quand la lecture d'un lien ou de ses titres echoue. */
+function importFailure(provider: ImportProvider, err: unknown, parsed?: ParsedUrl): { status: number; code: string; message: string } {
+  if (serviceDown(err)) return { status: 503, ...SERVICE_DOWN[provider] };
+  if (parsed?.type === "user") {
+    return {
+      status: 400,
+      code: "profile_unreadable",
+      message: "Ce profil n'a pas pu être lu. Colle plutôt le lien d'une de tes playlists : dans l'appli, Partager puis Copier le lien.",
+    };
+  }
+  return {
+    status: 400,
+    code: "import_failed",
+    message: "Cette playlist n'a pas pu être lue. Vérifie qu'elle est publique, puis réessaie.",
+  };
+}
+
+const EMPTY_PLAYLIST = "Cette playlist est vide ou privée. Passe-la en publique dans l'appli, puis réessaie.";
 
 /** Aucun morceau retrouve : Deezer ne les a pas, ou Deezer n'a pas repondu. */
 function youtubeNothingMessage(report: YoutubeMatchReport): string {
@@ -247,7 +313,8 @@ export const importController = {
     } catch (err) {
       if (failYoutube(res, err)) return;
       logger.error("import_playlists_failed", { url, error: err });
-      fail(res, "import_failed", "Impossible de récupérer les playlists. Vérifie l'URL et réessaie.", 500);
+      const failure = importFailure(parsed.provider, err, parsed);
+      fail(res, failure.code, failure.message, failure.status);
     }
   },
 
@@ -276,7 +343,7 @@ export const importController = {
           fail(res, "youtube_none_found", youtubeNothingMessage(youtube), 422, { youtube });
           return;
         }
-        fail(res, "empty_playlist", "Aucun titre trouvé dans cette playlist.");
+        fail(res, "empty_playlist", EMPTY_PLAYLIST);
         return;
       }
 
@@ -299,7 +366,8 @@ export const importController = {
     } catch (err) {
       if (failYoutube(res, err)) return;
       logger.error("import_sync_failed", { provider, playlistId, error: err });
-      fail(res, "sync_failed", "Erreur lors de la synchronisation des titres.", 500);
+      const failure = importFailure(provider, err);
+      fail(res, failure.code, failure.message, failure.status);
     }
   },
 
@@ -326,10 +394,16 @@ export const importController = {
       return;
     }
 
-    // Default: 10 tracks per playlist (quick import). Full import requires explicit opt-in.
-    const perPlaylistLimit = Number.isFinite(maxTracksPerPlaylist) && maxTracksPerPlaylist! > 0
-      ? Math.min(maxTracksPerPlaylist!, 500)
-      : 10;
+    // Une playlist seule (Spotify, Deezer) s'importe en entier : coupee aux 50
+    // premiers titres, elle redonnait toujours les memes, meme reimportee (T37).
+    // Un profil garde sa limite par playlist (10 par defaut, import rapide).
+    // YouTube garde la sienne : chaque video coute une recherche chez Deezer.
+    const wholePlaylist = provider !== "youtube" && playlistIds.length === 1;
+    const perPlaylistLimit = wholePlaylist
+      ? PLAYLIST_TRACKS_MAX
+      : Number.isFinite(maxTracksPerPlaylist) && maxTracksPerPlaylist! > 0
+        ? Math.min(maxTracksPerPlaylist!, PLAYLIST_TRACKS_MAX)
+        : 10;
 
     try {
       const ownLink = await ownLinkId(context.user.id, linkId);
@@ -338,10 +412,17 @@ export const importController = {
       let total = 0;
       let withIsrc = 0;
       let youtube: YoutubeMatchReport | null = null;
+      // Une playlist seule, lue en entier (sous le plafond, sans page en echec)
+      // et toute rangee : alors seulement la carte perd les morceaux qui ne
+      // sont plus dans la playlist. Un profil ou YouTube, lus en partie
+      // (limite par playlist, premieres videos), ne retirent jamais rien.
+      let complete = wholePlaylist;
+      const kept: string[] = [];
 
       for (const playlistId of playlistIds) {
         const fetched = await playlistTracks(provider, playlistId, perPlaylistLimit);
         youtube = addReports(youtube, fetched.youtube);
+        complete &&= fetched.complete && fetched.tracks.length < perPlaylistLimit;
         const tracks = fetched.tracks;
         for (const track of tracks) {
           const key = `${track.provider}:${track.externalId}`;
@@ -353,7 +434,9 @@ export const importController = {
           try {
             await upsertTrack(context.user.id, track, playlistId, ownLink);
             synced++;
+            kept.push(key);
           } catch (err) {
+            complete = false;
             logger.error("import_track_failed", { title: track.title, error: err });
           }
         }
@@ -364,8 +447,18 @@ export const importController = {
           fail(res, "youtube_none_found", youtubeNothingMessage(youtube), 422, { youtube });
           return;
         }
-        fail(res, "empty_playlists", "Aucun titre trouvé dans ces playlists.");
+        fail(res, "empty_playlists", EMPTY_PLAYLIST);
         return;
+      }
+
+      if (ownLink !== null && complete) {
+        try {
+          const removed = await pruneCard(context.user.id, ownLink, kept);
+          if (removed > 0) logger.info("import_card_pruned", { provider, removed });
+        } catch (err) {
+          // Les titres sont la ; seul le menage de la carte a echoue.
+          logger.error("import_card_prune_failed", { error: err });
+        }
       }
 
       logger.info("import_isrc", { provider, total, withIsrc });
@@ -376,7 +469,8 @@ export const importController = {
     } catch (err) {
       if (failYoutube(res, err)) return;
       logger.error("import_sync_all_failed", { provider, error: err });
-      fail(res, "sync_failed", "Erreur lors de la synchronisation des titres.", 500);
+      const failure = importFailure(provider, err);
+      fail(res, failure.code, failure.message, failure.status);
     }
   },
 };

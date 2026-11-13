@@ -257,8 +257,8 @@ export const api = {
   async importPlaylists(url: string) {
     return clientApi.importPlaylists(url)
   },
-  async importSync(provider: string, playlistId: string) {
-    return clientApi.importSync(provider, playlistId)
+  async importSync(provider: string, playlistId: string, linkId?: number | null) {
+    return clientApi.importSync(provider, playlistId, linkId)
   },
   async importSyncAll(provider: string, playlistIds: string[], maxTracksPerPlaylist?: number, linkId?: number | null) {
     return clientApi.importSyncAll(provider, playlistIds, maxTracksPerPlaylist, linkId)

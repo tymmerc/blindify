@@ -6,7 +6,9 @@ import { logger } from "../utils/logger";
 
 /**
  * Bibliotheque de liens : chaque lien importe (profil ou playlist) devient une
- * carte que le joueur peut activer/desactiver pour choisir "ce qui joue ce soir".
+ * carte. Une seule carte cochee par joueur : celle qui joue ce soir (decision
+ * de Tym du 13/11/2026, T37). Importer un lien ou cocher une carte decoche les
+ * autres.
  * Les stats de detail restent volontairement non-spoilantes (pas de titres) ;
  * seules les cartes du PROPRIETAIRE exposent la liste complete, a sa demande.
  */
@@ -44,6 +46,24 @@ async function createLinksSchema(): Promise<void> {
       UNIQUE (user_id, normalized_url)
     )`);
   await pool.query(`ALTER TABLE audio_sources ADD COLUMN IF NOT EXISTS link_id INTEGER`);
+  // Les joueurs qui avaient plusieurs cartes cochees avant la regle d'une seule.
+  await keepNewestActive();
+}
+
+/**
+ * Une seule carte cochee par joueur : la plus recemment importee reste, les
+ * autres se decochent (rien n'est supprime). Pour tous les joueurs, ou un seul.
+ */
+export async function keepNewestActive(userId?: number): Promise<void> {
+  await pool.query(
+    `UPDATE imported_links il SET active = FALSE
+     WHERE il.active AND ($1::int IS NULL OR il.user_id = $1)
+       AND EXISTS (
+         SELECT 1 FROM imported_links o
+         WHERE o.user_id = il.user_id AND o.active AND (o.last_import_at, o.id) > (il.last_import_at, il.id)
+       )`,
+    [userId ?? null]
+  );
 }
 
 export function normalizeLinkUrl(raw: string): string {
@@ -61,8 +81,9 @@ export function normalizeLinkUrl(raw: string): string {
 }
 
 /**
- * Cree ou rafraichit la carte d'un lien pour cet utilisateur. Reimporter le
- * meme lien ne cree PAS de doublon (contrainte user_id + normalized_url).
+ * Cree ou rafraichit la carte d'un lien pour cet utilisateur, et la coche
+ * seule : les autres cartes du joueur se decochent. Reimporter le meme lien ne
+ * cree PAS de doublon (contrainte user_id + normalized_url).
  */
 export async function upsertLink(params: {
   userId: number;
@@ -86,7 +107,9 @@ export async function upsertLink(params: {
      RETURNING id`,
     [params.userId, params.url, normalizeLinkUrl(params.url), params.provider, params.kind, params.label, params.imageUrl]
   );
-  return rows[0].id;
+  const id = rows[0].id;
+  await pool.query(`UPDATE imported_links SET active = FALSE WHERE user_id = $1 AND id <> $2 AND active`, [params.userId, id]);
+  return id;
 }
 
 /**
@@ -100,28 +123,37 @@ export async function claimLegacyTracks(userId: number): Promise<void> {
     [userId]
   );
   if (Number(rows[0]?.n ?? 0) === 0) return;
-  const legacyId = await upsertLink({
-    userId,
-    url: `legacy:${userId}`,
-    provider: null,
-    kind: "legacy",
-    label: "Imports précédents",
-    imageUrl: null,
-  });
+  // Pas par upsertLink : la carte des anciens imports ne se coche jamais
+  // par-dessus la playlist choisie. Neuve, elle est cochee seulement si aucune
+  // autre ne l'est ; existante, elle reste comme le joueur l'a laissee.
+  await ensureLinksSchema();
+  const { rows: legacy } = await pool.query<{ id: number }>(
+    `INSERT INTO imported_links (user_id, url, normalized_url, provider, kind, label, image_url, active)
+     VALUES ($1, $2, $3, NULL, 'legacy', 'Imports précédents', NULL,
+             NOT EXISTS (SELECT 1 FROM imported_links o WHERE o.user_id = $1 AND o.active))
+     ON CONFLICT (user_id, normalized_url) DO UPDATE SET last_import_at = imported_links.last_import_at
+     RETURNING id`,
+    [userId, `legacy:${userId}`, normalizeLinkUrl(`legacy:${userId}`)]
+  );
+  const legacyId = legacy[0].id;
   await pool.query(`UPDATE user_audio_sources SET link_id=$1 WHERE user_id=$2 AND link_id IS NULL`, [legacyId, userId]);
   // Colonne historique du premier importeur, tenue a jour pour un retour arriere.
   await pool.query(`UPDATE audio_sources SET link_id=$1 WHERE user_id=$2 AND link_id IS NULL`, [legacyId, userId]);
 }
 
-/** Ids des liens actifs d'un joueur ; null si le joueur n'a aucune carte (legacy pur). */
+/**
+ * La carte cochee d'un joueur (une au plus : la plus recente si une ecriture
+ * d'ailleurs en a coche plusieurs) ; [] si aucune ; null si le joueur n'a
+ * aucune carte (legacy pur).
+ */
 export async function activeLinkIds(userId: number): Promise<number[] | null> {
   await ensureLinksSchema();
   const { rows } = await pool.query<{ id: number; active: boolean }>(
-    `SELECT id, active FROM imported_links WHERE user_id=$1`,
+    `SELECT id, active FROM imported_links WHERE user_id=$1 ORDER BY last_import_at DESC, id DESC`,
     [userId]
   );
   if (rows.length === 0) return null; // jamais passe par la bibliotheque : tout son fonds joue
-  return rows.filter(r => r.active).map(r => r.id);
+  return rows.filter(r => r.active).slice(0, 1).map(r => r.id);
 }
 
 /** id int4 valide : Number.isInteger laisse passer 99999999999, pg refuse. */
@@ -165,7 +197,7 @@ export const linksController = {
     }
   },
 
-  /** PATCH /api/links/:id : activer / desactiver une carte. */
+  /** PATCH /api/links/:id : cocher une carte (les autres du joueur se decochent) ou la decocher. */
   async toggle(req: Request, res: Response): Promise<void> {
     const context = await getSessionContext(req, res);
     if (!context) return;
@@ -177,10 +209,16 @@ export const linksController = {
       return;
     }
     try {
-      const { rowCount } = await pool.query(
-        `UPDATE imported_links SET active=$1 WHERE id=$2 AND user_id=$3`,
-        [active, id, context.user.id]
-      );
+      // Cocher : une seule commande coche celle-ci et decoche les autres, et
+      // ne touche a rien si la carte n'est pas a ce joueur.
+      const { rowCount } = active
+        ? await pool.query(
+          `UPDATE imported_links SET active = (id = $1)
+           WHERE user_id = $2 AND EXISTS (SELECT 1 FROM imported_links c WHERE c.id = $1 AND c.user_id = $2)
+             AND (id = $1 OR active)`,
+          [id, context.user.id]
+        )
+        : await pool.query(`UPDATE imported_links SET active=FALSE WHERE id=$1 AND user_id=$2`, [id, context.user.id]);
       if (!rowCount) {
         fail(res, "not_found", "Lien introuvable.", 404);
         return;

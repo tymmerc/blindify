@@ -110,6 +110,44 @@ describe("resolveShortLink", () => {
     expect(calls).toEqual(["https://link.deezer.com/s/30ZnBD9L4b4a1R5V6NWDu"]);
   });
 
+  // T37 : vu le 12/11, les liens du bouton Partager de l'appli Deezer
+  // repondent 302 vers https://link.deezer.com/?awf=...&dest=<la page>, que
+  // l'ancienne regle refusait (redirect_refused, une quinzaine de fois).
+  const APP_HOP = "https://link.deezer.com/?awf=https%3A%2F%2Fwww.deezer.com%2Fplaylist%2F908622995%3Futm_campaign%3Dclipboard-generic"
+    + "&dest=https%3A%2F%2Fwww.deezer.com%2Fplaylist%2F908622995%3Futm_source%3Duser_sharing";
+
+  it("Deezer, appli : la page est lue dans dest=, sans autre appel", async () => {
+    const { hop, calls } = fakeHop({ "https://link.deezer.com/s/32Xtqzp0nOOGSbVgBeVpe": { status: 302, location: APP_HOP } });
+    await expect(resolveShortLink("https://link.deezer.com/s/32Xtqzp0nOOGSbVgBeVpe", { hop }))
+      .resolves.toBe("https://www.deezer.com/playlist/908622995?utm_source=user_sharing");
+    expect(calls).toEqual(["https://link.deezer.com/s/32Xtqzp0nOOGSbVgBeVpe"]);
+  });
+
+  it("Deezer, appli : la playlist d'un joueur s'importe par le lien court", async () => {
+    const hop: Hop = async () => ({ status: 302, location: APP_HOP });
+    await expect(parseProfileLink("https://link.deezer.com/s/32Xtqzp0nOOGSbVgBeVpe", { hop })).resolves.toEqual({
+      parsed: { provider: "deezer", type: "playlist", id: "908622995" },
+      url: "https://www.deezer.com/playlist/908622995",
+    });
+  });
+
+  it.each([
+    ["dest vers un autre hote", "https://link.deezer.com/?dest=https%3A%2F%2Fevil.com%2Fplaylist%2F1"],
+    ["dest en http", "https://link.deezer.com/?dest=http%3A%2F%2Fwww.deezer.com%2Fplaylist%2F1"],
+    ["dest avec un port", "https://link.deezer.com/?dest=https%3A%2F%2Fwww.deezer.com%3A8443%2Fplaylist%2F1"],
+    ["dest avec identifiants", "https://link.deezer.com/?dest=https%3A%2F%2Fu%40www.deezer.com%2Fplaylist%2F1"],
+    ["dest vers un lien court", "https://link.deezer.com/?dest=https%3A%2F%2Flink.deezer.com%2Fs%2Fabc"],
+    ["dest relatif", "https://link.deezer.com/?dest=%2Fplaylist%2F1"],
+    ["dest absent", "https://link.deezer.com/?awf=https%3A%2F%2Fwww.deezer.com%2Fplaylist%2F1"],
+    ["dest sur un autre chemin", "https://link.deezer.com/autre?dest=https%3A%2F%2Fwww.deezer.com%2Fplaylist%2F1"],
+    ["dest sur un autre hote", "https://evil.com/?dest=https%3A%2F%2Fwww.deezer.com%2Fplaylist%2F1"],
+    ["dest en http sur link.deezer.com", "http://link.deezer.com/?dest=https%3A%2F%2Fwww.deezer.com%2Fplaylist%2F1"],
+  ])("Deezer, appli : %s, refuse sans autre appel", async (_cas, location) => {
+    const { hop, calls } = fakeHop({ "https://link.deezer.com/s/abc": { status: 302, location } });
+    expect(await codeOf(resolveShortLink("https://link.deezer.com/s/abc", { hop }))).toBe("redirect_refused");
+    expect(calls).toEqual(["https://link.deezer.com/s/abc"]);
+  });
+
   it("Spotify : chaine entre hotes de depart, puis open.spotify.com", async () => {
     const { hop, calls } = fakeHop({
       "https://spotify.link/aBcD3fGh1Jb": { status: 307, location: "https://spotify.app.link/aBcD3fGh1Jb?_p=1" },
