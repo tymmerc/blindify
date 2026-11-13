@@ -15,6 +15,8 @@ export interface RoomMember {
   userId: number;
   username: string | null;
   status: MemberStatus;
+  /** Photo de profil ou avatar Discord (users.avatar), pour la salle d'attente (T39). */
+  avatar?: string | null;
 }
 
 const rooms = new Map<string, Map<number, RoomMember>>();
@@ -26,14 +28,25 @@ function key(roomCode: string, userId: number): string {
   return `${roomCode}:${userId}`;
 }
 
-export function upsertMember(roomCode: string, userId: number, username: string | null, status: MemberStatus): void {
+export function upsertMember(
+  roomCode: string,
+  userId: number,
+  username: string | null,
+  status: MemberStatus,
+  avatar?: string | null
+): void {
   let members = rooms.get(roomCode);
   if (!members) {
     members = new Map();
     rooms.set(roomCode, members);
   }
   const existing = members.get(userId);
-  members.set(userId, { userId, username: username ?? existing?.username ?? null, status });
+  members.set(userId, {
+    userId,
+    username: username ?? existing?.username ?? null,
+    status,
+    avatar: avatar === undefined ? existing?.avatar ?? null : avatar,
+  });
 }
 
 export function setStatus(roomCode: string, userId: number, status: MemberStatus): void {

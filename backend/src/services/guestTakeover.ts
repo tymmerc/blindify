@@ -1,4 +1,5 @@
 import type { PoolClient } from "pg";
+import { moveGuestPhoto } from "./userPhotos";
 
 /**
  * T26 : un joueur se connecte a son compte depuis un navigateur ou il jouait
@@ -70,6 +71,9 @@ export async function absorbGuest(client: PoolClient, guestId: number, accountId
     ids
   );
   await client.query(`DELETE FROM user_stats WHERE user_id=$1`, [guestId]);
+
+  // Photo de profil (T39) : le compte la prend s'il n'en a pas.
+  await moveGuestPhoto(client, guestId, accountId);
 
   // L'invite n'a plus de session : son ancien jeton ne rouvre plus rien.
   await client.query(`DELETE FROM user_sessions WHERE user_id=$1`, [guestId]);
