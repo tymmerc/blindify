@@ -61,9 +61,13 @@ function playAndReveal(answer = "Song"): void {
   revealRound(ROOM);
 }
 
-/** Fin du reveal (reponse puis classement, T38) : la manche suivante part. */
+/**
+ * Fin du reveal (T38) : reponse puis classement, la manche suivante part. Apres
+ * la derniere manche, pas de classement : la partie finit.
+ */
 function everyoneReady(): void {
-  expect(nextRevealStep(ROOM)).toBe("scores");
+  const state = getGameState(ROOM)!;
+  if (state.currentRound < state.totalRounds) expect(nextRevealStep(ROOM)).toBe("scores");
   expect(nextRevealStep(ROOM)).toBe("next");
   startNextRound(ROOM);
 }

@@ -481,15 +481,25 @@ describe("rythme du reveal (T38)", () => {
     expect(getGameState(ROOM)?.pacing?.endsAt).toBe(endsAt + 4_000);
   });
 
-  it("apres la derniere manche, le classement mene a la fin de partie", () => {
+  it("apres la derniere manche, pas de classement : la reponse mene au podium", () => {
     revealRound(ROOM);
     nextRevealStep(ROOM);
     nextRevealStep(ROOM);
     startNextRound(ROOM);
     revealRound(ROOM);
-    expect(nextRevealStep(ROOM)).toBe("scores");
     expect(nextRevealStep(ROOM)).toBe("next");
     expect(startNextRound(ROOM)?.phase).toBe("FINISHED");
+  });
+
+  it("le detail de chaque reponse arrive au reveal, jamais pendant la manche", () => {
+    recordAnswer(ROOM, 1, "", 2, "Song 1", "Wrong");
+    expect(gameStateSnapshot(ROOM)!.players[1].lastTitleOk).toBeUndefined();
+    const state = revealRound(ROOM)!;
+    expect(state.players[1]).toEqual(expect.objectContaining({ lastTitleOk: true, lastArtistOk: false, lastOwnerOk: false }));
+    nextRevealStep(ROOM);
+    nextRevealStep(ROOM);
+    startNextRound(ROOM);
+    expect(gameStateSnapshot(ROOM)!.players[1].lastTitleOk).toBeUndefined();
   });
 
   it("la piste de la manche suivante reste caviardee pendant son 3-2-1", () => {
@@ -580,8 +590,7 @@ describe("full game flow", () => {
     expect(state.players[2].streak).toBe(1);
     expect(state.players[3].streak).toBe(1);
 
-    nextRevealStep(ROOM);
-    nextRevealStep(ROOM);
+    expect(nextRevealStep(ROOM)).toBe("next");
     state = startNextRound(ROOM)!;
     expect(state.phase).toBe("FINISHED");
 

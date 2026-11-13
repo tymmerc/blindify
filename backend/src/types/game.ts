@@ -41,6 +41,10 @@ export interface PlayerState {
   lastGuessArtist?: string | null
   lastSourceGuess?: number | null
   lastVerdict?: Verdict
+  /** Au reveal (T38) : le titre, l'artiste, le « de qui » de sa reponse etaient-ils justes ? */
+  lastTitleOk?: boolean
+  lastArtistOk?: boolean
+  lastOwnerOk?: boolean
   answerAt?: number | null
   lastGained?: number
   totalReactionMs?: number

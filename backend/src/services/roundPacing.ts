@@ -35,9 +35,10 @@ export function answerStep(now: number): RoundPacing {
 
 /**
  * Ce qui suit l'ecran en cours : le classement apres la reponse, puis la
- * manche suivante (ou la fin de partie apres la derniere).
+ * manche suivante. Apres la derniere manche, pas de classement (il gacherait
+ * le podium) : la reponse mene directement a la fin de partie.
  */
-export function stepAfter(current: RoundPacing | null | undefined, now: number): RoundPacing | "next" {
-  if (current?.step === "answer") return { step: "scores", endsAt: now + ROUND_PACING.scoresMs };
+export function stepAfter(current: RoundPacing | null | undefined, now: number, lastRound: boolean): RoundPacing | "next" {
+  if (current?.step === "answer" && !lastRound) return { step: "scores", endsAt: now + ROUND_PACING.scoresMs };
   return "next";
 }

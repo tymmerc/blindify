@@ -47,6 +47,10 @@ export type PlayerState = {
   lastGuessArtist?: string | null;
   lastSourceGuess?: number | null;
   lastVerdict?: Verdict;
+  /** Au reveal (T38) : le titre, l'artiste, le « de qui » de sa reponse etaient-ils justes ? */
+  lastTitleOk?: boolean;
+  lastArtistOk?: boolean;
+  lastOwnerOk?: boolean;
   answerAt?: number | null;
   lastGained?: number;
   /** Cumul des temps de réponse (ms) — sert UNIQUEMENT au départage d'égalité. */
@@ -442,6 +446,9 @@ export function startNextRound(roomCode: string, opts?: { forceRound?: number; s
     player.lastGuessArtist = null;
     player.lastSourceGuess = undefined;
     player.lastVerdict = undefined;
+    player.lastTitleOk = undefined;
+    player.lastArtistOk = undefined;
+    player.lastOwnerOk = undefined;
     player.answerAt = null;
   });
 
@@ -513,12 +520,13 @@ export function markReady(roomCode: string, userId: number): GameState | undefin
 /**
  * Passe a l'ecran suivant du reveal (T38) : le classement apres la reponse,
  * puis "next" quand la manche suivante doit partir (l'appelant la lance).
+ * Apres la derniere manche, "next" des la reponse : le podium suit.
  * null si rien a faire : pas de reveal en cours, ou partie en pause.
  */
 export function nextRevealStep(roomCode: string, now = Date.now()): "scores" | "next" | null {
   const ctx = games.get(roomCode);
   if (!ctx || ctx.state.phase !== "REVEAL" || ctx.state.paused) return null;
-  const next = stepAfter(ctx.state.pacing, now);
+  const next = stepAfter(ctx.state.pacing, now, ctx.state.currentRound >= ctx.state.totalRounds);
   if (next === "next") return "next";
   ctx.state.pacing = next;
   return "scores";
@@ -711,6 +719,9 @@ export function gameStateSnapshot(roomCode: string): GameState | undefined {
         lastSourceGuess: null,
         lastVerdict: undefined,
         lastGained: undefined,
+        lastTitleOk: undefined,
+        lastArtistOk: undefined,
+        lastOwnerOk: undefined,
       };
     }
     return {
@@ -788,6 +799,9 @@ function computeScore(params: {
     score: previous.score + gainedPoints,
     accuracy: rounds > 0 ? Math.round((correctCount / rounds) * 100) : 0,
     lastVerdict: verdict,
+    lastTitleOk: correctTitle,
+    lastArtistOk: correctArtist,
+    lastOwnerOk: ownerGuessed === true,
     // Pas de réponse = temps plein du round (ne pas avantager l'inactif au départage)
     totalReactionMs: (previous.totalReactionMs ?? 0) + (reactionMs ?? maxDuration ?? DEFAULT_LISTENING_MS),
   };

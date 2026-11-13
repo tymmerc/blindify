@@ -243,8 +243,8 @@ export function cleanupGame(roomCode: string): void {
 }
 
 /**
- * « Suivant » de l'hote (T38), deux fois : reponse -> classement -> manche
- * suivante (ou fin de partie). Remplace les « pret » de tout le monde, qui ne
+ * « Suivant » de l'hote (T38) : reponse -> classement -> manche suivante, ou
+ * reponse -> fin de partie apres la derniere manche. Remplace les « pret » de tout le monde, qui ne
  * font plus avancer la partie. L'hote est retrouve parmi `clients`.
  */
 export async function hostNext(clients: GameClient[], roomCode: string, opts: { twice?: boolean } = {}): Promise<void> {
@@ -257,8 +257,10 @@ export async function hostNext(clients: GameClient[], roomCode: string, opts: { 
     if (opts.twice) host.socket.emit("game:next", { roomCode, round, step });
   };
   emit("answer");
-  await waitFor(() => host.lastState()?.pacing?.step === "scores", 4000, `classement manche ${round}`);
-  emit("scores");
+  // Apres la derniere manche, pas de classement : la partie finit tout de suite.
+  const moved = () => host.lastState()?.phase !== "REVEAL" || host.lastState()?.currentRound !== round;
+  await waitFor(() => host.lastState()?.pacing?.step === "scores" || moved(), 4000, `classement manche ${round}`);
+  if (!moved()) emit("scores");
 }
 
 /** Polls a predicate until true or timeout. */
