@@ -70,6 +70,18 @@ export interface WaitingPlayer {
   username: string | null
 }
 
+/**
+ * Les deux ecrans de la phase REVEAL (T38) : la reponse, puis le classement.
+ * Le 3-2-1 qui suit est le debut de la manche suivante (startAt dans le futur).
+ */
+export type RevealStep = "answer" | "scores"
+
+/** Ecran en cours du reveal et heure serveur (ms) de sa fin. */
+export interface RoundPacing {
+  step: RevealStep
+  endsAt: number
+}
+
 export interface GameState {
   roomCode: string
   hostUserId: number | null
@@ -85,6 +97,8 @@ export interface GameState {
   waiting?: WaitingPlayer[]
   /** Partie mise en pause par l'hote (timers geles cote serveur). */
   paused?: boolean
+  /** Ecran en cours du reveal (T38) ; null hors REVEAL. */
+  pacing?: RoundPacing | null
   timing: GameTiming
   config: GameConfig
 }

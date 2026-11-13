@@ -8,6 +8,7 @@ import type { MusicProvider } from "../types/user";
 import type { AudioSourceRow } from "../types/audio";
 import { bootstrapGameState, getGameState, gameStateSnapshot, revealedRoundCeiling, clearGame } from "../services/realtimeGame";
 import { startRoundAndBroadcast } from "../services/realtimeOrchestrator";
+import { ROUND_PACING } from "../services/roundPacing";
 import { GameMode, type RoundTrack } from "../types/game";
 import { initStreamerGame } from "../services/streamerOrchestrator";
 import { maxStreamerGames, streamerModeEnabled } from "../services/streamerConfig";
@@ -48,8 +49,9 @@ async function ensureRoomFlags(): Promise<void> {
 }
 
 const EVENT_ROUND_DURATION_MS = 20_000;
-// Decompte 3-2-1 avant la toute premiere manche (audio + chrono demarrent apres).
-const FIRST_ROUND_PREROLL_MS = 3_000;
+// Decompte 3-2-1 avant la toute premiere manche (audio + chrono demarrent
+// apres), le meme qu'entre les manches (T38).
+const FIRST_ROUND_PREROLL_MS = ROUND_PACING.countdownMs;
 
 /**
  * Manche non revelee, telle qu'elle sort de l'API REST (/state, /start) : son

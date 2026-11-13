@@ -2,7 +2,6 @@ import type { Server, Socket } from "socket.io";
 import { pool } from "./config/db";
 import {
   gameStateSnapshot,
-  redactedGuessingTrack,
   getGameState as getRealtimeState,
   markReady as markReadyState,
   recordAnswer,
@@ -23,14 +22,14 @@ import {
 import * as lobbyRps from "./services/lobbyRps";
 import { validRoomCode, clampText, toIntOrNull, MAX_GUESS_LEN, MAX_CHAT_LEN } from "./utils/socketValidation";
 import {
-  broadcastGameOver,
   broadcastState,
-  clearAdvanceTimer,
+  advanceRevealStep,
+  clearPacingTimer,
   clearGraceTimer,
   clearRevealTimer,
   refreshRoundPreviews,
   revealRoundNow,
-  scheduleForcedAdvance,
+  schedulePacingStep,
   scheduleReveal,
   tryEarlyReveal,
 } from "./services/realtimeOrchestrator";
@@ -634,61 +633,49 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
         }
       });
 
-    socket.on("game:ready", async ({ roomCode }: { roomCode: string }) => {
+    // « Pret » : depuis T38 il ne fait plus avancer la partie (le serveur
+    // enchaine les ecrans, roundPacing.ts). Il sert encore a signaler qu'on est
+    // la (markReconnected) et a recuperer l'ecran de fin.
+    socket.on("game:ready", async (payload: { roomCode?: unknown }) => {
+      const roomCode = validRoomCode(payload?.roomCode);
       if (!roomCode) return;
-      logger.debug(`game:ready from user ${currentUser.id} for room ${roomCode}`);
+      if (!allowEvent(socket.id, "ready", 4, 2_000)) return;
       const access = await requireRoomAccess(roomCode, currentUser.id);
       if (!access) {
         emitRoomError(socket, roomCode, "Accès refusé à cette salle.");
         return;
       }
-      // Ensure this socket is still in the room
-      if (!socket.rooms.has(roomCode)) {
-        socket.join(roomCode);
-      }
+      if (!socket.rooms.has(roomCode)) socket.join(roomCode);
       markReconnected(roomCode, currentUser.id);
       const existing = getRealtimeState(roomCode);
-      if (existing?.paused) return; // pas d'avancement de manche pendant la pause
-      if (!existing) {
-        emitRoomError(socket, roomCode, "Aucune partie en cours.");
-        return;
-      }
-      // Partie deja finie (l'etat FINISHED reste une minute en memoire) : un
-      // "pret" tardif ne repasse pas par la fin de partie, sinon user_stats
-      // compterait la partie et l'XP une deuxieme fois. Il recoit juste l'etat.
+      if (!existing) return;
+      // Partie deja finie (l'etat FINISHED reste une minute en memoire) : il
+      // recoit juste l'etat, jamais une seconde fin de partie.
       if (existing.phase === "FINISHED") {
         sendStateToSocket(roomCode);
         return;
       }
-      logger.debug(`game:ready phase before markReady: ${existing.phase}, round: ${existing.currentRound}`);
-      const beforeRound = existing.currentRound;
-      const state = markReadyState(roomCode, currentUser.id);
-      if (!state) return;
-      logger.debug(`game:ready phase after markReady: ${state.phase}, round: ${state.currentRound}`);
-      if (state.phase === "GUESSING" && state.currentTrack && state.timing.revealAt && state.currentRound !== beforeRound) {
-        logger.debug(`game:ready advancing to round ${state.currentRound} for ${roomCode}`);
-        // Broadcast full state FIRST so clients have the new round before
-        // the round:start trigger fires. Avoids the frontend needing to
-        // reconstruct a minimal state from the round:start payload.
-        broadcastState(io, roomCode);
-        io.to(roomCode).emit("game:round:start", {
-          roomCode,
-          round: state.currentRound,
-          // Caviarde : la reponse ne part sur le fil qu'au reveal.
-          track: redactedGuessingTrack(state.currentTrack),
-          timing: state.timing,
-        });
-        scheduleReveal(io, roomCode, state.timing.revealAt, state.currentRound);
-        void refreshRoundPreviews(io, roomCode);
-      } else if (state.phase === "FINISHED") {
-        logger.debug(`game:ready game finished for ${roomCode}`);
-        broadcastState(io, roomCode);
-        broadcastGameOver(io, roomCode);
-        clearRevealTimer(roomCode);
-      } else {
-        // Just a partial ready (player marked ready but not all yet) — broadcast updated state.
-        broadcastState(io, roomCode);
+      markReadyState(roomCode, currentUser.id);
+    });
+
+    // « Suivant » (T38) : l'hote passe a l'ecran suivant du reveal sans
+    // attendre (reponse -> classement -> manche suivante). `round` et `step`
+    // disent ce qu'il voyait : un double clic ne saute pas deux ecrans.
+    socket.on("game:next", async (payload: { roomCode?: unknown; round?: unknown; step?: unknown }) => {
+      const roomCode = validRoomCode(payload?.roomCode);
+      if (!roomCode) return;
+      if (!allowEvent(socket.id, "next", 4, 2_000)) return;
+      const access = await requireRoomAccess(roomCode, currentUser.id);
+      if (!access?.isHost) {
+        emitRoomError(socket, roomCode, "Seul l'hôte peut passer à la suite.");
+        return;
       }
+      const state = getRealtimeState(roomCode);
+      if (!state || state.phase !== "REVEAL" || state.paused) return;
+      const round = toIntOrNull(payload?.round);
+      if (round !== null && round !== state.currentRound) return;
+      if (typeof payload?.step === "string" && payload.step !== state.pacing?.step) return;
+      advanceRevealStep(io, roomCode);
     });
 
     socket.on("game:sync", async (payload: { roomCode?: unknown }) => {
@@ -914,7 +901,7 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
       const state = pauseGame(roomCode);
       if (!state?.paused) return;
       clearRevealTimer(roomCode);
-      clearAdvanceTimer(roomCode);
+      clearPacingTimer(roomCode);
       clearGraceTimer(roomCode);
       broadcastState(io, roomCode);
     });
@@ -932,7 +919,7 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
         // sinon a la fin de la grace qui la retient.
         tryEarlyReveal(io, roomCode);
       } else if (state.phase === "REVEAL") {
-        scheduleForcedAdvance(io, roomCode, state.currentRound);
+        schedulePacingStep(io, roomCode);
       }
       broadcastState(io, roomCode);
       // Une longue pause a pu faire expirer les liens (T35).
@@ -1032,7 +1019,7 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
               if (resumed.phase === "GUESSING" && resumed.timing.revealAt) {
                 scheduleReveal(io, roomCode, resumed.timing.revealAt, resumed.currentRound);
               } else if (resumed.phase === "REVEAL") {
-                scheduleForcedAdvance(io, roomCode, resumed.currentRound);
+                schedulePacingStep(io, roomCode);
               }
               void refreshRoundPreviews(io, roomCode);
             }
@@ -1053,7 +1040,8 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
           tryEarlyReveal(io, roomCode);
           broadcastState(io, roomCode);
         } else if (state && state.phase === "REVEAL") {
-          // During REVEAL, mark disconnected so they don't block ready-check
+          // Pendant le reveal : marque parti (compteurs de la salle), sans
+          // effet sur le rythme, decide par le serveur.
           markDisconnected(roomCode, currentUser.id);
           broadcastState(io, roomCode);
         } else {

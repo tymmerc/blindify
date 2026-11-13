@@ -9,6 +9,7 @@ import {
   type PublicWaitingPlayer,
   type WaitingPlayer,
 } from "./lateJoiners";
+import { answerStep, stepAfter, type RoundPacing } from "./roundPacing";
 
 export type Verdict = "correct" | "close" | "wrong";
 
@@ -87,6 +88,11 @@ export type GameState = {
   waiting?: PublicWaitingPlayer[];
   /** Partie mise en pause par l'hote (timers geles cote serveur). */
   paused?: boolean;
+  /**
+   * Ecran en cours pendant la phase REVEAL (T38) : la reponse puis le
+   * classement, chacun jusqu'a `endsAt`. null hors REVEAL.
+   */
+  pacing?: RoundPacing | null;
   config: { autoAdvance: boolean; roundDurationMs: number };
 };
 
@@ -180,6 +186,7 @@ export function bootstrapGameState(params: {
     },
     players: initialPlayers,
     waiting: [],
+    pacing: null,
     config: {
       autoAdvance: params.config?.autoAdvance ?? false,
       roundDurationMs: params.config?.roundDurationMs ?? DEFAULT_LISTENING_MS,
@@ -256,6 +263,7 @@ export function resumeGame(roomCode: string, now = Date.now()): GameState | unde
   const delta = now - (ctx.pausedAt ?? now);
   if (ctx.state.timing.startAt) ctx.state.timing.startAt += delta;
   if (ctx.state.timing.revealAt) ctx.state.timing.revealAt += delta;
+  if (ctx.state.pacing) ctx.state.pacing = { ...ctx.state.pacing, endsAt: ctx.state.pacing.endsAt + delta };
   ctx.graceUntil = gracesAfterPause(ctx.graceUntil, delta, now + ctx.reconnectGraceMs);
   ctx.pausedAt = null;
   ctx.state.paused = false;
@@ -389,6 +397,7 @@ export function startNextRound(roomCode: string, opts?: { forceRound?: number; s
   // Les graces de reconnexion valent pour une manche : la suivante repart a zero.
   ctx.graceUntil = {};
   const nextRound = opts?.forceRound ?? ctx.state.currentRound + 1;
+  ctx.state.pacing = null;
   if (nextRound > ctx.state.totalRounds) {
     ctx.state.phase = "FINISHED";
     ctx.state.currentTrack = null;
@@ -487,27 +496,32 @@ export function recordAnswer(
   return ctx.state;
 }
 
+/**
+ * « Pret » d'un joueur pendant le reveal. Depuis T38 il ne fait plus avancer
+ * la partie : le serveur enchaine les ecrans tout seul (roundPacing.ts). Garde
+ * pour les onglets restes ouverts sur l'ancienne version.
+ */
 export function markReady(roomCode: string, userId: number): GameState | undefined {
   const ctx = games.get(roomCode);
   if (!ctx) return undefined;
-  // Only accept ready signals during REVEAL phase to prevent "ghost ready" bugs
-  // where a premature ready from GUESSING phase causes instant advancement on reveal.
   if (ctx.state.phase !== "REVEAL") return ctx.state;
   const player = ctx.state.players[userId];
-  if (!player) return ctx.state;
-  player.isReady = true;
-
-  const answerablePlayers = allAnswerablePlayers(roomCode);
-  const everyoneReady =
-    ctx.state.phase === "REVEAL" &&
-    answerablePlayers.length > 0 &&
-    answerablePlayers.every(p => p.isReady);
-
-  if (everyoneReady) {
-    const advanced = startNextRound(roomCode);
-    return advanced;
-  }
+  if (player) player.isReady = true;
   return ctx.state;
+}
+
+/**
+ * Passe a l'ecran suivant du reveal (T38) : le classement apres la reponse,
+ * puis "next" quand la manche suivante doit partir (l'appelant la lance).
+ * null si rien a faire : pas de reveal en cours, ou partie en pause.
+ */
+export function nextRevealStep(roomCode: string, now = Date.now()): "scores" | "next" | null {
+  const ctx = games.get(roomCode);
+  if (!ctx || ctx.state.phase !== "REVEAL" || ctx.state.paused) return null;
+  const next = stepAfter(ctx.state.pacing, now);
+  if (next === "next") return "next";
+  ctx.state.pacing = next;
+  return "scores";
 }
 
 function setWaiting(ctx: GameContext, waiting: readonly WaitingPlayer[]): void {
@@ -638,6 +652,7 @@ export function revealRound(roomCode: string): GameState | undefined {
   });
 
   ctx.state.phase = "REVEAL";
+  ctx.state.pacing = answerStep(Date.now());
   ctx.state.timing = {
     startAt,
     revealAt: ctx.state.timing.revealAt,

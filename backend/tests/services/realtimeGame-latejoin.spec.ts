@@ -18,6 +18,7 @@ import {
   isWaitingPlayer,
   markDisconnected,
   markReady,
+  nextRevealStep,
   markReconnected,
   recordAnswer,
   revealRound,
@@ -60,9 +61,11 @@ function playAndReveal(answer = "Song"): void {
   revealRound(ROOM);
 }
 
-/** Tous les joueurs de la partie sont prets : la manche suivante part. */
+/** Fin du reveal (reponse puis classement, T38) : la manche suivante part. */
 function everyoneReady(): void {
-  for (const p of Object.values(getGameState(ROOM)!.players)) markReady(ROOM, p.userId);
+  expect(nextRevealStep(ROOM)).toBe("scores");
+  expect(nextRevealStep(ROOM)).toBe("next");
+  startNextRound(ROOM);
 }
 
 afterEach(() => clearGame(ROOM));

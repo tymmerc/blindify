@@ -149,6 +149,8 @@ export type MultiplayerGameState = {
   waiting?: WaitingPlayer[]
   /** Partie mise en pause par l'hote. */
   paused?: boolean
+  /** Ecran en cours du reveal (T38) : la reponse puis le classement ; null hors REVEAL. */
+  pacing?: RoundPacing | null
   /** L'hote (source audio en mode event) est-il toujours connecte ? */
   hostConnected?: boolean
   timing: {
@@ -219,6 +221,18 @@ export interface GameConfig {
   roundDurationMs: number
 }
 
+/**
+ * Les deux ecrans de la phase REVEAL (T38) : la reponse, puis le classement.
+ * Le 3-2-1 qui suit est le debut de la manche suivante (startAt dans le futur).
+ */
+export type RevealStep = "answer" | "scores"
+
+/** Ecran en cours du reveal et heure serveur (ms) de sa fin. */
+export interface RoundPacing {
+  step: RevealStep
+  endsAt: number
+}
+
 export interface GameState {
   roomCode: string
   hostUserId: number | null
@@ -234,6 +248,8 @@ export interface GameState {
   currentTrack: RoundTrack | null
   players: Record<number, PlayerState>
   paused?: boolean
+  /** Ecran en cours du reveal (T38) ; null hors REVEAL. */
+  pacing?: RoundPacing | null
   timing: GameTiming
   config: GameConfig
 }

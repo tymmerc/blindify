@@ -24,6 +24,7 @@ import {
   closePool,
   pool,
   waitFor,
+  hostNext,
   type TestServer,
   type TestUser,
   type GameClient,
@@ -139,8 +140,8 @@ describe("grace de reconnexion apres une coupure reseau", () => {
       expect((clock.get(1) ?? 0) - dropAt).toBeGreaterThanOrEqual(GRACE - 50);
       for (const c of [a, b]) expect(c.reveals.filter(r => r.round === 1)).toHaveLength(1);
 
-      // Derniere manche : les presents cliquent "pret", la partie se termine.
-      for (const c of [a, b]) c.socket.emit("game:ready", { roomCode: t.roomCode });
+      // Derniere manche : l'hote passe la reponse et le classement, la partie se termine.
+      await hostNext([a, b], t.roomCode);
       await waitFor(() => [a, b].every(c => c.gameOver !== null), 5000, "game over");
 
       // Une ligne par joueur, celle du joueur parti comprise (vide).

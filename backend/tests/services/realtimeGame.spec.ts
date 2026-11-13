@@ -10,8 +10,12 @@ import {
   upsertPlayer,
   removePlayer,
   gameStateSnapshot,
+  nextRevealStep,
+  pauseGame,
+  resumeGame,
   type RoundTrack,
 } from "../../src/services/realtimeGame";
+import { ROUND_PACING } from "../../src/services/roundPacing";
 
 const ROOM = "TEST_ROOM";
 
@@ -426,20 +430,74 @@ describe("markReady", () => {
     expect(getGameState(ROOM)?.players[2].isReady).toBe(true);
   });
 
-  it("auto-advances when all players ready", () => {
+  // T38 : le serveur enchaine les ecrans, les « pret » ne font plus avancer.
+  it("ne fait plus avancer la partie, meme quand tout le monde est pret", () => {
     markReady(ROOM, 1);
     markReady(ROOM, 2);
     const state = markReady(ROOM, 3);
-    // Should have advanced to next round (GUESSING) or FINISHED
-    expect(state?.phase === "GUESSING" || state?.phase === "FINISHED").toBe(true);
-    expect(state?.currentRound).toBeGreaterThanOrEqual(2);
+    expect(state?.phase).toBe("REVEAL");
+    expect(state?.currentRound).toBe(1);
+  });
+});
+
+describe("rythme du reveal (T38)", () => {
+  beforeEach(() => {
+    setupGame({ tracks: makeTracks(2) });
+    startNextRound(ROOM);
   });
 
-  it("does not advance with partial readiness", () => {
-    markReady(ROOM, 1);
-    markReady(ROOM, 2);
-    const state = getGameState(ROOM);
-    expect(state?.phase).toBe("REVEAL");
+  it("la revelation ouvre l'ecran de la reponse pour ROUND_PACING.answerMs", () => {
+    const before = Date.now();
+    const state = revealRound(ROOM)!;
+    expect(state.pacing?.step).toBe("answer");
+    expect(state.pacing!.endsAt).toBeGreaterThanOrEqual(before + ROUND_PACING.answerMs);
+    expect(state.pacing!.endsAt).toBeLessThanOrEqual(Date.now() + ROUND_PACING.answerMs);
+  });
+
+  it("reponse, puis classement, puis manche suivante", () => {
+    revealRound(ROOM);
+    expect(nextRevealStep(ROOM, 1_000)).toBe("scores");
+    expect(getGameState(ROOM)?.pacing).toEqual({ step: "scores", endsAt: 1_000 + ROUND_PACING.scoresMs });
+    expect(nextRevealStep(ROOM, 2_000)).toBe("next");
+    // L'appelant lance la manche suivante : l'ecran du reveal disparait.
+    const next = startNextRound(ROOM)!;
+    expect(next.phase).toBe("GUESSING");
+    expect(next.pacing).toBeNull();
+  });
+
+  it("rien pendant la manche ni pendant une pause", () => {
+    expect(nextRevealStep(ROOM)).toBeNull();
+    revealRound(ROOM);
+    pauseGame(ROOM, 1_000);
+    expect(nextRevealStep(ROOM)).toBeNull();
+    expect(getGameState(ROOM)?.pacing?.step).toBe("answer");
+  });
+
+  it("la pause gele aussi la fin de l'ecran en cours", () => {
+    revealRound(ROOM);
+    const endsAt = getGameState(ROOM)!.pacing!.endsAt;
+    pauseGame(ROOM, 10_000);
+    resumeGame(ROOM, 14_000);
+    expect(getGameState(ROOM)?.pacing?.endsAt).toBe(endsAt + 4_000);
+  });
+
+  it("apres la derniere manche, le classement mene a la fin de partie", () => {
+    revealRound(ROOM);
+    nextRevealStep(ROOM);
+    nextRevealStep(ROOM);
+    startNextRound(ROOM);
+    revealRound(ROOM);
+    expect(nextRevealStep(ROOM)).toBe("scores");
+    expect(nextRevealStep(ROOM)).toBe("next");
+    expect(startNextRound(ROOM)?.phase).toBe("FINISHED");
+  });
+
+  it("la piste de la manche suivante reste caviardee pendant son 3-2-1", () => {
+    revealRound(ROOM);
+    startNextRound(ROOM, { startAt: Date.now() + ROUND_PACING.countdownMs });
+    const snap = gameStateSnapshot(ROOM)!;
+    expect(snap.currentTrack?.title).toBe("");
+    expect(snap.currentTrack?.artist).toBe("");
   });
 });
 
@@ -458,16 +516,6 @@ describe("allAnswerablePlayers - event mode", () => {
     expect(answerable.map(p => p.userId)).toEqual([1, 2, 3]);
   });
 
-  it("event mode markReady ignores host for auto-advance", () => {
-    setupGame({ mode: "event" });
-    startNextRound(ROOM);
-    revealRound(ROOM);
-
-    // Only participants (2,3) need to be ready
-    markReady(ROOM, 2);
-    const state = markReady(ROOM, 3);
-    expect(state?.phase === "GUESSING" || state?.phase === "FINISHED").toBe(true);
-  });
 });
 
 describe("upsertPlayer / removePlayer", () => {
@@ -516,9 +564,9 @@ describe("full game flow", () => {
     expect(state.players[2].lastVerdict).toBe("close");
     expect(state.players[3].lastVerdict).toBe("wrong");
 
-    markReady(ROOM, 1);
-    markReady(ROOM, 2);
-    state = markReady(ROOM, 3)!;
+    expect(nextRevealStep(ROOM)).toBe("scores");
+    expect(nextRevealStep(ROOM)).toBe("next");
+    state = startNextRound(ROOM)!;
     expect(state.phase).toBe("GUESSING");
     expect(state.currentRound).toBe(2);
 
@@ -532,9 +580,9 @@ describe("full game flow", () => {
     expect(state.players[2].streak).toBe(1);
     expect(state.players[3].streak).toBe(1);
 
-    markReady(ROOM, 1);
-    markReady(ROOM, 2);
-    state = markReady(ROOM, 3)!;
+    nextRevealStep(ROOM);
+    nextRevealStep(ROOM);
+    state = startNextRound(ROOM)!;
     expect(state.phase).toBe("FINISHED");
 
     // Player 1 should have highest score (2 correct, with streak)

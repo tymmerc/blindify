@@ -158,7 +158,7 @@ afterEach(() => {
   jest.restoreAllMocks();
   for (const code of rooms.splice(0)) {
     orchestrator.clearRevealTimer(code);
-    orchestrator.clearAdvanceTimer(code);
+    orchestrator.clearPacingTimer(code);
     orchestrator.clearGraceTimer(code);
     clearGame(code);
   }
