@@ -14,6 +14,7 @@ import { TheaterGameView } from "./TheaterGameView"
 import { showOwnerQuestion } from "@/lib/ownerQuestion"
 import { SpectatorBadge } from "./SpectatorBadge"
 import { DeezerCredit, SpotifyTrackLink } from "./SourceCredits"
+import { ANSWER_INPUT_PROPS } from "@/lib/answerInput"
 
 const VINYL_GROOVES = "repeating-radial-gradient(circle at 50% 50%, #241a10 0 2.5px, #3a2a1a 2.5px 5px)"
 
@@ -1402,7 +1403,7 @@ export function MultiplayerGameClient({
                                   value={guessTitle}
                                   onChange={e => setGuessTitle(e.target.value)}
                                   disabled={localHasAnswered || disabled}
-                                  autoComplete="off"
+                                  {...ANSWER_INPUT_PROPS}
                                   aria-label="Titre du morceau"
                                   className={`w-full rounded-md border-[1.5px] bg-[#f4ecdb] px-3 py-3 pr-9 font-display text-lg text-[var(--ink)] outline-none transition-colors placeholder:italic placeholder:text-[#b3a182] focus:border-[var(--accent)] ${
                                     guessTitle.trim() ? "border-[#7d9471]" : "border-[rgba(46,32,20,.45)]"
@@ -1424,7 +1425,7 @@ export function MultiplayerGameClient({
                                   value={guessArtist}
                                   onChange={e => setGuessArtist(e.target.value)}
                                   disabled={localHasAnswered || disabled}
-                                  autoComplete="off"
+                                  {...ANSWER_INPUT_PROPS}
                                   aria-label="Artiste"
                                   className={`w-full rounded-md border-[1.5px] bg-[#f4ecdb] px-3 py-3 pr-9 font-display text-lg text-[var(--ink)] outline-none transition-colors placeholder:italic placeholder:text-[#b3a182] focus:border-[var(--accent)] ${
                                     guessArtist.trim() ? "border-[#7d9471]" : "border-[rgba(46,32,20,.45)]"

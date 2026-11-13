@@ -12,6 +12,7 @@ import { evaluateGuessSeparate, type Verdict } from "@/lib/matching"
 import { playCorrectSound, playPartialSound, playWrongSound } from "@/lib/audioManager"
 import { Flame, Timer, SkipForward, Check } from "lucide-react"
 import { DeezerCredit } from "./SourceCredits"
+import { ANSWER_INPUT_PROPS } from "@/lib/answerInput"
 
 const ACCENT = "#c65133"
 const AUDIO_OWNER = "chrono"
@@ -386,7 +387,7 @@ export function ChronoGameClient({ tracks, durationSeconds, onGameComplete }: Ch
               value={guessTitle}
               onChange={e => setGuessTitle(e.target.value)}
               placeholder="Titre..."
-              autoComplete="off"
+              {...ANSWER_INPUT_PROPS}
               autoFocus
               className="w-full rounded-md border-[1.5px] border-[rgba(46,32,20,.35)] bg-[#efe5d0] px-4 py-2.5 text-sm text-[#2e2014] outline-none transition placeholder:italic placeholder:text-[#b3a182] focus:border-[#c65133]"
             />
@@ -395,7 +396,7 @@ export function ChronoGameClient({ tracks, durationSeconds, onGameComplete }: Ch
               value={guessArtist}
               onChange={e => setGuessArtist(e.target.value)}
               placeholder="Artiste..."
-              autoComplete="off"
+              {...ANSWER_INPUT_PROPS}
               className="w-full rounded-md border-[1.5px] border-[rgba(46,32,20,.35)] bg-[#efe5d0] px-4 py-2.5 text-sm text-[#2e2014] outline-none transition placeholder:italic placeholder:text-[#b3a182] focus:border-[#c65133]"
             />
             <div className="flex gap-2">

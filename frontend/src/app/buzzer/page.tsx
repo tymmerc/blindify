@@ -15,6 +15,7 @@ import { evaluateGuess, type GuessVerdict } from "@/lib/guessMatch"
 import { publicPath } from "@/lib/publicPath"
 import { FingerBoard, type BoardPhase } from "./FingerBoard"
 import { EndFeedback } from "@/components/game/EndFeedback"
+import { ANSWER_INPUT_PROPS } from "@/lib/answerInput"
 
 const ZONE_COLORS = ["#c65133", "#e0a32e", "#7d9471", "#5b7d99", "#a06592"]
 const MAX_PLAYERS = 5 // limite multi-touch des iPhone
@@ -431,6 +432,7 @@ function BuzzerContent() {
               <span className="rounded-md border-2 border-[#2e2014] px-2 py-1 font-display text-lg font-bold">{answerLeft}s</span>
             </div>
             <input
+              {...ANSWER_INPUT_PROPS}
               autoFocus
               value={guessTitle}
               onChange={e => setGuessTitle(e.target.value)}
@@ -438,6 +440,7 @@ function BuzzerContent() {
               className="w-full rounded-md border-2 border-[#2e2014] bg-[#ece1c8] px-3 py-3 text-base outline-none placeholder:text-[#8a7558]"
             />
             <input
+              {...ANSWER_INPUT_PROPS}
               value={guessArtist}
               onChange={e => setGuessArtist(e.target.value)}
               placeholder="Artiste (bonus)"
