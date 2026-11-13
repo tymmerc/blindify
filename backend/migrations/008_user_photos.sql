@@ -28,9 +28,15 @@
 -- vers une photo afficheraient une image cassee, d'ou le UPDATE) :
 --   UPDATE users SET avatar = NULL WHERE avatar LIKE '/api/photos/%';
 --   DROP TABLE IF EXISTS user_photos;
+-- Les joueurs Discord qui avaient mis une photo retrouvent leur avatar Discord
+-- a leur prochaine connexion (upsertDiscordUser le remet quand il est vide).
 
 BEGIN;
 SET LOCAL lock_timeout = '3s';
+-- Deux backends qui demarrent en meme temps (tests en parallele, redemarrage)
+-- ne creent pas la table chacun de leur cote. Verrou consultatif seulement,
+-- aucune table n'est bloquee.
+SELECT pg_advisory_xact_lock(5008);
 
 DO $$
 BEGIN
@@ -46,6 +52,9 @@ BEGIN
       CONSTRAINT user_photos_mime CHECK (mime_type = 'image/webp'),
       CONSTRAINT user_photos_size CHECK (octet_length(image) BETWEEN 1 AND 262144)
     );
+    -- Le WebP est deja compresse : Postgres le range hors ligne sans essayer
+    -- de le recompresser.
+    ALTER TABLE user_photos ALTER COLUMN image SET STORAGE EXTERNAL;
   END IF;
 END
 $$;

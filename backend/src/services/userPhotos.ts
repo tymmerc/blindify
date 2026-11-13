@@ -155,19 +155,34 @@ export async function readUserPhoto(id: string): Promise<Buffer | null> {
 
 /**
  * T26 : le compte reprend la photo de l'invite s'il n'en a pas. S'il en a
- * une, il la garde ; celle de l'invite part avec lui (janitor, cascade).
- * A appeler dans la transaction de absorbGuest.
+ * une, il la garde ; celle de l'invite disparait. A appeler dans la
+ * transaction de absorbGuest.
+ *
+ * DELETE puis INSERT ... ON CONFLICT DO NOTHING plutot qu'un UPDATE : si le
+ * compte envoie une photo au meme instant, le conflit sur user_id est absorbe
+ * au lieu de lever une erreur d'unicite qui annulerait toute la reprise. L'id
+ * est garde, donc l'adresse de la photo aussi.
  */
 export async function moveGuestPhoto(client: PoolClient, guestId: number, accountId: number): Promise<void> {
   const { rows } = await client.query<{ id: string }>(
-    `UPDATE user_photos SET user_id = $2
-     WHERE user_id = $1 AND NOT EXISTS (SELECT 1 FROM user_photos WHERE user_id = $2)
+    `WITH moved AS (
+       DELETE FROM user_photos WHERE user_id = $1 RETURNING id, image, mime_type, created_at
+     )
+     INSERT INTO user_photos (id, user_id, image, mime_type, created_at)
+     SELECT id, $2, image, mime_type, created_at FROM moved
+     ON CONFLICT (user_id) DO NOTHING
      RETURNING id`,
     [guestId, accountId]
   );
-  if (!rows[0]) return;
-  await client.query(`UPDATE users SET avatar = $2 WHERE id = $1`, [accountId, photoPath(rows[0].id)]);
-  await client.query(`UPDATE users SET avatar = NULL WHERE id = $1`, [guestId]);
+  // L'invite n'a plus de photo dans tous les cas : son avatar ne doit pas
+  // pointer vers une adresse qui ne sert plus rien.
+  await client.query(`UPDATE users SET avatar = NULL WHERE id = $1 AND avatar LIKE $2`, [
+    guestId,
+    `${PHOTO_PATH_PREFIX}%`,
+  ]);
+  if (rows[0]) {
+    await client.query(`UPDATE users SET avatar = $2 WHERE id = $1`, [accountId, photoPath(rows[0].id)]);
+  }
 }
 
 // dist/services en prod, src/services en test : le dossier migrations est a
