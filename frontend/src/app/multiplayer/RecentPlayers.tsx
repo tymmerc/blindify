@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { Check } from "lucide-react"
 import { api } from "@/lib/api"
+import { shareInvite } from "./lobbyKit"
 
 type RecentPlayer = { userId: number; username: string | null; lastPlayed: string }
 
@@ -14,14 +15,21 @@ type RecentPlayer = { userId: number; username: string | null; lastPlayed: strin
  * Depuis le 30/09 il vit dans la banniere de la salle, sous "qui est la" : des
  * places en pointilles, a remplir. Avant, c'etait une carte sous la musique,
  * que Tym trouvait mal amenee.
+ *
+ * T34 (11/11) : « Inviter » passait par les invitations entre amis, refusees a
+ * tous (personne n'a d'amis sur Blindz, et aucun ecran ne les recoit). Il
+ * partage maintenant le lien de la salle, comme le gros bouton « Inviter ».
  */
 export function RecentPlayers({
   roomCode,
+  link,
   accent,
   tone = "light",
   exclude = [],
 }: {
   roomCode: string
+  /** Lien qui fait entrer dans la salle (le meme que le QR). */
+  link: string
   accent: string
   /** Couleur de la banniere : "dark" (encre, a distance) ou "light" (or, table). */
   tone?: "dark" | "light"
@@ -29,7 +37,8 @@ export function RecentPlayers({
   exclude?: number[]
 }) {
   const [players, setPlayers] = useState<RecentPlayer[]>([])
-  const [invited, setInvited] = useState<Record<number, "sending" | "done" | "error">>({})
+  const [invited, setInvited] = useState<Record<number, "shared" | "copied">>({})
+  const [copyFailed, setCopyFailed] = useState(false)
 
   useEffect(() => {
     let alive = true
@@ -40,13 +49,9 @@ export function RecentPlayers({
   }, [])
 
   const invite = async (userId: number) => {
-    setInvited(prev => ({ ...prev, [userId]: "sending" }))
-    try {
-      await api.sendInvitation(userId, roomCode)
-      setInvited(prev => ({ ...prev, [userId]: "done" }))
-    } catch {
-      setInvited(prev => ({ ...prev, [userId]: "error" }))
-    }
+    const res = await shareInvite(roomCode, link)
+    setCopyFailed(res === "failed")
+    if (res === "shared" || res === "copied") setInvited(prev => ({ ...prev, [userId]: res }))
   }
 
   const shown = players.filter(p => !exclude.includes(p.userId)).slice(0, 6)
@@ -81,19 +86,22 @@ export function RecentPlayers({
               <span className="min-w-0 truncate font-display text-[15px] font-semibold">{name}</span>
               <button
                 type="button"
-                onClick={() => invite(p.userId)}
-                disabled={state === "sending" || state === "done"}
-                className="flex shrink-0 items-center gap-1 rounded-full border-2 border-[#2e2014] px-2.5 py-0.5 text-[11px] font-bold text-[#f4ecdb] transition hover:brightness-110 disabled:opacity-80"
-                style={{ background: state === "done" ? "#7d9471" : btnBg }}
+                onClick={() => void invite(p.userId)}
+                className="flex shrink-0 items-center gap-1 rounded-full border-2 border-[#2e2014] px-2.5 py-0.5 text-[11px] font-bold text-[#f4ecdb] transition hover:brightness-110"
+                style={{ background: state ? "#7d9471" : btnBg }}
               >
-                {state === "done" ? (<><Check className="h-3 w-3" /> Invité</>) :
-                 state === "sending" ? "…" :
-                 state === "error" ? "Réessayer" : "Inviter"}
+                {state === "copied" ? (<><Check className="h-3 w-3" /> Lien copié</>) :
+                 state === "shared" ? (<><Check className="h-3 w-3" /> Envoyé</>) : "Inviter"}
               </button>
             </li>
           )
         })}
       </ul>
+      {copyFailed ? (
+        <p className="mb-0 mt-2 rounded bg-[#f4ecdb] px-2 py-1 text-xs font-bold text-[#9c2f1d]">
+          Copie impossible ici, donne-leur le code {roomCode}.
+        </p>
+      ) : null}
     </div>
   )
 }

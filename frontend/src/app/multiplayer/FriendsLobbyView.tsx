@@ -144,7 +144,7 @@ function FriendsLobby(props: LobbyRendererProps) {
             emptyLabel="Personne pour l'instant."
           />
           {isHost && code && !discord ? (
-            <RecentPlayers roomCode={code} accent={ACCENT} tone="dark" exclude={participants.map(p => p.user_id)} />
+            <RecentPlayers roomCode={code} link={link} accent={ACCENT} tone="dark" exclude={participants.map(p => p.user_id)} />
           ) : null}
         </div>
       </section>
