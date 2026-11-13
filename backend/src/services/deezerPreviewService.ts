@@ -2,7 +2,7 @@ import axios from "axios";
 import { DEEZER_API } from "../config/deezer";
 import { logger } from "../utils/logger";
 import { pickMatch, isIsrc, searchQueryFor } from "./previewMatch";
-import { isExpiredPreview } from "../utils/previewExpiry";
+import { isExpiredPreview, PREVIEW_MIN_VALIDITY_MS } from "../utils/previewExpiry";
 
 const DEEZER_SEARCH_URL = `${DEEZER_API}/search`;
 const DEEZER_TRACK_URL = `${DEEZER_API}/track`;
@@ -241,8 +241,9 @@ export class DeezerPreviewService {
   private getCached(key: string): PreviewOutcome | undefined {
     const entry = this.cache.get(key);
     if (!entry) return undefined;
-    const expiredPreview = entry.outcome.status === "found" && isExpiredPreview(entry.outcome.track.preview);
-    // Trop vieux, ou extrait expire (les URL Deezer vivent ~15 min) : on oublie.
+    // Les URL Deezer vivent ~15 min : un extrait qui meurt dans moins de 5 min
+    // ne sert plus (il tomberait en pleine partie, T35). On oublie, comme trop vieux.
+    const expiredPreview = entry.outcome.status === "found" && isExpiredPreview(entry.outcome.track.preview, PREVIEW_MIN_VALIDITY_MS);
     if (this.clock.now() - entry.ts > entry.ttlMs || expiredPreview) {
       this.cache.delete(key);
       return undefined;

@@ -213,6 +213,17 @@ export const clientApi = {
       body: JSON.stringify(payload),
     })
   },
+  /** T35 : lien neuf pour une manche solo dont l'extrait n'a pas pu jouer (lien Deezer expire). */
+  async refreshSoloPreview(payload: { sessionId: number; round: number }): Promise<string> {
+    const data = await request<{ audioUrl: string }>("/api/games/solo/preview", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    })
+    return data.audioUrl
+  },
   async addLike(audioSourceId: string): Promise<void> {
     await request("/api/likes", {
       method: "POST",

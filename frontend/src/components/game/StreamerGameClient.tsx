@@ -20,6 +20,7 @@ import { Label, Panel } from "@/app/multiplayer/lobbyKit"
 import { STREAMER_FORMATS } from "@/app/multiplayer/StreamerLobbyView"
 import { KickButton, Leaderboard, RevealCard, SAGE, StreamerPodium, TimerBar } from "@/components/streamer/StreamerBits"
 import { DeezerCredit } from "./SourceCredits"
+import { ANSWER_INPUT_PROPS } from "@/lib/answerInput"
 
 export type StreamerAnswers = { round: number; count: number; names: string[]; viewers?: Array<{ id: string; pseudo: string }> } | null
 
@@ -79,8 +80,8 @@ function HostGuess({ round, onGuess }: { round: number; onGuess: Props["onHostGu
     <form onSubmit={submit} className="space-y-3" data-testid="streamer-guess">
       <p className="m-0 font-display text-2xl font-semibold">À toi !</p>
       <div className="grid gap-3 sm:grid-cols-2">
-        <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Titre" aria-label="Titre" autoComplete="off" className={INPUT} autoFocus />
-        <input value={artist} onChange={e => setArtist(e.target.value)} placeholder="Artiste" aria-label="Artiste" autoComplete="off" className={INPUT} />
+        <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Titre" aria-label="Titre" {...ANSWER_INPUT_PROPS} className={INPUT} autoFocus />
+        <input value={artist} onChange={e => setArtist(e.target.value)} placeholder="Artiste" aria-label="Artiste" {...ANSWER_INPUT_PROPS} className={INPUT} />
       </div>
       <button type="submit" disabled={!(title.trim() || artist.trim())} className={`${BUTTON} w-full bg-[#c65133] text-[#f4ecdb]`}>Valider</button>
     </form>

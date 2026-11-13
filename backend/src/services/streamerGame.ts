@@ -19,6 +19,7 @@ import { markMultiplayerRoomFinished, markStreamerSessionFinished } from "./game
 import { HIDDEN_PHASES, emitStreamerState, emitToMedia, mediaView, viewerView } from "./streamerChannels";
 import { chatFactor, scoreViewerAnswer, type AnswerWindow, type ViewerAnswer } from "./streamerScoring";
 import { evaluateGuessDetail } from "./guessMatching";
+import { PREVIEW_LOOKAHEAD_ROUNDS, freshPreview, previewNeedsRefresh } from "./roundPreviews";
 import {
   banViewer,
   clearViewers,
@@ -225,7 +226,31 @@ export function startNextStreamerRound(io: IOServer, roomCode: string): Streamer
   broadcast(io, ctx, "round:start");
   broadcast(io, ctx);
   schedule(ctx, ctx.timings.countdownMs, () => openGuessing(io, ctx));
+  refreshStreamerPreviews(io, ctx).catch(() => {}); // freshPreview ne rejette pas ; filet pour broadcast
   return ctx.state;
+}
+
+/**
+ * T35 : les liens Deezer meurent ~15 min apres leur creation, et c'est l'hote
+ * qui lance chaque manche (une partie streamer dure souvent plus). Au debut
+ * de chaque manche, on redemande le lien de celle-ci et des 2 suivantes s'il
+ * mourra avant d'avoir servi. Le son part apres le decompte de 3 s : le lien
+ * neuf arrive en general avant ; sinon l'etat diffuse le porte a l'overlay,
+ * qui relance la lecture. Un echec garde l'ancien lien.
+ */
+async function refreshStreamerPreviews(io: IOServer, ctx: StreamerCtx): Promise<void> {
+  const from = ctx.state.currentRound;
+  const due = ctx.rounds.filter(r => r.round >= from && r.round <= from + PREVIEW_LOOKAHEAD_ROUNDS && previewNeedsRefresh(r.previewUrl));
+  await Promise.all(due.map(async r => {
+    const url = await freshPreview(r.audioSourceId);
+    // Partie finie ou relancee entre-temps : ce lien ne sert plus.
+    if (!url || games.get(ctx.state.roomCode) !== ctx) return;
+    r.previewUrl = url;
+    const current = ctx.state.currentTrack;
+    if (current?.round !== r.round || current.previewUrl === url) return;
+    ctx.state = { ...ctx.state, currentTrack: { ...current, previewUrl: url } };
+    broadcast(io, ctx);
+  }));
 }
 
 function openGuessing(io: IOServer, ctx: StreamerCtx): void {
