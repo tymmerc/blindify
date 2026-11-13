@@ -21,6 +21,7 @@ export default function ImportPage() {
   const [syncing, setSyncing] = useState<string | null>(null) // playlistId or "__all__"
   const [error, setError] = useState<string | null>(null)
   const [provider, setProvider] = useState<"spotify" | "deezer" | "youtube" | null>(null)
+  const [linkId, setLinkId] = useState<number | null>(null)
   const [playlists, setPlaylists] = useState<ImportedPlaylist[]>([])
   const [notice, setNotice] = useState<string | null>(null)
   const [syncResult, setSyncResult] = useState<{ playlistId: string; synced: number } | null>(null)
@@ -35,6 +36,7 @@ export default function ImportPage() {
     setError(null)
     setPlaylists([])
     setProvider(null)
+    setLinkId(null)
     setNotice(null)
     setSyncResult(null)
     setSyncAllResult(null)
@@ -42,10 +44,11 @@ export default function ImportPage() {
     try {
       const result = await api.importPlaylists(trimmed)
       setProvider(result.provider)
+      setLinkId(result.linkId)
       setPlaylists(result.playlists)
       setNotice(result.notice)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Impossible de charger les playlists.")
+      setError(err instanceof Error && err.message ? err.message : "Ce lien n'a pas pu être lu. Vérifie que la playlist est publique, puis réessaie.")
     } finally {
       setLoading(false)
     }
@@ -60,10 +63,10 @@ export default function ImportPage() {
 
     try {
       const ids = playlists.map(p => p.id)
-      const result = await api.importSyncAll(provider, ids)
+      const result = await api.importSyncAll(provider, ids, undefined, linkId)
       setSyncAllResult({ synced: result.synced, total: result.total })
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erreur lors de la synchronisation.")
+      setError(err instanceof Error && err.message ? err.message : "Les titres n'ont pas pu être récupérés. Réessaie dans un instant.")
     } finally {
       setSyncing(null)
     }
@@ -76,10 +79,10 @@ export default function ImportPage() {
 
     try {
       const ids = playlists.map(p => p.id)
-      await api.importSyncAll(provider, ids)
+      await api.importSyncAll(provider, ids, undefined, linkId)
       router.push("/solo?source=library&count=10")
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erreur lors de la synchronisation.")
+      setError(err instanceof Error && err.message ? err.message : "Les titres n'ont pas pu être récupérés. Réessaie dans un instant.")
       setSyncing(null)
     }
   }
@@ -91,10 +94,10 @@ export default function ImportPage() {
     setSyncResult(null)
 
     try {
-      const result = await api.importSync(provider, playlist.id)
+      const result = await api.importSync(provider, playlist.id, linkId)
       setSyncResult({ playlistId: playlist.id, synced: result.synced })
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erreur lors de la synchronisation.")
+      setError(err instanceof Error && err.message ? err.message : "Les titres n'ont pas pu être récupérés. Réessaie dans un instant.")
     } finally {
       setSyncing(null)
     }

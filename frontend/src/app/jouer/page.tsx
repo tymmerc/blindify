@@ -174,8 +174,13 @@ export default function EntryWizard() {
       setTimeout(() => { if (joinParam) { void handleJoin() } else { setStep("action") } }, report ? 2600 : 1150)
       return
     } catch (err) {
-      // YouTube : le serveur dit quoi faire (playlist privee, vide, mix, import indisponible).
-      setImportError(isYoutube && err instanceof Error && err.message ? err.message : "Lien invalide ou profil privé. Vérifie le lien.")
+      // Le serveur dit quoi faire (lien court, playlist privee ou vide, service
+      // qui ne repond pas, YouTube). Sans reponse de sa part : un message general.
+      const message = err instanceof Error ? err.message : ""
+      const fromServer = (err instanceof ApiError && Boolean(err.code)) || isYoutube
+      setImportError(fromServer && message
+        ? message
+        : "Ce lien n'a pas marché. Vérifie que la playlist est publique, puis colle-le à nouveau.")
     }
     setImporting(false)
   }

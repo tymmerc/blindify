@@ -7,7 +7,7 @@ jest.mock("../../src/utils/logger", () => ({
 }));
 
 import axios from "axios";
-import { fetchPlaylistTracks } from "../../src/services/profileImportService";
+import { fetchPlaylistTracks, fetchPlaylistTracksChecked, fetchPublicPlaylists } from "../../src/services/profileImportService";
 
 const get = axios.get as jest.Mock;
 const post = axios.post as jest.Mock;
@@ -68,5 +68,82 @@ describe("jeton client Spotify", () => {
     expect(url).toBe("https://accounts.spotify.com/api/token");
     expect(new URLSearchParams(body).get("grant_type")).toBe("client_credentials");
     expect(new URLSearchParams(body).has("refresh_token")).toBe(false);
+  });
+});
+
+// T37 : une playlist Deezer de joueur de 200 morceaux ne doit pas s'arreter a
+// une page, et l'import doit savoir s'il a tout lu (sinon il ne retire rien
+// de la carte au reimport).
+describe("fetchPlaylistTracksChecked (Deezer)", () => {
+  const page = (from: number, count: number, next: string | null) => ({ data: {
+    next,
+    data: Array.from({ length: count }, (_, i) => ({ id: from + i, title: `T${from + i}`, artist: { name: "A" }, album: { title: "B" }, duration: 30 })),
+  } });
+
+  it("lit toutes les pages : 230 morceaux", async () => {
+    get
+      .mockResolvedValueOnce(page(1, 100, "https://api.deezer.com/playlist/9/tracks?index=100"))
+      .mockResolvedValueOnce(page(101, 100, "https://api.deezer.com/playlist/9/tracks?index=200"))
+      .mockResolvedValueOnce(page(201, 30, null));
+    const { tracks, complete } = await fetchPlaylistTracksChecked("deezer", "9", 500);
+    expect(tracks).toHaveLength(230);
+    expect(complete).toBe(true);
+  });
+
+  it("une page en echec : ce qui a ete lu, marque incomplet", async () => {
+    get
+      .mockResolvedValueOnce(page(1, 100, "https://api.deezer.com/playlist/9/tracks?index=100"))
+      .mockRejectedValueOnce(new Error("timeout of 15000ms exceeded"));
+    const { tracks, complete } = await fetchPlaylistTracksChecked("deezer", "9", 500);
+    expect(tracks).toHaveLength(100);
+    expect(complete).toBe(false);
+  });
+
+  it("Deezer repond une erreur (quota) : incomplet", async () => {
+    get
+      .mockResolvedValueOnce(page(1, 100, "https://api.deezer.com/playlist/9/tracks?index=100"))
+      .mockResolvedValueOnce({ data: { error: { code: 4, message: "Quota limit exceeded" } } });
+    expect((await fetchPlaylistTracksChecked("deezer", "9", 500)).complete).toBe(false);
+  });
+
+  it("coupe a la limite demandee, sans se dire incomplet", async () => {
+    get.mockResolvedValueOnce(page(1, 50, "https://api.deezer.com/playlist/9/tracks?index=50"));
+    const { tracks, complete } = await fetchPlaylistTracksChecked("deezer", "9", 50);
+    expect(tracks).toHaveLength(50);
+    expect(complete).toBe(true);
+  });
+});
+
+// T37 : le 12/11, Spotify repondait 503 ou trop lentement sur la fiche de la
+// playlist. Le repli cherchait alors une playlist du meme nom chez Deezer (celle
+// d'un inconnu) et la rendait sous le fournisseur « spotify » : l'import des
+// titres partait chez Spotify avec un identifiant Deezer et finissait en 400.
+describe("fetchPublicPlaylists : fiche Spotify indisponible", () => {
+  const parsed = { provider: "spotify" as const, type: "playlist" as const, id: "37i9dQZF1DXcBWIGoYBM5M" };
+
+  it("503 : on garde la playlist du joueur, jamais une playlist Deezer d'un inconnu", async () => {
+    get.mockImplementation(async (url: string) => {
+      if (url.startsWith("https://api.spotify.com/v1/playlists/")) throw Object.assign(new Error("503"), { response: { status: 503 } });
+      if (url === "https://open.spotify.com/oembed") return { data: { title: "Ma playlist" } };
+      return { data: { data: [{ id: 999, title: "Une autre", nb_tracks: 20 }] } };
+    });
+    const playlists = await fetchPublicPlaylists(parsed);
+    expect(playlists).toEqual([{ id: parsed.id, name: "Ma playlist", trackCount: 0, cover: null }]);
+    expect(get.mock.calls.some(([url]) => String(url).includes("deezer"))).toBe(false);
+  });
+
+  it("delai depasse, sans nom : la playlist du joueur quand meme", async () => {
+    get.mockImplementation(async (url: string) => {
+      if (url.startsWith("https://api.spotify.com/v1/playlists/")) throw Object.assign(new Error("timeout of 10000ms exceeded"), { code: "ECONNABORTED" });
+      throw new Error("oembed muet");
+    });
+    expect(await fetchPublicPlaylists(parsed)).toEqual([{ id: parsed.id, name: "Playlist", trackCount: 0, cover: null }]);
+  });
+
+  it("404 (privee ou supprimee) : aucune playlist", async () => {
+    get.mockImplementation(async () => {
+      throw Object.assign(new Error("404"), { response: { status: 404 } });
+    });
+    expect(await fetchPublicPlaylists(parsed)).toEqual([]);
   });
 });

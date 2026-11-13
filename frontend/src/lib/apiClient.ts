@@ -501,11 +501,11 @@ export const clientApi = {
       body: JSON.stringify({ url }),
     })
   },
-  async importSync(provider: string, playlistId: string): Promise<{ synced: number; failed: number }> {
+  async importSync(provider: string, playlistId: string, linkId?: number | null): Promise<{ synced: number; failed: number }> {
     return request("/api/import/sync", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ provider, playlistId }),
+      body: JSON.stringify({ provider, playlistId, linkId }),
     })
   },
   async importSyncAll(provider: string, playlistIds: string[], maxTracksPerPlaylist?: number, linkId?: number | null): Promise<{ synced: number; failed: number; total: number; youtube?: YoutubeImportReport }> {

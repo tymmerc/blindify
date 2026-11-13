@@ -21,6 +21,7 @@ import net from "node:net";
  *     normalise l'analyseur WHATWG, et le chemin repart tel quel.
  *
  * Hotes verifies le 17/10/2026 (link.deezer.com : 302 vers www.deezer.com ;
+ * depuis, vers son relais link.deezer.com/?dest=..., voir deezerRelayTarget ;
  * spotify.link : 307 vers open.spotify.com) et le 21/10 (spotify.app.link,
  * domaine Branch des memes liens : 307 vers open.spotify.com). deezer.page.link
  * est retire : Firebase Dynamic Links est ferme depuis aout 2025 (404).
@@ -32,6 +33,8 @@ export const SHORT_LINK_HOSTS: ReadonlySet<string> = new Set([
 ]);
 
 export const TARGET_HOSTS: ReadonlySet<string> = new Set(["www.deezer.com", "deezer.com", "open.spotify.com"]);
+const DEEZER_RELAY_HOSTS: ReadonlySet<string> = new Set(["link.deezer.com"]);
+const DEEZER_TARGET_HOSTS: ReadonlySet<string> = new Set(["www.deezer.com", "deezer.com"]);
 
 export const MAX_REDIRECTS = 5;
 /** Delai total de la resolution, tous sauts compris. */
@@ -236,10 +239,27 @@ async function followOnce(current: URL, hop: Hop, timeoutMs: number): Promise<UR
     throw new ShortLinkError("no_redirect", `status ${result.status}`);
   }
   const next = parseUrl(result.location, current);
-  if (!next || !(allowedShortLink(next) || allowedUrl(next, TARGET_HOSTS))) {
+  if (!next) throw new ShortLinkError("redirect_refused");
+  const relay = deezerRelayTarget(next);
+  if (relay) return relay;
+  if (!(allowedShortLink(next) || allowedUrl(next, TARGET_HOSTS))) {
     throw new ShortLinkError("redirect_refused");
   }
   return next;
+}
+
+/**
+ * Le relais de l'appli Deezer (vu le 13/11/2026) : link.deezer.com/s/<jeton>
+ * repond 302 vers https://link.deezer.com/?awf=...&dest=<la page Deezer>. On
+ * lit la page dans dest= sans appeler le relais : elle doit etre elle-meme une
+ * adresse d'arrivee (www.deezer.com ou deezer.com, https, port par defaut, sans
+ * identifiants), jamais appelee non plus. null pour tout le reste.
+ */
+function deezerRelayTarget(url: URL): URL | null {
+  if (!allowedUrl(url, DEEZER_RELAY_HOSTS) || url.pathname !== "/") return null;
+  const dest = url.searchParams.get("dest");
+  const target = dest === null ? null : parseUrl(dest);
+  return target && allowedUrl(target, DEEZER_TARGET_HOSTS) ? target : null;
 }
 
 /** Reponse a donner au joueur quand un lien court n'aboutit pas. */
@@ -251,7 +271,7 @@ export function shortLinkFailure(code: ShortLinkErrorCode): { status: number; me
     return { status: 429, message: "Beaucoup de liens courts d'un coup. Attends une minute, ou colle l'adresse complète." };
   }
   if (code === "not_a_playlist") {
-    return { status: 400, message: "Ce lien court ne mène pas à une playlist ni à un profil Spotify ou Deezer." };
+    return { status: 400, message: "Ce lien ne mène pas à une playlist. Dans l'appli, ouvre la playlist, touche Partager puis Copier le lien, et colle-le ici." };
   }
   return {
     status: 400,
