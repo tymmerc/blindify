@@ -1,6 +1,7 @@
 "use client"
 
 import { accentTexte } from "@/lib/accentText"
+import { avatarSrc } from "@/lib/photo"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { ArrowLeft, PartyPopper, ShieldCheck, Share2, ChevronDown, Music } from "lucide-react"
@@ -328,8 +329,8 @@ export function ResultsView({
                       N°1
                     </span>
                   )}
-                  {entry!.avatar ? (
-                    <img src={entry!.avatar ?? ""} alt={entry!.username ?? `Joueur ${entry!.userId}`} className="h-full w-full object-cover" />
+                  {avatarSrc(entry!.avatar) ? (
+                    <img src={avatarSrc(entry!.avatar) ?? ""} alt={entry!.username ?? `Joueur ${entry!.userId}`} className="h-full w-full object-cover" />
                   ) : (
                     <span>{initials(entry!.username, entry!.userId)}</span>
                   )}

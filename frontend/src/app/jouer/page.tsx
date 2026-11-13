@@ -13,6 +13,8 @@ import { findHostedRoom } from "@/lib/hostedRooms"
 import { ApiError } from "@/lib/apiClient"
 import { createRoute, parsePreferredMode, situationFor, type SituationMode } from "@/lib/playSituations"
 import { InAppBrowserNote } from "@/components/account/InAppBrowserNote"
+import { PhotoPicker } from "@/components/account/PhotoPicker"
+import { useProfilePhoto } from "@/components/account/useProfilePhoto"
 
 const NAME_KEY = "blindify_nickname"
 const URL_KEY = "blindify_profile_url"
@@ -94,6 +96,11 @@ export default function EntryWizard() {
   const [tuto, setTuto] = useState<null | "spotify" | "deezer">(null)
   const nameRef = useRef<HTMLInputElement>(null)
   const codeRef = useRef<HTMLInputElement>(null)
+  // Photo de profil facultative (T39). Le joueur n'existe cote serveur qu'une
+  // fois son pseudo connu : avant, la photo choisie attend le « Continuer ».
+  const photo = useProfilePhoto()
+  const { setOnline: setOnlinePhoto } = photo
+  const [registered, setRegistered] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -114,10 +121,16 @@ export default function EntryWizard() {
     // qui revient (pseudo en memoire) retrouve bien sa session tout de suite.
     ;(async () => {
       if (!storedName.trim()) return
-      try { await api.ensureUserSession(storedName.trim()) } catch { /* ignore */ }
+      try {
+        const me = await api.ensureUserSession(storedName.trim())
+        if (active && me?.user) {
+          setRegistered(true)
+          setOnlinePhoto(me.user.avatar ?? null)
+        }
+      } catch { /* ignore */ }
     })()
     return () => { active = false }
-  }, [])
+  }, [setOnlinePhoto])
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -137,7 +150,19 @@ export default function EntryWizard() {
     const pseudo = name.trim()
     if (!pseudo) return
     try { localStorage.setItem(NAME_KEY, pseudo) } catch { /* ignore */ }
-    try { await api.ensureUserSession(pseudo) } catch { /* ignore */ }
+    try {
+      const me = await api.ensureUserSession(pseudo)
+      if (me?.user) setRegistered(true)
+    } catch { /* ignore */ }
+  }
+
+  // Premier ecran : sans photo en attente, on avance tout de suite comme avant.
+  // Avec une photo, on l'envoie d'abord ; si l'envoi rate, on reste ici avec le
+  // message, et le joueur peut reessayer ou retirer la photo.
+  const leaveNameStep = async () => {
+    if (!photo.hasPending) { void ensureName(); setStep("musique"); return }
+    await ensureName()
+    if (await photo.sendPending()) setStep("musique")
   }
 
   // Importe la musique puis affiche la confirmation. Le meme bouton sert ensuite a continuer.
@@ -261,12 +286,19 @@ export default function EntryWizard() {
           <p className="text-sm text-ink-2">C'est le nom que les autres verront.</p>
           <InAppBrowserNote className="mx-auto max-w-xs pt-1" />
         </div>
-        <div className="mt-10 space-y-6">
+        <div className="mt-8 space-y-6">
+          <PhotoPicker
+            src={photo.src}
+            busy={photo.busy}
+            error={photo.error}
+            onPick={file => { void photo.pick(file, registered) }}
+            onRemove={() => { void photo.remove() }}
+          />
           <input
             ref={nameRef}
             value={name}
             onChange={e => setName(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter" && ok) { void ensureName(); setStep("musique") } }}
+            onKeyDown={e => { if (e.key === "Enter" && ok && !photo.busy) void leaveNameStep() }}
             placeholder="Ton nom"
             maxLength={24}
             className="w-full border-0 border-b-2 border-line bg-transparent px-2 py-3 text-center font-display text-2xl text-ink outline-none placeholder:italic placeholder:text-pale focus:border-terra"
@@ -274,14 +306,14 @@ export default function EntryWizard() {
           />
           <button
             type="button"
-            disabled={!ok}
+            disabled={!ok || photo.busy}
             /* On enregistre le joueur des que son pseudo est valide. Attendre
                l'etape suivante laissait sans identite quiconque saute l'import
                de musique, et le pseudo est deja connu ici. */
-            onClick={() => { void ensureName(); setStep("musique") }}
+            onClick={() => { void leaveNameStep() }}
             className="flex w-full items-center justify-center gap-2 rounded-md border-2 border-line bg-terra px-5 py-4 text-sm font-bold text-on-ink shadow-[4px_4px_0_rgb(var(--c-shadow))] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgb(var(--c-shadow))] disabled:cursor-not-allowed disabled:opacity-40"
           >
-            Continuer
+            {photo.busy && photo.hasPending ? "Envoi de ta photo..." : "Continuer"}
             <ArrowRight size={15} />
           </button>
           {/* Pas pour un QR scanne : ce joueur rejoint une partie deja lancee. */}

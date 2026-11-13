@@ -15,6 +15,8 @@ import { PseudoField } from "@/components/account/PseudoField"
 import { RecentGames } from "@/components/account/RecentGames"
 import { KeepMyInfo } from "@/components/account/KeepMyInfo"
 import { AppearanceChoice } from "@/components/account/AppearanceChoice"
+import { PhotoPicker } from "@/components/account/PhotoPicker"
+import { useProfilePhoto } from "@/components/account/useProfilePhoto"
 
 const CORAL = "#c65133"
 
@@ -32,6 +34,8 @@ export function AccountScreen() {
   const [data, setData] = useState<Loaded | null>(null)
   const [pseudo, setPseudo] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const photo = useProfilePhoto()
+  const { setOnline: setOnlinePhoto } = photo
 
   useEffect(() => {
     let active = true
@@ -40,6 +44,7 @@ export function AccountScreen() {
       const user = me?.user ?? null
       if (!active) return
       setPseudo(initialPseudo(readStored(NICKNAME_KEY), user?.username))
+      setOnlinePhoto(user?.avatar ?? null)
       if (!user) {
         setData({ user: null, games: [], stats: null })
         return
@@ -56,7 +61,7 @@ export function AccountScreen() {
     return () => {
       active = false
     }
-  }, [])
+  }, [setOnlinePhoto])
 
   const user = data?.user ?? null
   const isGuest = !user || user.provider === "guest"
@@ -111,6 +116,28 @@ export function AccountScreen() {
         </h1>
         {data.stats && <p className="mt-3 font-mono text-[13px] text-ink-2">{data.stats}</p>}
 
+        {/* T39 : la photo des joueurs Discord est leur avatar Discord, gere chez Discord. */}
+        {user && user.provider !== "discord" && (
+          <Block title="Photo">
+            <div className="flex items-center gap-5">
+              <PhotoPicker
+                src={photo.src}
+                busy={photo.busy}
+                error={photo.error}
+                onPick={file => {
+                  void photo.pick(file, true)
+                }}
+                onRemove={() => {
+                  void photo.remove()
+                }}
+              />
+              <p className="text-sm text-ink-2">
+                Elle s&apos;affiche à côté de ton pseudo pour les joueurs de ta salle.
+              </p>
+            </div>
+          </Block>
+        )}
+
         <Block title="Pseudo">
           <PseudoField initial={pseudo} />
         </Block>
@@ -156,7 +183,7 @@ export function AccountScreen() {
 
         <Block title="Mes données">
           <p className="text-sm text-ink-2">
-            Ton pseudo, ton lien de musique et l&apos;historique de tes parties. Rien d&apos;autre, aucun tracking publicitaire.
+            Ton pseudo, ta photo si tu en as mis une, ton lien de musique et l&apos;historique de tes parties. Rien d&apos;autre, aucun tracking publicitaire.
           </p>
           <p className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm">
             <FootLink href="/confidentialite/">Confidentialité</FootLink>

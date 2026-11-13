@@ -733,8 +733,8 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       const presenceHandler = (payload: RoomPresenceEvent) => {
         if (payload.roomCode !== roomCode) return
         if ((payload as { type?: string }).type === "members") {
-          const members = (payload as unknown as { members?: Array<{ userId: number; username: string | null; status: "active" | "away" | "disconnected" }> }).members ?? []
-          setParticipants(members.map(m => ({ user_id: m.userId, username: m.username ?? null, status: m.status })))
+          const members = (payload as unknown as { members?: Array<{ userId: number; username: string | null; status: "active" | "away" | "disconnected"; avatar?: string | null }> }).members ?? []
+          setParticipants(members.map(m => ({ user_id: m.userId, username: m.username ?? null, status: m.status, avatar: m.avatar ?? null })))
           return
         }
         if (payload.type === "joined") {

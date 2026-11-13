@@ -17,6 +17,7 @@ import { Check, Copy, Crown, Share2 } from "lucide-react"
 import { api } from "@/lib/api"
 import { updateHostedRoom } from "@/lib/hostedRooms"
 import type { MultiplayerParticipant, MultiplayerRoom } from "@/lib/types"
+import { PlayerAvatar } from "@/components/ui/PlayerAvatar"
 
 export const PAPER = "rgb(var(--c-paper))"
 export const INK = "rgb(var(--c-ink))"
@@ -227,13 +228,12 @@ export function Roster({
             key={p.user_id}
             className={`flex max-w-full items-center gap-2 rounded-full border-2 border-line bg-paper py-1 pl-1 pr-3 text-ink shadow-[2px_2px_0_rgb(var(--c-shadow))] ${away ? "opacity-60" : ""}`}
           >
-            <span
-              aria-hidden
-              className={`flex shrink-0 items-center justify-center rounded-full border-2 border-line font-display font-bold ${big ? "h-9 w-9 text-lg" : "h-7 w-7 text-sm"}`}
+            <PlayerAvatar
+              name={name}
+              avatarUrl={p.avatar}
+              className={`border-2 border-line font-display font-bold ${big ? "h-9 w-9 text-lg" : "h-7 w-7 text-sm"}`}
               style={{ background: isHost ? accent : PAPER, color: INK }}
-            >
-              {name.charAt(0).toUpperCase()}
-            </span>
+            />
             <span className="min-w-0 leading-tight">
               <span className={`block truncate font-display font-semibold ${big ? "text-lg" : "text-[15px]"}`}>
                 {name}

@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react"
+import { avatarSrc } from "@/lib/photo"
 import { showOwnerQuestion } from "@/lib/ownerQuestion"
 import { motion, AnimatePresence } from "framer-motion"
 import { Pause, Play, Trophy, Volume2, VolumeX, X } from "lucide-react"
@@ -281,7 +282,7 @@ export function TheaterGameView(props: Props) {
                     style={{ "--c": color } as CSSProperties}
                   >
                     <div className="pavatar">
-                      {p.avatar ? <img src={p.avatar} alt="" /> : initial(p.username)}
+                      {avatarSrc(p.avatar) ? <img src={avatarSrc(p.avatar) ?? ""} alt="" /> : initial(p.username)}
                     </div>
                     <div className="pmid">
                       <span className="pname">
@@ -402,7 +403,7 @@ export function TheaterGameView(props: Props) {
                       title={p.username || `J${p.userId}`}
                     >
                       <span className="pick-avatar">
-                        {p.avatar ? <img src={p.avatar} alt="" /> : initial(p.username)}
+                        {avatarSrc(p.avatar) ? <img src={avatarSrc(p.avatar) ?? ""} alt="" /> : initial(p.username)}
                       </span>
                       <span className="pick-name">{(p.username || `J${p.userId}`).slice(0, 8)}</span>
                     </button>

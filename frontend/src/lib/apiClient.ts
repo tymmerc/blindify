@@ -449,6 +449,18 @@ export const clientApi = {
       method: "DELETE",
     })
   },
+  // Photo de profil (T39) : les octets bruts de l'image. Le serveur verifie le
+  // format sur le contenu, recadre et reencode ; il rend l'adresse a afficher.
+  async uploadPhoto(image: Blob): Promise<{ avatar: string }> {
+    return request<{ avatar: string }>("/api/photos", {
+      method: "POST",
+      headers: { "Content-Type": image.type || "application/octet-stream" },
+      body: image,
+    })
+  },
+  async deletePhoto(): Promise<{ avatar: null }> {
+    return request<{ avatar: null }>("/api/photos", { method: "DELETE" })
+  },
   async createGuestSession(nickname?: string, opts?: { signal?: AbortSignal }): Promise<{ sessionToken: string }> {
     return request<{ sessionToken: string }>("/api/auth/guest", {
       method: "POST",
