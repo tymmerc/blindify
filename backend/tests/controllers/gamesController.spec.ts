@@ -1328,11 +1328,11 @@ describe('gamesController.refreshSoloPreview', () => {
   const mockFresh = freshPreview as jest.MockedFunction<typeof freshPreview>;
   beforeEach(() => {
     jest.clearAllMocks();
-    mockGetSessionContext.mockResolvedValue({ user: makeUser({ id: 7 }) } as any);
+    mockGetSessionContext.mockResolvedValue({ user: makeUser({ id: 7 }) } as never);
   });
 
   it('rend un lien neuf pour une manche de SA partie solo en cours', async () => {
-    mockQuery.mockResolvedValueOnce({ rows: [{ audio_source_id: '3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b' }] } as any);
+    mockQuery.mockResolvedValueOnce({ rows: [{ audio_source_id: '3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b' }] } as never);
     mockFresh.mockResolvedValueOnce('https://cdnt-preview.dzcdn.net/x.mp3?hdnea=exp=9999999999');
     const res = mockRes();
     await gamesController.refreshSoloPreview(mockReq({ body: { sessionId: 900, round: 3 } }), res);
@@ -1355,12 +1355,12 @@ describe('gamesController.refreshSoloPreview', () => {
   });
 
   it("404 si la partie n'est pas la sienne, ou si Deezer n'a rien", async () => {
-    mockQuery.mockResolvedValueOnce({ rows: [] } as any);
+    mockQuery.mockResolvedValueOnce({ rows: [] } as never);
     const res = mockRes();
     await gamesController.refreshSoloPreview(mockReq({ body: { sessionId: 900, round: 3 } }), res);
     expect(res.status).toHaveBeenCalledWith(404);
     expect(mockFresh).not.toHaveBeenCalled();
-    mockQuery.mockResolvedValueOnce({ rows: [{ audio_source_id: '3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b' }] } as any);
+    mockQuery.mockResolvedValueOnce({ rows: [{ audio_source_id: '3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b' }] } as never);
     mockFresh.mockResolvedValueOnce(null);
     const res2 = mockRes();
     await gamesController.refreshSoloPreview(mockReq({ body: { sessionId: 900, round: 3 } }), res2);
