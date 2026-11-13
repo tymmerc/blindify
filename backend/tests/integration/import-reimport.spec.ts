@@ -51,7 +51,7 @@ import {
   fetchPublicPlaylists,
   type ImportedTrack,
 } from "../../src/services/profileImportService";
-import { ensureLinksSchema, linksController } from "../../src/controllers/linksController";
+import { activeLinkIds, claimLegacyTracks, ensureLinksSchema, keepNewestActive, linksController } from "../../src/controllers/linksController";
 import { ensureUserTracksSchema } from "../../src/services/userTracks";
 import { importController } from "../../src/controllers/importController";
 
@@ -262,5 +262,88 @@ describe("Spotify ou Deezer ne repondent pas : un message qui dit quoi faire", (
     const reply = await call(importController.syncAll, kim, { body: { provider: "deezer", playlistIds: ["9701"] } });
     expect(reply.status).toBe(400);
     expect(reply.body.error?.message).toContain("publique");
+  });
+});
+
+// T37, decision de Tym du 13/11 : une seule playlist par joueur et par partie.
+describe("une playlist par joueur", () => {
+  const activeCards = async (userId: number): Promise<number[]> =>
+    (await pool.query<{ id: number }>(`SELECT id FROM imported_links WHERE user_id = $1 AND active ORDER BY id`, [userId])).rows.map(r => r.id);
+
+  it("importer une 2e playlist la rend seule cochee : la partie ne pioche plus dans la 1re", async () => {
+    playlists.set("9801", range(8001, 6));
+    playlists.set("9802", range(8101, 6));
+    const lou = await newGuest("lou");
+    const first = await importLink(lou, "9801");
+    const second = await importLink(lou, "9802");
+    expect(await activeCards(lou)).toEqual([second.linkId]);
+    expect(await activeLinkIds(lou)).toEqual([second.linkId]);
+    // La 1re reste dans la bibliotheque, decochee, avec ses titres.
+    expect(await tracksOf(lou, first.linkId)).toEqual(range(8001, 6));
+  });
+
+  it("reimporter la 1re la recoche, seule", async () => {
+    playlists.set("9811", range(8201, 4));
+    playlists.set("9812", range(8301, 4));
+    const rob = await newGuest("rob");
+    const first = await importLink(rob, "9811");
+    await importLink(rob, "9812");
+    await importLink(rob, "9811");
+    expect(await activeCards(rob)).toEqual([first.linkId]);
+  });
+
+  it("cocher une carte decoche les autres", async () => {
+    playlists.set("9821", range(8401, 4));
+    playlists.set("9822", range(8501, 4));
+    const pia = await newGuest("pia");
+    const first = await importLink(pia, "9821");
+    const second = await importLink(pia, "9822");
+    const reply = await call(linksController.toggle, pia, { params: { id: String(first.linkId) }, body: { active: true } });
+    expect(reply.status).toBe(200);
+    expect(await activeCards(pia)).toEqual([first.linkId]);
+    // Decocher reste possible (l'API ne change pas) : plus rien ne joue.
+    await call(linksController.toggle, pia, { params: { id: String(first.linkId) }, body: { active: false } });
+    expect(await activeCards(pia)).toEqual([]);
+    expect(second.linkId).not.toBe(first.linkId);
+  });
+
+  it("cocher la carte d'un autre joueur ne touche a rien", async () => {
+    playlists.set("9831", range(8601, 4));
+    const una = await newGuest("una");
+    const vic = await newGuest("vic");
+    const card = await importLink(una, "9831");
+    const reply = await call(linksController.toggle, vic, { params: { id: String(card.linkId) }, body: { active: true } });
+    expect(reply.status).toBe(404);
+    expect(await activeCards(una)).toEqual([card.linkId]);
+  });
+
+  it("un joueur qui avait deja plusieurs cartes cochees : la plus recente reste", async () => {
+    const wes = await newGuest("wes");
+    const { rows } = await pool.query<{ id: number }>(
+      `INSERT INTO imported_links (user_id, url, normalized_url, kind, label, active, last_import_at) VALUES
+         ($1, 'https://www.deezer.com/playlist/1', 'deezer.com/playlist/1', 'playlist', 'A', TRUE, NOW() - INTERVAL '2 days'),
+         ($1, 'https://www.deezer.com/playlist/2', 'deezer.com/playlist/2', 'playlist', 'B', TRUE, NOW() - INTERVAL '1 day'),
+         ($1, 'https://www.deezer.com/playlist/3', 'deezer.com/playlist/3', 'playlist', 'C', FALSE, NOW())
+       RETURNING id`,
+      [wes],
+    );
+    // Avant le menage, la partie ne prend deja que la plus recente des cochees.
+    expect(await activeLinkIds(wes)).toEqual([rows[1].id]);
+    await keepNewestActive();
+    expect(await activeCards(wes)).toEqual([rows[1].id]);
+  });
+
+  it("les « Imports precedents » ne se cochent pas par-dessus la playlist choisie", async () => {
+    playlists.set("9841", range(8701, 4));
+    const yan = await newGuest("yan");
+    const card = await importLink(yan, "9841");
+    // Des titres arrives sans carte (ancien ecran /import).
+    const { rows: [orphan] } = await pool.query<{ id: string }>(
+      `INSERT INTO audio_sources (provider, external_id, title, artist) VALUES ('deezer', $1, 'Orphelin', 'A') RETURNING id`,
+      [`${RUN}-re-orphan`],
+    );
+    await pool.query(`INSERT INTO user_audio_sources (user_id, audio_source_id, link_id) VALUES ($1, $2, NULL)`, [yan, orphan.id]);
+    await claimLegacyTracks(yan);
+    expect(await activeCards(yan)).toEqual([card.linkId]);
   });
 });

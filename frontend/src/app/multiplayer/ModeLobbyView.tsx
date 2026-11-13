@@ -1890,7 +1890,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
               </button>
             </div>
             <p className="mb-4 text-sm text-[#6b573f]">
-              Colle un lien Spotify, Deezer ou YouTube, ou coche les playlists qui doivent passer. Tu restes dans la salle avec les autres : la prochaine partie prendra ta nouvelle musique.
+              Colle un lien Spotify, Deezer ou YouTube, ou choisis la playlist qui doit passer. Tu restes dans la salle avec les autres : la prochaine partie prendra ta nouvelle musique.
             </p>
             <div className="max-h-[220px] overflow-y-auto pr-1">
               <MusicLibrary accent={accentColor ?? "#c65133"} refreshSignal={musicRefresh} />

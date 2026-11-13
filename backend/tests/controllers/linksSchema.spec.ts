@@ -24,7 +24,10 @@ describe("ensureLinksSchema", () => {
     await ensureLinksSchema();
 
     const sent = query.mock.calls.map(c => String(c[0]));
-    expect(sent).toHaveLength(3); // l'echec, puis CREATE TABLE + ALTER une seule fois
+    // L'echec, puis une seule fois CREATE TABLE, ALTER et le menage des cartes
+    // cochees en trop (une playlist par joueur, T37).
+    expect(sent).toHaveLength(4);
     expect(sent.filter(sql => sql.includes("ALTER TABLE audio_sources"))).toHaveLength(1);
+    expect(sent.filter(sql => sql.includes("UPDATE imported_links il SET active = FALSE"))).toHaveLength(1);
   });
 });

@@ -1,12 +1,12 @@
 "use client"
 
 // Bibliotheque de liens : l'historique dedoublonne de tout ce que le joueur a
-// importe. Les cases cochees decident de ce qui joue CE SOIR (la partie ne
-// pioche que dans les cartes actives). Le detail d'une carte reste
+// importe. Une seule carte choisie par joueur (T37, decision de Tym du 13/11) :
+// c'est elle qui joue CE SOIR, la partie ne pioche que dedans. Le detail d'une carte reste
 // non-spoilant : stats + mosaique floutee ; les titres sont derriere un clic
 // explicite, uniquement parce que ce sont les siens.
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useId, useState } from "react"
 import { Music2, Trash2, ChevronRight, X } from "lucide-react"
 import { api } from "@/lib/api"
 import type { ImportedLink, LinkDetails } from "@/lib/types"
@@ -28,6 +28,7 @@ export function MusicLibrary({ accent, refreshSignal, onLinksChange, emptyText =
   const [detail, setDetail] = useState<LinkDetails | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [showTracks, setShowTracks] = useState(false)
+  const radioGroup = useId()
 
   const load = useCallback(async () => {
     try {
@@ -46,13 +47,15 @@ export function MusicLibrary({ accent, refreshSignal, onLinksChange, emptyText =
     if (links) onLinksChange?.(links)
   }, [links, onLinksChange])
 
-  const toggle = async (link: ImportedLink) => {
-    // optimiste : la case repond tout de suite
-    setLinks(prev => prev?.map(l => (l.id === link.id ? { ...l, active: !l.active } : l)) ?? null)
+  const choose = async (link: ImportedLink) => {
+    if (link.active) return
+    const before = links
+    // optimiste : le choix repond tout de suite, les autres cartes se decochent
+    setLinks(prev => prev?.map(l => ({ ...l, active: l.id === link.id })) ?? null)
     try {
-      await api.toggleLink(link.id, !link.active)
+      await api.toggleLink(link.id, true)
     } catch {
-      setLinks(prev => prev?.map(l => (l.id === link.id ? { ...l, active: link.active } : l)) ?? null)
+      setLinks(before)
     }
   }
 
@@ -100,9 +103,10 @@ export function MusicLibrary({ accent, refreshSignal, onLinksChange, emptyText =
           }`}
         >
           <input
-            type="checkbox"
+            type="radio"
+            name={radioGroup}
             checked={link.active}
-            onChange={() => toggle(link)}
+            onChange={() => choose(link)}
             aria-label={`Jouer avec ${link.label ?? link.url}`}
             className="h-4 w-4 shrink-0 accent-[#c65133]"
           />
