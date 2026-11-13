@@ -35,17 +35,11 @@ const e2eBypass = (req: Request): boolean => {
   return Boolean(key) && req.headers["x-e2e-key"] === key;
 };
 
+// Ordre voulu : par IP d'abord, global ensuite, les deux apres la session
+// (requireSession). Un anonyme ou une IP deja bloquee ne vide pas le plafond
+// global, qui couperait les envois de tout le monde.
 export function createPhotoLimiters(): RequestHandler[] {
   return [
-    rateLimit({
-      windowMs: PHOTO_GLOBAL_WINDOW_MS,
-      max: PHOTO_GLOBAL_MAX,
-      standardHeaders: true,
-      legacyHeaders: false,
-      keyGenerator: () => "global",
-      skip: e2eBypass,
-      message: limitedBody,
-    }),
     rateLimit({
       windowMs: PHOTO_WINDOW_MS,
       max: PHOTO_MAX_PER_WINDOW,
@@ -55,7 +49,30 @@ export function createPhotoLimiters(): RequestHandler[] {
       skip: e2eBypass,
       message: limitedBody,
     }),
+    rateLimit({
+      windowMs: PHOTO_GLOBAL_WINDOW_MS,
+      max: PHOTO_GLOBAL_MAX,
+      standardHeaders: true,
+      legacyHeaders: false,
+      keyGenerator: () => "global",
+      skip: e2eBypass,
+      message: limitedBody,
+    }),
   ];
+}
+
+type PhotoSession = NonNullable<Awaited<ReturnType<typeof getSessionContext>>>;
+
+/** Session verifiee avant de compter l'envoi et de lire 6 Mo de corps. */
+async function requireSession(req: Request, res: Response, next: NextFunction): Promise<void> {
+  const context = await getSessionContext(req, res, { autoExtend: true });
+  if (!context) return;
+  res.locals.photoSession = context;
+  next();
+}
+
+async function sessionOf(req: Request, res: Response): Promise<PhotoSession | null> {
+  return (res.locals?.photoSession as PhotoSession | undefined) ?? getSessionContext(req, res, { autoExtend: true });
 }
 
 // Le corps est lu en octets bruts quel que soit le type annonce : le format
@@ -85,7 +102,7 @@ const PHOTO_ERRORS: Record<PhotoError["code"], { status: number; message: string
 };
 
 async function upload(req: Request, res: Response): Promise<void> {
-  const context = await getSessionContext(req, res, { autoExtend: true });
+  const context = await sessionOf(req, res);
   if (!context) return;
   const body: unknown = req.body;
   if (!Buffer.isBuffer(body) || body.length === 0) {
@@ -108,7 +125,7 @@ async function upload(req: Request, res: Response): Promise<void> {
 }
 
 async function remove(req: Request, res: Response): Promise<void> {
-  const context = await getSessionContext(req, res, { autoExtend: true });
+  const context = await sessionOf(req, res);
   if (!context) return;
   try {
     await deleteUserPhoto(context.user.id);
@@ -155,8 +172,11 @@ export const photosController = { upload, remove, serve };
 
 export function createPhotosRouter(limiters: RequestHandler[] = createPhotoLimiters()): Router {
   const router = Router();
-  router.post("/", ...limiters, readBody, (req, res) => void upload(req, res));
-  router.delete("/", (req, res) => void remove(req, res));
+  const session: RequestHandler = (req, res, next) => {
+    requireSession(req, res, next).catch(next);
+  };
+  router.post("/", session, ...limiters, readBody, (req, res) => void upload(req, res));
+  router.delete("/", session, limiters[0], (req, res) => void remove(req, res));
   router.get("/:file", (req, res) => void serve(req, res));
   return router;
 }

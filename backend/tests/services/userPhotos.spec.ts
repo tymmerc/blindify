@@ -96,3 +96,15 @@ describe("parsePhotoFile", () => {
     expect(parsePhotoFile("--------------------------------------.webp")).toBeNull();
   });
 });
+
+describe("processPhoto en file", () => {
+  it("traite les envois un par un, et un refus ne bloque pas les suivants", async () => {
+    const good = await solid(40, 30).png().toBuffer();
+    const results = await Promise.allSettled([
+      processPhoto(good),
+      processPhoto(Buffer.from("pas une image")),
+      processPhoto(good),
+    ]);
+    expect(results.map(r => r.status)).toEqual(["fulfilled", "rejected", "fulfilled"]);
+  });
+});

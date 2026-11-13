@@ -25,9 +25,10 @@ export const PHOTO_SIZE_PX = 256;
 export const PHOTO_UPLOAD_MAX_BYTES = 6 * 1024 * 1024;
 /** Plafond de la photo reencodee, le meme que la contrainte de la table. */
 export const PHOTO_MAX_BYTES = 256 * 1024;
-// Une photo de telephone fait 12 a 50 Mpx ; au-dela on refuse sans decoder
-// (une petite image peut annoncer des dimensions enormes).
-const MAX_INPUT_PIXELS = 60_000_000;
+// Au-dela on refuse sans decoder (une petite image peut annoncer des
+// dimensions enormes). Le front reduit deja a 512 px : 36 Mpx ne sert qu'aux
+// envois directs, et borne un PNG decode a environ 150 Mo.
+const MAX_INPUT_PIXELS = 36_000_000;
 
 export type PhotoInputType = "jpeg" | "png" | "webp";
 
@@ -61,8 +62,18 @@ export function detectImageType(data: Buffer): PhotoInputType | null {
 sharp.cache(false);
 sharp.concurrency(1);
 
+// sharp.concurrency ne borne que les threads d'une image : une file garde un
+// seul decodage a la fois, donc un seul gros tampon en memoire.
+let queue: Promise<unknown> = Promise.resolve();
+
 /** Recadre, reduit et reencode. Lance PhotoError si l'entree ne convient pas. */
-export async function processPhoto(data: Buffer): Promise<Buffer> {
+export function processPhoto(data: Buffer): Promise<Buffer> {
+  const run = queue.then(() => decodePhoto(data));
+  queue = run.catch(() => {});
+  return run;
+}
+
+async function decodePhoto(data: Buffer): Promise<Buffer> {
   if (data.length > PHOTO_UPLOAD_MAX_BYTES) throw new PhotoError("image_too_large");
   const type = detectImageType(data);
   if (!type) throw new PhotoError("not_an_image");
