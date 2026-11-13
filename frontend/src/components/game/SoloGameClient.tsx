@@ -17,6 +17,7 @@ import { EndFeedback } from "./EndFeedback"
 import { useMode } from "@/contexts/ModeContext"
 import { evaluateGuess as evaluateGuessShared, evaluateGuessSeparate, normalize, tokenize, type Verdict } from "@/lib/matching"
 import { DeezerCredit, SpotifyTrackLink } from "./SourceCredits"
+import { ANSWER_INPUT_PROPS } from "@/lib/answerInput"
 
 type FinalizeReason = "timeout" | "reveal" | "guess"
 type RoundState = "pending" | "current" | Verdict
@@ -1258,6 +1259,7 @@ export function SoloGameClient({
 
           <form className="flex flex-col gap-3" onSubmit={handleGuessSubmit}>
             <input
+              {...ANSWER_INPUT_PROPS}
               value={guessTitle}
               onChange={event => {
                 const value = event.target.value
@@ -1270,6 +1272,7 @@ export function SoloGameClient({
             />
             <div className="flex gap-3">
               <input
+                {...ANSWER_INPUT_PROPS}
                 value={guessArtist}
                 onChange={event => {
                   const value = event.target.value
