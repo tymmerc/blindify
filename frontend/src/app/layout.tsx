@@ -10,6 +10,7 @@ import { ModeProvider } from "@/contexts/ModeContext"
 import { ThemeProvider } from "@/contexts/ThemeContext"
 import { publicPath } from "@/lib/publicPath"
 import { DISCORD_HEAD_CLEANUP } from "@/lib/discord/headCleanup"
+import { THEME_HEAD_SCRIPT } from "@/lib/theme"
 import { SITE_ALTERNATE_NAMES, SITE_NAME, organizationJsonLd, websiteJsonLd } from "@/lib/site"
 
 const karla = Karla({
@@ -109,9 +110,10 @@ export default function RootLayout({
         <script
           dangerouslySetInnerHTML={{
             // En tete : retire le script que le proxy de Discord insere dans le
-            // <head>, avant que React n'hydrate (lib/discord/headCleanup.ts).
+            // <head>, avant que React n'hydrate (lib/discord/headCleanup.ts),
+            // puis pose le theme clair ou sombre avant le premier affichage (lib/theme.ts).
             __html: `${DISCORD_HEAD_CLEANUP}
-            document.documentElement.setAttribute("data-theme","dark");
+            ${THEME_HEAD_SCRIPT}
             /* Tue tout ancien service worker PWA qui sert un cache perime et empeche les MAJ. */
             if ("serviceWorker" in navigator) {
               navigator.serviceWorker.getRegistrations().then(function(rs){
@@ -161,7 +163,7 @@ export default function RootLayout({
       <body className={`${karla.variable} ${jetbrainsMono.variable} ${fraunces.variable} font-sans antialiased min-h-screen`}>
         {/* Club analogique : base papier creme, le grain est pose par globals.css */}
         <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
-          <div className="absolute inset-0 bg-[#f4ecdb]" />
+          <div className="absolute inset-0 bg-paper" />
         </div>
         <ThemeProvider>
           <ModeProvider>

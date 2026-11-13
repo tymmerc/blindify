@@ -44,7 +44,7 @@ export default function Page() {
     <GuideShell
       tag="Guide"
       tagColor={AMBER}
-      title={<>Un blind test en ligne <em className="font-medium italic text-[#cc4830]">gratuit</em>, sans inscription</>}
+      title={<>Un blind test en ligne <em className="font-medium italic text-vermillon-txt">gratuit</em>, sans inscription</>}
       intro="Il n'y a ni compte à créer, ni application à installer, ni carte bancaire à sortir. Il faut un navigateur, les téléphones des joueurs, et le lien d'une playlist publique Spotify ou Deezer. Voilà comment ça se passe."
       updated="28 octobre 2026"
       currentHref="/blind-test-en-ligne-gratuit/"

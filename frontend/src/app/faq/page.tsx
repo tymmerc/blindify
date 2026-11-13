@@ -29,7 +29,7 @@ export const metadata: Metadata = {
 }
 
 const MORE_LINK =
-  "border-b-2 border-[#2e2014] pb-0.5 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-[#2e2014] transition hover:border-[#cc4830] hover:text-[#cc4830]"
+  "border-b-2 border-line pb-0.5 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-ink transition hover:border-vermillon hover:text-vermillon-txt"
 
 const SUPPORT_LINKS = (
   <p className="flex flex-wrap gap-x-6 gap-y-3">
@@ -124,7 +124,7 @@ const FAQ: Array<{ q: string; a: string; more?: ReactNode }> = [
 
 export default function FaqPage() {
   return (
-    <div className="min-h-screen text-[#2e2014]">
+    <div className="min-h-screen text-ink">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd(FAQ)) }}
@@ -139,7 +139,7 @@ export default function FaqPage() {
       <header className="mx-auto max-w-4xl px-5 pb-[3rem] pt-[4rem] sm:px-8 lg:pt-[5rem]">
         <Tag color={VERMILION}>Questions fréquentes</Tag>
         <h1 className="mt-5 font-display text-[2.4rem] font-semibold leading-[1.04] sm:text-[3.2rem] lg:text-[4rem]">
-          Le blind test avec <em className="font-medium italic text-[#cc4830]">vos</em> musiques
+          Le blind test avec <em className="font-medium italic text-vermillon-txt">vos</em> musiques
         </h1>
         <p className="mt-6 max-w-[38rem] text-[1.1rem] leading-relaxed sm:text-[1.2rem]">
           Pas de playlists imposées, pas de compte obligatoire : un blind test généré à partir de ce que
@@ -148,13 +148,13 @@ export default function FaqPage() {
         </p>
       </header>
 
-      <section className="border-t-2 border-[#2e2014] bg-[#ece1c8]">
+      <section className="border-t-2 border-line bg-paper-deep">
         <div className="mx-auto max-w-4xl px-5 py-[4rem] sm:px-8">
           <FaqAccordion items={FAQ} />
         </div>
       </section>
 
-      <section className="border-t-2 border-[#2e2014]">
+      <section className="border-t-2 border-line">
         <div className="mx-auto max-w-4xl px-5 py-[4.5rem] sm:px-8">
           <Tag color={VERMILION}>Prêt ?</Tag>
           <h2 className="mt-5 font-display text-[2.4rem] font-semibold leading-[1] sm:text-[3.4rem]">
@@ -163,13 +163,13 @@ export default function FaqPage() {
           <div className="mt-8 flex flex-wrap items-center gap-6">
             <Link
               href="/jouer/"
-              className="inline-block rounded-md border-2 border-[#2e2014] bg-[#cc4830] px-7 py-4 font-display text-xl font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:bg-[#b83f29] hover:text-[#f4ecdb] hover:shadow-[2px_2px_0_#2e2014]"
+              className="inline-block rounded-md border-2 border-line bg-vermillon px-7 py-4 font-display text-xl font-bold text-on-ink shadow-[4px_4px_0_rgb(var(--c-shadow))] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:bg-[#b83f29] hover:text-on-ink hover:shadow-[2px_2px_0_rgb(var(--c-shadow))]"
             >
               Lancer un blind test
             </Link>
             <Link
               href="/"
-              className="border-b-2 border-[#2e2014] pb-0.5 text-[13px] font-bold uppercase tracking-[0.14em] transition hover:border-[#cc4830] hover:text-[#cc4830]"
+              className="border-b-2 border-line pb-0.5 text-[13px] font-bold uppercase tracking-[0.14em] transition hover:border-vermillon hover:text-vermillon-txt"
             >
               Retour à l'accueil
             </Link>

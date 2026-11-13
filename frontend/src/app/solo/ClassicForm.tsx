@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { buildSoloGamePath, type SoloTab } from "@/lib/soloSetup"
 import { FormCard, MusicLinkField, OptionPicker, ROUND_OPTIONS, type SoloSettings } from "./SoloFormParts"
 
-const CROSS_LINK = "font-bold text-[#2e2014] underline decoration-[#c65133] decoration-2 underline-offset-2 hover:text-[#c65133]"
+const CROSS_LINK = "font-bold text-ink underline decoration-terra-txt decoration-2 underline-offset-2 hover:text-terra-txt"
 
 export function ClassicForm({ settings, onJump }: { settings: SoloSettings; onJump: (tab: SoloTab) => void }) {
   const router = useRouter()
@@ -30,10 +30,10 @@ export function ClassicForm({ settings, onJump }: { settings: SoloSettings; onJu
             type="checkbox"
             checked={progressive}
             onChange={e => setProgressive(e.target.checked)}
-            className="h-4 w-4 rounded border-[#2e2014] bg-[#efe5d0] accent-[#c65133]"
+            className="h-4 w-4 rounded border-line bg-well accent-terra-txt"
           />
-          <span className="text-sm text-[#6b573f]">
-            <span className="font-bold text-[#2e2014]">Mode progressif</span> : 30 s par titre au début, puis 20 s, puis 10 s
+          <span className="text-sm text-ink-2">
+            <span className="font-bold text-ink">Mode progressif</span> : 30 s par titre au début, puis 20 s, puis 10 s
           </span>
         </label>
         <button
@@ -49,7 +49,7 @@ export function ClassicForm({ settings, onJump }: { settings: SoloSettings; onJu
           nombre de titres suivent. Le bouton "Chrono" garde aussi en marche
           les scripts de campagne d'avant les onglets ARIA (browser-solo.mjs y
           cliquait un bouton "Chrono", c'est maintenant un onglet). */}
-      <div className="space-y-2 border-t-2 border-dotted border-[rgba(46,32,20,.3)] pt-4 text-sm text-[#6b573f]">
+      <div className="space-y-2 border-t-2 border-dotted border-[rgb(var(--c-line)/.3)] pt-4 text-sm text-ink-2">
         <p>
           Envie de jouer contre un pote ?{" "}
           <button type="button" onClick={() => onJump("challenge")} className={CROSS_LINK}>

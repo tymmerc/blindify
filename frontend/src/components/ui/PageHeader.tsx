@@ -14,7 +14,7 @@ export default function PageHeader({ title, subtitle }: PageHeaderProps) {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6 }}
-        className="font-display text-4xl md:text-5xl font-semibold leading-[1.05] text-[#2e2014] mb-3"
+        className="font-display text-4xl md:text-5xl font-semibold leading-[1.05] text-ink mb-3"
       >
         {title}
       </motion.h1>
@@ -24,7 +24,7 @@ export default function PageHeader({ title, subtitle }: PageHeaderProps) {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.2 }}
-          className="text-lg text-[#6b573f] max-w-2xl mx-auto"
+          className="text-lg text-ink-2 max-w-2xl mx-auto"
         >
           {subtitle}
         </motion.p>

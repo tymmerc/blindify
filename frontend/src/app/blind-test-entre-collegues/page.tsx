@@ -48,7 +48,7 @@ export default function Page() {
     <GuideShell
       tag="Guide entre collègues"
       tagColor={AMBER}
-      title={<>Un blind test entre <em className="font-medium italic text-[#cc4830]">collègues</em></>}
+      title={<>Un blind test entre <em className="font-medium italic text-vermillon-txt">collègues</em></>}
       intro="Le pot de départ, l'afterwork du jeudi, la fin d'après-midi d'un séminaire, ou une équipe éparpillée en télétravail. Avec un blind test fait sur la musique des collègues, on apprend vite des choses les uns sur les autres, et il n'y a presque rien à préparer : chacun colle le lien d'une playlist, la partie se construit avec."
       updated="5 octobre 2026"
       currentHref="/blind-test-entre-collegues/"

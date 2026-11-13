@@ -11,14 +11,14 @@ export const DISCORD_SERVER_INTRO = "Une idée, un souci, envie de jouer avec d'
 
 export function DiscordServerLine({ className = "" }: { className?: string }) {
   return (
-    <p data-testid="fin-discord" className={`text-xs text-[#6b573f] ${className}`}>
+    <p data-testid="fin-discord" className={`text-xs text-ink-2 ${className}`}>
       {DISCORD_SERVER_INTRO}{" "}
       <a
         href={DISCORD_SUPPORT_URL}
         target="_blank"
         rel="noopener noreferrer"
         onClick={event => followExternalLink(event, DISCORD_SUPPORT_URL)}
-        className="font-semibold text-[#2e2014] underline decoration-dotted underline-offset-4 hover:text-[#c65133]"
+        className="font-semibold text-ink underline decoration-dotted underline-offset-4 hover:text-terra-txt"
       >
         {DISCORD_SERVER_TEXT}
         <span className="sr-only"> (s&apos;ouvre dans un nouvel onglet)</span>

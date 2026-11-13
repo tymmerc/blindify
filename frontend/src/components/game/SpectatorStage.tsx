@@ -12,7 +12,7 @@ const SAGE = "#7d9471"
 const VERDICT: Record<string, { text: string; color: string }> = {
   correct: { text: "trouvé", color: SAGE },
   close: { text: "presque", color: GOLD },
-  wrong: { text: "raté", color: "#9c2f1d" },
+  wrong: { text: "raté", color: "rgb(var(--c-rouge-txt))" },
 }
 
 /** Horloge locale rafraichie 4 fois par seconde, pour le compte a rebours. */
@@ -37,18 +37,18 @@ function Scoreboard({ players, phase }: { players: MultiplayerPlayerState[]; pha
         const verdict = phase !== "GUESSING" && p.lastVerdict ? VERDICT[p.lastVerdict] : null
         return (
           <li key={p.userId} className="flex items-baseline gap-2 text-sm">
-            <span className="w-5 shrink-0 font-display font-semibold text-[#8a7558]">{i + 1}</span>
-            <span className={`truncate font-semibold ${p.disconnected ? "text-[#8a7558] line-through" : "text-[#2e2014]"}`}>{name(p)}</span>
-            <span aria-hidden className="mx-1 min-w-4 flex-1 border-b-2 border-dotted border-[#2e2014]/30" />
+            <span className="w-5 shrink-0 font-display font-semibold text-sourd">{i + 1}</span>
+            <span className={`truncate font-semibold ${p.disconnected ? "text-sourd line-through" : "text-ink"}`}>{name(p)}</span>
+            <span aria-hidden className="mx-1 min-w-4 flex-1 border-b-2 border-dotted border-line/30" />
             {phase === "GUESSING" ? (
-              <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#8a7558]">{p.hasAnswered ? "a répondu" : "cherche…"}</span>
+              <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-sourd">{p.hasAnswered ? "a répondu" : "cherche…"}</span>
             ) : verdict ? (
               <span className="text-[11px] font-bold uppercase tracking-[0.12em]" style={{ color: verdict.color }}>
                 {verdict.text}
                 {p.lastGained ? ` +${p.lastGained}` : ""}
               </span>
             ) : null}
-            <span className="w-14 shrink-0 text-right font-display font-semibold tabular-nums text-[#2e2014]">{p.score ?? 0}</span>
+            <span className="w-14 shrink-0 text-right font-display font-semibold tabular-nums text-ink">{p.score ?? 0}</span>
           </li>
         )
       })}
@@ -70,12 +70,12 @@ function Podium({ players }: { players: MultiplayerPlayerState[] }) {
           <div key={p.userId} className="flex flex-col items-center gap-2 text-center">
             <span className="max-w-full truncate font-display text-base font-semibold">{name(p)}</span>
             <div
-              className="flex w-full items-start justify-center rounded-t-md border-2 border-b-0 border-[#2e2014] pt-2 font-display text-2xl font-bold"
+              className="flex w-full items-start justify-center rounded-t-md border-2 border-b-0 border-line pt-2 font-display text-2xl font-bold"
               style={{ height: rank === 0 ? 112 : rank === 1 ? 84 : 64, background: colors[rank] }}
             >
               {rank + 1}
             </div>
-            <span className="text-xs font-bold tabular-nums text-[#6b573f]">{p.score ?? 0} pts</span>
+            <span className="text-xs font-bold tabular-nums text-ink-2">{p.score ?? 0} pts</span>
           </div>
         )
       })}
@@ -101,15 +101,15 @@ export function SpectatorStage({ game, members, clockOffset, now }: SpectatorSta
   if (!game || game.phase === "LOBBY") {
     return (
       <Panel label="Salle d'attente" dot={TERRA}>
-        <p className="m-0 mb-4 text-sm text-[#6b573f]">La partie n'a pas encore commencé. Elle s'affichera ici dès le lancement.</p>
+        <p className="m-0 mb-4 text-sm text-ink-2">La partie n'a pas encore commencé. Elle s'affichera ici dès le lancement.</p>
         <ul className="m-0 flex list-none flex-wrap gap-2 p-0">
           {members.map(m => (
-            <li key={m.userId} className="flex items-center gap-2 rounded-full border-[1.5px] border-[#2e2014] bg-[#efe5d0] px-3 py-1 text-sm font-semibold">
+            <li key={m.userId} className="flex items-center gap-2 rounded-full border-[1.5px] border-line bg-well px-3 py-1 text-sm font-semibold">
               <span aria-hidden className="h-2 w-2 rounded-full" style={{ background: m.status === "active" ? SAGE : m.status === "away" ? GOLD : "#8a7558" }} />
               {name(m)}
             </li>
           ))}
-          {members.length === 0 ? <li className="text-sm text-[#8a7558]">Personne pour l'instant.</li> : null}
+          {members.length === 0 ? <li className="text-sm text-sourd">Personne pour l'instant.</li> : null}
         </ul>
       </Panel>
     )
@@ -136,7 +136,7 @@ export function SpectatorStage({ game, members, clockOffset, now }: SpectatorSta
   const present = ranked.filter(p => !p.disconnected).length
   return (
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
-      <section className="flex flex-col items-center gap-5 rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-5 shadow-[4px_4px_0_rgba(46,32,20,.18)]">
+      <section className="flex flex-col items-center gap-5 rounded-md border-2 border-line bg-paper-deep p-5 shadow-[4px_4px_0_rgb(var(--c-shadow)/.18)]">
         <div className="flex w-full items-center justify-between gap-3">
           <Label dot={revealed ? SAGE : TERRA}>Manche {game.currentRound} / {game.totalRounds}</Label>
           <span className="font-display text-2xl font-bold tabular-nums" style={{ color: left !== null && left <= 5 ? TERRA : "#2e2014" }}>
@@ -147,10 +147,10 @@ export function SpectatorStage({ game, members, clockOffset, now }: SpectatorSta
         {revealed && track?.title ? (
           <div className="text-center">
             <p className="m-0 font-display text-2xl font-semibold">{track.title}</p>
-            <p className="m-0 mt-1 text-sm font-semibold text-[#6b573f]">{track.artist}</p>
+            <p className="m-0 mt-1 text-sm font-semibold text-ink-2">{track.artist}</p>
           </div>
         ) : (
-          <p className="m-0 text-sm font-semibold text-[#6b573f]">
+          <p className="m-0 text-sm font-semibold text-ink-2">
             {answered} / {present} ont répondu
           </p>
         )}

@@ -133,7 +133,7 @@ export default function Page() {
     <GuideShell
       tag="Comparatif"
       tagColor={BLUE}
-      title={<>Quel blind test en ligne choisir en <em className="font-medium italic text-[#cc4830]">2026</em> ?</>}
+      title={<>Quel blind test en ligne choisir en <em className="font-medium italic text-vermillon-txt">2026</em> ?</>}
       intro="Sept services, une seule question qui tranche vraiment : d'où vient la musique, et qui la choisit. Ce comparatif est écrit par les gens qui font blindz.app, lisez-le avec ça en tête. Tout ce qui est dit des autres vient de leurs propres pages, lues le 8 septembre 2026 (le 5 octobre 2026 pour Blinest), liens à l'appui. Quand on n'a pas trouvé l'information, on l'écrit."
       updated="5 octobre 2026"
       currentHref="/comparatif-blind-test/"
@@ -162,8 +162,8 @@ export default function Page() {
         <div className="-mx-5 overflow-x-auto sm:mx-0">
           <table className="w-full min-w-[820px] border-collapse text-[0.95rem]">
             <thead>
-              <tr className="border-b-2 border-[#2e2014] text-left font-mono text-[11px] uppercase tracking-[0.14em]">
-                <th className="sticky left-0 z-[1] bg-[#ece1c8] py-3 pl-5 pr-4 shadow-[1px_0_0_rgba(46,32,20,.18)] sm:pl-0 lg:static lg:shadow-none">Service</th>
+              <tr className="border-b-2 border-line text-left font-mono text-[11px] uppercase tracking-[0.14em]">
+                <th className="sticky left-0 z-[1] bg-paper-deep py-3 pl-5 pr-4 shadow-[1px_0_0_rgb(var(--c-shadow)/.18)] sm:pl-0 lg:static lg:shadow-none">Service</th>
                 <th className="py-3 pr-4">D'où vient la musique</th>
                 <th className="py-3 pr-4">Vos playlists ?</th>
                 <th className="py-3 pr-4">Gratuit</th>
@@ -176,10 +176,10 @@ export default function Page() {
             <tbody>
               {ROWS.map(r => {
                 // Fond explicite sur la ligne ET sur la cellule collee, qui doit masquer ce qui defile dessous.
-                const bg = r.name === "blindz.app" ? "bg-[#f4ecdb]" : "bg-[#ece1c8]"
+                const bg = r.name === "blindz.app" ? "bg-paper" : "bg-paper-deep"
                 return (
-                  <tr key={r.name} className={`border-b-2 border-[rgba(46,32,20,.18)] align-top ${bg}`}>
-                    <td className={`sticky left-0 z-[1] ${bg} py-4 pl-5 pr-4 font-display text-lg font-semibold shadow-[1px_0_0_rgba(46,32,20,.18)] sm:pl-0 lg:static lg:shadow-none`}>{r.name}</td>
+                  <tr key={r.name} className={`border-b-2 border-[rgb(var(--c-line)/.18)] align-top ${bg}`}>
+                    <td className={`sticky left-0 z-[1] ${bg} py-4 pl-5 pr-4 font-display text-lg font-semibold shadow-[1px_0_0_rgb(var(--c-shadow)/.18)] sm:pl-0 lg:static lg:shadow-none`}>{r.name}</td>
                     <td className="py-4 pr-4">{r.music}</td>
                     <td className="py-4 pr-4">{r.own}</td>
                     <td className="py-4 pr-4">{r.free}</td>

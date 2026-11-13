@@ -28,7 +28,7 @@ import { useOverlayAudio, useOverlaySocket } from "./useOverlay"
 
 const STAGE_W = 1920
 const STAGE_H = 1080
-const CARD = "rounded-lg border-[3px] border-[#2e2014] bg-[#f4ecdb] shadow-[6px_6px_0_rgba(46,32,20,.35)]"
+const CARD = "rounded-lg border-[3px] border-line bg-paper shadow-[6px_6px_0_rgb(var(--c-shadow)/.35)]"
 
 /** La scene garde ses proportions 1920×1080 quelle que soit la taille de la source. */
 function useStageScale(): number {
@@ -45,13 +45,13 @@ function useStageScale(): number {
 function JoinCard({ code, large = false, chat = false }: { code: string; large?: boolean; chat?: boolean }) {
   return (
     <div className={`${CARD} flex items-center gap-6 p-6`} data-testid="overlay-join">
-      <div className="rounded-md border-[3px] border-[#2e2014] bg-white p-2">
+      <div className="rounded-md border-[3px] border-line bg-white p-2">
         <QRCodeSVG value={liveJoinUrl(code)} size={large ? 220 : 150} bgColor="#ffffff" fgColor="#2e2014" level="M" />
       </div>
       <div>
-        <p className="m-0 text-xl font-bold uppercase tracking-[0.2em] text-[#6b573f]">Joue sur</p>
+        <p className="m-0 text-xl font-bold uppercase tracking-[0.2em] text-ink-2">Joue sur</p>
         <p className={`m-0 font-display font-semibold ${large ? "text-5xl" : "text-4xl"}`}>{liveLabel()}</p>
-        <p className="m-0 mt-3 text-xl font-bold uppercase tracking-[0.2em] text-[#6b573f]">Code</p>
+        <p className="m-0 mt-3 text-xl font-bold uppercase tracking-[0.2em] text-ink-2">Code</p>
         <p className={`m-0 font-display font-bold tracking-[0.18em] ${large ? "text-8xl" : "text-6xl"}`}>{code}</p>
         {chat ? <p className="m-0 mt-2 text-2xl" data-testid="overlay-chat-hint">ou dans le chat : <b>!b titre - artiste</b></p> : null}
       </div>
@@ -69,7 +69,7 @@ function GuessingPanel({ view, now }: { view: OverlayView; now: number }) {
   const streamerTurn = game.phase === "GUESSING_STREAMER" || game.phase === "REVEAL_PARTIAL"
   return (
     <div className={`${CARD} w-[640px] space-y-4 p-6`} data-testid="overlay-round">
-      <p className="m-0 text-xl font-bold uppercase tracking-[0.2em] text-[#6b573f]">
+      <p className="m-0 text-xl font-bold uppercase tracking-[0.2em] text-ink-2">
         Manche {game.currentRound} / {game.totalRounds}
       </p>
       {game.phase === "STARTING_ROUND" ? (
@@ -118,7 +118,7 @@ function Stage({ view, now }: { view: OverlayView; now: number }) {
       <Corner className="right-12 top-12">
         {revealed ? (
           <div className={`${CARD} w-[640px] p-6`}>
-            <p className="m-0 mb-4 text-xl font-bold uppercase tracking-[0.2em] text-[#6b573f]">Manche {game.currentRound} / {game.totalRounds}</p>
+            <p className="m-0 mb-4 text-xl font-bold uppercase tracking-[0.2em] text-ink-2">Manche {game.currentRound} / {game.totalRounds}</p>
             <RevealCard track={game.currentTrack} size="lg" />
           </div>
         ) : (
@@ -127,7 +127,7 @@ function Stage({ view, now }: { view: OverlayView; now: number }) {
       </Corner>
       <Corner className="right-12 top-[420px]">
         <div className={`${CARD} w-[640px] p-6`}>
-          <p className="m-0 mb-3 text-xl font-bold uppercase tracking-[0.2em] text-[#6b573f]">Face B · Classement</p>
+          <p className="m-0 mb-3 text-xl font-bold uppercase tracking-[0.2em] text-ink-2">Face B · Classement</p>
           <Leaderboard entries={game.leaderboard ?? []} size="lg" emptyLabel="Le classement arrive au premier reveal." />
         </div>
       </Corner>
@@ -149,7 +149,7 @@ export function OverlayClient() {
   return (
     <div className="fixed inset-0 overflow-hidden" data-testid="overlay-view">
       <div
-        className="absolute left-0 top-0 origin-top-left text-[#2e2014]"
+        className="absolute left-0 top-0 origin-top-left text-ink"
         style={{ width: STAGE_W, height: STAGE_H, transform: `scale(${scale})` }}
       >
         {view.status === "error" && view.error ? (

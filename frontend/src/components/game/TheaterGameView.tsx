@@ -413,7 +413,7 @@ export function TheaterGameView(props: Props) {
             )}
 
             {state?.singleContributor && (
-              <p className="text-[11px] italic leading-snug" style={{ color: "#8a7558" }}>
+              <p className="text-[11px] italic leading-snug" style={{ color: "rgb(var(--c-sourd))" }}>
                 Une seule playlist en jeu, pas de point « qui a ajouté » cette partie.
               </p>
             )}
@@ -605,7 +605,7 @@ function RevealStage({
             <div key={p.userId} className={`theater-recap-row ${p.userId === me ? "you" : ""}`}>
               <span className="rank">{idx + 1}</span>
               <span className="who">{p.username || `J${p.userId}`}{p.userId === me ? " (toi)" : ""}</span>
-              <span className="ans" style={{ color: answered ? color : "#8a7558", fontStyle: answered ? "normal" : "italic" }}>
+              <span className="ans" style={{ color: answered ? color: "rgb(var(--c-sourd))", fontStyle: answered ? "normal" : "italic" }}>
                 {label}
               </span>
               <span className="gain" style={{ color: (p.lastGained ?? 0) > 0 ? SAGE : "#8a7558" }}>

@@ -1,8 +1,12 @@
 import type { Config } from "tailwindcss"
 import tailwindcssAnimate from "tailwindcss-animate"
 
+/** Couleur du theme a partir de son jeton --c-* (triplet RGB), opacite comprise. */
+const tok = (nom: string) => `rgb(var(--c-${nom}) / <alpha-value>)`
+
 const config: Config = {
-  darkMode: "class",
+  // Mode sombre pose par data-theme="dark" sur <html> (pas une classe).
+  darkMode: ["variant", "&:is([data-theme=\"dark\"] *)"],
   content: [
     "./pages/**/*.{ts,tsx}",
     "./components/**/*.{ts,tsx}",
@@ -24,53 +28,51 @@ const config: Config = {
         display: ["var(--font-display)", "Fraunces", "Georgia", "serif"],
       },
       colors: {
-        // Club analogique : papier creme, encre espresso, terracotta, or.
-        background: "#f4ecdb",
-        foreground: "#2e2014",
-        border: "rgba(46, 32, 20, 0.22)",
-        ring: "rgba(198, 81, 51, 0.55)",
-        primary: {
-          DEFAULT: "#c65133", // terracotta
-          foreground: "#f4ecdb",
-        },
-        secondary: {
-          DEFAULT: "#e0a32e", // or
-          foreground: "#2e2014",
-        },
-        accent: {
-          DEFAULT: "#c65133",
-          foreground: "#f4ecdb",
-        },
-        destructive: {
-          DEFAULT: "#9c2f1d",
-          foreground: "#f4ecdb",
-        },
-        muted: {
-          DEFAULT: "#ece1c8",
-          foreground: "#8a7558",
-        },
-        popover: {
-          DEFAULT: "#f4ecdb",
-          foreground: "#2e2014",
-        },
-        card: {
-          DEFAULT: "#ece1c8",
-          foreground: "#2e2014",
-        },
-        surface: {
-          DEFAULT: "#ece1c8",
-          strong: "#e6d9bd",
-          well: "#efe5d0",
-        },
-        // Anciennes couleurs "neon" remappees sur la palette chaude
-        // (les classes text-neon-pink etc. degradent proprement).
-        neon: {
-          pink: "#c65133",
-          cyan: "#7d9471",
-          purple: "#e0a32e",
-          yellow: "#e0a32e",
-          green: "#7d9471",
-        },
+        // Jetons du theme (globals.css, --c-*) : clair ou nuit chaude selon
+        // data-theme sur <html>. Le suffixe -txt = la variante lisible en texte.
+        "paper": tok("paper"),
+        "paper-deep": tok("paper-deep"),
+        "well": tok("well"),
+        "paper-strong": tok("paper-strong"),
+        "paper-light": tok("paper-light"),
+        "ink": tok("ink"),
+        "line": tok("line"),
+        "ink-block": tok("ink-block"),
+        "ink-block-hover": tok("ink-block-hover"),
+        "on-ink": tok("on-ink"),
+        "on-accent": tok("on-accent"),
+        "ink-2": tok("ink-2"),
+        "sourd": tok("sourd"),
+        "pale": tok("pale"),
+        "terra": tok("terra"),
+        "terra-txt": tok("terra-txt"),
+        "vermillon": tok("vermillon"),
+        "vermillon-txt": tok("vermillon-txt"),
+        "rouge": tok("rouge"),
+        "rouge-txt": tok("rouge-txt"),
+        "gold": tok("gold"),
+        "gold-txt": tok("gold-txt"),
+        "gold-deep-txt": tok("gold-deep-txt"),
+        "ambre": tok("ambre"),
+        "ambre-txt": tok("ambre-txt"),
+        "sage": tok("sage"),
+        "sage-txt": tok("sage-txt"),
+        "sage-deep-txt": tok("sage-deep-txt"),
+        "acier": tok("acier"),
+        "acier-txt": tok("acier-txt"),
+        // Couleurs nommees historiques, branchees sur les memes jetons.
+        background: tok("paper"),
+        foreground: tok("ink"),
+        border: "rgb(var(--c-line) / 0.22)",
+        ring: "rgb(var(--c-terra) / 0.55)",
+        primary: { DEFAULT: tok("terra"), foreground: tok("on-ink") },
+        secondary: { DEFAULT: tok("gold"), foreground: "#2e2014" },
+        accent: { DEFAULT: tok("terra"), foreground: tok("on-ink") },
+        destructive: { DEFAULT: tok("rouge"), foreground: tok("on-ink") },
+        muted: { DEFAULT: tok("paper-deep"), foreground: tok("sourd") },
+        popover: { DEFAULT: tok("paper"), foreground: tok("ink") },
+        card: { DEFAULT: tok("paper-deep"), foreground: tok("ink") },
+        surface: { DEFAULT: tok("paper-deep"), strong: tok("paper-strong"), well: tok("well") },
       },
       borderRadius: {
         lg: "0.75rem",
@@ -79,16 +81,16 @@ const config: Config = {
       },
       boxShadow: {
         // Ombres dures decalees, esprit print/pochette de disque.
-        glow: "4px 4px 0 rgba(46, 32, 20, 0.18)",
-        "glow-sm": "3px 3px 0 rgba(46, 32, 20, 0.15)",
-        "glow-cyan": "4px 4px 0 rgba(125, 148, 113, 0.4)",
-        "glow-purple": "4px 4px 0 rgba(224, 163, 46, 0.4)",
-        "glow-yellow": "4px 4px 0 rgba(224, 163, 46, 0.4)",
-        "glow-pink": "4px 4px 0 rgba(198, 81, 51, 0.4)",
-        "glow-orange": "4px 4px 0 rgba(198, 81, 51, 0.4)",
-        "glow-violet": "4px 4px 0 rgba(224, 163, 46, 0.4)",
-        "neon-inset": "inset 0 1px 3px rgba(46, 32, 20, 0.18)",
-        glass: "4px 4px 0 rgba(46, 32, 20, 0.16)",
+        glow: "4px 4px 0 rgb(var(--c-shadow) / 0.18)",
+        "glow-sm": "3px 3px 0 rgb(var(--c-shadow) / 0.15)",
+        "glow-cyan": "4px 4px 0 rgb(var(--c-sage) / 0.4)",
+        "glow-purple": "4px 4px 0 rgb(var(--c-gold) / 0.4)",
+        "glow-yellow": "4px 4px 0 rgb(var(--c-gold) / 0.4)",
+        "glow-pink": "4px 4px 0 rgb(var(--c-terra) / 0.4)",
+        "glow-orange": "4px 4px 0 rgb(var(--c-terra) / 0.4)",
+        "glow-violet": "4px 4px 0 rgb(var(--c-gold) / 0.4)",
+        "neon-inset": "inset 0 1px 3px rgb(var(--c-shadow) / 0.18)",
+        glass: "4px 4px 0 rgb(var(--c-shadow) / 0.16)",
       },
       keyframes: {
         "accordion-down": {
@@ -100,8 +102,8 @@ const config: Config = {
           to: { height: "0" },
         },
         "pulse-glow": {
-          "0%, 100%": { boxShadow: "4px 4px 0 rgba(46, 32, 20, 0.14)" },
-          "50%": { boxShadow: "4px 4px 0 rgba(46, 32, 20, 0.26)" },
+          "0%, 100%": { boxShadow: "4px 4px 0 rgb(var(--c-shadow) / 0.14)" },
+          "50%": { boxShadow: "4px 4px 0 rgb(var(--c-shadow) / 0.26)" },
         },
         shimmer: {
           "0%": { backgroundPosition: "-200% 0" },

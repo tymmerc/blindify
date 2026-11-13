@@ -47,27 +47,27 @@ export function LobbyRps({
   const opponents = players.filter(p => p.userId !== currentUserId)
   const pendingName = pendingTargetId != null ? nameFor(pendingTargetId) : null
 
-  const card = bare ? "" : "rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-4 shadow-[4px_4px_0_rgba(46,32,20,.18)]"
+  const card = bare ? "" : "rounded-md border-2 border-line bg-paper-deep p-4 shadow-[4px_4px_0_rgb(var(--c-shadow)/.18)]"
 
   return (
     <div className={card}>
       {!bare && (
       <div className="mb-3 flex items-center justify-between">
-        <p className="m-0 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.22em] text-[#2e2014]">
-          <span aria-hidden className="h-2.5 w-2.5 rounded-full border-[1.5px] border-[#2e2014]" style={{ background: accent }} />
+        <p className="m-0 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.22em] text-ink">
+          <span aria-hidden className="h-2.5 w-2.5 rounded-full border-[1.5px] border-line" style={{ background: accent }} />
           Pierre, feuille, ciseaux
         </p>
-        <Swords aria-hidden className="h-4 w-4 text-[#6b573f]" />
+        <Swords aria-hidden className="h-4 w-4 text-ink-2" />
       </div>
       )}
 
       {/* Revelation du dernier duel */}
       {result ? (
-        <div className="mb-3 rounded-md border-[1.5px] border-[#2e2014] bg-[#f4ecdb] px-3 py-3 text-center">
-          <p className="m-0 font-display text-lg text-[#2e2014]">
+        <div className="mb-3 rounded-md border-[1.5px] border-line bg-paper px-3 py-3 text-center">
+          <p className="m-0 font-display text-lg text-ink">
             <span className="font-bold">{nameFor(result.a)}</span>
             <span className="mx-2 text-2xl align-middle">{MOVE_EMOJI[result.aMove]}</span>
-            <span className="text-[#8a7558]">vs</span>
+            <span className="text-sourd">vs</span>
             <span className="mx-2 text-2xl align-middle">{MOVE_EMOJI[result.bMove]}</span>
             <span className="font-bold">{nameFor(result.b)}</span>
           </p>
@@ -80,13 +80,13 @@ export function LobbyRps({
       {/* Etat principal */}
       {active ? (
         <div className="text-center">
-          <p className="m-0 mb-3 text-sm text-[#6b573f]">
-            Duel contre <span className="font-bold text-[#2e2014]">{nameFor(active.opponentId)}</span>
+          <p className="m-0 mb-3 text-sm text-ink-2">
+            Duel contre <span className="font-bold text-ink">{nameFor(active.opponentId)}</span>
           </p>
           {active.myMove ? (
             <div className="flex flex-col items-center gap-1 py-2">
               <span className="text-4xl">{MOVE_EMOJI[active.myMove]}</span>
-              <p className="m-0 text-sm italic text-[#8a7558]">En attente de {nameFor(active.opponentId)}...</p>
+              <p className="m-0 text-sm italic text-sourd">En attente de {nameFor(active.opponentId)}...</p>
             </div>
           ) : (
             <div className="flex justify-center gap-3">
@@ -96,7 +96,7 @@ export function LobbyRps({
                   type="button"
                   onClick={() => onPlay(m)}
                   aria-label={MOVE_LABEL[m]}
-                  className="flex h-16 w-16 items-center justify-center rounded-md border-2 border-[#2e2014] bg-[#f4ecdb] text-3xl shadow-[2px_2px_0_#2e2014] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_#2e2014]"
+                  className="flex h-16 w-16 items-center justify-center rounded-md border-2 border-line bg-paper text-3xl shadow-[2px_2px_0_rgb(var(--c-shadow))] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_rgb(var(--c-shadow))]"
                 >
                   {MOVE_EMOJI[m]}
                 </button>
@@ -106,14 +106,14 @@ export function LobbyRps({
         </div>
       ) : incoming ? (
         <div className="text-center">
-          <p className="m-0 mb-3 text-sm text-[#2e2014]">
+          <p className="m-0 mb-3 text-sm text-ink">
             <span className="font-bold">{incoming.fromUsername || `Joueur ${incoming.fromUserId}`}</span> te défie !
           </p>
           <div className="flex justify-center gap-2">
             <button
               type="button"
               onClick={onAccept}
-              className="rounded-md border-2 border-[#2e2014] px-4 py-2 font-display text-sm font-bold text-[#f4ecdb] shadow-[2px_2px_0_#2e2014] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_#2e2014]"
+              className="rounded-md border-2 border-line px-4 py-2 font-display text-sm font-bold text-on-ink shadow-[2px_2px_0_rgb(var(--c-shadow))] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_rgb(var(--c-shadow))]"
               style={{ background: accent }}
             >
               Accepter
@@ -121,26 +121,26 @@ export function LobbyRps({
             <button
               type="button"
               onClick={onDecline}
-              className="rounded-md border-2 border-[#2e2014] bg-[#f4ecdb] px-4 py-2 font-display text-sm font-bold text-[#2e2014] shadow-[2px_2px_0_#2e2014] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_#2e2014]"
+              className="rounded-md border-2 border-line bg-paper px-4 py-2 font-display text-sm font-bold text-ink shadow-[2px_2px_0_rgb(var(--c-shadow))] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_rgb(var(--c-shadow))]"
             >
               Refuser
             </button>
           </div>
         </div>
       ) : pendingName ? (
-        <p className="py-2 text-center text-sm italic text-[#8a7558]">En attente de la réponse de {pendingName}...</p>
+        <p className="py-2 text-center text-sm italic text-sourd">En attente de la réponse de {pendingName}...</p>
       ) : opponents.length === 0 ? (
-        <p className="py-2 text-center text-sm italic text-[#8a7558]">{"En attente d'un adversaire pour se défier..."}</p>
+        <p className="py-2 text-center text-sm italic text-sourd">{"En attente d'un adversaire pour se défier..."}</p>
       ) : (
         <div className="flex flex-col gap-2">
-          <p className="m-0 text-xs text-[#8a7558]">Défie un joueur en attendant :</p>
+          <p className="m-0 text-xs text-sourd">Défie un joueur en attendant :</p>
           {opponents.map(p => (
-            <div key={p.userId} className="flex items-center justify-between rounded-md border-[1.5px] border-[rgba(46,32,20,.25)] bg-[#f4ecdb] px-3 py-2">
-              <span className="truncate text-sm font-medium text-[#2e2014]">{p.username || `Joueur ${p.userId}`}</span>
+            <div key={p.userId} className="flex items-center justify-between rounded-md border-[1.5px] border-[rgb(var(--c-line)/.25)] bg-paper px-3 py-2">
+              <span className="truncate text-sm font-medium text-ink">{p.username || `Joueur ${p.userId}`}</span>
               <button
                 type="button"
                 onClick={() => onChallenge(p.userId)}
-                className="shrink-0 rounded-md border-2 border-[#2e2014] px-3 py-1 text-xs font-bold text-[#f4ecdb] shadow-[2px_2px_0_#2e2014] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_#2e2014]"
+                className="shrink-0 rounded-md border-2 border-line px-3 py-1 text-xs font-bold text-on-ink shadow-[2px_2px_0_rgb(var(--c-shadow))] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_rgb(var(--c-shadow))]"
                 style={{ background: accent }}
               >
                 Défier
@@ -152,11 +152,11 @@ export function LobbyRps({
 
       {/* Palmares de la soiree */}
       {scoreboard.length > 0 ? (
-        <div className="mt-3 border-t-[1.5px] border-[rgba(46,32,20,.2)] pt-2">
-          <p className="m-0 mb-1 text-[10px] font-bold uppercase tracking-[0.2em] text-[#8a7558]">Palmarès</p>
+        <div className="mt-3 border-t-[1.5px] border-[rgb(var(--c-line)/.2)] pt-2">
+          <p className="m-0 mb-1 text-[10px] font-bold uppercase tracking-[0.2em] text-sourd">Palmarès</p>
           <div className="flex flex-wrap gap-x-3 gap-y-1">
             {scoreboard.map(s => (
-              <span key={s.userId} className="text-xs text-[#2e2014]">
+              <span key={s.userId} className="text-xs text-ink">
                 {s.userId === currentUserId ? "Toi" : s.username || `J${s.userId}`}
                 <span className="ml-1 font-bold" style={{ color: accent }}>{s.wins}</span>
               </span>

@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 
 export default function AvisPage() {
   return (
-    <div className="flex min-h-screen flex-col text-[#2e2014]">
+    <div className="flex min-h-screen flex-col text-ink">
       <SiteHeader />
       <main className="mx-auto w-full max-w-xl flex-1 px-5 pb-[5rem] pt-[4rem] sm:px-8">
         <Tag color={VERMILION}>Donne ton avis</Tag>

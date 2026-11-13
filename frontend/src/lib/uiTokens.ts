@@ -1,9 +1,9 @@
 import type { GameMode } from "@/lib/gameModes"
 
 export const surfaces = {
-  background: "#f4ecdb",
+  background: "rgb(var(--c-paper))",
   card: "#ece1c8",
-  border: "rgba(46,32,20,0.22)",
+  border: "rgb(var(--c-line) / 0.22)",
   text: "#2e2014",
   muted: "#6b573f",
 }

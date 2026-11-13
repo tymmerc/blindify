@@ -147,13 +147,13 @@ export function FingerBoard({
         <div
           key={i}
           ref={el => { zoneRefs.current[i] = el }}
-          className="relative flex flex-col items-center justify-center overflow-hidden rounded-xl border-2 border-[#2e2014] transition-colors duration-200"
+          className="relative flex flex-col items-center justify-center overflow-hidden rounded-xl border-2 border-line transition-colors duration-200"
           style={{
             background: p.eliminated
               ? "#d8cdb4"
               : holding
                 ? held[i] ? "#b3261e" : "#7a1712"
-                : held[i] ? p.color : "#ece1c8",
+                : held[i] ? p.color: "#ece1c8",
             opacity: p.eliminated ? 0.45 : 1,
           }}
         >
@@ -170,7 +170,7 @@ export function FingerBoard({
       ))}
       {phase === "countdown" && countdown !== null && (
         <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center">
-          <span className="font-display text-[7rem] font-bold leading-none text-[#2e2014] drop-shadow-[3px_3px_0_#f4ecdb]">
+          <span className="font-display text-[7rem] font-bold leading-none text-ink drop-shadow-[3px_3px_0_#f4ecdb]">
             {countdown}
           </span>
         </div>

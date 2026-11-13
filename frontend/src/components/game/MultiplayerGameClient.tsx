@@ -71,7 +71,7 @@ function AnalogVinyl({
 }) {
   return (
     <div
-      className="relative rounded-full border-[3px] border-[#2e2014]"
+      className="relative rounded-full border-[3px] border-line"
       style={{
         width: `${size}px`,
         height: `${size}px`,
@@ -82,7 +82,7 @@ function AnalogVinyl({
       }}
     >
       {coverUrl ? (
-        <div className="absolute inset-[26%] overflow-hidden rounded-full border-[3px] border-[#2e2014]">
+        <div className="absolute inset-[26%] overflow-hidden rounded-full border-[3px] border-line">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={coverUrl}
@@ -94,11 +94,11 @@ function AnalogVinyl({
       ) : (
         <span
           aria-hidden
-          className="absolute inset-[33%] rounded-full border-[3px] border-[#2e2014]"
+          className="absolute inset-[33%] rounded-full border-[3px] border-line"
           style={{ background: accentColor }}
         />
       )}
-      <span aria-hidden className="absolute inset-[47%] z-10 rounded-full border-2 border-[#2e2014] bg-[#f4ecdb]" />
+      <span aria-hidden className="absolute inset-[47%] z-10 rounded-full border-2 border-line bg-paper" />
     </div>
   )
 }
@@ -287,11 +287,11 @@ export function MultiplayerGameClient({
   const theme = {
     // Thème papier "Club analogique" - transparent pour laisser le papier du body
     "--bg": "transparent",
-    "--surface": "#ece1c8",
-    "--surface-strong": "#efe5d0",
-    "--border": "rgba(46, 32, 20, 0.35)",
-    "--ink": "#2e2014",
-    "--muted": "#8a7558",
+    "--surface": "rgb(var(--c-paper-deep))",
+    "--surface-strong": "rgb(var(--c-well))",
+    "--border": "rgb(var(--c-line) / 0.35)",
+    "--ink": "rgb(var(--c-ink))",
+    "--muted": "rgb(var(--c-sourd))",
     "--accent": accent,
     "--success": "#7d9471",
     "--warn": "#e0a32e",
@@ -698,7 +698,7 @@ export function MultiplayerGameClient({
   }
 
   const panelClassName =
-    "rounded-md border-2 border-[#2e2014] bg-[var(--surface)] p-5 shadow-[4px_4px_0_rgba(46,32,20,.18)]"
+    "rounded-md border-2 border-line bg-[var(--surface)] p-5 shadow-[4px_4px_0_rgb(var(--c-shadow)/.18)]"
 
   // Waveform bars component
   const WaveformBars = ({ active }: { active: boolean }) => (
@@ -724,8 +724,8 @@ export function MultiplayerGameClient({
   // Theater UI is the new visual for friends/streamer modes.
   // Overlay de pause : plein ecran chez tout le monde, bouton reprendre chez l'hote.
   const pauseOverlay = isPaused ? (
-    <div className="fixed inset-0 z-[80] flex flex-col items-center justify-center gap-4 px-8 text-center" style={{ background: "rgba(46,32,20,.92)" }}>
-      <p className="font-display text-6xl font-bold text-[#f4ecdb]">PAUSE</p>
+    <div className="fixed inset-0 z-[80] flex flex-col items-center justify-center gap-4 px-8 text-center" style={{ background: "rgb(var(--c-ink-block) / .92)" }}>
+      <p className="font-display text-6xl font-bold text-on-ink">PAUSE</p>
       <p className="text-sm font-semibold text-[#d8cdb4]">
         {isHost ? "La partie est gelée pour tout le monde." : "L'hôte a mis la partie en pause."}
       </p>
@@ -733,7 +733,7 @@ export function MultiplayerGameClient({
         <button
           type="button"
           onClick={onPauseToggle}
-          className="rounded-md border-2 border-[#f4ecdb] bg-[#f4ecdb] px-6 py-3 font-display text-lg font-bold text-[#2e2014] shadow-[4px_4px_0_rgba(244,236,219,.3)]"
+          className="rounded-md border-2 border-on-ink bg-paper px-6 py-3 font-display text-lg font-bold text-ink shadow-[4px_4px_0_rgba(244,236,219,.3)]"
         >
           Reprendre
         </button>
@@ -823,7 +823,7 @@ export function MultiplayerGameClient({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-[70] flex items-center justify-center"
-            style={{ background: "rgba(244,236,219,0.94)" }}
+            style={{ background: "rgb(var(--c-paper) / 0.94)" }}
           >
             <motion.span
               key={introCount}
@@ -841,7 +841,7 @@ export function MultiplayerGameClient({
       {pauseOverlay}
       {audioBrokenNotice && (
         <div
-          className="sticky top-0 z-[59] border-b-2 border-[#2e2014] px-3 py-2 text-center text-xs font-semibold sm:text-sm"
+          className="sticky top-0 z-[59] border-b-2 border-line px-3 py-2 text-center text-xs font-semibold sm:text-sm"
           style={{ background: "#b3543f", color: "#f4ecdb" }}
         >
           Pas de son ? L&apos;extrait semble indisponible. Tente le bouton play, ou passez la manche.
@@ -849,18 +849,18 @@ export function MultiplayerGameClient({
       )}
       {hostGone && (
         <div
-          className="sticky top-0 z-[60] border-b-2 border-[#2e2014] px-3 py-2 text-center text-xs font-semibold sm:text-sm"
-          style={{ background: "#e0a32e", color: "#2e2014" }}
+          className="sticky top-0 z-[60] border-b-2 border-line px-3 py-2 text-center text-xs font-semibold sm:text-sm"
+          style={{ background: "#e0a32e", color: "rgb(var(--c-on-accent))" }}
         >
           L&apos;organisateur a quitté. La musique passe sur ton téléphone, monte le son.
         </div>
       )}
       <div className="relative flex min-h-screen flex-col">
         {/* Header - compact */}
-        <header className="shrink-0 border-b-2 border-[#2e2014]">
+        <header className="shrink-0 border-b-2 border-line">
           <div className="mx-auto flex w-full items-center justify-between gap-2 px-3 py-2.5 sm:gap-4 sm:px-6 lg:px-12">
             <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-              <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-[#2e2014] bg-[var(--surface)] sm:h-10 sm:w-10">
+              <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-line bg-[var(--surface)] sm:h-10 sm:w-10">
                 <Clock className="relative h-4 w-4" style={{ color: timerColor }} />
               </div>
               <div className="min-w-0">
@@ -872,7 +872,7 @@ export function MultiplayerGameClient({
             </div>
 
             <motion.div
-              className="rounded-full border-[1.5px] border-[#2e2014] bg-[var(--surface)] px-4 py-1.5"
+              className="rounded-full border-[1.5px] border-line bg-[var(--surface)] px-4 py-1.5"
               animate={isPlaying && remaining <= 5 && remaining > 0 ? { x: [0, -2, 2, -2, 2, 0], scale: [1, 1.02, 1] } : { x: 0, scale: 1 }}
               transition={isPlaying && remaining <= 5 && remaining > 0 ? { duration: 0.4, repeat: Infinity, repeatDelay: 0.6 } : { duration: 0.2 }}
             >
@@ -880,7 +880,7 @@ export function MultiplayerGameClient({
                 <span className={`${isLargeUI ? "text-2xl" : "text-base"} font-display font-bold`} style={{ color: timerColor }}>
                   {isPlaying ? `${remaining}s` : isLocked ? "LOCK" : "REVEAL"}
                 </span>
-                <div className={`hidden sm:block ${isLargeUI ? "h-2 w-40" : "h-1.5 w-28"} rounded-full bg-[rgba(46,32,20,.15)]`}>
+                <div className={`hidden sm:block ${isLargeUI ? "h-2 w-40" : "h-1.5 w-28"} rounded-full bg-[rgb(var(--c-line)/.15)]`}>
                   <div
                     className="h-full rounded-full transition-all duration-1000"
                     style={{ width: `${timerProgress}%`, background: timerColor }}
@@ -899,7 +899,7 @@ export function MultiplayerGameClient({
                 <span>{playerCount}</span>
               </div>
               {/* Volume control (hidden for event participants — audio plays on presenter only) */}
-              {!isEventParticipant && <div className="flex shrink-0 items-center gap-1 rounded-full border-[1.5px] border-[#2e2014] bg-[var(--surface)] px-1.5 py-1.5">
+              {!isEventParticipant && <div className="flex shrink-0 items-center gap-1 rounded-full border-[1.5px] border-line bg-[var(--surface)] px-1.5 py-1.5">
                 <button
                   className="flex h-7 w-7 items-center justify-center rounded-full text-[var(--muted)] transition hover:text-[var(--ink)]"
                   onClick={() => {
@@ -930,13 +930,13 @@ export function MultiplayerGameClient({
                       setMuted(true)
                     }
                   }}
-                  className="hidden h-1 cursor-pointer appearance-none rounded-full bg-[rgba(46,32,20,.25)] accent-[var(--accent)] sm:block sm:w-16 md:w-20"
+                  className="hidden h-1 cursor-pointer appearance-none rounded-full bg-[rgb(var(--c-line)/.25)] accent-[var(--accent)] sm:block sm:w-16 md:w-20"
                   style={{ accentColor: accent }}
                 />
               </div>}
               {isHost && onPauseToggle && (
                 <button
-                  className="flex shrink-0 items-center rounded-full border-[1.5px] border-[#2e2014] bg-[var(--surface)] px-2 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--ink)] transition hover:bg-[#2e2014] hover:text-[#f4ecdb] sm:px-3"
+                  className="flex shrink-0 items-center rounded-full border-[1.5px] border-line bg-[var(--surface)] px-2 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--ink)] transition hover:bg-ink-block hover:text-on-ink sm:px-3"
                   onClick={onPauseToggle}
                   title="Pause"
                 >
@@ -946,7 +946,7 @@ export function MultiplayerGameClient({
               )}
               {onExit && (
                 <button
-                  className="flex shrink-0 items-center rounded-full border-[1.5px] border-[#2e2014] bg-[var(--surface)] px-2 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--ink)] transition hover:bg-[#2e2014] hover:text-[#f4ecdb] sm:px-3"
+                  className="flex shrink-0 items-center rounded-full border-[1.5px] border-line bg-[var(--surface)] px-2 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--ink)] transition hover:bg-ink-block hover:text-on-ink sm:px-3"
                   onClick={onExit}
                   title="Quitter"
                 >
@@ -998,13 +998,13 @@ export function MultiplayerGameClient({
                             <div className="flex w-32 flex-col items-center">
                               <div className="mb-2 text-sm font-bold text-[var(--muted)]">2e</div>
                               {sortedPlayersFixed[1].avatar ? (
-                                <img src={sortedPlayersFixed[1].avatar} alt={sortedPlayersFixed[1].username ?? "2e joueur"} className="mb-2 h-12 w-12 rounded-full border-2 border-[#2e2014] object-cover" />
+                                <img src={sortedPlayersFixed[1].avatar} alt={sortedPlayersFixed[1].username ?? "2e joueur"} className="mb-2 h-12 w-12 rounded-full border-2 border-line object-cover" />
                               ) : (
-                                <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-full border-2 border-[#2e2014] bg-[#f4ecdb] text-lg font-bold text-[var(--muted)]">
+                                <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-full border-2 border-line bg-paper text-lg font-bold text-[var(--muted)]">
                                   {(sortedPlayersFixed[1].username || "?")[0].toUpperCase()}
                                 </div>
                               )}
-                              <div className="flex h-24 w-full flex-col items-center justify-center rounded-t-md border-2 border-[#2e2014] bg-[var(--surface-strong)]">
+                              <div className="flex h-24 w-full flex-col items-center justify-center rounded-t-md border-2 border-line bg-[var(--surface-strong)]">
                                 <span className="font-display text-lg font-semibold">{sortedPlayersFixed[1].username || "?"}</span>
                                 <span className="font-display text-2xl font-bold text-[var(--muted)]">{sortedPlayersFixed[1].score}</span>
                               </div>
@@ -1013,13 +1013,13 @@ export function MultiplayerGameClient({
                             <div className="flex w-36 flex-col items-center">
                               <Crown className="mb-2 h-8 w-8" style={{ color: accent }} />
                               {sortedPlayersFixed[0].avatar ? (
-                                <img src={sortedPlayersFixed[0].avatar} alt={sortedPlayersFixed[0].username ?? "1er joueur"} className="mb-2 h-16 w-16 rounded-full object-cover border-2 border-[#2e2014]" style={{ boxShadow: `0 0 0 3px ${accent}` }} />
+                                <img src={sortedPlayersFixed[0].avatar} alt={sortedPlayersFixed[0].username ?? "1er joueur"} className="mb-2 h-16 w-16 rounded-full object-cover border-2 border-line" style={{ boxShadow: `0 0 0 3px ${accent}` }} />
                               ) : (
-                                <div className="mb-2 flex h-16 w-16 items-center justify-center rounded-full border-2 border-[#2e2014] text-xl font-bold text-[#f4ecdb]" style={{ background: accent }}>
+                                <div className="mb-2 flex h-16 w-16 items-center justify-center rounded-full border-2 border-line text-xl font-bold text-on-ink" style={{ background: accent }}>
                                   {(sortedPlayersFixed[0].username || "?")[0].toUpperCase()}
                                 </div>
                               )}
-                              <div className="flex h-36 w-full flex-col items-center justify-center rounded-t-md border-2 border-[#2e2014]" style={{ background: `${accent}2b`, boxShadow: "4px 4px 0 rgba(46,32,20,.18)" }}>
+                              <div className="flex h-36 w-full flex-col items-center justify-center rounded-t-md border-2 border-line" style={{ background: `${accent}2b`, boxShadow: "4px 4px 0 rgb(var(--c-shadow) / .18)" }}>
                                 <span className="font-display text-xl font-bold">{sortedPlayersFixed[0].username || "?"}</span>
                                 <span className="font-display text-3xl font-bold" style={{ color: accent }}>{sortedPlayersFixed[0].score}</span>
                                 <span className="text-sm text-[var(--muted)]">{Math.round(sortedPlayersFixed[0].accuracy ?? 0)}%</span>
@@ -1029,13 +1029,13 @@ export function MultiplayerGameClient({
                             <div className="flex w-32 flex-col items-center">
                               <div className="mb-2 text-sm font-bold text-[var(--muted)]">3e</div>
                               {sortedPlayersFixed[2].avatar ? (
-                                <img src={sortedPlayersFixed[2].avatar} alt={sortedPlayersFixed[2].username ?? "3e joueur"} className="mb-2 h-12 w-12 rounded-full border-2 border-[#2e2014] object-cover" />
+                                <img src={sortedPlayersFixed[2].avatar} alt={sortedPlayersFixed[2].username ?? "3e joueur"} className="mb-2 h-12 w-12 rounded-full border-2 border-line object-cover" />
                               ) : (
-                                <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-full border-2 border-[#2e2014] bg-[#f4ecdb] text-lg font-bold text-[var(--muted)]">
+                                <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-full border-2 border-line bg-paper text-lg font-bold text-[var(--muted)]">
                                   {(sortedPlayersFixed[2].username || "?")[0].toUpperCase()}
                                 </div>
                               )}
-                              <div className="flex h-20 w-full flex-col items-center justify-center rounded-t-md border-2 border-[#2e2014] bg-[var(--surface-strong)]">
+                              <div className="flex h-20 w-full flex-col items-center justify-center rounded-t-md border-2 border-line bg-[var(--surface-strong)]">
                                 <span className="font-display text-lg font-semibold">{sortedPlayersFixed[2].username || "?"}</span>
                                 <span className="font-display text-2xl font-bold text-[var(--muted)]">{sortedPlayersFixed[2].score}</span>
                               </div>
@@ -1046,7 +1046,7 @@ export function MultiplayerGameClient({
                             {sortedPlayersFixed.slice(0, 2).map((p, idx) => (
                               <div key={p.userId} className="flex flex-col items-center gap-2">
                                 {idx === 0 && <Crown className="h-6 w-6" style={{ color: accent }} />}
-                                <div className="flex h-28 w-28 flex-col items-center justify-center rounded-md border-2 border-[#2e2014] shadow-[4px_4px_0_rgba(46,32,20,.18)]"
+                                <div className="flex h-28 w-28 flex-col items-center justify-center rounded-md border-2 border-line shadow-[4px_4px_0_rgb(var(--c-shadow)/.18)]"
                                   style={{ background: idx === 0 ? `${accent}2b` : "var(--surface-strong)" }}>
                                   <span className="font-display text-lg font-semibold">{p.username || "?"}</span>
                                   <span className="font-display text-2xl font-bold" style={{ color: idx === 0 ? accent : "var(--muted)" }}>{p.score}</span>
@@ -1058,7 +1058,7 @@ export function MultiplayerGameClient({
                         {onRematch && (
                           <button
                             onClick={onRematch}
-                            className="mt-4 rounded-md border-2 border-[#2e2014] px-8 py-3 text-lg font-bold shadow-[4px_4px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#2e2014]"
+                            className="mt-4 rounded-md border-2 border-line px-8 py-3 text-lg font-bold shadow-[4px_4px_0_rgb(var(--c-shadow))] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgb(var(--c-shadow))]"
                             style={{ background: accent, color: "#f4ecdb" }}
                           >
                             Rejouer
@@ -1083,7 +1083,7 @@ export function MultiplayerGameClient({
                         >
                           <p className="text-sm font-bold uppercase tracking-[0.32em]" style={{ color: accent }}>La réponse était</p>
                           <h2 className="mt-3 font-display text-5xl font-semibold">{currentTrack.title}</h2>
-                          <p className="mt-2 font-display text-2xl italic text-[#6b573f]">{currentTrack.artist}</p>
+                          <p className="mt-2 font-display text-2xl italic text-ink-2">{currentTrack.artist}</p>
                           {trackOwnerUsername && (
                             <p className="mt-3 text-base text-[var(--muted)]">Proposé par <span className="font-semibold" style={{ color: accent }}>{trackOwnerUsername}</span></p>
                           )}
@@ -1101,17 +1101,17 @@ export function MultiplayerGameClient({
                           {sortedPlayersFixed.slice(0, 3).map((p, idx) => (
                             <div
                               key={p.userId}
-                              className="flex items-center gap-2 rounded-md border-[1.5px] border-[#2e2014] px-3 py-2"
+                              className="flex items-center gap-2 rounded-md border-[1.5px] border-line px-3 py-2"
                               style={{
                                 background: idx === 0 ? `${accent}2b` : "var(--surface-strong)",
                               }}
                             >
-                              <span className="flex h-6 w-6 items-center justify-center rounded-full border border-[#2e2014] text-[10px] font-bold"
+                              <span className="flex h-6 w-6 items-center justify-center rounded-full border border-line text-[10px] font-bold"
                                 style={{ background: idx === 0 ? accent : "#f4ecdb", color: idx === 0 ? "#f4ecdb" : "var(--muted)" }}>
                                 {idx + 1}
                               </span>
                               {p.avatar ? (
-                                <img src={p.avatar} alt={p.username ?? "Joueur"} className="h-6 w-6 rounded-full border border-[#2e2014] object-cover" />
+                                <img src={p.avatar} alt={p.username ?? "Joueur"} className="h-6 w-6 rounded-full border border-line object-cover" />
                               ) : null}
                               <span className="font-display text-sm font-medium">{p.username || "?"}</span>
                               <span className="text-sm font-bold" style={{ color: idx === 0 ? accent : "var(--muted)" }}>{p.score}</span>
@@ -1129,7 +1129,7 @@ export function MultiplayerGameClient({
                         {manualPlayRequired && isAudioPhase && (
                           <button
                             onClick={handleManualPlay}
-                            className="absolute top-[30%] flex h-20 w-20 items-center justify-center rounded-full border-2 border-[#2e2014] bg-[#f4ecdb] shadow-[3px_3px_0_#2e2014] transition-transform hover:scale-110"
+                            className="absolute top-[30%] flex h-20 w-20 items-center justify-center rounded-full border-2 border-line bg-paper shadow-[3px_3px_0_rgb(var(--c-shadow))] transition-transform hover:scale-110"
                             title="Lancer la musique"
                           >
                             <Play className="h-10 w-10" style={{ color: accent }} />
@@ -1155,16 +1155,16 @@ export function MultiplayerGameClient({
                                 background: p.hasAnswered ? "rgba(125,148,113,0.18)" : "var(--surface-strong)",
                               }}>
                               {p.avatar ? (
-                                <img src={p.avatar} alt={p.username ?? "Joueur"} className="h-5 w-5 rounded-full border border-[#2e2014] object-cover" />
+                                <img src={p.avatar} alt={p.username ?? "Joueur"} className="h-5 w-5 rounded-full border border-line object-cover" />
                               ) : (
-                                <span className="flex h-5 w-5 items-center justify-center rounded-full border border-[#2e2014] bg-[#f4ecdb] text-[9px] font-bold">
+                                <span className="flex h-5 w-5 items-center justify-center rounded-full border border-line bg-paper text-[9px] font-bold">
                                   {(p.username || "?")[0].toUpperCase()}
                                 </span>
                               )}
-                              <span className={p.hasAnswered ? "font-bold text-[#5d7252]" : "text-[var(--muted)]"}>
+                              <span className={p.hasAnswered ? "font-bold text-sage-deep-txt" : "text-[var(--muted)]"}>
                                 {p.username || `J${p.userId}`}
                               </span>
-                              {p.hasAnswered && <Check className="h-3.5 w-3.5 text-[#5d7252]" />}
+                              {p.hasAnswered && <Check className="h-3.5 w-3.5 text-sage-deep-txt" />}
                             </div>
                           ))}
                         </div>
@@ -1202,7 +1202,7 @@ export function MultiplayerGameClient({
                       >
                         <p className="text-[10px] font-bold uppercase tracking-[0.32em]" style={{ color: accent }}>La réponse était</p>
                         <h2 className={`mt-2 ${isLargeUI ? "text-4xl" : "text-3xl"} font-display font-semibold`}>{currentTrack.title}</h2>
-                        <p className={`mt-1 ${isLargeUI ? "text-lg" : "text-base"} font-display italic text-[#6b573f]`}>{currentTrack.artist}</p>
+                        <p className={`mt-1 ${isLargeUI ? "text-lg" : "text-base"} font-display italic text-ink-2`}>{currentTrack.artist}</p>
                         {trackOwnerUsername && (
                           <p className="mt-1 text-xs text-[var(--muted)]">Proposé par <span style={{ color: accent }}>{trackOwnerUsername}</span></p>
                         )}
@@ -1223,7 +1223,7 @@ export function MultiplayerGameClient({
                             <p className="mt-0.5 text-sm font-medium">{player?.lastGuess || "(pas de réponse)"}</p>
                           </div>
                           <span
-                            className="rounded-full px-3 py-1 text-xs font-bold uppercase tracking-[0.14em] text-[#f4ecdb]"
+                            className="rounded-full px-3 py-1 text-xs font-bold uppercase tracking-[0.14em] text-on-ink"
                             style={{ background: verdictColor(player?.lastVerdict) }}
                           >
                             {verdictLabel(player?.lastVerdict)}
@@ -1241,7 +1241,7 @@ export function MultiplayerGameClient({
                         {sortedPlayersFixed.filter(p => p.userId !== user.id).map(p => {
                           const answered = Boolean((p.lastGuess ?? "").trim())
                           return (
-                            <div key={p.userId} className="flex items-center justify-between gap-2 rounded-md border-[1.5px] border-[rgba(46,32,20,.25)] bg-[var(--surface-strong)] px-3 py-1.5 text-xs">
+                            <div key={p.userId} className="flex items-center justify-between gap-2 rounded-md border-[1.5px] border-[rgb(var(--c-line)/.25)] bg-[var(--surface-strong)] px-3 py-1.5 text-xs">
                               <span className="shrink-0 font-bold">{p.username || `J${p.userId}`}</span>
                               <span className="min-w-0 flex-1 truncate text-right" style={{ color: answered ? verdictColor(p.lastVerdict) : "var(--muted)", fontStyle: answered ? "normal" : "italic" }}>
                                 {answered ? `« ${p.lastGuess} »` : p.hasAnswered ? "a passé" : "pas de réponse"}
@@ -1264,8 +1264,8 @@ export function MultiplayerGameClient({
                           onClick={onReady}
                           disabled={disabled || player?.isReady}
                           variant="outline"
-                          className="rounded-full border-2 bg-[#f4ecdb] px-5 py-2 text-sm font-bold shadow-[3px_3px_0_rgba(46,32,20,.25)]"
-                          style={{ borderColor: "#2e2014", color: accent }}
+                          className="rounded-full border-2 bg-paper px-5 py-2 text-sm font-bold shadow-[3px_3px_0_rgb(var(--c-shadow)/.25)]"
+                          style={{ borderColor: "rgb(var(--c-line))", color: accent }}
                         >
                           {player?.isReady
                             ? `En attente (${readyCount}/${playerCount})`
@@ -1306,7 +1306,7 @@ export function MultiplayerGameClient({
                           {manualPlayRequired && isAudioPhase && (
                             <button
                               onClick={handleManualPlay}
-                              className="absolute left-[50px] top-1/2 -translate-x-1/2 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full border-2 border-[#2e2014] bg-[#f4ecdb] shadow-[2px_2px_0_#2e2014] transition-transform hover:scale-110"
+                              className="absolute left-[50px] top-1/2 -translate-x-1/2 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full border-2 border-line bg-paper shadow-[2px_2px_0_rgb(var(--c-shadow))] transition-transform hover:scale-110"
                               title="Lancer la musique"
                             >
                               <Play className="h-6 w-6" style={{ color: accent }} />
@@ -1346,7 +1346,7 @@ export function MultiplayerGameClient({
                       {/* Compact status bar for event participants (no audio, no vinyl).
                           Cache sur mobile : le header affiche deja timer + round (doublon). */}
                       {isEventParticipant && (
-                        <div className="hidden items-center justify-between rounded-md border-[1.5px] border-[#2e2014] bg-[var(--surface-strong)] px-4 py-3 sm:flex">
+                        <div className="hidden items-center justify-between rounded-md border-[1.5px] border-line bg-[var(--surface-strong)] px-4 py-3 sm:flex">
                           <div className="flex items-center gap-3">
                             {isPlaying ? (
                               <span className="h-2.5 w-2.5 animate-pulse rounded-full" style={{ background: accent }} />
@@ -1383,7 +1383,7 @@ export function MultiplayerGameClient({
                         {isLocked && (
                           <motion.div
                             className="absolute inset-0 z-10 flex flex-col items-center justify-center rounded-md"
-                            style={{ background: "rgba(244,236,219,0.92)" }}
+                            style={{ background: "rgb(var(--c-paper) / 0.92)" }}
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             transition={{ duration: 0.3 }}
@@ -1394,7 +1394,7 @@ export function MultiplayerGameClient({
                               animate={{ scale: 1 }}
                               transition={{ duration: 0.3 }}
                             >
-                              <div className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-[#2e2014]" style={{ background: `${accent}22` }}>
+                              <div className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-line" style={{ background: `${accent}22` }}>
                                 <Lock className="h-6 w-6" style={{ color: accent }} />
                               </div>
                               <p className="font-display text-lg font-semibold">C'est noté</p>
@@ -1428,8 +1428,8 @@ export function MultiplayerGameClient({
                                   disabled={localHasAnswered || disabled}
                                   {...ANSWER_INPUT_PROPS}
                                   aria-label="Titre du morceau"
-                                  className={`w-full rounded-md border-[1.5px] bg-[#f4ecdb] px-3 py-3 pr-9 font-display text-lg text-[var(--ink)] outline-none transition-colors placeholder:italic placeholder:text-[#b3a182] focus:border-[var(--accent)] ${
-                                    guessTitle.trim() ? "border-[#7d9471]" : "border-[rgba(46,32,20,.45)]"
+                                  className={`w-full rounded-md border-[1.5px] bg-paper px-3 py-3 pr-9 font-display text-lg text-[var(--ink)] outline-none transition-colors placeholder:italic placeholder:text-pale focus:border-[var(--accent)] ${
+                                    guessTitle.trim() ? "border-sage" : "border-[rgb(var(--c-line)/.45)]"
                                   }`}
                                   placeholder="Le morceau qui tourne…"
                                 />
@@ -1450,8 +1450,8 @@ export function MultiplayerGameClient({
                                   disabled={localHasAnswered || disabled}
                                   {...ANSWER_INPUT_PROPS}
                                   aria-label="Artiste"
-                                  className={`w-full rounded-md border-[1.5px] bg-[#f4ecdb] px-3 py-3 pr-9 font-display text-lg text-[var(--ink)] outline-none transition-colors placeholder:italic placeholder:text-[#b3a182] focus:border-[var(--accent)] ${
-                                    guessArtist.trim() ? "border-[#7d9471]" : "border-[rgba(46,32,20,.45)]"
+                                  className={`w-full rounded-md border-[1.5px] bg-paper px-3 py-3 pr-9 font-display text-lg text-[var(--ink)] outline-none transition-colors placeholder:italic placeholder:text-pale focus:border-[var(--accent)] ${
+                                    guessArtist.trim() ? "border-sage" : "border-[rgb(var(--c-line)/.45)]"
                                   }`}
                                   placeholder="Qui chante ?"
                                 />
@@ -1475,7 +1475,7 @@ export function MultiplayerGameClient({
                                   type="button"
                                   disabled={localHasAnswered || disabled}
                                   onClick={() => setSourceGuess(sourceGuess === p.userId ? null : p.userId)}
-                                  className={`flex items-center gap-2 rounded-full border-2 border-[#2e2014] px-3.5 py-2.5 text-xs font-bold transition-all duration-150 hover:-translate-y-0.5 active:scale-90 disabled:opacity-60 ${
+                                  className={`flex items-center gap-2 rounded-full border-2 border-line px-3.5 py-2.5 text-xs font-bold transition-all duration-150 hover:-translate-y-0.5 active:scale-90 disabled:opacity-60 ${
                                     sourceGuess === p.userId ? "-translate-y-0.5 scale-105" : ""
                                   }`}
                                   style={{
@@ -1488,7 +1488,7 @@ export function MultiplayerGameClient({
                                     <img
                                       src={p.avatar}
                                       alt={p.username ?? "Joueur"}
-                                      className="h-5 w-5 rounded-full border border-[#2e2014] object-cover"
+                                      className="h-5 w-5 rounded-full border border-line object-cover"
                                     />
                                   ) : (
                                     <span
@@ -1521,7 +1521,7 @@ export function MultiplayerGameClient({
                             style={{
                               background: localHasAnswered ? "var(--surface-strong)" : "#2e2014",
                               color: localHasAnswered ? "var(--muted)" : "#f4ecdb",
-                              border: "2px solid #2e2014",
+                              border: "2px solid rgb(var(--c-line))",
                               boxShadow: hasInput && !localHasAnswered ? "4px 4px 0 rgba(46,32,20,.3)" : "none",
                             }}
                             whileTap={!localHasAnswered ? { scale: 0.93 } : undefined}
@@ -1593,7 +1593,7 @@ export function MultiplayerGameClient({
                           {p.streak}x
                         </span>
                       )}
-                      <span className="flex-1 -translate-y-1 border-b-2 border-dotted border-[rgba(46,32,20,.45)]" />
+                      <span className="flex-1 -translate-y-1 border-b-2 border-dotted border-[rgb(var(--c-line)/.45)]" />
                       <span className="font-bold tabular-nums"><CountUp value={p.score} /></span>
                     </motion.div>
                   ))}
@@ -1611,7 +1611,7 @@ export function MultiplayerGameClient({
               >
                 <ConfettiBurst />
                 <div className="text-center">
-                  <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full border-2 border-[#2e2014]" style={{ background: `${accent}22` }}>
+                  <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full border-2 border-line" style={{ background: `${accent}22` }}>
                     <Trophy className="h-6 w-6" style={{ color: accent }} />
                   </div>
                   <h3 className="font-display text-xl font-semibold">Partie terminée</h3>
@@ -1625,7 +1625,7 @@ export function MultiplayerGameClient({
                   <div className="mt-5 flex items-end justify-center gap-2">
                     <div className="flex w-20 flex-col items-center">
                       <div className="mb-1 text-[10px] font-bold text-[var(--muted)]">2e</div>
-                      <div className="flex h-16 w-full flex-col items-center justify-center rounded-t-md border-2 border-[#2e2014] bg-[var(--surface-strong)]">
+                      <div className="flex h-16 w-full flex-col items-center justify-center rounded-t-md border-2 border-line bg-[var(--surface-strong)]">
                         <span className="font-display text-xs font-semibold">{sortedPlayersFixed[1].username || "?"}</span>
                         <span className="text-[11px] text-[var(--muted)]">{sortedPlayersFixed[1].score}</span>
                       </div>
@@ -1633,8 +1633,8 @@ export function MultiplayerGameClient({
                     <div className="flex w-24 flex-col items-center">
                       <Crown className="mb-1 h-4 w-4" style={{ color: accent }} />
                       <div
-                        className="flex h-24 w-full flex-col items-center justify-center rounded-t-md border-2 border-[#2e2014]"
-                        style={{ background: `${accent}2b`, boxShadow: "3px 3px 0 rgba(46,32,20,.18)" }}
+                        className="flex h-24 w-full flex-col items-center justify-center rounded-t-md border-2 border-line"
+                        style={{ background: `${accent}2b`, boxShadow: "3px 3px 0 rgb(var(--c-shadow) / .18)" }}
                       >
                         <span className="font-display text-sm font-semibold">{sortedPlayersFixed[0].username || "?"}</span>
                         <span className="font-display text-base font-bold" style={{ color: accent }}>{sortedPlayersFixed[0].score}</span>
@@ -1643,7 +1643,7 @@ export function MultiplayerGameClient({
                     </div>
                     <div className="flex w-20 flex-col items-center">
                       <div className="mb-1 text-[10px] font-bold text-[var(--muted)]">3e</div>
-                      <div className="flex h-14 w-full flex-col items-center justify-center rounded-t-md border-2 border-[#2e2014] bg-[var(--surface-strong)]">
+                      <div className="flex h-14 w-full flex-col items-center justify-center rounded-t-md border-2 border-line bg-[var(--surface-strong)]">
                         <span className="font-display text-xs font-semibold">{sortedPlayersFixed[2].username || "?"}</span>
                         <span className="text-[11px] text-[var(--muted)]">{sortedPlayersFixed[2].score}</span>
                       </div>
@@ -1659,7 +1659,7 @@ export function MultiplayerGameClient({
                         {idx === 0 && <Crown className="h-4 w-4" style={{ color: accent }} />}
                         {idx === 1 && <div className="h-4" />}
                         <div
-                          className="flex h-20 w-24 flex-col items-center justify-center rounded-md border-2 border-[#2e2014]"
+                          className="flex h-20 w-24 flex-col items-center justify-center rounded-md border-2 border-line"
                           style={{
                             background: idx === 0 ? `${accent}2b` : "var(--surface-strong)",
                             boxShadow: idx === 0 ? "3px 3px 0 rgba(46,32,20,.18)" : "none",
@@ -1692,7 +1692,7 @@ export function MultiplayerGameClient({
                         <span className="text-xs font-bold" style={{ color: "var(--warn)" }}>{p.bestStreak}x</span>
                       )}
                       <span className="text-[10px] text-[var(--muted)]">{Math.round(p.accuracy ?? 0)}%</span>
-                      <span className="flex-1 -translate-y-1 border-b-2 border-dotted border-[rgba(46,32,20,.45)]" />
+                      <span className="flex-1 -translate-y-1 border-b-2 border-dotted border-[rgb(var(--c-line)/.45)]" />
                       <span className="font-bold">{p.score}</span>
                     </div>
                   ))}
@@ -1702,7 +1702,7 @@ export function MultiplayerGameClient({
                   {onRematch && (
                     <button
                       onClick={onRematch}
-                      className="rounded-md border-2 border-[#2e2014] px-5 py-2 text-sm font-bold shadow-[3px_3px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[1px_1px_0_#2e2014]"
+                      className="rounded-md border-2 border-line px-5 py-2 text-sm font-bold shadow-[3px_3px_0_rgb(var(--c-shadow))] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[1px_1px_0_rgb(var(--c-shadow))]"
                       style={{ background: accent, color: "#f4ecdb" }}
                     >
                       Rejouer
@@ -1711,7 +1711,7 @@ export function MultiplayerGameClient({
                   {onExit && (
                     <button
                       onClick={onExit}
-                      className="rounded-full border-[1.5px] border-[#2e2014] bg-[#f4ecdb] px-5 py-2 text-sm font-bold text-[var(--ink)] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+                      className="rounded-full border-[1.5px] border-line bg-paper px-5 py-2 text-sm font-bold text-[var(--ink)] transition hover:bg-ink-block hover:text-on-ink"
                     >
                       Retour au lobby
                     </button>
@@ -1727,20 +1727,20 @@ export function MultiplayerGameClient({
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.1 }}
-              className="flex w-full flex-col overflow-hidden rounded-md border-2 border-[#2e2014] bg-[var(--surface)] shadow-[4px_4px_0_rgba(46,32,20,.18)] lg:sticky lg:top-4 lg:h-[calc(100vh-100px)] lg:w-72"
+              className="flex w-full flex-col overflow-hidden rounded-md border-2 border-line bg-[var(--surface)] shadow-[4px_4px_0_rgb(var(--c-shadow)/.18)] lg:sticky lg:top-4 lg:h-[calc(100vh-100px)] lg:w-72"
             >
               {/* Scoreboard */}
-              <div className="border-b-2 border-[#2e2014] px-4 py-3">
+              <div className="border-b-2 border-line px-4 py-3">
                 <p className="text-[10px] font-bold uppercase tracking-[0.3em]" style={{ color: accent }}>Face B · Classement</p>
                 <div className="mt-2 space-y-1">
                   {sortedPlayersFixed.map((p, idx) => (
                     <div
                       key={p.userId}
-                      className={`flex items-center gap-2.5 rounded-md px-2 py-1.5 ${idx === 0 ? "border-[1.5px] border-[rgba(46,32,20,.35)]" : ""}`}
+                      className={`flex items-center gap-2.5 rounded-md px-2 py-1.5 ${idx === 0 ? "border-[1.5px] border-[rgb(var(--c-line)/.35)]" : ""}`}
                       style={idx === 0 ? { background: `${accent}1c` } : undefined}
                     >
                       <span
-                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-[1.5px] border-[#2e2014] font-display text-[11px] font-bold ${idx === 0 ? "text-[#2e2014]" : "text-[var(--muted)]"}`}
+                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-[1.5px] border-line font-display text-[11px] font-bold ${idx === 0 ? "text-ink" : "text-[var(--muted)]"}`}
                         style={idx === 0 ? { background: accent } : undefined}
                       >
                         {idx + 1}
@@ -1758,7 +1758,7 @@ export function MultiplayerGameClient({
                       {isRevealed && p.isReady && (
                         <Check className="h-3 w-3 shrink-0" style={{ color: "var(--success)" }} />
                       )}
-                      <span className="flex-1 border-b-2 border-dotted border-[rgba(46,32,20,.35)]" />
+                      <span className="flex-1 border-b-2 border-dotted border-[rgb(var(--c-line)/.35)]" />
                       <motion.span
                         key={`${p.userId}-${p.score}`}
                         initial={{ scale: 1.45 }}
@@ -1774,7 +1774,7 @@ export function MultiplayerGameClient({
               </div>
 
               {/* Round status */}
-              <div className="border-b-2 border-[#2e2014] px-4 py-2">
+              <div className="border-b-2 border-line px-4 py-2">
                 <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[var(--muted)]">
                   Round {state?.currentRound ?? 0}/{state?.totalRounds ?? 0}
                 </p>
@@ -1786,7 +1786,7 @@ export function MultiplayerGameClient({
               </div>
 
               {/* Chat */}
-              <div className="flex items-center justify-between border-b-2 border-[#2e2014] px-4 py-2">
+              <div className="flex items-center justify-between border-b-2 border-line px-4 py-2">
                 <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[var(--muted)]">Chat</p>
               </div>
               <div ref={chatScrollRef} className="flex-1 space-y-1 overflow-auto px-3 py-2 text-xs">
@@ -1806,7 +1806,7 @@ export function MultiplayerGameClient({
               </div>
               {onSendChat && (
                 <form
-                  className="border-t-2 border-[#2e2014] px-3 py-2"
+                  className="border-t-2 border-line px-3 py-2"
                   onSubmit={e => {
                     e.preventDefault()
                     const text = chatInput.trim()
@@ -1820,7 +1820,7 @@ export function MultiplayerGameClient({
                     onChange={e => setChatInput(e.target.value)}
                     placeholder="Message..."
                     maxLength={200}
-                    className="w-full rounded-md border-[1.5px] border-[rgba(46,32,20,.35)] bg-[var(--surface-strong)] px-2.5 py-1.5 text-xs text-[var(--ink)] outline-none transition placeholder:italic placeholder:text-[#b3a182] focus:border-[#2e2014]"
+                    className="w-full rounded-md border-[1.5px] border-[rgb(var(--c-line)/.35)] bg-[var(--surface-strong)] px-2.5 py-1.5 text-xs text-[var(--ink)] outline-none transition placeholder:italic placeholder:text-pale focus:border-line"
                   />
                 </form>
               )}

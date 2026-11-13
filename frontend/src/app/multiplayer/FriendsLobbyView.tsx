@@ -38,17 +38,17 @@ function FriendsEntry({
   return (
     <div className="mx-auto w-full max-w-md space-y-5">
       <div className="space-y-2 text-center">
-        <h2 className="font-display text-3xl font-semibold text-[#2e2014]">
-          Une partie <em className="font-medium italic text-[#c65133]">à distance</em>
+        <h2 className="font-display text-3xl font-semibold text-ink">
+          Une partie <em className="font-medium italic text-terra-txt">à distance</em>
         </h2>
-        <p className="text-sm text-[#6b573f]">{"Crée une salle, ou entre le code qu'on t'a envoyé."}</p>
+        <p className="text-sm text-ink-2">{"Crée une salle, ou entre le code qu'on t'a envoyé."}</p>
       </div>
       <Panel dot={ACCENT}>
         <div className="grid gap-3">
           <button
             type="button"
             onClick={onHost}
-            className="w-full rounded-md border-2 border-[#2e2014] bg-[#c65133] px-5 py-3.5 text-sm font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#2e2014]"
+            className="w-full rounded-md border-2 border-line bg-terra px-5 py-3.5 text-sm font-bold text-on-ink shadow-[4px_4px_0_rgb(var(--c-shadow))] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgb(var(--c-shadow))]"
           >
             Créer une partie
           </button>
@@ -58,12 +58,12 @@ function FriendsEntry({
               onChange={e => setJoinCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8))}
               placeholder="CODE"
               aria-label="Code de la salle"
-              className="min-w-0 flex-1 rounded-md border-2 border-[#2e2014] bg-[#efe5d0] px-4 py-3 font-display text-sm font-bold uppercase tracking-[0.25em] text-[#2e2014] outline-none placeholder:text-[#b3a182] focus:border-[#c65133]"
+              className="min-w-0 flex-1 rounded-md border-2 border-line bg-well px-4 py-3 font-display text-sm font-bold uppercase tracking-[0.25em] text-ink outline-none placeholder:text-pale focus:border-terra"
             />
             <button
               type="submit"
               disabled={joining}
-              className="rounded-md border-2 border-[#2e2014] bg-[#2e2014] px-5 py-3 text-sm font-bold text-[#f4ecdb] disabled:opacity-50"
+              className="rounded-md border-2 border-line bg-ink-block px-5 py-3 text-sm font-bold text-on-ink disabled:opacity-50"
             >
               Rejoindre
             </button>
@@ -72,7 +72,7 @@ function FriendsEntry({
       </Panel>
       <DiscordHint className="text-center" />
       <p className="text-center">
-        <Link href="/friends" className="text-xs text-[#6b573f] underline hover:text-[#2e2014]">Retour</Link>
+        <Link href="/friends" className="text-xs text-ink-2 underline hover:text-ink">Retour</Link>
       </p>
     </div>
   )
@@ -101,8 +101,8 @@ function FriendsLobby(props: LobbyRendererProps) {
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 pb-32 lg:gap-6 lg:pb-10">
       {/* 1. LA SALLE : le code, le partage, et qui est deja la */}
       <section
-        className={`${BLOCK} grid gap-5 p-4 text-[#f4ecdb] sm:p-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:gap-8 lg:p-7`}
-        style={{ background: "#2e2014" }}
+        className={`${BLOCK} grid gap-5 p-4 text-on-ink sm:p-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:gap-8 lg:p-7`}
+        style={{ background: "rgb(var(--c-ink-block))" }}
         data-testid="lobby-salle"
       >
         {discord ? (
@@ -129,7 +129,7 @@ function FriendsLobby(props: LobbyRendererProps) {
             {isHost ? <DiscordHint tone="dark" className="mt-4 text-center" /> : null}
           </div>
         )}
-        <div className="min-w-0 border-t-2 border-dashed border-[#6b573f] pt-4 lg:border-l-2 lg:border-t-0 lg:pl-8 lg:pt-0">
+        <div className="min-w-0 border-t-2 border-dashed border-ink-2 pt-4 lg:border-l-2 lg:border-t-0 lg:pl-8 lg:pt-0">
           <div className="mb-3 flex items-center justify-between gap-3">
             <p className="m-0 text-[11px] font-bold uppercase tracking-[0.18em] text-[#e9dcc0]">Dans la salle</p>
             <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#e9dcc0]">
@@ -157,7 +157,7 @@ function FriendsLobby(props: LobbyRendererProps) {
             <RoundSettings room={room} accent={ACCENT} accentText="#f4ecdb" />
           ) : (
             <>
-              <p className="-mt-2 mb-3 text-sm text-[#6b573f]">Choisi par {hostName ?? "l'hôte"}.</p>
+              <p className="-mt-2 mb-3 text-sm text-ink-2">Choisi par {hostName ?? "l'hôte"}.</p>
               <RoundSettings room={room} accent={ACCENT} accentText="#f4ecdb" readOnly />
             </>
           )}
@@ -192,21 +192,21 @@ function FriendsLobby(props: LobbyRendererProps) {
             <button
               type="button"
               onClick={props.onEditMusic}
-              className="rounded-md border-2 border-[#2e2014] bg-[#f4ecdb] px-4 py-2.5 text-sm font-bold text-[#2e2014] shadow-[3px_3px_0_#2e2014] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0_#2e2014]"
+              className="rounded-md border-2 border-line bg-paper px-4 py-2.5 text-sm font-bold text-ink shadow-[3px_3px_0_rgb(var(--c-shadow))] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0_rgb(var(--c-shadow))]"
             >
               Changer ma musique
             </button>
           </Panel>
         ) : (
         <Panel fill label="Ta musique" dot={ACCENT} testId="lobby-musique" className="min-w-0">
-          <p className="-mt-2 mb-3 text-sm text-[#6b573f]">
+          <p className="-mt-2 mb-3 text-sm text-ink-2">
             La partie pioche dans la musique de chaque joueur présent. Coche ce que tu amènes ce soir.
           </p>
           {/* Une longue bibliotheque defile ici au lieu d'etirer la page. */}
           <div className="lg:max-h-[240px] lg:overflow-y-auto lg:pr-1">
             <MusicLibrary accent={ACCENT} refreshSignal={libRefresh} />
           </div>
-          <div className="mt-4 border-t-2 border-dotted border-[rgba(46,32,20,.35)] pt-4">
+          <div className="mt-4 border-t-2 border-dotted border-[rgb(var(--c-line)/.35)] pt-4">
             <ProfileImportBlock accent={ACCENT} hideHeader onImported={() => setLibRefresh(n => n + 1)} />
           </div>
         </Panel>

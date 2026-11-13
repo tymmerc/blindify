@@ -144,7 +144,7 @@ export default function GameClient() {
   }
 
   return (
-    <main className="min-h-screen text-[#2e2014]">
+    <main className="min-h-screen text-ink">
       <SoloGameClient
         user={userPayload.user}
         tracks={tracks}

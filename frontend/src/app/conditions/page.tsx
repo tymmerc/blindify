@@ -14,27 +14,27 @@ export const metadata: Metadata = {
 }
 
 const INLINE_LINK =
-  "font-bold text-[#c65133] underline decoration-[#c65133]/40 underline-offset-2 transition hover:decoration-[#c65133]"
+  "font-bold text-terra-txt underline decoration-terra-txt/40 underline-offset-2 transition hover:decoration-terra-txt"
 
 const PILL =
-  "inline-flex items-center gap-2 rounded-full border-[1.5px] border-[#2e2014] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+  "inline-flex items-center gap-2 rounded-full border-[1.5px] border-line px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-ink transition hover:bg-ink-block hover:text-on-ink"
 
 export default function ConditionsPage() {
   return (
-    <div className="min-h-screen text-[#2e2014] pb-20">
+    <div className="min-h-screen text-ink pb-20">
       <div className="mx-auto max-w-2xl px-5 pt-10">
         <div className="mb-8">
-          <Link href="/" className={`${PILL} bg-[#ece1c8]`}>
+          <Link href="/" className={`${PILL} bg-paper-deep`}>
             Retour à l&apos;accueil
           </Link>
         </div>
 
         <div className="mb-10 space-y-2">
-          <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-[#c65133]">Légal</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-terra-txt">Légal</p>
           <h1 className="font-display text-4xl font-semibold md:text-5xl">
-            Conditions <em className="font-medium italic text-[#c65133]">d&apos;utilisation</em>
+            Conditions <em className="font-medium italic text-terra-txt">d&apos;utilisation</em>
           </h1>
-          <p className="text-sm text-[#8a7558]">Dernière mise à jour : 8 novembre 2026</p>
+          <p className="text-sm text-sourd">Dernière mise à jour : 8 novembre 2026</p>
         </div>
 
         <div className="space-y-6">
@@ -161,7 +161,7 @@ export default function ConditionsPage() {
           </Link>
           <Link
             href="/"
-            className="inline-flex items-center gap-2 rounded-full border-2 border-[#2e2014] bg-[#c65133] px-5 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#f4ecdb] shadow-[3px_3px_0_#2e2014] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_#2e2014]"
+            className="inline-flex items-center gap-2 rounded-full border-2 border-line bg-terra px-5 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-on-ink shadow-[3px_3px_0_rgb(var(--c-shadow))] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_rgb(var(--c-shadow))]"
           >
             Jouer
           </Link>

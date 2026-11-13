@@ -22,10 +22,10 @@ function JoinChallenge() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-3 border-t-2 border-dotted border-[rgba(46,32,20,.3)] pt-5">
+    <form onSubmit={handleSubmit} className="space-y-3 border-t-2 border-dotted border-[rgb(var(--c-line)/.3)] pt-5">
       <div className="space-y-1">
-        <h3 className="font-display text-lg font-semibold text-[#2e2014]">On t&apos;a envoyé un défi ?</h3>
-        <p className="text-sm text-[#6b573f]">Ouvre le lien reçu, ou tape son code ici.</p>
+        <h3 className="font-display text-lg font-semibold text-ink">On t&apos;a envoyé un défi ?</h3>
+        <p className="text-sm text-ink-2">Ouvre le lien reçu, ou tape son code ici.</p>
       </div>
       <label htmlFor="challenge-code" className="sr-only">Code du défi</label>
       <div className="flex gap-2">
@@ -37,12 +37,12 @@ function JoinChallenge() {
           onChange={e => setCode(extractChallengeCode(e.target.value).slice(0, 12))}
           placeholder="Ex. K7Q2M9XA"
           autoComplete="off"
-          className="min-w-0 flex-1 rounded-md border-[1.5px] border-[rgba(46,32,20,.35)] bg-[#efe5d0] px-3 py-3 text-center font-display text-lg font-semibold tracking-[0.2em] text-[#2e2014] outline-none transition placeholder:font-sans placeholder:text-sm placeholder:italic placeholder:tracking-normal placeholder:text-[#b3a182] focus:border-[#c65133]"
+          className="min-w-0 flex-1 rounded-md border-[1.5px] border-[rgb(var(--c-line)/.35)] bg-well px-3 py-3 text-center font-display text-lg font-semibold tracking-[0.2em] text-ink outline-none transition placeholder:font-sans placeholder:text-sm placeholder:italic placeholder:tracking-normal placeholder:text-pale focus:border-terra"
         />
         <button
           type="submit"
           disabled={!ready}
-          className="shrink-0 rounded-md border-2 border-[#2e2014] bg-[#2e2014] px-4 text-sm font-bold text-[#f4ecdb] shadow-[3px_3px_0_rgba(46,32,20,.3)] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[1px_1px_0_rgba(46,32,20,.3)] disabled:cursor-not-allowed disabled:opacity-40"
+          className="shrink-0 rounded-md border-2 border-line bg-ink-block px-4 text-sm font-bold text-on-ink shadow-[3px_3px_0_rgb(var(--c-shadow)/.3)] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[1px_1px_0_rgb(var(--c-shadow)/.3)] disabled:cursor-not-allowed disabled:opacity-40"
         >
           Rejoindre le défi
         </button>
@@ -76,7 +76,7 @@ export function ChallengeTab({ settings }: { settings: SoloSettings }) {
         >
           Jouer et lancer le défi
         </button>
-        <p className="text-center text-[12px] text-[#6b573f]">
+        <p className="text-center text-[12px] text-ink-2">
           Le lien à envoyer s&apos;affiche à la fin de ta partie.
         </p>
       </form>

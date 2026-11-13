@@ -48,7 +48,7 @@ export default function Page() {
     <GuideShell
       tag="Guide EVJF et EVG"
       tagColor={VERMILION}
-      title={<>Un blind test pour un <em className="font-medium italic text-[#cc4830]">EVJF</em> ou un <em className="font-medium italic text-[#cc4830]">EVG</em></>}
+      title={<>Un blind test pour un <em className="font-medium italic text-vermillon-txt">EVJF</em> ou un <em className="font-medium italic text-vermillon-txt">EVG</em></>}
       intro="Un enterrement de vie de jeune fille ou de garçon, c'est souvent un gîte, une bande qui ne se connaît que par morceaux (les amis d'enfance, ceux de la fac, la sœur, les collègues) et une personne à mettre au centre. Un blind test fait avec la musique de tout ce monde tient très bien dans ce cadre, surtout si on le tourne vers elle."
       updated="5 octobre 2026"
       currentHref="/blind-test-evjf-evg/"

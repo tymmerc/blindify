@@ -15,7 +15,7 @@ export function GoToAccount() {
     router.replace(ACCOUNT_PATH)
   }, [router])
   return (
-    <div className="grid min-h-screen place-items-center text-sm text-[#8a7558]">
+    <div className="grid min-h-screen place-items-center text-sm text-sourd">
       <Link href={ACCOUNT_PATH} className="underline underline-offset-4">
         Mon compte
       </Link>

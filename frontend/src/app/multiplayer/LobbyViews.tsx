@@ -32,24 +32,24 @@ export function ParticipantPanel({
 }) {
   const showScores = modeConfig.game.scoring
   return (
-    <div className={`rounded-md border-2 border-[#2e2014] bg-[#ece1c8] shadow-[4px_4px_0_rgba(46,32,20,.18)] ${compact ? "p-5" : "p-7"} text-left`}>
-      <h3 className={`font-bold uppercase tracking-[0.22em] text-[#8a7558] ${variant === "large" ? "text-sm" : "text-[11px]"}`}>
+    <div className={`rounded-md border-2 border-line bg-paper-deep shadow-[4px_4px_0_rgb(var(--c-shadow)/.18)] ${compact ? "p-5" : "p-7"} text-left`}>
+      <h3 className={`font-bold uppercase tracking-[0.22em] text-sourd ${variant === "large" ? "text-sm" : "text-[11px]"}`}>
         {title}
       </h3>
-      <ul className={`mt-4 space-y-3 text-[#2e2014] ${variant === "large" ? "text-base" : "text-sm"}`}>
+      <ul className={`mt-4 space-y-3 text-ink ${variant === "large" ? "text-base" : "text-sm"}`}>
         {participants.map(participant => (
           <li
             key={participant.user_id}
             className="flex items-baseline gap-2 px-1 py-1"
           >
             <span className="font-semibold">{participant.username || `Player #${participant.user_id}`}</span>
-            <span aria-hidden className="flex-1 border-b-2 border-dotted border-[rgba(46,32,20,.45)]" />
+            <span aria-hidden className="flex-1 border-b-2 border-dotted border-[rgb(var(--c-line)/.45)]" />
             {showScores ? (
-              <span className="text-xs font-bold uppercase tracking-[0.14em] text-[#6b573f]">
+              <span className="text-xs font-bold uppercase tracking-[0.14em] text-ink-2">
                 {scores[participant.user_id]?.score ?? 0} pts · {scores[participant.user_id]?.accuracy ?? 0}%
               </span>
             ) : (
-              <span className="text-xs font-bold uppercase tracking-[0.14em] text-[#7d9471]">
+              <span className="text-xs font-bold uppercase tracking-[0.14em] text-sage-txt">
                 {typeof participant.track_count === "number"
                   ? participant.track_count > 0
                     ? `${participant.track_count} titres`
@@ -60,7 +60,7 @@ export function ParticipantPanel({
           </li>
         ))}
         {participants.length === 0 && (
-          <li className="rounded-md border-[1.5px] border-[rgba(46,32,20,.22)] bg-[#efe5d0] px-4 py-3 text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">
+          <li className="rounded-md border-[1.5px] border-[rgb(var(--c-line)/.22)] bg-well px-4 py-3 text-[11px] font-bold uppercase tracking-[0.22em] text-sourd">
             On arrive…
           </li>
         )}
@@ -262,7 +262,7 @@ export function ResultsView({
 
 
   return (
-    <section className="relative flex flex-col gap-5 overflow-hidden rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-4 text-center shadow-[4px_4px_0_rgba(46,32,20,.18)] sm:p-7">
+    <section className="relative flex flex-col gap-5 overflow-hidden rounded-md border-2 border-line bg-paper-deep p-4 text-center shadow-[4px_4px_0_rgb(var(--c-shadow)/.18)] sm:p-7">
       <ConfettiBurst />
       <style>{`
         @keyframes res-rise { from { opacity: 0; transform: translateY(18px) } to { opacity: 1; transform: translateY(0) } }
@@ -278,22 +278,22 @@ export function ResultsView({
         {podium[0] && (
           <>
             <div
-              className="res-pop relative grid h-28 w-28 place-items-center rounded-full border-[3px] border-[#2e2014] shadow-[5px_5px_0_rgba(46,32,20,.18)]"
+              className="res-pop relative grid h-28 w-28 place-items-center rounded-full border-[3px] border-line shadow-[5px_5px_0_rgb(var(--c-shadow)/.18)]"
               style={{
                 background: "repeating-radial-gradient(circle at 50% 50%, #241a10 0 2.5px, #3a2a1a 2.5px 5px)",
                 animation: "res-pop .6s cubic-bezier(.22,1,.36,1) backwards, vinyl-spin 9s linear 0.6s infinite",
                 animationDelay: "0.2s",
               }}
             >
-              <span className="absolute inset-[30%] grid place-items-center rounded-full border-[3px] border-[#2e2014] bg-[#e0a32e] font-display text-2xl font-bold text-[#2e2014]">
+              <span className="absolute inset-[30%] grid place-items-center rounded-full border-[3px] border-line bg-gold font-display text-2xl font-bold text-on-accent">
                 {initials(podium[0].username, podium[0].userId)}
               </span>
-              <span className="absolute inset-[46%] z-10 rounded-full border-2 border-[#2e2014] bg-[#f4ecdb]" />
+              <span className="absolute inset-[46%] z-10 rounded-full border-2 border-line bg-paper" />
             </div>
-            <h2 className="res-rise font-display text-4xl font-bold leading-tight text-[#2e2014]" style={{ animationDelay: "0.45s" }}>
+            <h2 className="res-rise font-display text-4xl font-bold leading-tight text-ink" style={{ animationDelay: "0.45s" }}>
               {podium[0].username || `Joueur ${podium[0].userId}`}
             </h2>
-            <p className="res-rise text-sm text-[#6b573f]" style={{ animationDelay: "0.6s" }}>
+            <p className="res-rise text-sm text-ink-2" style={{ animationDelay: "0.6s" }}>
               {/* score = des POINTS (2 par manche parfaite), pas un nombre de bonnes reponses */}
               {podium[0].score > 0
                 ? `${podium[0].score} ${podium[0].score > 1 ? "points" : "point"} · ${podium[0].accuracy}% de précision · disque d'or de la session`
@@ -317,12 +317,12 @@ export function ResultsView({
             return (
               <div key={entry!.userId} className={`res-rise flex flex-row items-center gap-3 md:flex-col ${colOrder}`} style={{ animationDelay: `${0.75 + idx * 0.15}s` }}>
                 <div
-                  className={`relative flex shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-[#2e2014] bg-[#f4ecdb] font-bold text-[#2e2014] ${rank === 1 ? "h-14 w-14 text-base md:h-24 md:w-24 md:text-xl" : "h-12 w-12 text-sm md:h-20 md:w-20 md:text-xl"}`}
+                  className={`relative flex shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-line bg-paper font-bold text-ink ${rank === 1 ? "h-14 w-14 text-base md:h-24 md:w-24 md:text-xl" : "h-12 w-12 text-sm md:h-20 md:w-20 md:text-xl"}`}
                 >
                   {rank === 1 && (
                     <span
                       aria-hidden
-                      className="absolute -top-2 -right-2 z-10 grid h-7 w-7 place-items-center rounded-full border-2 border-[#2e2014] bg-[#e0a32e] text-[9px] font-bold text-[#2e2014]"
+                      className="absolute -top-2 -right-2 z-10 grid h-7 w-7 place-items-center rounded-full border-2 border-line bg-gold text-[9px] font-bold text-on-accent"
                     >
                       N°1
                     </span>
@@ -334,22 +334,22 @@ export function ResultsView({
                   )}
                 </div>
                 <div
-                  className={`flex w-full flex-row items-center gap-3 rounded-md border-2 px-4 py-3 text-left text-[#2e2014] md:w-48 md:flex-col md:justify-end md:px-4 md:pb-4 md:pt-5 md:text-center ${height}`}
-                  style={{ borderColor, backgroundColor: "#f4ecdb", boxShadow: rank === 1 ? `4px 4px 0 ${accent}` : "4px 4px 0 rgba(46,32,20,.18)" }}
+                  className={`flex w-full flex-row items-center gap-3 rounded-md border-2 px-4 py-3 text-left text-ink md:w-48 md:flex-col md:justify-end md:px-4 md:pb-4 md:pt-5 md:text-center ${height}`}
+                  style={{ borderColor, backgroundColor: "rgb(var(--c-paper))", boxShadow: rank === 1 ? `4px 4px 0 ${accent}` : "4px 4px 0 rgba(46,32,20,.18)" }}
                 >
                   <div className="font-display text-2xl font-black md:text-4xl" style={{ color: rank === 1 ? accent : "#8a7558" }}>
                     {rank}
                   </div>
                   <div className="min-w-0 flex-1 md:flex-none">
-                    <div className="truncate text-base font-semibold text-[#2e2014] md:mt-1">{entry!.username || `Joueur ${entry!.userId}`}</div>
-                    <div className="text-sm text-[#6b573f]">{entry!.score} pts • {entry!.accuracy}%</div>
+                    <div className="truncate text-base font-semibold text-ink md:mt-1">{entry!.username || `Joueur ${entry!.userId}`}</div>
+                    <div className="text-sm text-ink-2">{entry!.score} pts • {entry!.accuracy}%</div>
                   </div>
                 </div>
               </div>
             )
           })}
         </div>
-        {podium.length === 0 && <div className="text-sm text-[#8a7558]">Aucun score.</div>}
+        {podium.length === 0 && <div className="text-sm text-sourd">Aucun score.</div>}
       </div>
 
       {/* Titres de la soiree : chacun repart avec quelque chose. Le piege est du
@@ -360,14 +360,14 @@ export function ResultsView({
           {highlights.map(a => (
             <div
               key={a.label}
-              className="res-rise flex items-center gap-3 rounded-md border-[1.5px] border-[rgba(46,32,20,.22)] bg-[#efe5d0] px-3 py-2.5 text-left sm:min-w-[14rem] sm:max-w-sm sm:flex-1"
+              className="res-rise flex items-center gap-3 rounded-md border-[1.5px] border-[rgb(var(--c-line)/.22)] bg-well px-3 py-2.5 text-left sm:min-w-[14rem] sm:max-w-sm sm:flex-1"
               style={{ animationDelay: "1.1s" }}
             >
               <span className="text-xl leading-none">{a.emoji}</span>
               <div className="min-w-0">
-                <p className="m-0 text-[10px] font-bold uppercase tracking-[0.18em] text-[#8a7558]">{a.label}</p>
-                <p className="m-0 truncate font-display text-sm font-semibold text-[#2e2014]">{a.who}</p>
-                <p className="m-0 truncate text-[11px] text-[#6b573f]">{a.detail}</p>
+                <p className="m-0 text-[10px] font-bold uppercase tracking-[0.18em] text-sourd">{a.label}</p>
+                <p className="m-0 truncate font-display text-sm font-semibold text-ink">{a.who}</p>
+                <p className="m-0 truncate text-[11px] text-ink-2">{a.detail}</p>
               </div>
             </div>
           ))}
@@ -381,22 +381,22 @@ export function ResultsView({
           style={{ borderColor: accent, background: `${accent}14` }}
         >
           <div className="flex items-center gap-3">
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full border-2 border-[#2e2014] font-display text-sm font-bold text-[#2e2014]" style={{ background: accent }}>
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full border-2 border-line font-display text-sm font-bold text-ink" style={{ background: accent }}>
               {myRank + 1}
             </span>
             <div>
-              <p className="m-0 text-[10px] font-bold uppercase tracking-[0.18em] text-[#8a7558]">Ta place</p>
-              <p className="m-0 font-display text-base font-semibold text-[#2e2014]">{me.username || "Toi"}</p>
+              <p className="m-0 text-[10px] font-bold uppercase tracking-[0.18em] text-sourd">Ta place</p>
+              <p className="m-0 font-display text-base font-semibold text-ink">{me.username || "Toi"}</p>
             </div>
           </div>
-          <p className="m-0 font-display text-lg font-bold text-[#2e2014]">{me.score} pts</p>
+          <p className="m-0 font-display text-lg font-bold text-ink">{me.score} pts</p>
         </div>
       )}
 
       {rest.length ? (
-        <div className="overflow-x-auto rounded-md border-[1.5px] border-[rgba(46,32,20,.22)] bg-[#efe5d0]">
-          <table className="w-full text-left text-sm text-[#2e2014]">
-            <thead className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">
+        <div className="overflow-x-auto rounded-md border-[1.5px] border-[rgb(var(--c-line)/.22)] bg-well">
+          <table className="w-full text-left text-sm text-ink">
+            <thead className="text-[11px] font-bold uppercase tracking-[0.22em] text-sourd">
               <tr>
                 <th className="px-6 py-3">Place</th>
                 <th className="px-6 py-3">Joueur</th>
@@ -408,13 +408,13 @@ export function ResultsView({
               {rest.map((entry, index) => (
                 <tr
                   key={entry.userId}
-                  className="border-t border-dotted border-[rgba(46,32,20,.45)]"
+                  className="border-t border-dotted border-[rgb(var(--c-line)/.45)]"
                   style={entry.userId === currentUserId ? { background: `${accent}12` } : undefined}
                 >
                   <td className="px-6 py-3">{index + 4}</td>
                   <td className="px-6 py-3">{entry.username || `Joueur ${entry.userId}`}</td>
-                  <td className="px-6 py-3 text-right font-semibold text-[#2e2014]">{entry.score}</td>
-                  <td className="px-6 py-3 text-right text-[#6b573f]">{entry.accuracy}%</td>
+                  <td className="px-6 py-3 text-right font-semibold text-ink">{entry.score}</td>
+                  <td className="px-6 py-3 text-right text-ink-2">{entry.accuracy}%</td>
                 </tr>
               ))}
             </tbody>
@@ -426,16 +426,16 @@ export function ResultsView({
       {myStats.length > 0 && (
         <div className="grid grid-cols-3 gap-2">
           {myStats.map(s => (
-            <div key={s.label} className="rounded-md border-[1.5px] border-[rgba(46,32,20,.22)] bg-[#efe5d0] px-2 py-2.5 text-center">
-              <p className="m-0 font-display text-xl font-bold text-[#2e2014]">{s.value}</p>
-              <p className="m-0 text-[9px] font-bold uppercase tracking-[0.14em] text-[#8a7558]">{s.label}</p>
+            <div key={s.label} className="rounded-md border-[1.5px] border-[rgb(var(--c-line)/.22)] bg-well px-2 py-2.5 text-center">
+              <p className="m-0 font-display text-xl font-bold text-ink">{s.value}</p>
+              <p className="m-0 text-[9px] font-bold uppercase tracking-[0.14em] text-sourd">{s.label}</p>
             </div>
           ))}
         </div>
       )}
 
       {/* Titres joues : replies par defaut (la liste mangeait tout l'ecran) */}
-      <div className="rounded-md border-[1.5px] border-[rgba(46,32,20,.22)] bg-[#efe5d0] p-4 text-left sm:p-5">
+      <div className="rounded-md border-[1.5px] border-[rgb(var(--c-line)/.22)] bg-well p-4 text-left sm:p-5">
         <button
           type="button"
           onClick={() => setTracksOpen(o => !o)}
@@ -443,16 +443,16 @@ export function ResultsView({
           aria-expanded={tracksOpen}
         >
           <div className="min-w-0">
-            <h3 className="m-0 font-display text-lg font-semibold text-[#2e2014]">Titres joués</h3>
-            <p className="m-0 text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">{tracks.length} titre(s) · qui les a ramenés</p>
+            <h3 className="m-0 font-display text-lg font-semibold text-ink">Titres joués</h3>
+            <p className="m-0 text-[11px] font-bold uppercase tracking-[0.22em] text-sourd">{tracks.length} titre(s) · qui les a ramenés</p>
           </div>
           <ChevronDown
-            className={`h-5 w-5 shrink-0 text-[#6b573f] transition-transform ${tracksOpen ? "rotate-180" : ""}`}
+            className={`h-5 w-5 shrink-0 text-ink-2 transition-transform ${tracksOpen ? "rotate-180" : ""}`}
           />
         </button>
         <div className={`grid gap-2 sm:grid-cols-2 ${tracksOpen ? "mt-4" : "hidden"}`}>
           {tracks.length === 0 ? (
-            <p className="text-sm text-[#8a7558]">Aucun titre disponible.</p>
+            <p className="text-sm text-sourd">Aucun titre disponible.</p>
           ) : (
             tracks.map((track, idx) => {
               const owner = resolveContributor(track)
@@ -461,20 +461,20 @@ export function ResultsView({
               return (
                 <div
                   key={`${id}-${idx}`}
-                  className="flex items-center justify-between rounded-md border-[1.5px] border-[rgba(46,32,20,.22)] bg-[#ece1c8] px-4 py-3 text-sm"
+                  className="flex items-center justify-between rounded-md border-[1.5px] border-[rgb(var(--c-line)/.22)] bg-paper-deep px-4 py-3 text-sm"
                 >
                   <div className="flex flex-col gap-1">
-                    <div className="font-semibold text-[#2e2014]">{track.title}</div>
-                    <div className="text-xs text-[#6b573f]">{track.artist}</div>
-                    <div className="flex items-center gap-2 text-[11px] text-[#8a7558]">
-                      <span className="rounded-full border-[1.5px] border-[rgba(46,32,20,.35)] bg-[#f4ecdb] px-2 py-[2px] text-[10px] font-bold uppercase tracking-[0.14em] text-[#6b573f]">
+                    <div className="font-semibold text-ink">{track.title}</div>
+                    <div className="text-xs text-ink-2">{track.artist}</div>
+                    <div className="flex items-center gap-2 text-[11px] text-sourd">
+                      <span className="rounded-full border-[1.5px] border-[rgb(var(--c-line)/.35)] bg-paper px-2 py-[2px] text-[10px] font-bold uppercase tracking-[0.14em] text-ink-2">
                         Joueur
                       </span>
-                      <span className="text-[#2e2014]">{owner ?? "Inconnu"}</span>
+                      <span className="text-ink">{owner ?? "Inconnu"}</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className="text-xs text-[#8a7558]">#{idx + 1}</span>
+                    <span className="text-xs text-sourd">#{idx + 1}</span>
                   </div>
                 </div>
               )
@@ -484,12 +484,12 @@ export function ResultsView({
       </div>
 
       {isGuest && (
-        <div className="mx-auto mb-5 flex max-w-md flex-col items-center gap-1.5 rounded-2xl border-2 border-[#2e2014] bg-[#efe5d0] px-5 py-4 text-center shadow-[4px_4px_0_rgba(46,32,20,.14)]">
-          <p className="m-0 font-display text-base font-semibold text-[#2e2014]">Garde ton score</p>
-          <p className="m-0 text-[13px] text-[#6b573f]">Tes parties sont gardées sur cet appareil. Un pseudo et un mot de passe suffisent pour les retrouver sur ton ordi ou un autre téléphone.</p>
+        <div className="mx-auto mb-5 flex max-w-md flex-col items-center gap-1.5 rounded-2xl border-2 border-line bg-well px-5 py-4 text-center shadow-[4px_4px_0_rgb(var(--c-shadow)/.14)]">
+          <p className="m-0 font-display text-base font-semibold text-ink">Garde ton score</p>
+          <p className="m-0 text-[13px] text-ink-2">Tes parties sont gardées sur cet appareil. Un pseudo et un mot de passe suffisent pour les retrouver sur ton ordi ou un autre téléphone.</p>
           <Link
             href="/auth/login"
-            className="mt-1.5 rounded-full border-2 border-[#2e2014] bg-[#c65133] px-5 py-2 text-sm font-bold text-[#f4ecdb] shadow-[3px_3px_0_#2e2014] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_#2e2014]"
+            className="mt-1.5 rounded-full border-2 border-line bg-terra px-5 py-2 text-sm font-bold text-on-ink shadow-[3px_3px_0_rgb(var(--c-shadow))] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_rgb(var(--c-shadow))]"
           >
             Crée un compte
           </Link>
@@ -505,7 +505,7 @@ export function ResultsView({
         <Button
           variant="outline"
           onClick={handleShare}
-          className="gap-2 rounded-full border-[1.5px] border-[#2e2014] bg-transparent px-4 py-2 text-sm font-bold text-[#2e2014] hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+          className="gap-2 rounded-full border-[1.5px] border-line bg-transparent px-4 py-2 text-sm font-bold text-ink hover:bg-ink-block hover:text-on-ink"
         >
           <Share2 className="h-4 w-4" />
           {shared ? "Copié !" : "Partager"}
@@ -514,7 +514,7 @@ export function ResultsView({
           <Button
             variant="outline"
             onClick={onReturn}
-            className="gap-2 rounded-full border-[1.5px] border-[#2e2014] bg-transparent px-4 py-2 text-sm font-bold text-[#2e2014] hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+            className="gap-2 rounded-full border-[1.5px] border-line bg-transparent px-4 py-2 text-sm font-bold text-ink hover:bg-ink-block hover:text-on-ink"
           >
             <ArrowLeft className="h-4 w-4" />
             Retour modes
@@ -525,7 +525,7 @@ export function ResultsView({
             variant="outline"
             onClick={onEditMusic}
             data-testid="fin-musique"
-            className="gap-2 rounded-full border-[1.5px] border-[#2e2014] bg-transparent px-4 py-2 text-sm font-bold text-[#2e2014] hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+            className="gap-2 rounded-full border-[1.5px] border-line bg-transparent px-4 py-2 text-sm font-bold text-ink hover:bg-ink-block hover:text-on-ink"
           >
             <Music className="h-4 w-4" />
             Changer la musique

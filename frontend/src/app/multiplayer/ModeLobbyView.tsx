@@ -1530,23 +1530,23 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       <div className="grid min-h-screen place-items-center px-6 text-center">
         {rateLimited ? (
           <div className="max-w-sm space-y-3">
-            <p className="font-display text-xl font-semibold text-[#2e2014]">Un instant…</p>
-            <p className="text-sm text-[#6b573f]">Beaucoup de monde se connecte en même temps. On réessaie tout seul dans quelques secondes.</p>
-            <Loader2 className="mx-auto h-6 w-6 animate-spin text-[#c65133]" />
+            <p className="font-display text-xl font-semibold text-ink">Un instant…</p>
+            <p className="text-sm text-ink-2">Beaucoup de monde se connecte en même temps. On réessaie tout seul dans quelques secondes.</p>
+            <Loader2 className="mx-auto h-6 w-6 animate-spin text-terra-txt" />
           </div>
         ) : error ? (
           <div className="max-w-sm space-y-3">
-            <p className="text-sm font-semibold text-[#9c2f1d]">{error}</p>
+            <p className="text-sm font-semibold text-rouge-txt">{error}</p>
             <button
               type="button"
               onClick={() => (onRetry ? onRetry() : window.location.reload())}
-              className="rounded-md border-2 border-[#2e2014] bg-[#c65133] px-5 py-2.5 text-sm font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014]"
+              className="rounded-md border-2 border-line bg-terra px-5 py-2.5 text-sm font-bold text-on-ink shadow-[4px_4px_0_rgb(var(--c-shadow))]"
             >
               Réessayer
             </button>
           </div>
         ) : (
-          <Loader2 className="h-8 w-8 animate-spin text-[#c65133]" />
+          <Loader2 className="h-8 w-8 animate-spin text-terra-txt" />
         )}
       </div>
     )
@@ -1560,17 +1560,17 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
 
   if (isPendingIntent) {
     return (
-      <div className="grid min-h-screen place-items-center px-6 text-[#6b573f]">
+      <div className="grid min-h-screen place-items-center px-6 text-ink-2">
         <div className="space-y-3 text-center">
-          <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#c65133]" />
+          <Loader2 className="mx-auto h-8 w-8 animate-spin text-terra-txt" />
           <p className="text-sm">Préparation du lobby…</p>
-          <p className="text-xs text-[#8a7558]">
+          <p className="text-xs text-sourd">
             {joinRetrying ? "Le réseau traîne, on réessaie tout seul…" : "Si l’attente dure, reviens au menu et relance."}
           </p>
           <button
             type="button"
             onClick={handleLeaveRoom}
-            className="rounded-full border-[1.5px] border-[#2e2014] bg-transparent px-4 py-2 text-sm font-bold text-[#2e2014] hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+            className="rounded-full border-[1.5px] border-line bg-transparent px-4 py-2 text-sm font-bold text-ink hover:bg-ink-block hover:text-on-ink"
           >
             Retour au menu
           </button>
@@ -1652,11 +1652,11 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
 
   const loadingGame =
     view === "playing" && room && !gameState ? (
-      <div className="grid min-h-[50vh] place-items-center text-center text-sm text-[#6b573f]">
+      <div className="grid min-h-[50vh] place-items-center text-center text-sm text-ink-2">
         <div className="space-y-3">
-          <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#c65133]" />
+          <Loader2 className="mx-auto h-8 w-8 animate-spin text-terra-txt" />
           <p>Synchronisation de la partie…</p>
-          <p className="text-xs text-[#8a7558]">Si rien ne se passe, reste sur cette page quelques secondes.</p>
+          <p className="text-xs text-sourd">Si rien ne se passe, reste sur cette page quelques secondes.</p>
         </div>
       </div>
     ) : null
@@ -1850,8 +1850,8 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         {socketNotice ? (
           <div
             role={noticeTone === "alert" ? "alert" : "status"}
-            className={`flex items-center justify-between gap-3 rounded-md border-2 bg-[#efe5d0] px-4 py-3 text-sm font-semibold shadow-[4px_4px_0_rgba(46,32,20,.18)] ${
-              noticeTone === "alert" ? "border-[#9c2f1d] text-[#9c2f1d]" : "border-[#2e2014] text-[#2e2014]"
+            className={`flex items-center justify-between gap-3 rounded-md border-2 bg-well px-4 py-3 text-sm font-semibold shadow-[4px_4px_0_rgb(var(--c-shadow)/.18)] ${
+              noticeTone === "alert" ? "border-rouge-txt text-rouge-txt" : "border-line text-ink"
             }`}
           >
             <span>{socketNotice}</span>
@@ -1868,7 +1868,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
           aussi quand le lancement bloque faute de musique. */}
       {showMusicImport ? (
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-[#2e2014]/40 p-4"
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-ink-block/40 p-4"
           onClick={() => setShowMusicImport(false)}
         >
           <div
@@ -1876,27 +1876,27 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
             aria-modal="true"
             aria-label="Ta musique"
             data-testid="musique-salle"
-            className="max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-md border-2 border-[#2e2014] bg-[#f4ecdb] p-5 shadow-[6px_6px_0_rgba(46,32,20,.25)]"
+            className="max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-md border-2 border-line bg-paper p-5 shadow-[6px_6px_0_rgb(var(--c-shadow)/.25)]"
             onClick={e => e.stopPropagation()}
           >
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="m-0 font-display text-lg font-semibold text-[#2e2014]">Ta musique</h3>
+              <h3 className="m-0 font-display text-lg font-semibold text-ink">Ta musique</h3>
               <button
                 type="button"
                 onClick={() => setShowMusicImport(false)}
                 aria-label="Fermer"
-                className="flex h-8 w-8 items-center justify-center rounded-full border-[1.5px] border-[#2e2014] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+                className="flex h-8 w-8 items-center justify-center rounded-full border-[1.5px] border-line text-ink transition hover:bg-ink-block hover:text-on-ink"
               >
                 ✕
               </button>
             </div>
-            <p className="mb-4 text-sm text-[#6b573f]">
+            <p className="mb-4 text-sm text-ink-2">
               Colle un lien Spotify, Deezer ou YouTube, ou choisis la playlist qui doit passer. Tu restes dans la salle avec les autres : la prochaine partie prendra ta nouvelle musique.
             </p>
             <div className="max-h-[220px] overflow-y-auto pr-1">
               <MusicLibrary accent={accentColor ?? "#c65133"} refreshSignal={musicRefresh} />
             </div>
-            <div className="mt-4 border-t-2 border-dotted border-[rgba(46,32,20,.35)] pt-4">
+            <div className="mt-4 border-t-2 border-dotted border-[rgb(var(--c-line)/.35)] pt-4">
               <ProfileImportBlock
                 accent={mode === "event" ? "#e0a32e" : mode === "streamer" ? "#7d9471" : "#c65133"}
                 initialUrl={initialProfileUrl ?? undefined}
@@ -1908,7 +1908,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
             <button
               type="button"
               onClick={() => { setShowMusicImport(false); setError(null); setErrorAction(null) }}
-              className="mt-4 w-full rounded-md border-2 border-[#2e2014] bg-[#ece1c8] px-4 py-2.5 text-sm font-bold text-[#2e2014] transition hover:bg-[#e0d4ba]"
+              className="mt-4 w-full rounded-md border-2 border-line bg-paper-deep px-4 py-2.5 text-sm font-bold text-ink transition hover:bg-paper-strong"
             >
               C'est bon, revenir à la salle
             </button>

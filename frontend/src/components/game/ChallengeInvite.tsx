@@ -44,10 +44,10 @@ function isAbort(err: unknown): boolean {
   return typeof err === "object" && err !== null && (err as { name?: unknown }).name === "AbortError"
 }
 
-const BUTTON_BASE = "inline-flex items-center justify-center gap-2 rounded-md border-2 border-[#2e2014] px-5 py-3 text-sm font-bold shadow-[4px_4px_0_rgba(46,32,20,.3)] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgba(46,32,20,.3)] disabled:cursor-not-allowed disabled:opacity-50"
-const INK_BUTTON = `${BUTTON_BASE} bg-[#2e2014] text-[#f4ecdb]`
+const BUTTON_BASE = "inline-flex items-center justify-center gap-2 rounded-md border-2 border-line px-5 py-3 text-sm font-bold shadow-[4px_4px_0_rgb(var(--c-shadow)/.3)] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgb(var(--c-shadow)/.3)] disabled:cursor-not-allowed disabled:opacity-50"
+const INK_BUTTON = `${BUTTON_BASE} bg-ink-block text-on-ink`
 // Confirmation = bloc sauge, texte encre (creme sur sauge : 2,8:1, illisible).
-const DONE_BUTTON = `${BUTTON_BASE} bg-[#7d9471] text-[#2e2014]`
+const DONE_BUTTON = `${BUTTON_BASE} bg-sage text-on-accent`
 
 const COPY_HINT: Record<CopyState, string> = {
   done: "Copié, tu n'as plus qu'à le coller dans ta conversation.",
@@ -83,8 +83,8 @@ function InviteReady({ invite, score, tracks, autoCopied }: { invite: Invite; sc
 
   return (
     <div className="space-y-3">
-      <h3 className="font-display text-xl font-semibold text-[#2e2014]">Ton défi est prêt</h3>
-      <p className="text-sm text-[#6b573f]">
+      <h3 className="font-display text-xl font-semibold text-ink">Ton défi est prêt</h3>
+      <p className="text-sm text-ink-2">
         Envoie ce lien à ton pote. Il verra « Défi de {invite.name} » et tes {score.points} pts à battre.
       </p>
       <label htmlFor="challenge-link" className="sr-only">Lien du défi</label>
@@ -94,7 +94,7 @@ function InviteReady({ invite, score, tracks, autoCopied }: { invite: Invite; sc
         readOnly
         value={invite.url}
         onFocus={e => e.currentTarget.select()}
-        className="w-full rounded-md border-[1.5px] border-[rgba(46,32,20,.35)] bg-[#efe5d0] px-3 py-2.5 text-sm text-[#2e2014] outline-none focus:border-[#c65133]"
+        className="w-full rounded-md border-[1.5px] border-[rgb(var(--c-line)/.35)] bg-well px-3 py-2.5 text-sm text-ink outline-none focus:border-terra"
       />
       <div className="flex flex-wrap gap-3">
         <button
@@ -112,9 +112,9 @@ function InviteReady({ invite, score, tracks, autoCopied }: { invite: Invite; sc
           </button>
         )}
       </div>
-      <p aria-live="polite" className="text-[13px] text-[#6b573f]">
+      <p aria-live="polite" className="text-[13px] text-ink-2">
         {copy === "idle" && canShare ? "Copie le lien, ou envoie-le directement." : COPY_HINT[copy]}
-        <span className="block text-[#6b573f]">Code du défi : <strong className="tracking-[0.12em] text-[#2e2014]">{invite.code}</strong></span>
+        <span className="block text-ink-2">Code du défi : <strong className="tracking-[0.12em] text-ink">{invite.code}</strong></span>
       </p>
     </div>
   )
@@ -161,7 +161,7 @@ export function ChallengeInvite({ tracks, score, defaultName, featured }: {
 
   return (
     <section
-      className="rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-5 sm:p-6"
+      className="rounded-md border-2 border-line bg-paper-deep p-5 sm:p-6"
       style={{ boxShadow: featured ? "4px 4px 0 #c65133" : "4px 4px 0 rgba(46,32,20,.18)" }}
     >
       {phase === "ready" && invite ? (
@@ -169,15 +169,15 @@ export function ChallengeInvite({ tracks, score, defaultName, featured }: {
       ) : (
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <h3 className="font-display text-xl font-semibold text-[#2e2014]">
+            <h3 className="font-display text-xl font-semibold text-ink">
               {featured ? "Plus qu'à lancer ton défi" : "Défie un pote sur ces morceaux"}
             </h3>
-            <p className="text-sm text-[#6b573f]">
+            <p className="text-sm text-ink-2">
               Ton pote écoute les mêmes {tracks.length} morceaux, dans le même ordre, et doit faire mieux que tes {score.points} pts.
             </p>
           </div>
           <div className="space-y-1.5">
-            <label htmlFor="challenge-name" className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#6b573f]">
+            <label htmlFor="challenge-name" className="text-[11px] font-bold uppercase tracking-[0.22em] text-ink-2">
               Ton nom sur le défi
             </label>
             <input
@@ -187,7 +187,7 @@ export function ChallengeInvite({ tracks, score, defaultName, featured }: {
               maxLength={24}
               placeholder="Ton pseudo"
               autoComplete="off"
-              className="w-full border-0 border-b-2 border-[#2e2014] bg-transparent px-1 py-2 font-display text-lg text-[#2e2014] outline-none placeholder:italic placeholder:text-[#b3a182] focus:border-[#c65133]"
+              className="w-full border-0 border-b-2 border-line bg-transparent px-1 py-2 font-display text-lg text-ink outline-none placeholder:italic placeholder:text-pale focus:border-terra"
             />
           </div>
           <button
@@ -200,7 +200,7 @@ export function ChallengeInvite({ tracks, score, defaultName, featured }: {
             Défier un ami
           </button>
           {phase === "error" && (
-            <p role="alert" className="text-sm font-bold text-[#9c2f1d]">Le défi n&apos;a pas pu être créé. Réessaie dans un instant.</p>
+            <p role="alert" className="text-sm font-bold text-rouge-txt">Le défi n&apos;a pas pu être créé. Réessaie dans un instant.</p>
           )}
         </div>
       )}

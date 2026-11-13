@@ -137,13 +137,13 @@ export function LobbyDock({
       aria-selected={tab === key}
       onClick={() => show(key)}
       className={`relative z-0 flex flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] transition-colors duration-200 ${
-        tab === key ? "text-[#f4ecdb]" : "text-[#6b573f] hover:text-[#2e2014]"
+        tab === key ? "text-on-ink" : "text-ink-2 hover:text-ink"
       }`}
     >
       {tab === key ? (
         <motion.span
           layoutId="lobby-dock-onglet"
-          className="absolute inset-0 -z-10 rounded-full bg-[#2e2014]"
+          className="absolute inset-0 -z-10 rounded-full bg-ink-block"
           transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 500, damping: 38 }}
         />
       ) : null}
@@ -168,7 +168,7 @@ export function LobbyDock({
             initial={{ backgroundColor: INK }}
             animate={{ backgroundColor: CARD }}
             transition={{ layout: morph, backgroundColor: { duration: reduce ? 0 : 0.22 } }}
-            className="flex h-[min(480px,64vh)] w-[min(380px,calc(100vw-2rem))] flex-col overflow-hidden border-2 border-[#2e2014] shadow-[5px_5px_0_rgba(46,32,20,.25)]"
+            className="flex h-[min(480px,64vh)] w-[min(380px,calc(100vw-2rem))] flex-col overflow-hidden border-2 border-line shadow-[5px_5px_0_rgb(var(--c-shadow)/.25)]"
           >
             <motion.div
               className="flex min-h-0 flex-1 flex-col"
@@ -176,27 +176,27 @@ export function LobbyDock({
               animate={{ opacity: 1, y: 0, transition: { delay: reduce ? 0 : 0.14, duration: 0.2, ease: "easeOut" } }}
             >
               <div className="flex shrink-0 items-center justify-between gap-2 px-4 pb-2 pt-3">
-                <span className="font-display text-lg font-semibold text-[#2e2014]">En attendant</span>
+                <span className="font-display text-lg font-semibold text-ink">En attendant</span>
                 <button
                   type="button"
                   onClick={close}
                   aria-label="Fermer"
-                  className="flex h-8 w-8 items-center justify-center rounded-full border-[1.5px] border-[#2e2014] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+                  className="flex h-8 w-8 items-center justify-center rounded-full border-[1.5px] border-line text-ink transition hover:bg-ink-block hover:text-on-ink"
                 >
                   <X size={15} />
                 </button>
               </div>
               {rps ? (
-                <div role="tablist" className="mx-4 mb-3 flex shrink-0 gap-1 rounded-full border-2 border-[#2e2014] bg-[#f4ecdb] p-1">
+                <div role="tablist" className="mx-4 mb-3 flex shrink-0 gap-1 rounded-full border-2 border-line bg-paper p-1">
                   {tabBtn("chat", "Le chat", unread > 0 && tab !== "chat" ? (
-                    <span className="rounded-full px-1.5 text-[9px] text-[#2e2014]" style={{ background: accent }}>{unread}</span>
+                    <span className="rounded-full px-1.5 text-[9px] text-ink" style={{ background: accent }}>{unread}</span>
                   ) : null)}
                   {tabBtn("rps", "Pierre, feuille, ciseaux", rpsCalls ? (
-                    <span aria-label="Un défi t'attend" className="h-2 w-2 animate-pulse rounded-full border border-[#2e2014]" style={{ background: accent }} />
+                    <span aria-label="Un défi t'attend" className="h-2 w-2 animate-pulse rounded-full border border-line" style={{ background: accent }} />
                   ) : null)}
                 </div>
               ) : null}
-              <div className="relative min-h-0 flex-1 overflow-hidden border-t-2 border-[#2e2014]">
+              <div className="relative min-h-0 flex-1 overflow-hidden border-t-2 border-line">
                 <AnimatePresence mode="popLayout" initial={false} custom={dir}>
                   <motion.div
                     key={rps ? tab : "chat"}
@@ -257,7 +257,7 @@ export function LobbyDock({
             whileHover={reduce ? undefined : { scale: 1.07 }}
             whileTap={reduce ? undefined : { scale: 0.93 }}
             transition={{ layout: morph, backgroundColor: { duration: reduce ? 0 : 0.2 }, scale: { type: "spring", stiffness: 420, damping: 22 } }}
-            className="relative flex h-[60px] w-[60px] items-center justify-center border-2 border-[#2e2014] text-[#f4ecdb] shadow-[3px_3px_0_rgba(46,32,20,.35)]"
+            className="relative flex h-[60px] w-[60px] items-center justify-center border-2 border-line text-on-ink shadow-[3px_3px_0_rgb(var(--c-shadow)/.35)]"
           >
             {/* La bagarre : un eclat au point de choc, la bulle de chat a
                 gauche, les ciseaux a droite. */}
@@ -273,7 +273,7 @@ export function LobbyDock({
               <Scissors size={17} strokeWidth={2.4} />
             </motion.span>
             {badge ? (
-              <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full border-2 border-[#2e2014] px-1 text-[10px] font-bold text-[#2e2014]" style={{ background: accent }}>
+              <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full border-2 border-line px-1 text-[10px] font-bold text-ink" style={{ background: accent }}>
                 {rpsCalls && !reduce ? <span className="absolute inset-0 animate-ping rounded-full opacity-60" style={{ background: accent }} /> : null}
                 <span className="relative">{badge}</span>
               </span>

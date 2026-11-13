@@ -162,7 +162,7 @@ export function DiscordActivity({ search, createSdk = defaultCreateSdk, apiBaseU
   if (params === undefined) {
     return (
       <Shell title="Blindz dans ton salon">
-        <div className="flex items-center gap-3 text-sm text-[#6b573f]">
+        <div className="flex items-center gap-3 text-sm text-ink-2">
           <Loader2 className="h-5 w-5 shrink-0 animate-spin" style={{ color: ACCENT }} aria-hidden />
           <p className="m-0">Un instant…</p>
         </div>
@@ -173,7 +173,7 @@ export function DiscordActivity({ search, createSdk = defaultCreateSdk, apiBaseU
   if (params === null) {
     return (
       <Shell title="Cette page se lance depuis Discord">
-        <p className="m-0 text-sm text-[#6b573f]">
+        <p className="m-0 text-sm text-ink-2">
           Ouvre un salon vocal, clique sur la fusée (Activités) et choisis Blindz. Pour jouer dans le navigateur,
           c&apos;est sur blindz.app.
         </p>
@@ -184,7 +184,7 @@ export function DiscordActivity({ search, createSdk = defaultCreateSdk, apiBaseU
   if (state.kind === "error") {
     return (
       <Shell title={ERROR_TITLE[state.code]}>
-        <p className="m-0 text-sm font-semibold text-[#9c2f1d]">{state.message}</p>
+        <p className="m-0 text-sm font-semibold text-rouge-txt">{state.message}</p>
         {state.action === "retry" ? (
           <button type="button" onClick={() => store?.retry()} className={PRIMARY}>
             Réessayer
@@ -202,7 +202,7 @@ export function DiscordActivity({ search, createSdk = defaultCreateSdk, apiBaseU
   if (state.kind === "deleted") {
     return (
       <Shell title="Compte supprimé">
-        <p className="m-0 text-sm text-[#6b573f]">
+        <p className="m-0 text-sm text-ink-2">
           Ton compte et tes données sont effacés. Si tu relances l&apos;Activité, Blindz te recrée un compte neuf à partir de
           ton pseudo Discord.
         </p>
@@ -213,7 +213,7 @@ export function DiscordActivity({ search, createSdk = defaultCreateSdk, apiBaseU
   if (state.kind === "boot") {
     return (
       <Shell title="Blindz dans ton salon">
-        <div className="flex items-center gap-3 text-sm text-[#6b573f]">
+        <div className="flex items-center gap-3 text-sm text-ink-2">
           <Loader2 className="h-5 w-5 shrink-0 animate-spin" style={{ color: ACCENT }} aria-hidden />
           <p className="m-0" role="status">{STEP_COPY[state.step]}</p>
         </div>
@@ -258,7 +258,7 @@ export function DiscordActivity({ search, createSdk = defaultCreateSdk, apiBaseU
         onRetry={() => setLobbyKey(k => k + 1)}
       />
       {editingMusic ? (
-        <div role="dialog" aria-modal="true" aria-label="Ta musique" className="fixed inset-0 z-50 overflow-y-auto bg-[#f4ecdb]">
+        <div role="dialog" aria-modal="true" aria-label="Ta musique" className="fixed inset-0 z-50 overflow-y-auto bg-paper">
           <DiscordMusicStep mode="edit" onContinue={() => setEditingMusic(false)} />
         </div>
       ) : null}
@@ -267,15 +267,15 @@ export function DiscordActivity({ search, createSdk = defaultCreateSdk, apiBaseU
 }
 
 const PRIMARY =
-  "mt-4 w-full rounded-md border-2 border-[#2e2014] bg-[#c65133] px-5 py-3 text-sm font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#2e2014]"
+  "mt-4 w-full rounded-md border-2 border-line bg-terra px-5 py-3 text-sm font-bold text-on-ink shadow-[4px_4px_0_rgb(var(--c-shadow))] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgb(var(--c-shadow))]"
 
 /** Ecran d'attente ou d'erreur, Club analogique : une carte sur le papier. */
 function Shell({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <main className="grid min-h-screen place-items-center px-5 py-8 text-[#2e2014]">
-      <section className="w-full max-w-md rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-6 shadow-[4px_4px_0_rgba(46,32,20,.18)]">
+    <main className="grid min-h-screen place-items-center px-5 py-8 text-ink">
+      <section className="w-full max-w-md rounded-md border-2 border-line bg-paper-deep p-6 shadow-[4px_4px_0_rgb(var(--c-shadow)/.18)]">
         <p className="m-0 mb-3 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.22em]">
-          <span aria-hidden className="h-2.5 w-2.5 rounded-full border-[1.5px] border-[#2e2014]" style={{ background: ACCENT }} />
+          <span aria-hidden className="h-2.5 w-2.5 rounded-full border-[1.5px] border-line" style={{ background: ACCENT }} />
           Activité Discord
         </p>
         <h1 className="m-0 mb-4 font-display text-2xl font-semibold leading-tight">{title}</h1>
@@ -290,10 +290,10 @@ function VoiceStrip({ sdk }: { sdk: ActivitySdk }) {
   const participants = useInstanceParticipants(sdk)
   if (participants.length === 0) return <span />
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 pt-1 text-xs text-[#6b573f]" data-testid="salon-vocal">
+    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 pt-1 text-xs text-ink-2" data-testid="salon-vocal">
       <span className="font-bold uppercase tracking-[0.18em]">Dans le salon vocal</span>
       {participants.map(p => (
-        <span key={p.id} className="rounded-full border-[1.5px] border-[#2e2014] bg-[#f4ecdb] px-2.5 py-0.5 font-semibold text-[#2e2014]">
+        <span key={p.id} className="rounded-full border-[1.5px] border-line bg-paper px-2.5 py-0.5 font-semibold text-ink">
           {p.name}
         </span>
       ))}

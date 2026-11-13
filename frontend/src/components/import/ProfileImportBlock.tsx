@@ -56,7 +56,7 @@ function recognitionText(r: MusicLinkRecognition): { text: string; tone: "ok" | 
 }
 
 const HELP_LINK =
-  "inline-flex items-center gap-1 rounded-full border-[1.5px] border-[#2e2014] bg-[#f4ecdb] px-3 py-1.5 text-[13px] font-bold text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+  "inline-flex items-center gap-1 rounded-full border-[1.5px] border-line bg-paper px-3 py-1.5 text-[13px] font-bold text-ink transition hover:bg-ink-block hover:text-on-ink"
 
 export function ProfileImportBlock({ accent = "#c65133", onImportingChange, onImported, initialUrl, autoStart, hideHeader }: ProfileImportBlockProps) {
   const inputId = useId()
@@ -141,23 +141,23 @@ export function ProfileImportBlock({ accent = "#c65133", onImportingChange, onIm
     const nothing = syncedCount === 0
     return (
       <div className="space-y-3">
-        <div className="flex items-start gap-3 rounded-md border-2 border-[#2e2014] bg-[#f4ecdb] p-3">
+        <div className="flex items-start gap-3 rounded-md border-2 border-line bg-paper p-3">
           <span
             aria-hidden
-            className="grid h-7 w-7 shrink-0 place-items-center rounded-full border-2 border-[#2e2014]"
+            className="grid h-7 w-7 shrink-0 place-items-center rounded-full border-2 border-line"
             style={{ background: nothing ? "#d88418" : accent }}
           >
-            <Check className="h-4 w-4 text-[#f4ecdb]" strokeWidth={3} />
+            <Check className="h-4 w-4 text-on-ink" strokeWidth={3} />
           </span>
           <div className="min-w-0">
-            <p className="m-0 text-[15px] font-bold text-[#2e2014]">
+            <p className="m-0 text-[15px] font-bold text-ink">
               {nothing
                 ? "Aucun titre jouable dans ce lien"
                 : youtube
                   ? youtubeSummary(youtube)
                   : `${syncedCount} titre${syncedCount > 1 ? "s" : ""} importé${syncedCount > 1 ? "s" : ""}`}
             </p>
-            <p className="m-0 mt-0.5 text-[13px] text-[#2e2014]">
+            <p className="m-0 mt-0.5 text-[13px] text-ink">
               {nothing
                 ? "Essaie une playlist avec des extraits disponibles (Deezer marche bien)."
                 : youtube
@@ -166,7 +166,7 @@ export function ProfileImportBlock({ accent = "#c65133", onImportingChange, onIm
             </p>
           </div>
         </div>
-        <button type="button" onClick={reset} className="text-[13px] font-bold text-[#2e2014] underline underline-offset-4">
+        <button type="button" onClick={reset} className="text-[13px] font-bold text-ink underline underline-offset-4">
           {nothing ? "Essayer un autre lien" : "Importer un autre lien"}
         </button>
       </div>
@@ -177,12 +177,12 @@ export function ProfileImportBlock({ accent = "#c65133", onImportingChange, onIm
     <div className="space-y-3">
       {!hideHeader && (
         <div>
-          <p className="m-0 text-[11px] font-bold uppercase tracking-[0.22em] text-[#2e2014]">Importe ta musique</p>
-          <p className="m-0 mt-1 text-[13px] text-[#2e2014]">Une playlist, ou ton profil pour toutes tes playlists publiques.</p>
+          <p className="m-0 text-[11px] font-bold uppercase tracking-[0.22em] text-ink">Importe ta musique</p>
+          <p className="m-0 mt-1 text-[13px] text-ink">Une playlist, ou ton profil pour toutes tes playlists publiques.</p>
         </div>
       )}
       <form onSubmit={handleImportAll} className="space-y-2">
-        <label htmlFor={inputId} className="block text-[13px] font-bold text-[#2e2014]">
+        <label htmlFor={inputId} className="block text-[13px] font-bold text-ink">
           Lien d&apos;une playlist ou d&apos;un profil
         </label>
         <div className="flex flex-col gap-2 sm:flex-row">
@@ -204,12 +204,12 @@ export function ProfileImportBlock({ accent = "#c65133", onImportingChange, onIm
             enterKeyHint="go"
             aria-describedby={hint || error ? hintId : undefined}
             aria-invalid={recognition.kind === "unknown" || Boolean(error)}
-            className="min-w-0 flex-1 rounded-md border-2 border-[#2e2014] bg-[#f4ecdb] px-3.5 py-3 text-base text-[#2e2014] outline-none placeholder:text-[#8a7558] focus:shadow-[3px_3px_0_#2e2014] disabled:opacity-60"
+            className="min-w-0 flex-1 rounded-md border-2 border-line bg-paper px-3.5 py-3 text-base text-ink outline-none placeholder:text-sourd focus:shadow-[3px_3px_0_rgb(var(--c-shadow))] disabled:opacity-60"
           />
           <button
             type="submit"
             disabled={busy || !importable}
-            className="flex items-center justify-center gap-2 rounded-md border-2 border-[#2e2014] bg-[#2e2014] px-5 py-3 text-[15px] font-bold text-[#f4ecdb] transition enabled:hover:bg-[#3d2b1b] disabled:cursor-not-allowed disabled:border-[rgba(46,32,20,.35)] disabled:bg-transparent disabled:text-[rgba(46,32,20,.5)]"
+            className="flex items-center justify-center gap-2 rounded-md border-2 border-line bg-ink-block px-5 py-3 text-[15px] font-bold text-on-ink transition enabled:hover:bg-[#3d2b1b] disabled:cursor-not-allowed disabled:border-[rgb(var(--c-line)/.35)] disabled:bg-transparent disabled:text-[rgb(var(--c-ink)/.5)]"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
             {busy ? "Import…" : "Importer"}
@@ -217,7 +217,7 @@ export function ProfileImportBlock({ accent = "#c65133", onImportingChange, onIm
         </div>
         <div id={hintId} className="min-h-[1.25rem]">
           {busy ? (
-            <p className="m-0 flex items-center gap-2 text-[13px] font-semibold text-[#2e2014]" role="status">
+            <p className="m-0 flex items-center gap-2 text-[13px] font-semibold text-ink" role="status">
               {state === "loading"
                 ? "On cherche les playlists…"
                 : syncingYoutube
@@ -225,23 +225,23 @@ export function ProfileImportBlock({ accent = "#c65133", onImportingChange, onIm
                   : `Import de ${playlistCount} playlist${playlistCount > 1 ? "s" : ""}…`}
             </p>
           ) : error ? (
-            <p className="m-0 text-[13px] font-bold text-[#9c2f1d]" role="alert">{error}</p>
+            <p className="m-0 text-[13px] font-bold text-rouge-txt" role="alert">{error}</p>
           ) : hint ? (
-            <p className={`m-0 flex items-center gap-2 text-[13px] ${hint.tone === "ok" ? "font-bold text-[#2e2014]" : "font-semibold text-[#9c2f1d]"}`}>
+            <p className={`m-0 flex items-center gap-2 text-[13px] ${hint.tone === "ok" ? "font-bold text-ink" : "font-semibold text-rouge-txt"}`}>
               {hint.tone === "ok" ? (
-                <span aria-hidden className="h-2.5 w-2.5 shrink-0 rounded-full border-[1.5px] border-[#2e2014]" style={{ background: accent }} />
+                <span aria-hidden className="h-2.5 w-2.5 shrink-0 rounded-full border-[1.5px] border-line" style={{ background: accent }} />
               ) : null}
               {hint.text}
             </p>
           ) : null}
         </div>
       </form>
-      <details className="group rounded-md border-[1.5px] border-dashed border-[rgba(46,32,20,.45)] px-3 py-2">
-        <summary className="cursor-pointer list-none text-[13px] font-bold text-[#2e2014] [&::-webkit-details-marker]:hidden">
+      <details className="group rounded-md border-[1.5px] border-dashed border-[rgb(var(--c-line)/.45)] px-3 py-2">
+        <summary className="cursor-pointer list-none text-[13px] font-bold text-ink [&::-webkit-details-marker]:hidden">
           <span aria-hidden className="mr-1.5 inline-block transition group-open:rotate-90">›</span>
           Où trouver ton lien ?
         </summary>
-        <ul className="m-0 mt-2 list-none space-y-1.5 p-0 text-[13px] leading-snug text-[#2e2014]">
+        <ul className="m-0 mt-2 list-none space-y-1.5 p-0 text-[13px] leading-snug text-ink">
           <li><strong>Spotify</strong> : sur la playlist, « Partager » puis « Copier le lien ».</li>
           <li><strong>Deezer</strong> : sur la playlist, « Partager » puis « Copier le lien », ou l&apos;adresse de la playlist sur deezer.com.</li>
           <li><strong>YouTube</strong> et <strong>YouTube Music</strong> : sur la playlist, « Partager » puis « Copier le lien ». Le son vient de Deezer : on y retrouve chaque morceau, ceux qui n&apos;y sont pas sont laissés de côté.</li>

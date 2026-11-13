@@ -12,8 +12,8 @@ export default function ChatRedirectPage() {
   }, [router])
 
   return (
-    <div className="grid min-h-screen place-items-center text-[#2e2014]">
-      <p className="font-display text-sm italic text-[#8a7558]">Redirection vers le mode streamer...</p>
+    <div className="grid min-h-screen place-items-center text-ink">
+      <p className="font-display text-sm italic text-sourd">Redirection vers le mode streamer...</p>
     </div>
   )
 }

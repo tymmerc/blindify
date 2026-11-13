@@ -64,7 +64,7 @@ export default function Page() {
     <GuideShell
       tag="Guide soirée"
       tagColor={VERMILION}
-      title={<>Organiser un blind test en <em className="font-medium italic text-[#cc4830]">soirée</em> ou à l'apéro</>}
+      title={<>Organiser un blind test en <em className="font-medium italic text-vermillon-txt">soirée</em> ou à l'apéro</>}
       intro="Un écran au milieu et les téléphones des invités, ou un seul téléphone qui passe de main en main. Dans les deux cas il n'y a rien à préparer : chacun ramène sa playlist, la partie se génère toute seule. Voilà comment ça se déroule, et les deux ou trois pièges à éviter."
       updated="5 octobre 2026"
       currentHref="/blind-test-soiree/"

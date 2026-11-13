@@ -72,27 +72,27 @@ function VinylSleeve({
         style={{ background: DISC_GROOVES }}
       >
         <span
-          className="absolute inset-[34%] rounded-full border-[3px] border-[#2e2014]"
+          className="absolute inset-[34%] rounded-full border-[3px] border-line"
           style={{ background: accent }}
         />
-        <span className="absolute inset-[47%] rounded-full bg-[#f4ecdb]" />
+        <span className="absolute inset-[47%] rounded-full bg-paper" />
       </span>
       {/* La pochette — au survol elle prend la COULEUR du mode (bordure + ombre) */}
       <span
-        className={`relative z-10 mt-9 flex min-h-[225px] flex-1 flex-col justify-between border-2 bg-[#ece1c8] p-5 transition-all duration-200 group-hover:translate-y-0.5 group-hover:![border-color:var(--ac)] group-hover:!shadow-[6px_6px_0_var(--ac)] ${
+        className={`relative z-10 mt-9 flex min-h-[225px] flex-1 flex-col justify-between border-2 bg-paper-deep p-5 transition-all duration-200 group-hover:translate-y-0.5 group-hover:![border-color:var(--ac)] group-hover:!shadow-[6px_6px_0_var(--ac)] ${
           picking || discOut ? "![border-color:var(--ac)] !shadow-[6px_6px_0_var(--ac)]" : ""
         }`}
         style={{
           ["--ac" as string]: accent,
-          borderColor: "#2e2014",
-          boxShadow: "4px 4px 0 rgba(46,32,20,.18)",
+          borderColor: "rgb(var(--c-line))",
+          boxShadow: "4px 4px 0 rgb(var(--c-shadow) / .18)",
         }}
       >
         <span className="block">
-          <span className="block font-display text-[1.35rem] font-semibold leading-tight text-[#2e2014]">
+          <span className="block font-display text-[1.35rem] font-semibold leading-tight text-ink">
             {title}
           </span>
-          <span className="mt-2 block text-sm leading-relaxed text-[#6b573f]">{subtitle}</span>
+          <span className="mt-2 block text-sm leading-relaxed text-ink-2">{subtitle}</span>
         </span>
         <span className="mt-5 block">
           <span className="flex flex-wrap gap-2">
@@ -103,7 +103,7 @@ function VinylSleeve({
               {posture}
             </span>
             {wip && (
-              <span className="rounded-full border-[1.5px] border-[#2e2014] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#2e2014]">
+              <span className="rounded-full border-[1.5px] border-line px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-ink">
                 Bientôt
               </span>
             )}
@@ -190,7 +190,7 @@ function ModeSelectionContent() {
   }
 
   return (
-    <div className="flex min-h-dvh flex-col px-6 pt-10 pb-24 text-[#2e2014] sm:min-h-screen sm:flex-row sm:items-center sm:justify-center sm:py-14">
+    <div className="flex min-h-dvh flex-col px-6 pt-10 pb-24 text-ink sm:min-h-screen sm:flex-row sm:items-center sm:justify-center sm:py-14">
       <AccountMenu />
       <div className="relative z-10 my-auto mx-auto w-full max-w-5xl space-y-10">
         <header className="flex flex-col gap-2">
@@ -198,15 +198,20 @@ function ModeSelectionContent() {
           <img
             src={publicPath("/logo-mark.png")}
             alt="Blindz"
-            className="mb-1 h-11 w-11 object-contain lg:fixed lg:left-8 lg:top-8 lg:z-40 lg:mb-0 lg:h-12 lg:w-12"
+            className="mb-1 h-11 w-11 object-contain lg:fixed lg:left-8 lg:top-8 lg:z-40 lg:mb-0 lg:h-12 lg:w-12 dark:hidden"
           />
-          <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-[#c65133]">
+          <img
+            src={publicPath("/logo-mark-nuit.png")}
+            alt="Blindz"
+            className="mb-1 h-11 w-11 object-contain lg:fixed lg:left-8 lg:top-8 lg:z-40 lg:mb-0 lg:h-12 lg:w-12 hidden dark:block"
+          />
+          <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-terra-txt">
             Choisis ta face
           </p>
           <h1 className="font-display text-4xl font-semibold leading-[1.05] sm:text-5xl">
-            Comment tu veux <em className="font-medium italic text-[#c65133]">jouer</em>&nbsp;?
+            Comment tu veux <em className="font-medium italic text-terra-txt">jouer</em>&nbsp;?
           </h1>
-          <p className="text-base text-[#6b573f]">Choisis ce qui ressemble à ce que vous faites. Le mode suit tout seul.</p>
+          <p className="text-base text-ink-2">Choisis ce qui ressemble à ce que vous faites. Le mode suit tout seul.</p>
         </header>
 
         <div className="grid gap-10 sm:gap-6 sm:grid-cols-2 lg:grid-cols-4">
@@ -225,48 +230,48 @@ function ModeSelectionContent() {
           ))}
         </div>
 
-        <p className="text-center font-display text-sm italic text-[#8a7558]">
+        <p className="text-center font-display text-sm italic text-sourd">
           Tu pourras changer la musique et les réglages dans la salle.
         </p>
 
         <button
           type="button"
           onClick={() => setShowHelp(h => !h)}
-          className="fixed bottom-6 left-6 rounded-full border-[1.5px] border-[#2e2014] bg-[#ece1c8] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+          className="fixed bottom-6 left-6 rounded-full border-[1.5px] border-line bg-paper-deep px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-ink transition hover:bg-ink-block hover:text-on-ink"
         >
           {showHelp ? "Fermer" : "Comment ça marche ?"}
         </button>
         {showHelp && (
-          <div className="fixed inset-0 z-50 flex items-end justify-start bg-[#2e2014]/20 p-6" onClick={() => setShowHelp(false)}>
+          <div className="fixed inset-0 z-50 flex items-end justify-start bg-ink-block/20 p-6" onClick={() => setShowHelp(false)}>
             <div
-              className="w-full max-w-md space-y-4 border-2 border-[#2e2014] bg-[#f4ecdb] p-6 shadow-[6px_6px_0_rgba(46,32,20,.25)]"
+              className="w-full max-w-md space-y-4 border-2 border-line bg-paper p-6 shadow-[6px_6px_0_rgb(var(--c-shadow)/.25)]"
               onClick={e => e.stopPropagation()}
             >
-              <h3 className="font-display text-xl font-semibold text-[#2e2014]">Comment ça marche ?</h3>
-              <p className="text-sm leading-relaxed text-[#6b573f]">
+              <h3 className="font-display text-xl font-semibold text-ink">Comment ça marche ?</h3>
+              <p className="text-sm leading-relaxed text-ink-2">
                 Blindz te fait écouter des extraits de musique. Tu dois deviner le titre et l'artiste le plus vite possible.
               </p>
 
               <div className="space-y-3">
-                <div className="border-l-4 border-[#c65133] bg-[#ece1c8] p-3">
-                  <p className="text-sm font-bold text-[#c65133]">À distance</p>
-                  <p className="mt-1 text-xs leading-relaxed text-[#6b573f]">
+                <div className="border-l-4 border-terra bg-paper-deep p-3">
+                  <p className="text-sm font-bold text-terra-txt">À distance</p>
+                  <p className="mt-1 text-xs leading-relaxed text-ink-2">
                     Crée une salle, invite tes potes avec un code et jouez ensemble. Chacun écoute la musique et répond de son côté. Celui qui devine le plus vite gagne le plus de points.
                   </p>
                 </div>
 
-                <div className="border-l-4 border-[#e0a32e] bg-[#ece1c8] p-3">
-                  <p className="text-sm font-bold text-[#a87714]">Autour d'une table</p>
-                  <p className="mt-1 text-xs leading-relaxed text-[#6b573f]">
+                <div className="border-l-4 border-gold bg-paper-deep p-3">
+                  <p className="text-sm font-bold text-gold-deep-txt">Autour d'une table</p>
+                  <p className="mt-1 text-xs leading-relaxed text-ink-2">
                     Parfait pour une soirée ou un bar. Un écran principal diffuse la musique (le présentateur), les joueurs rejoignent avec un code et répondent depuis leur téléphone.
                   </p>
                 </div>
 
-                <div className="border-l-4 border-[#7d9471] bg-[#ece1c8] p-3">
+                <div className="border-l-4 border-sage bg-paper-deep p-3">
                   <div className="flex items-center gap-2">
-                    <p className="text-sm font-bold text-[#5d7252]">Avec ta communauté</p>
+                    <p className="text-sm font-bold text-sage-deep-txt">Avec ta communauté</p>
                   </div>
-                  <p className="mt-1 text-xs leading-relaxed text-[#6b573f]">
+                  <p className="mt-1 text-xs leading-relaxed text-ink-2">
                     Pour un live Twitch : ton public devine depuis son téléphone ou en tapant dans le chat.
                   </p>
                 </div>
@@ -278,7 +283,7 @@ function ModeSelectionContent() {
           <button
             type="button"
             onClick={() => setGuest(false)}
-            className="fixed bottom-[4.5rem] left-6 rounded-full border-[1.5px] border-[#2e2014]/40 bg-[#ece1c8] px-4 py-2 text-xs font-bold text-[#2e2014] hover:border-[#2e2014]"
+            className="fixed bottom-[4.5rem] left-6 rounded-full border-[1.5px] border-line/40 bg-paper-deep px-4 py-2 text-xs font-bold text-ink hover:border-line"
           >
             Revenir en mode connecté
           </button>

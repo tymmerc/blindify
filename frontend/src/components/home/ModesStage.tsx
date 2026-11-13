@@ -69,11 +69,11 @@ export function ModesStage({ children }: { children: ReactNode }) {
     <div ref={ref} className="lg:grid lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] lg:gap-20">
       {/* Mobile : bandeau compact colle en haut (le dessin change pendant que
           les modes defilent dessous). Desktop : panneau epingle a gauche. */}
-      <div className="sticky top-0 z-10 -mx-5 mb-8 flex items-center gap-4 border-b-2 border-[#2e2014] bg-[#ece1c8] px-5 py-3 sm:-mx-8 sm:px-8 lg:top-24 lg:z-auto lg:mx-0 lg:mb-0 lg:block lg:self-start lg:border-0 lg:bg-transparent lg:px-0 lg:py-0">
+      <div className="sticky top-0 z-10 -mx-5 mb-8 flex items-center gap-4 border-b-2 border-line bg-paper-deep px-5 py-3 sm:-mx-8 sm:px-8 lg:top-24 lg:z-auto lg:mx-0 lg:mb-0 lg:block lg:self-start lg:border-0 lg:bg-transparent lg:px-0 lg:py-0">
         <div className="relative aspect-[4/3] w-28 shrink-0 sm:w-36 lg:w-full lg:max-w-[520px]">
           {ORDER.map(k => <Scene key={k} mode={k} opacity={weights[k]} />)}
         </div>
-        <p className="font-mono text-[10px] font-bold uppercase leading-snug tracking-[0.14em] text-[#6b573f] sm:text-[11px] lg:mt-4 lg:tracking-[0.2em]">
+        <p className="font-mono text-[10px] font-bold uppercase leading-snug tracking-[0.14em] text-ink-2 sm:text-[11px] lg:mt-4 lg:tracking-[0.2em]">
           {LABELS[active]}
         </p>
       </div>
