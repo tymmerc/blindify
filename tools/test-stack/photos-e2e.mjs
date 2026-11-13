@@ -16,7 +16,7 @@ import path from "node:path"
 import { Bot, api } from "./bot.mjs"
 import { seedUser } from "./testdb.mjs"
 
-const { chromium } = createRequire("/opt/blindify/package.json")("@playwright/test")
+const { chromium } = createRequire("/opt/blindify/tools/")("@playwright/test")
 const APP = "http://blindz-test.localhost:3180/blindify"
 const BACKEND = "http://127.0.0.1:3098"
 const ORIGIN = "http://blindz-test.localhost:3180"
