@@ -1767,6 +1767,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
           chatMessages={chatMessages}
           spectators={spectators}
           onSendChat={sendChat}
+          onPreviewBroken={round => socketRef.current?.emit("game:preview:refresh", { roomCode: room.room_code, round })}
         />
       )
     ) : view === "results" ? (

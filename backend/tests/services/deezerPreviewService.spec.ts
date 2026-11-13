@@ -217,6 +217,18 @@ describe("DeezerPreviewService : debit et cache", () => {
     expect(get).toHaveBeenCalledTimes(2);
   });
 
+  it("T35 : un extrait en cache qui meurt dans moins de 5 min n'est plus resservi", async () => {
+    const soon = `https://cdn.example/1.mp3?hdnea=exp=${Math.floor((Date.now() + 4 * 60_000) / 1000)}~acl=x`;
+    const later = `https://cdn.example/1.mp3?hdnea=exp=${Math.floor((Date.now() + 14 * 60_000) / 1000)}~acl=x`;
+    get.mockResolvedValueOnce({ data: { data: [item(1, "Song", "A", soon)] } });
+    get.mockResolvedValue({ data: { data: [item(1, "Song", "A", later)] } });
+    const svc = new DeezerPreviewService();
+    await svc.searchTrack("Song", "A");
+    expect((await svc.searchTrack("Song", "A"))?.preview).toBe(later);
+    expect((await svc.searchTrack("Song", "A"))?.preview).toBe(later);
+    expect(get).toHaveBeenCalledTimes(2);
+  });
+
   it("panne reseau : l'echec est retenu 30 s, pas 1 h", async () => {
     const clock = virtualClock();
     get.mockRejectedValue(new Error("ETIMEDOUT"));

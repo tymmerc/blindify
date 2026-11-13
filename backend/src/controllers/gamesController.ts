@@ -8,6 +8,7 @@ import type { AudioSourceRow } from "../types/audio";
 import { hydratePreviewUrl, isExpiredPreview } from "../services/trackResolution";
 import { UNOWNED } from "../services/userTracks";
 import { deezerPreviewService } from "../services/deezerPreviewService";
+import { freshPreview } from "../services/roundPreviews";
 
 /**
  * Repli des invites sans musique : le classement Deezer du moment, mis en
@@ -608,6 +609,41 @@ export const gamesController = {
         lastPlayedAt: stats?.last_played_at ?? null,
       },
     });
+  },
+
+  /**
+   * T35 : le navigateur n'arrive pas a jouer l'extrait d'une manche solo (lien
+   * Deezer expire, ~15 min de vie). Il redemande un lien neuf, une fois, pour
+   * une manche de SA partie solo en cours.
+   */
+  async refreshSoloPreview(req: Request, res: Response): Promise<void> {
+    const context = await getSessionContext(req, res);
+    if (!context) return;
+    const sessionId = Number(req.body?.sessionId);
+    const round = Number(req.body?.round);
+    if (!Number.isSafeInteger(sessionId) || sessionId <= 0 || !Number.isSafeInteger(round) || round < 1 || round > 100) {
+      fail(res, "invalid_round", "Manche manquante ou invalide", 400);
+      return;
+    }
+    const { rows } = await pool.query<{ audio_source_id: string }>(
+      `SELECT gr.audio_source_id
+       FROM game_rounds gr
+       JOIN game_sessions gs ON gs.id = gr.session_id
+       WHERE gr.session_id = $1 AND gr.round_index = $2
+         AND gs.host_user_id = $3 AND gs.mode = 'solo' AND gs.state = 'in_progress'
+       LIMIT 1`,
+      [sessionId, round, context.user.id]
+    );
+    if (!rows[0]) {
+      fail(res, "round_not_found", "Manche inconnue", 404);
+      return;
+    }
+    const audioUrl = await freshPreview(rows[0].audio_source_id);
+    if (!audioUrl) {
+      fail(res, "preview_unavailable", "Extrait indisponible", 404);
+      return;
+    }
+    ok(res, { audioUrl });
   },
 
   async recordSoloResult(req: Request, res: Response): Promise<void> {

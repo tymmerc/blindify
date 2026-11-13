@@ -131,6 +131,8 @@ type Props = {
   onPauseToggle?: () => void
   /** Spectateurs de la salle (T18) : « 👀 1 spectateur » dans l'en-tete. */
   spectators?: number
+  /** L'extrait de la manche ne joue pas (lien expire) : redemander un lien neuf au serveur (T35). */
+  onPreviewBroken?: (round: number) => void
 }
 
 type Phase = "guessing" | "locked" | "reveal"
@@ -145,6 +147,7 @@ export function MultiplayerGameClient({
   onExit,
   disabled,
   onPauseToggle,
+  onPreviewBroken,
   modeConfig,
   accentColor,
   mode,
@@ -184,6 +187,9 @@ export function MultiplayerGameClient({
   // Watchdog audio : force une re-execution de l'effet de lecture (relance).
   const [audioRetryNonce, setAudioRetryNonce] = useState(0)
   const audioRetriesRef = useRef(0)
+  // T35 : manche pour laquelle un lien neuf a deja ete demande (une fois par manche).
+  // Cle = heure de depart de la manche : une revanche repart a la manche 1 sans demontage.
+  const previewAskedRef = useRef<number | null>(null)
   const [justSubmitted, setJustSubmitted] = useState(false)
   const [revealCountdown, setRevealCountdown] = useState(isFastPace ? 4 : 7)
   const [chatInput, setChatInput] = useState("")
@@ -359,6 +365,15 @@ export function MultiplayerGameClient({
   // isAudioPhase and previewUrl happen to be the same across rounds.
   const currentRound = state?.currentRound ?? 0
 
+  // Une fois par manche : le serveur renvoie l'etat avec un lien neuf (ou celui
+  // deja rafraichi), et l'effet de lecture repart tout seul sur ce lien.
+  const askFreshPreview = () => {
+    const roundKey = state?.timing?.startAt ?? null
+    if (!onPreviewBroken || !currentRound || roundKey === null || previewAskedRef.current === roundKey) return
+    previewAskedRef.current = roundKey
+    onPreviewBroken(currentRound)
+  }
+
   // Sequence platine : vinyle IMMOBILE, le bras se pose (~1.3s), la musique part
   // a startAt. Avant, tout demarrait en meme temps et ca cassait l'illusion.
   const [needleStage, setNeedleStage] = useState<"raised" | "dropping" | "down">("down")
@@ -395,13 +410,19 @@ export function MultiplayerGameClient({
       audioManager.play({ src: playedSrc, loop: true, volume, owner: "multiplayer", seekTo })
         .then(() => {
           setManualPlayRequired(false)
+          setAudioBrokenNotice(false)
         })
         .catch((err) => {
           if ((err as DOMException)?.name === "NotAllowedError") {
             setManualPlayRequired(true)
           } else {
+            // Extrait illisible (lien Deezer expire : 403 -> NotSupportedError).
+            // Rejouer le meme lien ne sert a rien : on en demande un neuf, et le
+            // watchdog relance la lecture (puis montre le bouton et le message
+            // si ca ne joue toujours pas). Avant, le bouton play apparaissait
+            // tout de suite, sans message, et rejouait le lien mort (T35).
             console.error("multiplayer_audio_play_failed", err)
-            setManualPlayRequired(true)
+            askFreshPreview()
           }
         })
     }
@@ -442,6 +463,7 @@ export function MultiplayerGameClient({
       const startAt = state?.timing?.startAt ?? 0
       if (startAt && Date.now() < startAt + 1500) return // pas encore l'heure
       if (audioManager.getState().playing) { audioRetriesRef.current = 0; return }
+      askFreshPreview()
       if (audioRetriesRef.current < 2) {
         audioRetriesRef.current += 1
         setAudioRetryNonce(n => n + 1) // re-execute l'effet de lecture
@@ -625,8 +647,9 @@ export function MultiplayerGameClient({
       })
       audioManager.setMuted(muted, "multiplayer")
       setManualPlayRequired(false)
-    } catch {
+    } catch (err) {
       // Keep manualPlayRequired visible so user can retry
+      if ((err as DOMException)?.name !== "NotAllowedError") askFreshPreview()
     } finally {
       setPlayLoading(false)
     }
