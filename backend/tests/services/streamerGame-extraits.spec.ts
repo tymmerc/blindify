@@ -54,7 +54,7 @@ function rounds(count: number): StreamerRound[] {
   return Array.from({ length: count }, (_, i) => ({
     round: i + 1,
     trackId: `deezer-${i + 1}`,
-    audioSourceId: String(200 + i),
+    audioSourceId: `00000000-0000-4000-8000-${String(200 + i).padStart(12, "0")}`,
     title: `Chanson ${i + 1}`,
     artist: "Les Testeurs",
     previewUrl: linkValidUntil(now + LINK_LIFE_MS, `lancement-${i + 1}`),
@@ -91,7 +91,7 @@ describe("T35 streamer : un lien valable au debut de chaque manche", () => {
     startNextStreamerRound(io, ROOM);
     await jest.advanceTimersByTimeAsync(0);
     const link = overlayLink(sent, 1);
-    expect(link).toContain("neuf-200");
+    expect(link).toContain("neuf-00000000-0000-4000-8000-000000000200");
     // Le son part apres le decompte : le lien tient toute la manche.
     expect(previewExpiresAt(link)).toBeGreaterThan(Date.now() + START_COUNTDOWN_MS + 60_000);
     expect(getStreamerState(ROOM)?.currentTrack?.previewUrl).toBe(link);

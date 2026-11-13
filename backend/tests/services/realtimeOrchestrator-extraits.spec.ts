@@ -61,13 +61,16 @@ function fakeIo(): { io: Server; emitted: Emitted[] } {
   return { io, emitted };
 }
 
+// audio_sources.id est un uuid : c'est ce que porte chaque manche.
+const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+
 // Comme au lancement : toutes les manches preparees d'un coup, liens de 15 min.
 function launchTracks(count: number): RoundTrack[] {
   const now = Date.now();
   return Array.from({ length: count }, (_, i) => ({
     round: i + 1,
     trackId: `track-${i + 1}`,
-    audioSourceId: String(100 + i),
+    audioSourceId: uuid(100 + i),
     title: `Song ${i + 1}`,
     artist: `Artist ${i + 1}`,
     previewUrl: linkValidUntil(now + LINK_LIFE_MS, `lancement-${i + 1}`),
@@ -148,7 +151,7 @@ describe("T35 : un lien valable au debut de chaque manche", () => {
     launch(io, tracks);
     await jest.advanceTimersByTimeAsync(0);
     const link = linkAtStart(emitted, 1);
-    expect(link).toContain("neuf-100");
+    expect(link).toContain(`neuf-${uuid(100)}`);
     expect(isExpiredPreview(link, 10 * 60_000)).toBe(false);
   });
 

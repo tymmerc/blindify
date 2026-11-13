@@ -22,7 +22,9 @@ export function previewNeedsRefresh(url: string | null | undefined): boolean {
   return isExpiredPreview(url, PREVIEW_MIN_VALIDITY_MS);
 }
 
-const inFlight = new Map<number, Promise<string | null>>();
+const inFlight = new Map<string, Promise<string | null>>();
+// audio_sources.id est un uuid (le jeu le recoit en chaine).
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Un lien frais pour ce morceau (relu en base, puis Deezer si besoin), ou
@@ -31,8 +33,8 @@ const inFlight = new Map<number, Promise<string | null>>();
  * coutent un appel. Ne rejette jamais.
  */
 export function freshPreview(audioSourceId: string | number | null | undefined): Promise<string | null> {
-  const id = Number(audioSourceId);
-  if (!Number.isSafeInteger(id) || id <= 0) return Promise.resolve(null);
+  const id = String(audioSourceId ?? "").toLowerCase();
+  if (!UUID.test(id)) return Promise.resolve(null);
   const pending = inFlight.get(id);
   if (pending) return pending;
   const run = (async () => {

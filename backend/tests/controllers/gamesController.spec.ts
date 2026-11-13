@@ -1332,7 +1332,7 @@ describe('gamesController.refreshSoloPreview', () => {
   });
 
   it('rend un lien neuf pour une manche de SA partie solo en cours', async () => {
-    mockQuery.mockResolvedValueOnce({ rows: [{ audio_source_id: '42' }] } as any);
+    mockQuery.mockResolvedValueOnce({ rows: [{ audio_source_id: '3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b' }] } as any);
     mockFresh.mockResolvedValueOnce('https://cdnt-preview.dzcdn.net/x.mp3?hdnea=exp=9999999999');
     const res = mockRes();
     await gamesController.refreshSoloPreview(mockReq({ body: { sessionId: 900, round: 3 } }), res);
@@ -1343,7 +1343,7 @@ describe('gamesController.refreshSoloPreview', () => {
     expect(String(sql)).toMatch(/host_user_id = \$3/);
     expect(String(sql)).toMatch(/state = 'in_progress'/);
     expect(params).toEqual([900, 3, 7]);
-    expect(mockFresh).toHaveBeenCalledWith('42');
+    expect(mockFresh).toHaveBeenCalledWith('3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b');
   });
 
   it("refuse une manche invalide sans toucher la base", async () => {
@@ -1360,7 +1360,7 @@ describe('gamesController.refreshSoloPreview', () => {
     await gamesController.refreshSoloPreview(mockReq({ body: { sessionId: 900, round: 3 } }), res);
     expect(res.status).toHaveBeenCalledWith(404);
     expect(mockFresh).not.toHaveBeenCalled();
-    mockQuery.mockResolvedValueOnce({ rows: [{ audio_source_id: '42' }] } as any);
+    mockQuery.mockResolvedValueOnce({ rows: [{ audio_source_id: '3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b' }] } as any);
     mockFresh.mockResolvedValueOnce(null);
     const res2 = mockRes();
     await gamesController.refreshSoloPreview(mockReq({ body: { sessionId: 900, round: 3 } }), res2);
