@@ -277,7 +277,7 @@ function EventHostLobby(props: LobbyRendererProps) {
               emptyLabel="Personne pour l'instant. Les joueurs apparaissent ici dès qu'ils ont scanné."
             />
             {code ? (
-              <RecentPlayers roomCode={code} accent={ACCENT} tone="light" exclude={props.participants.map(p => p.user_id)} />
+              <RecentPlayers roomCode={code} link={joinUrl} accent={ACCENT} tone="light" exclude={props.participants.map(p => p.user_id)} />
             ) : null}
           </div>
         </div>
