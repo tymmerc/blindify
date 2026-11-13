@@ -25,6 +25,7 @@ import {
   type LiveView,
 } from "@/lib/streamerLive"
 import { PSEUDO_STORAGE, useLiveSocket } from "./useLiveSocket"
+import { ANSWER_INPUT_PROPS } from "@/lib/answerInput"
 
 const INPUT =
   "w-full rounded-md border-2 border-[#2e2014] bg-[#efe5d0] px-4 py-3 text-base text-[#2e2014] outline-none placeholder:text-[#b3a182] focus:border-[#7d9471]"
@@ -102,8 +103,8 @@ function AnswerForm({ view, onAnswer }: { view: LiveView; onAnswer: (title: stri
   }
   return (
     <form onSubmit={submit} className="space-y-3" data-testid="live-answer">
-      <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Titre" aria-label="Titre" autoComplete="off" className={INPUT} disabled={!open} />
-      <input value={artist} onChange={e => setArtist(e.target.value)} placeholder="Artiste" aria-label="Artiste" autoComplete="off" className={INPUT} disabled={!open} />
+      <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Titre" aria-label="Titre" {...ANSWER_INPUT_PROPS} className={INPUT} disabled={!open} />
+      <input value={artist} onChange={e => setArtist(e.target.value)} placeholder="Artiste" aria-label="Artiste" {...ANSWER_INPUT_PROPS} className={INPUT} disabled={!open} />
       <button type="submit" disabled={!open || !(title.trim() || artist.trim())} className={PRIMARY} style={{ background: "#c65133" }}>
         {view.sendingRound === round ? "Envoi…" : "Envoyer ma réponse"}
       </button>

@@ -8,6 +8,7 @@ import type { MultiplayerGameState, UserSummary } from "@/lib/types"
 import { shortGameNotice } from "@/lib/roundCount"
 import { DeezerCredit, SpotifyTrackLink } from "./SourceCredits"
 import { SpectatorBadge } from "./SpectatorBadge"
+import { ANSWER_INPUT_PROPS } from "@/lib/answerInput"
 
 type ChatMessage = {
   userId: number
@@ -357,7 +358,7 @@ export function TheaterGameView(props: Props) {
                 disabled={localHasAnswered || disabled}
                 className={`theater-input ${guessTitle.trim() ? "filled" : ""}`}
                 placeholder="Titre du morceau"
-                autoComplete="off"
+                {...ANSWER_INPUT_PROPS}
               />
             </div>
 
@@ -372,7 +373,7 @@ export function TheaterGameView(props: Props) {
                 disabled={localHasAnswered || disabled}
                 className={`theater-input ${guessArtist.trim() ? "filled" : ""}`}
                 placeholder="Tape ici..."
-                autoComplete="off"
+                {...ANSWER_INPUT_PROPS}
               />
             </div>
 

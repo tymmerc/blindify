@@ -77,6 +77,9 @@ export const api = {
   async recordSoloResult(payload: { sessionId: number; rounds: number; correct: number; bestStreak: number }) {
     return clientApi.recordSoloResult(payload)
   },
+  async refreshSoloPreview(payload: { sessionId: number; round: number }): Promise<string> {
+    return clientApi.refreshSoloPreview(payload)
+  },
   async addLike(_userId: number | null | undefined, audioSourceId: string): Promise<void> {
     return clientApi.addLike(audioSourceId)
   },

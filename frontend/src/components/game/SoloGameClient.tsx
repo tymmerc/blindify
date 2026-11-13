@@ -17,6 +17,7 @@ import { EndFeedback } from "./EndFeedback"
 import { useMode } from "@/contexts/ModeContext"
 import { evaluateGuess as evaluateGuessShared, evaluateGuessSeparate, normalize, tokenize, type Verdict } from "@/lib/matching"
 import { DeezerCredit, SpotifyTrackLink } from "./SourceCredits"
+import { ANSWER_INPUT_PROPS } from "@/lib/answerInput"
 
 type FinalizeReason = "timeout" | "reveal" | "guess"
 type RoundState = "pending" | "current" | Verdict
@@ -805,6 +806,19 @@ export function SoloGameClient({
         await startAudio(previewUrl, current)
       } catch (err) {
         if (cancelled) return
+        // Extrait illisible (lien Deezer expire au bout de ~15 min) : on
+        // redemande un lien neuf une fois et on relance, avant le bouton play (T35).
+        if ((err as DOMException)?.name !== "NotAllowedError" && sessionId) {
+          try {
+            const fresh = await api.refreshSoloPreview({ sessionId, round: current.round })
+            if (cancelled) return
+            previewUrlRef.current = fresh
+            await startAudio(fresh, current)
+            return
+          } catch {
+            if (cancelled) return
+          }
+        }
         // Don't set feedback — it triggers the result popup flow.
         // Just show the manual play button overlay on the vinyl disc.
         setManualPlayRequired(true)
@@ -837,6 +851,7 @@ export function SoloGameClient({
     setIndex,
     scheduleListeningTimer,
     muted,
+    sessionId,
   ])
 
   const handleManualPlay = useCallback(async () => {
@@ -1244,6 +1259,7 @@ export function SoloGameClient({
 
           <form className="flex flex-col gap-3" onSubmit={handleGuessSubmit}>
             <input
+              {...ANSWER_INPUT_PROPS}
               value={guessTitle}
               onChange={event => {
                 const value = event.target.value
@@ -1256,6 +1272,7 @@ export function SoloGameClient({
             />
             <div className="flex gap-3">
               <input
+                {...ANSWER_INPUT_PROPS}
                 value={guessArtist}
                 onChange={event => {
                   const value = event.target.value

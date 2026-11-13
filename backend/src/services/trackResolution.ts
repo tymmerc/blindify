@@ -56,11 +56,13 @@ async function savePreview(id: AudioSourceRow["id"], preview: string): Promise<v
  */
 export async function hydratePreviewOutcome(
   source: AudioSourceRow,
-  hooks?: PreviewHooks
+  hooks?: PreviewHooks,
+  /** Validite qu'il faut encore a l'extrait en base pour le garder (60 s par defaut). */
+  minValidityMs?: number
 ): Promise<{ url: string | null; failed: boolean }> {
   const cached = source.audio_url;
   // URL en cache encore valide -> on la garde.
-  if (cached && !isExpiredPreview(cached)) return { url: cached, failed: false };
+  if (cached && !isExpiredPreview(cached, minValidityMs)) return { url: cached, failed: false };
 
   const query = previewQueryFor(source);
   const { title } = query;
