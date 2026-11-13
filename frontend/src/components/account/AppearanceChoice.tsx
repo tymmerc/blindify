@@ -22,7 +22,7 @@ export function AppearanceChoice() {
             <label
               key={o.value}
               className={`cursor-pointer rounded-full border-[1.5px] border-line px-4 py-1.5 text-sm font-bold transition focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-terra ${
-                actif ? "bg-ink-block text-on-ink" : "bg-paper-deep text-ink hover:bg-well"
+                actif ? "bg-ink-block text-on-ink dark:bg-on-ink dark:text-paper" : "bg-paper-deep text-ink hover:bg-well"
               }`}
             >
               <input

@@ -66,6 +66,18 @@ try {
         await shot(p, `${theme}-${tag}${path.replace(/\//g, "_").replace(/_$/, "") || "_accueil"}`)
       }
     }
+    // Activite Discord : le parametre theme de l'adresse gagne sur l'appareil,
+    // et il est garde quand la navigation interne le perd.
+    if (theme === "clair") {
+      const cd = await ctx(TEL, "clair")
+      const pd = await page(cd, "discord")
+      await pd.goto(`${B}/jouer/?theme=darker&frame_id=f-1&instance_id=i-1&platform=mobile`, { waitUntil: "domcontentloaded", timeout: 90000 })
+      const t1 = await pd.evaluate(() => document.documentElement.getAttribute("data-theme"))
+      await pd.goto(`${B}/profile/`, { waitUntil: "domcontentloaded", timeout: 90000 })
+      const t2 = await pd.evaluate(() => document.documentElement.getAttribute("data-theme"))
+      t1 === "dark" && t2 === "dark" ? console.log("  [ok] theme Discord suivi (darker), garde apres navigation") : bad(`theme Discord : ${t1} puis ${t2}`)
+      await cd.close()
+    }
     // Une vraie partie "A distance"
     const ch = await ctx(ORDI, theme), cg = await ctx(TEL, theme)
     const h = await page(ch, "hote"), g = await page(cg, "invite")
