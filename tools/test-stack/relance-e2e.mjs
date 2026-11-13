@@ -85,7 +85,7 @@ try {
   host = await newPage(browser, { viewport: { width: 1440, height: 900 } }, "hote", problems)
   const page = host.page
   await page.goto(`${APP}/jouer/`, { waitUntil: "networkidle", timeout: 60000 })
-  await page.locator("input").first().fill("Lea")
+  await page.locator("input:not([type=file])").first().fill("Lea")
   await page.getByRole("button", { name: /continuer/i }).click()
   for (let i = 0; i < 40 && !page.__uid; i++) await sleep(250)
   if (!page.__uid) throw new Error("hote : aucune identite creee")

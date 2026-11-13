@@ -50,7 +50,7 @@ async function importOnNewPhone(browser, name, tag) {
   const phone = await newPage(browser, { ...devices["iPhone 13"] }, tag, problems)
   const p = phone.page
   await p.goto(`${APP}/jouer/`, { waitUntil: "networkidle", timeout: 90000 })
-  await p.locator("input").first().fill(name)
+  await p.locator("input:not([type=file])").first().fill(name)
   await p.getByRole("button", { name: /continuer/i }).click()
   for (let i = 0; i < 40 && !p.__uid; i++) await sleep(250)
   await p.locator('input[placeholder^="https://"]').fill(`https://www.deezer.com/profile/${profil}`)

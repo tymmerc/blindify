@@ -55,7 +55,7 @@ const shot = async (p, nom) => {
 /** Passe le wizard /jouer/ : pseudo, musique vide. */
 const wizard = async (p, nom, join) => {
   await p.goto(`${B}/jouer/${join ? `?join=${join}` : ""}`, { waitUntil: "networkidle", timeout: 90000 })
-  await p.locator("input").first().fill(nom)
+  await p.locator("input:not([type=file])").first().fill(nom)
   await p.getByRole("button", { name: /continuer/i }).click()
   if (join) {
     await p.getByRole("button", { name: /rejoindre la partie/i }).click({ timeout: 20000 })

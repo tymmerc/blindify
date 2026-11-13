@@ -83,7 +83,7 @@ try {
     const h = await page(ch, "hote"), g = await page(cg, "invite")
     const wizard = async (p, nom, join) => {
       await p.goto(`${B}/jouer/${join ? `?join=${join}` : ""}`, { waitUntil: "networkidle", timeout: 90000 })
-      await p.locator("input").first().fill(nom)
+      await p.locator("input:not([type=file])").first().fill(nom)
       await p.getByRole("button", { name: /continuer/i }).click()
       if (join) await p.getByRole("button", { name: /rejoindre la partie/i }).click({ timeout: 20000 })
       else await p.getByRole("button", { name: /^continuer$/i }).click({ timeout: 20000 })

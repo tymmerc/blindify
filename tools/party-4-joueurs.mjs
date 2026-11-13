@@ -75,7 +75,7 @@ const grabUserId = page => new Promise(resolve => {
 })
 const hostIdP = grabUserId(host)
 await host.goto(`${B}/jouer/`, { waitUntil: "networkidle", timeout: 90000 })
-await host.locator("input").first().fill("Tymeo")
+await host.locator("input:not([type=file])").first().fill("Tymeo")
 await host.getByRole("button", { name: /continuer/i }).click()
 // URL laissee vide -> Continuer passe l'ecran d'import
 await host.getByRole("button", { name: /^continuer$/i }).click({ timeout: 20000 })
@@ -105,7 +105,7 @@ for (const name of ["Megane", "Max", "Lea"]) {
   // le bouton ne s'active pas.
   const go = p.getByRole("button", { name: /continuer/i })
   for (let i = 0; i < 6 && !(await go.isEnabled().catch(() => false)); i++) {
-    await p.locator("input").first().fill(name)
+    await p.locator("input:not([type=file])").first().fill(name)
     await p.waitForTimeout(500)
   }
   await go.click()
@@ -183,7 +183,7 @@ if (CHAOS) {
     let joins = 0
     zoe.on("request", r => { if (r.url().includes("/join")) joins++ })
     await zoe.goto(`${B}/?join=${code}`, { waitUntil: "networkidle", timeout: 90000 })
-    await zoe.locator("input").first().fill("Zoe")
+    await zoe.locator("input:not([type=file])").first().fill("Zoe")
     await zoe.getByRole("button", { name: /continuer/i }).click()
     await zoe.getByRole("button", { name: /rejoindre la partie/i }).click().catch(() => {})
     // T19 : elle entre et regarde, puis joue des la manche suivante. En prod

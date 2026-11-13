@@ -30,7 +30,7 @@ page.on("response", async r => {
 
 // il faut une session + musique importee : on passe par l'accueil comme un humain
 await page.goto(`${B}/jouer/`, { waitUntil: "networkidle", timeout: 90000 })
-await page.locator("input").first().fill("Tymeo")
+await page.locator("input:not([type=file])").first().fill("Tymeo")
 await page.getByRole("button", { name: /continuer/i }).click()
 await page.locator('input[placeholder^="https://"]').fill("https://www.deezer.com/profile/2529")
 await page.getByRole("button", { name: /importer ma musique/i }).click()

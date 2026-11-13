@@ -46,7 +46,7 @@ const hostCtx = await mk({ viewport: { width: 1440, height: 900 } })
 const host = await hostCtx.newPage()
 const hostIdP = grabUserId(host)
 await host.goto(`${B}/jouer/`, { waitUntil: "networkidle", timeout: 90000 })
-await host.locator("input").first().fill("Tymeo")
+await host.locator("input:not([type=file])").first().fill("Tymeo")
 await host.getByRole("button", { name: /continuer/i }).click()
 await host.getByRole("button", { name: /^continuer$/i }).click({ timeout: 20000 })
 const hostId = await hostIdP
@@ -74,7 +74,7 @@ for (const name of ["Lea", "Max"]) {
   const p = await ctx.newPage()
   const idP = grabUserId(p)
   await p.goto(`${B}/?join=${code}`, { waitUntil: "networkidle", timeout: 90000 })
-  await p.locator("input").first().fill(name)
+  await p.locator("input:not([type=file])").first().fill(name)
   await p.getByRole("button", { name: /continuer/i }).click()
   const uid = await idP
   await seedLibrary(uid, 12)
@@ -198,7 +198,7 @@ while (Date.now() - t0 < 5 * 60 * 1000) {
     const outsider = await mk({ ...devices["iPhone 13"] })
     const op = await outsider.newPage()
     await op.goto(`${B}/jouer/`, { waitUntil: "domcontentloaded", timeout: 60000 })
-    await op.locator("input").first().fill("Intrus")
+    await op.locator("input:not([type=file])").first().fill("Intrus")
     await op.getByRole("button", { name: /continuer/i }).click().catch(() => {})
     await op.waitForTimeout(1500)
     const outRounds = await op.evaluate(async (url) => {
