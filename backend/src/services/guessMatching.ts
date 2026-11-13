@@ -1,11 +1,29 @@
 /**
- * Comparaison des reponses tapees avec le morceau de la manche (titre,
- * artiste, variantes, fautes de frappe). Fonctions pures, sorties de
- * realtimeGame.ts le 30/10/2026 sans changement de comportement.
+ * Le juge des reponses : compare ce qui est tape avec le titre et l'artiste du
+ * morceau (variantes, fautes de frappe, espaces, article, mashups, fin du
+ * titre). Fonctions pures, sans import.
+ *
+ * COPIE A L'IDENTIQUE : shared/src/guessMatching.ts fait foi, recopie tel quel
+ * dans backend/src/services/guessMatching.ts (multi, streamer, Discord) et
+ * frontend/src/lib/guessMatching.ts (solo, chrono, buzzer, juges dans le
+ * navigateur). Modifier les trois ensemble : tools/check-shared-types.sh (CI
+ * « types partages ») refuse des copies differentes. Les cas de test communs
+ * sont dans shared/src/guessMatchingCases.json.
  */
-import type { RoundTrack, Verdict } from "./realtimeGame";
 
-export type GuessDetail = ReturnType<typeof evaluateGuessDetail>;
+export type Verdict = "correct" | "close" | "wrong";
+
+export interface GuessTrack {
+  title: string;
+  artist: string;
+}
+
+export interface GuessDetail {
+  verdict: Verdict;
+  matchedTitle: boolean;
+  matchedArtist: boolean;
+  guessProvided: boolean;
+}
 
 // --- string matching helpers ---
 const NORMALIZE_SUBS: Record<string, string> = {
@@ -226,15 +244,10 @@ function artistVariants(artist: string): Variant[] {
 
 export function evaluateGuessDetail(
   guess: string,
-  track: Pick<RoundTrack, "title" | "artist">,
+  track: GuessTrack,
   separateTitle?: string | null,
   separateArtist?: string | null,
-): {
-  verdict: Verdict;
-  matchedTitle: boolean;
-  matchedArtist: boolean;
-  guessProvided: boolean;
-} {
+): GuessDetail {
   const hasSeparateFields = (separateTitle && separateTitle.trim().length > 0) || (separateArtist && separateArtist.trim().length > 0);
 
   if (hasSeparateFields) {

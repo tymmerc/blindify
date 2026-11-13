@@ -1,0 +1,837 @@
+{
+ "_doc": "Cas communs du juge des reponses, joues tels quels par backend/tests/services/guessMatching.spec.ts et frontend/src/lib/guessMatching.test.ts. field=title : champ titre seul (et la meme chose en saisie unique si aussiSaisieUnique). field=artist : champ artiste seul. field=verdict : verdict complet (guess = saisie unique, titleInput/artistInput = champs separes).",
+ "cases": [
+  {
+   "field": "title",
+   "guess": "nothing news",
+   "title": "Nothing's New",
+   "artist": "Rio Romeo",
+   "accepted": true,
+   "aussiSaisieUnique": true
+  },
+  {
+   "field": "title",
+   "guess": "nothing new",
+   "title": "Nothing's New",
+   "artist": "Rio Romeo",
+   "accepted": true,
+   "aussiSaisieUnique": true
+  },
+  {
+   "field": "title",
+   "guess": "nothings new",
+   "title": "Nothing's New",
+   "artist": "Rio Romeo",
+   "accepted": true,
+   "aussiSaisieUnique": true
+  },
+  {
+   "field": "title",
+   "guess": "Nothing's New",
+   "title": "Nothing's New",
+   "artist": "Rio Romeo",
+   "accepted": true,
+   "aussiSaisieUnique": true
+  },
+  {
+   "field": "title",
+   "guess": "nothing’s new",
+   "title": "Nothing's New",
+   "artist": "Rio Romeo",
+   "accepted": true,
+   "aussiSaisieUnique": true
+  },
+  {
+   "field": "title",
+   "guess": "NOTHING NEW",
+   "title": "Nothing's New",
+   "artist": "Rio Romeo",
+   "accepted": true,
+   "aussiSaisieUnique": true
+  },
+  {
+   "field": "title",
+   "guess": "dont stop me now",
+   "title": "Don't Stop Me Now",
+   "artist": "Queen",
+   "accepted": true,
+   "aussiSaisieUnique": true
+  },
+  {
+   "field": "title",
+   "guess": "don't stop me now",
+   "title": "Don't Stop Me Now",
+   "artist": "Queen",
+   "accepted": true,
+   "aussiSaisieUnique": true
+  },
+  {
+   "field": "title",
+   "guess": "Don’t Stop Me Now",
+   "title": "Don't Stop Me Now",
+   "artist": "Queen",
+   "accepted": true,
+   "aussiSaisieUnique": true
+  },
+  {
+   "field": "title",
+   "guess": "dont stop me nw",
+   "title": "Don't Stop Me Now",
+   "artist": "Queen",
+   "accepted": true,
+   "aussiSaisieUnique": true
+  },
+  {
+   "field": "title",
+   "guess": "lamour",
+   "title": "L'amour",
+   "artist": "Odezenne",
+   "accepted": true,
+   "aussiSaisieUnique": true
+  },
+  {
+   "field": "title",
+   "guess": "l amour",
+   "title": "L'amour",
+   "artist": "Odezenne",
+   "accepted": true,
+   "aussiSaisieUnique": true
+  },
+  {
+   "field": "title",
+   "guess": "amour",
+   "title": "L'amour",
+   "artist": "Odezenne",
+   "accepted": true,
+   "aussiSaisieUnique": true
+  },
+  {
+   "field": "title",
+   "guess": "l'amour",
+   "title": "L'amour",
+   "artist": "Odezenne",
+   "accepted": true,
+   "aussiSaisieUnique": true
+  },
+  {
+   "field": "title",
+   "guess": "l’amour",
+   "title": "L'amour",
+   "artist": "Odezenne",
+   "accepted": true,
+   "aussiSaisieUnique": true
+  },
+  {
+   "field": "title",
+   "guess": "nothing news",
+   "title": "Nothing’s New",
+   "artist": "Rio Romeo",
+   "accepted": true,
+   "aussiSaisieUnique": true
+  },
+  {
+   "field": "title",
+   "guess": "dont stop me now",
+   "title": "Don`t Stop Me Now",
+   "artist": "Queen",
+   "accepted": true,
+   "aussiSaisieUnique": true
+  },
+  {
+   "field": "title",
+   "guess": "nothing else",
+   "title": "Nothing's New",
+   "artist": "Rio Romeo",
+   "accepted": false,
+   "aussiSaisieUnique": true
+  },
+  {
+   "field": "title",
+   "guess": "nothing",
+   "title": "Nothing's New",
+   "artist": "Rio Romeo",
+   "accepted": false,
+   "aussiSaisieUnique": true
+  },
+  {
+   "field": "title",
+   "guess": "new",
+   "title": "Nothing's New",
+   "artist": "Rio Romeo",
+   "accepted": false,
+   "aussiSaisieUnique": true
+  },
+  {
+   "field": "title",
+   "guess": "news",
+   "title": "Nothing's New",
+   "artist": "Rio Romeo",
+   "accepted": false,
+   "aussiSaisieUnique": true
+  },
+  {
+   "field": "title",
+   "guess": "something new",
+   "title": "Nothing's New",
+   "artist": "Rio Romeo",
+   "accepted": false,
+   "aussiSaisieUnique": true
+  },
+  {
+   "field": "title",
+   "guess": "everything new",
+   "title": "Nothing's New",
+   "artist": "Rio Romeo",
+   "accepted": false,
+   "aussiSaisieUnique": true
+  },
+  {
+   "field": "title",
+   "guess": "stop me now",
+   "title": "Don't Stop Me Now",
+   "artist": "Queen",
+   "accepted": false,
+   "aussiSaisieUnique": true
+  },
+  {
+   "field": "title",
+   "guess": "dont stop",
+   "title": "Don't Stop Me Now",
+   "artist": "Queen",
+   "accepted": false,
+   "aussiSaisieUnique": true
+  },
+  {
+   "field": "title",
+   "guess": "do stop me now",
+   "title": "Don't Stop Me Now",
+   "artist": "Queen",
+   "accepted": false,
+   "aussiSaisieUnique": true
+  },
+  {
+   "field": "title",
+   "guess": "dont start me now",
+   "title": "Don't Stop Me Now",
+   "artist": "Queen",
+   "accepted": false,
+   "aussiSaisieUnique": true
+  },
+  {
+   "field": "title",
+   "guess": "l",
+   "title": "L'amour",
+   "artist": "Odezenne",
+   "accepted": false,
+   "aussiSaisieUnique": true
+  },
+  {
+   "field": "title",
+   "guess": "toujours",
+   "title": "L'amour",
+   "artist": "Odezenne",
+   "accepted": false,
+   "aussiSaisieUnique": true
+  },
+  {
+   "field": "title",
+   "guess": "la mer",
+   "title": "L'amour",
+   "artist": "Odezenne",
+   "accepted": false,
+   "aussiSaisieUnique": true
+  },
+  {
+   "field": "title",
+   "guess": "lumiere",
+   "title": "L'amour",
+   "artist": "Odezenne",
+   "accepted": false,
+   "aussiSaisieUnique": true
+  },
+  {
+   "field": "title",
+   "guess": "lete",
+   "title": "L'été",
+   "artist": "Artiste",
+   "accepted": true,
+   "aussiSaisieUnique": true
+  },
+  {
+   "field": "title",
+   "guess": "ete",
+   "title": "L'été",
+   "artist": "Artiste",
+   "accepted": true,
+   "aussiSaisieUnique": true
+  },
+  {
+   "field": "title",
+   "guess": "lait",
+   "title": "L'été",
+   "artist": "Artiste",
+   "accepted": false,
+   "aussiSaisieUnique": true
+  },
+  {
+   "field": "title",
+   "guess": "lot",
+   "title": "L'été",
+   "artist": "Artiste",
+   "accepted": false,
+   "aussiSaisieUnique": true
+  },
+  {
+   "field": "title",
+   "guess": "rock n roll",
+   "title": "Rock'n'Roll",
+   "artist": "Artiste",
+   "accepted": true,
+   "aussiSaisieUnique": true
+  },
+  {
+   "field": "title",
+   "guess": "rock'n'roll",
+   "title": "Rock'n'Roll",
+   "artist": "Artiste",
+   "accepted": true,
+   "aussiSaisieUnique": true
+  },
+  {
+   "field": "title",
+   "guess": "rocknroll",
+   "title": "Rock'n'Roll",
+   "artist": "Artiste",
+   "accepted": true,
+   "aussiSaisieUnique": true
+  },
+  {
+   "field": "title",
+   "guess": "chocolat",
+   "title": "Chocolat (feat. Awa Imani)",
+   "artist": "Naza",
+   "accepted": true,
+   "aussiSaisieUnique": true
+  },
+  {
+   "field": "title",
+   "guess": "chocolate",
+   "title": "Chocolat (feat. Awa Imani)",
+   "artist": "Naza",
+   "accepted": true,
+   "aussiSaisieUnique": true
+  },
+  {
+   "field": "title",
+   "guess": "chocolat's",
+   "title": "Chocolat (feat. Awa Imani)",
+   "artist": "Naza",
+   "accepted": true,
+   "aussiSaisieUnique": true
+  },
+  {
+   "field": "title",
+   "guess": "caramel",
+   "title": "Chocolat (feat. Awa Imani)",
+   "artist": "Naza",
+   "accepted": false,
+   "aussiSaisieUnique": true
+  },
+  {
+   "field": "title",
+   "guess": "Bubblegum",
+   "title": "Bubble Gum",
+   "artist": "Artiste",
+   "accepted": true
+  },
+  {
+   "field": "title",
+   "guess": "danidana",
+   "title": "Dana Dana (ft. Rima)",
+   "artist": "Artiste",
+   "accepted": true
+  },
+  {
+   "field": "title",
+   "guess": "bubble gum",
+   "title": "Bubblegum",
+   "artist": "Artiste",
+   "accepted": true
+  },
+  {
+   "field": "title",
+   "guess": "jet ski",
+   "title": "Jetski",
+   "artist": "Artiste",
+   "accepted": true
+  },
+  {
+   "field": "artist",
+   "guess": "Karolg",
+   "title": "BbY WOW",
+   "artist": "KAROL G",
+   "accepted": true
+  },
+  {
+   "field": "title",
+   "guess": "bad bi",
+   "title": "Baby",
+   "artist": "Artiste",
+   "accepted": false
+  },
+  {
+   "field": "title",
+   "guess": "I love you",
+   "title": "I Love You So",
+   "artist": "Artiste",
+   "accepted": false
+  },
+  {
+   "field": "title",
+   "guess": "iloveyou",
+   "title": "I Love You So",
+   "artist": "Artiste",
+   "accepted": false
+  },
+  {
+   "field": "title",
+   "guess": "sauf my name",
+   "title": "Say My Name",
+   "artist": "Artiste",
+   "accepted": false
+  },
+  {
+   "field": "title",
+   "guess": "Kill 2",
+   "title": "the kill 2",
+   "artist": "Artiste",
+   "accepted": true
+  },
+  {
+   "field": "title",
+   "guess": "Sky full off stars",
+   "title": "A Sky Full of Stars",
+   "artist": "Artiste",
+   "accepted": true
+  },
+  {
+   "field": "title",
+   "guess": "grenade",
+   "title": "La grenade",
+   "artist": "Artiste",
+   "accepted": true
+  },
+  {
+   "field": "title",
+   "guess": "danse",
+   "title": "Une danse",
+   "artist": "Artiste",
+   "accepted": true
+  },
+  {
+   "field": "title",
+   "guess": "rock that body",
+   "title": "The Rock",
+   "artist": "Artiste",
+   "accepted": false
+  },
+  {
+   "field": "title",
+   "guess": "kill",
+   "title": "the kill 2",
+   "artist": "Artiste",
+   "accepted": false
+  },
+  {
+   "field": "title",
+   "guess": "Le temps est beau",
+   "title": "Le temps est bon",
+   "artist": "Artiste",
+   "accepted": false
+  },
+  {
+   "field": "title",
+   "guess": "Sky",
+   "title": "A Sky Full of Stars",
+   "artist": "Artiste",
+   "accepted": false
+  },
+  {
+   "field": "title",
+   "guess": "Carnival",
+   "title": "Carnival x Fein",
+   "artist": "Artiste",
+   "accepted": true
+  },
+  {
+   "field": "title",
+   "guess": "Fein",
+   "title": "Carnival x Fein",
+   "artist": "Artiste",
+   "accepted": true
+  },
+  {
+   "field": "title",
+   "guess": "Sweather weather",
+   "title": "sweater weather x another love",
+   "artist": "Artiste",
+   "accepted": true
+  },
+  {
+   "field": "title",
+   "guess": "another love",
+   "title": "sweater weather x another love",
+   "artist": "Artiste",
+   "accepted": true
+  },
+  {
+   "field": "title",
+   "guess": "love",
+   "title": "sweater weather x another love",
+   "artist": "Artiste",
+   "accepted": false
+  },
+  {
+   "field": "title",
+   "guess": "another",
+   "title": "sweater weather x another love",
+   "artist": "Artiste",
+   "accepted": false
+  },
+  {
+   "field": "title",
+   "guess": "Formidable",
+   "title": "For Me... Formidable",
+   "artist": "Artiste",
+   "accepted": true
+  },
+  {
+   "field": "title",
+   "guess": "Les yeux d’emilie",
+   "title": "Dans les yeux d'Émilie",
+   "artist": "Artiste",
+   "accepted": true
+  },
+  {
+   "field": "title",
+   "guess": "les yeux demilie",
+   "title": "Dans les yeux d'Émilie",
+   "artist": "Artiste",
+   "accepted": true
+  },
+  {
+   "field": "title",
+   "guess": "Break free",
+   "title": "I Want To Break Free",
+   "artist": "Artiste",
+   "accepted": true
+  },
+  {
+   "field": "title",
+   "guess": "I want a break free",
+   "title": "I Want To Break Free",
+   "artist": "Artiste",
+   "accepted": true
+  },
+  {
+   "field": "title",
+   "guess": "Ophelia",
+   "title": "The Fate of Ophelia",
+   "artist": "Artiste",
+   "accepted": true
+  },
+  {
+   "field": "title",
+   "guess": "ophelie",
+   "title": "The Fate of Ophelia",
+   "artist": "Artiste",
+   "accepted": true
+  },
+  {
+   "field": "title",
+   "guess": "sushi restaurant",
+   "title": "Music For a Sushi Restaurant",
+   "artist": "Artiste",
+   "accepted": true
+  },
+  {
+   "field": "title",
+   "guess": "I love you",
+   "title": "I Love You So",
+   "artist": "Artiste",
+   "accepted": false
+  },
+  {
+   "field": "title",
+   "guess": "Ti amo",
+   "title": "Sarà perché ti amo",
+   "artist": "Artiste",
+   "accepted": false
+  },
+  {
+   "field": "title",
+   "guess": "Love song",
+   "title": "Love You Like A Love Song",
+   "artist": "Artiste",
+   "accepted": false,
+   "note": "refus tranche par Tym le 13/11"
+  },
+  {
+   "field": "title",
+   "guess": "Like a love song",
+   "title": "Love You Like A Love Song",
+   "artist": "Selena Gomez",
+   "accepted": true
+  },
+  {
+   "field": "title",
+   "guess": "kuduro",
+   "title": "Danza Kuduro",
+   "artist": "Don Omar",
+   "accepted": false,
+   "note": "refus tranche par Tym le 13/11"
+  },
+  {
+   "field": "title",
+   "guess": "Émilie",
+   "title": "Dans les yeux d'Émilie",
+   "artist": "Artiste",
+   "accepted": false,
+   "note": "refus tranche par Tym le 13/11"
+  },
+  {
+   "field": "title",
+   "guess": "free",
+   "title": "I Want To Break Free",
+   "artist": "Artiste",
+   "accepted": false
+  },
+  {
+   "field": "title",
+   "guess": "restaurant",
+   "title": "Music For a Sushi Restaurant",
+   "artist": "Artiste",
+   "accepted": false
+  },
+  {
+   "field": "title",
+   "guess": "tonight",
+   "title": "Save Me Tonight",
+   "artist": "Artiste",
+   "accepted": false
+  },
+  {
+   "field": "title",
+   "guess": "say my the night",
+   "title": "Save Me Tonight",
+   "artist": "Artiste",
+   "accepted": false
+  },
+  {
+   "field": "title",
+   "guess": "ophelai",
+   "title": "The Fate of Ophelia",
+   "artist": "Artiste",
+   "accepted": false
+  },
+  {
+   "field": "title",
+   "guess": "mix it",
+   "title": "In The Mix",
+   "artist": "Artiste",
+   "accepted": false
+  },
+  {
+   "field": "title",
+   "guess": "curse you off",
+   "title": "Cut You Off",
+   "artist": "Artiste",
+   "accepted": false
+  },
+  {
+   "field": "title",
+   "guess": "Mountain high enough",
+   "title": "Ain't No Mountain High Enough",
+   "artist": "Artiste",
+   "accepted": false
+  },
+  {
+   "field": "artist",
+   "guess": "Jhon denver",
+   "title": "Titre",
+   "artist": "John Denver",
+   "accepted": true
+  },
+  {
+   "field": "artist",
+   "guess": "fujikaze",
+   "title": "Titre",
+   "artist": "Fujii Kaze",
+   "accepted": true
+  },
+  {
+   "field": "artist",
+   "guess": "Tate Mac ray",
+   "title": "Titre",
+   "artist": "Tate McRae",
+   "accepted": false
+  },
+  {
+   "field": "artist",
+   "guess": "Enimen",
+   "title": "Titre",
+   "artist": "Eminem",
+   "accepted": false
+  },
+  {
+   "field": "artist",
+   "guess": "Tate",
+   "title": "Titre",
+   "artist": "Tate McRae",
+   "accepted": false
+  },
+  {
+   "field": "artist",
+   "guess": "Kate Mc",
+   "title": "Titre",
+   "artist": "Tate McRae",
+   "accepted": false
+  },
+  {
+   "field": "verdict",
+   "guess": "",
+   "titleInput": "im yours",
+   "artistInput": "guns n roses",
+   "title": "I'm Yours",
+   "artist": "Guns N' Roses",
+   "verdict": "correct"
+  },
+  {
+   "field": "verdict",
+   "guess": "im yours guns n roses",
+   "titleInput": "",
+   "artistInput": "",
+   "title": "I'm Yours",
+   "artist": "Guns N' Roses",
+   "verdict": "correct"
+  },
+  {
+   "field": "verdict",
+   "guess": "",
+   "titleInput": "im yours",
+   "artistInput": "metallica",
+   "title": "I'm Yours",
+   "artist": "Guns N' Roses",
+   "verdict": "close"
+  },
+  {
+   "field": "verdict",
+   "guess": "",
+   "titleInput": "rio romeo",
+   "artistInput": "nothing news",
+   "title": "Nothing's New",
+   "artist": "Rio Romeo",
+   "verdict": "correct",
+   "note": "champs croises : l'artiste tape dans le champ titre"
+  },
+  {
+   "field": "verdict",
+   "guess": "",
+   "titleInput": "",
+   "artistInput": "",
+   "title": "Nothing's New",
+   "artist": "Rio Romeo",
+   "verdict": "wrong"
+  },
+  {
+   "field": "verdict",
+   "guess": "'''",
+   "titleInput": "",
+   "artistInput": "",
+   "title": "Nothing's New",
+   "artist": "Rio Romeo",
+   "verdict": "wrong"
+  },
+  {
+   "field": "verdict",
+   "guess": "",
+   "titleInput": "'",
+   "artistInput": "",
+   "title": "Nothing's New",
+   "artist": "Rio Romeo",
+   "verdict": "wrong"
+  },
+  {
+   "field": "verdict",
+   "guess": "",
+   "titleInput": "Ophelia",
+   "artistInput": "Taylor Swift",
+   "title": "The Fate of Ophelia",
+   "artist": "Taylor Swift",
+   "verdict": "correct"
+  },
+  {
+   "field": "verdict",
+   "guess": "ophelia taylor swift",
+   "titleInput": "",
+   "artistInput": "",
+   "title": "The Fate of Ophelia",
+   "artist": "Taylor Swift",
+   "verdict": "correct"
+  },
+  {
+   "field": "verdict",
+   "guess": "",
+   "titleInput": "Ophelia",
+   "artistInput": "",
+   "title": "The Fate of Ophelia",
+   "artist": "Taylor Swift",
+   "verdict": "close"
+  },
+  {
+   "field": "verdict",
+   "guess": "supermassive black hole",
+   "titleInput": "",
+   "artistInput": "",
+   "title": "Supermassive Black Hole",
+   "artist": "Muse",
+   "verdict": "close"
+  },
+  {
+   "field": "verdict",
+   "guess": "supermassive black hole muse",
+   "titleInput": "",
+   "artistInput": "",
+   "title": "Supermassive Black Hole",
+   "artist": "Muse",
+   "verdict": "correct"
+  },
+  {
+   "field": "verdict",
+   "guess": "bohemian rhapsody",
+   "titleInput": "",
+   "artistInput": "",
+   "title": "Supermassive Black Hole",
+   "artist": "Muse",
+   "verdict": "wrong"
+  },
+  {
+   "field": "verdict",
+   "guess": "",
+   "titleInput": "supermassiv black hole",
+   "artistInput": "",
+   "title": "Supermassive Black Hole",
+   "artist": "Muse",
+   "verdict": "close"
+  },
+  {
+   "field": "verdict",
+   "guess": "",
+   "titleInput": "",
+   "artistInput": "muse",
+   "title": "Supermassive Black Hole",
+   "artist": "Muse",
+   "verdict": "close"
+  }
+ ]
+}

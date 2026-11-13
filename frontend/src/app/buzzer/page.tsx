@@ -11,7 +11,7 @@ import { api } from "@/lib/api"
 import type { SoloTrack } from "@/lib/types"
 import { audioManager } from "@/lib/audioManager"
 import { useWakeLock } from "@/lib/useWakeLock"
-import { evaluateGuess, type GuessVerdict } from "@/lib/guessMatch"
+import { evaluateGuessDetail, type Verdict } from "@/lib/guessMatching"
 import { publicPath } from "@/lib/publicPath"
 import { FingerBoard, type BoardPhase } from "./FingerBoard"
 import { EndFeedback } from "@/components/game/EndFeedback"
@@ -57,7 +57,7 @@ function BuzzerContent() {
   const [liftQueue, setLiftQueue] = useState<number[]>([])
   const [answerer, setAnswerer] = useState<number | null>(null)
   const [eliminated, setEliminated] = useState<Set<number>>(new Set())
-  const [lastVerdict, setLastVerdict] = useState<GuessVerdict | null>(null)
+  const [lastVerdict, setLastVerdict] = useState<Verdict | null>(null)
   const [roundWinner, setRoundWinner] = useState<number | null>(null)
   const [guessTitle, setGuessTitle] = useState("")
   const [guessArtist, setGuessArtist] = useState("")
@@ -173,7 +173,7 @@ function BuzzerContent() {
   const submitRef = useRef<((timeout?: boolean) => void) | null>(null)
   submitRef.current = (timeout = false) => {
     if (phaseRef.current !== "answering" || answerer === null || !track) return
-    const verdict = timeout ? "wrong" : evaluateGuess(guessTitle, guessArtist, track).verdict
+    const verdict = timeout ? "wrong" : evaluateGuessDetail("", track, guessTitle, guessArtist).verdict
     setGuessTitle("")
     setGuessArtist("")
     if (verdict === "wrong") {

@@ -15,7 +15,7 @@ import { getListeningDuration } from "@/lib/progressiveDifficulty"
 import { HintButton } from "./HintButton"
 import { EndFeedback } from "./EndFeedback"
 import { useMode } from "@/contexts/ModeContext"
-import { evaluateGuess as evaluateGuessShared, evaluateGuessSeparate, normalize, tokenize, type Verdict } from "@/lib/matching"
+import { evaluateGuessDetail, type Verdict } from "@/lib/guessMatching"
 import { DeezerCredit, SpotifyTrackLink } from "./SourceCredits"
 import { ANSWER_INPUT_PROPS } from "@/lib/answerInput"
 
@@ -492,13 +492,8 @@ export function SoloGameClient({
 
       const startedAt = flow.startAt
       const reactionMs = startedAt ? Math.max(0, now - startedAt) : null
-      // Use separate title/artist fields when available for more accurate matching
-      const currentGuessTitle = guessTitleRef.current
-      const currentGuessArtist = guessArtistRef.current
-      const hasSeparateFields = (currentGuessTitle && currentGuessTitle.trim().length > 0) || (currentGuessArtist && currentGuessArtist.trim().length > 0)
-      const detail = hasSeparateFields
-        ? evaluateGuessSeparate(currentGuessTitle, currentGuessArtist, track)
-        : evaluateGuessShared(submittedGuess, track)
+      // Champs titre et artiste s'ils sont remplis, sinon la saisie unique : le juge choisit.
+      const detail = evaluateGuessDetail(submittedGuess, track, guessTitleRef.current, guessArtistRef.current)
       const finalVerdict = detail.verdict ?? nextVerdict
 
       const prevStats = statsRef.current
@@ -608,7 +603,7 @@ export function SoloGameClient({
         setTimer(prev => (prev === nextSeconds ? prev : nextSeconds))
         if (remainingMs <= 0) {
           const latestGuess = guessRef.current
-          const computedVerdict = verdictRef.current ?? evaluateGuessShared(latestGuess, track).verdict
+          const computedVerdict = verdictRef.current ?? evaluateGuessDetail(latestGuess, track).verdict
           finalizeRound(computedVerdict, "timeout", track, latestGuess)
         } else {
           listeningRafRef.current = requestAnimationFrame(tick)
@@ -898,7 +893,7 @@ export function SoloGameClient({
     (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault()
       if (!current || isRevealed || isLocked || uiState !== RoundUiState.Playing) return
-      const currentVerdict = evaluateGuessShared(guess, current).verdict
+      const currentVerdict = evaluateGuessDetail(guess, current).verdict
       setVerdict(currentVerdict)
       finalizeRound(currentVerdict, "guess", current, guess)
     },
@@ -907,7 +902,7 @@ export function SoloGameClient({
 
   const handleReveal = useCallback(() => {
     if (!current) return
-    const finalVerdict = verdict ?? evaluateGuessShared(guess, current).verdict
+    const finalVerdict = verdict ?? evaluateGuessDetail(guess, current).verdict
     finalizeRound(finalVerdict, "reveal", current, guess)
   }, [current, verdict, guess, finalizeRound])
 
