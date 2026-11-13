@@ -712,8 +712,6 @@ export function MultiplayerGameClient({
         isAudioPhase={isAudioPhase}
         onManualPlay={handleManualPlay}
         currentTrack={currentTrack}
-        trackOwnerUsername={trackOwnerUsername}
-        player={player}
         revealPanel={revealPanel({ fill: true, meId: user.id })}
         onExit={onExit}
         chatMessages={chatMessages}

@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import type { ComponentProps } from "react"
 import type { MultiplayerGameState, UserSummary } from "@/lib/types"
 import { TheaterGameView } from "./TheaterGameView"
+import { RevealPanel } from "./pacing/RevealPanel"
 
 // Ecran de jeu a distance. Sur telephone, Pause et Quitter deviennent des
 // icones : leur nom accessible doit rester le meme, les scripts de la pile de
@@ -33,13 +34,13 @@ function renderView(overrides: Partial<Props> = {}) {
     user, state, uiPhase: "guessing", isPlaying: true, isHost: true,
     onPauseToggle: vi.fn(), isLocked: false, isRevealed: false,
     remaining: 18, totalSeconds: 20, sortedPlayers: players,
-    answeredCount: 0, displayAnsweredCount: 0, playerCount: 2, readyCount: 0,
+    answeredCount: 0, displayAnsweredCount: 0, playerCount: 2,
     guessTitle: "", setGuessTitle: vi.fn(), guessArtist: "", setGuessArtist: vi.fn(),
     sourceGuess: null, setSourceGuess: vi.fn(), localHasAnswered: false,
     onSubmit: vi.fn(), onPass: vi.fn(), muted: false, volume: 0.5,
     onToggleMute: vi.fn(), onVolumeChange: vi.fn(), manualPlayRequired: false,
     isAudioPhase: true, onManualPlay: vi.fn(), currentTrack: null,
-    trackOwnerUsername: null, player: null, revealCountdown: 7, onReady: vi.fn(),
+    revealPanel: null,
     onExit: vi.fn(), chatMessages: [], chatInput: "", setChatInput: vi.fn(),
     chatScrollRef: { current: null },
     ...overrides,
@@ -99,15 +100,21 @@ describe("TheaterGameView, credits des sources", () => {
     expect(screen.queryByRole("link", { name: /spotify/i })).toBeNull()
   })
 
+  const revealedPanel = (track: typeof revealed) => {
+    const now = Date.now()
+    const s = { ...state, phase: "REVEAL", currentTrack: track, pacing: { step: "answer", endsAt: now + 8000, ms: 8000 } } as MultiplayerGameState
+    return <RevealPanel state={s} players={[]} meId={1} now={now} />
+  }
+
   it("au reveal d'un morceau Spotify : lien vers le morceau, logo Deezer toujours la", () => {
-    renderView({ uiPhase: "reveal", isRevealed: true, isPlaying: false, currentTrack: revealed })
+    renderView({ uiPhase: "reveal", isRevealed: true, isPlaying: false, currentTrack: revealed, revealPanel: revealedPanel(revealed) })
     const link = screen.getByRole("link", { name: /écouter sur spotify/i })
     expect(link.getAttribute("href")).toBe(`https://open.spotify.com/track/${SPOTIFY_ID}`)
     expect(screen.getAllByRole("img", { name: "Deezer" })).toHaveLength(2)
   })
 
   it("au reveal d'un morceau Deezer : pas de lien Spotify", () => {
-    renderView({ uiPhase: "reveal", isRevealed: true, isPlaying: false, currentTrack: { ...revealed, trackId: "3135556", provider: "deezer" } })
+    renderView({ uiPhase: "reveal", isRevealed: true, isPlaying: false, currentTrack: { ...revealed, trackId: "3135556", provider: "deezer" }, revealPanel: revealedPanel({ ...revealed, trackId: "3135556", provider: "deezer" }) })
     expect(screen.queryByRole("link", { name: /spotify/i })).toBeNull()
   })
 })

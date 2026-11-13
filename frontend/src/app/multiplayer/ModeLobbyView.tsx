@@ -428,9 +428,9 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     roomRef.current = room
   }, [room])
 
-  // Filet anti-gel : si on reste bloque en REVEAL trop longtemps (un game:ready
-  // perdu empeche tout le monde d'avancer), on resynchronise une fois via
-  // game:sync et on previent le joueur. Borne a un seul declenchement par phase.
+  // Filet anti-gel : le serveur fait avancer les ecrans entre les manches (T38).
+  // Si on reste en REVEAL bien plus longtemps que prevu (evenement perdu), on
+  // resynchronise une fois via game:sync. Borne a un seul declenchement par phase.
   useEffect(() => {
     const gs = gameState as MultiplayerGameState | null
     if (!gs || gs.phase !== "REVEAL" || !room) return
@@ -441,7 +441,6 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       const still = gameStateRef.current as MultiplayerGameState | null
       if (still?.phase === "REVEAL" && still.currentRound === round) {
         socket.emit("game:sync", { roomCode: room.room_code })
-        socket.emit("game:ready", { roomCode: room.room_code })
         showNotice("Resynchronisation de la partie…")
       }
     }, 25000)
@@ -834,6 +833,8 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         round: number
         players: MultiplayerGameState["players"]
         timing: { startAt: number | null; revealAt: number | null }
+        // Ecran entre deux manches et son echeance (T38), decides par le serveur.
+        pacing?: MultiplayerGameState["pacing"]
         // Le serveur caviarde la piste pendant la manche (anti-triche) :
         // la version complete (titre/artiste/pochette) arrive AVEC le reveal.
         track?: MultiplayerGameState["currentTrack"]
@@ -854,6 +855,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
             currentTrack: payload.track ?? multi.currentTrack,
             players: payload.players,
             timing: payload.timing,
+            pacing: payload.pacing ?? null,
           }
         })
       }
@@ -1736,14 +1738,14 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
             })
             return true
           }}
-          onReady={() => {
+          onNext={(round, step) => {
             const socket = socketRef.current
             if (!socket || !socket.connected) {
               showNotice("Connexion perdue. Reconnexion…")
               ensureSocket()
               return
             }
-            socket.emit("game:ready", { roomCode: room.room_code })
+            socket.emit("game:next", { roomCode: room.room_code, round, step })
           }}
           onPauseToggle={() => {
             const socket = socketRef.current
@@ -1755,15 +1757,6 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
           modeConfig={modeConfig}
           accentColor={accentColor}
           onExit={handleLeaveRoom}
-          onRematch={isHost ? () => runExclusive(restartingRef, async () => {
-            try {
-              const { tracks: newTracks, gameState: newState } = await api.startMultiplayerGame(room.room_code, { source: "library" })
-              setTracks(newTracks)
-              if (newState) setGameState(newState)
-            } catch (err) {
-              console.error("rematch_failed", err)
-            }
-          }) : undefined}
           chatMessages={chatMessages}
           spectators={spectators}
           onSendChat={sendChat}

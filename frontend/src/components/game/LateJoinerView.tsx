@@ -5,6 +5,7 @@ import { Hourglass, LogOut, Volume2, VolumeX } from "lucide-react"
 import { Label, Panel } from "@/app/multiplayer/lobbyKit"
 import { LobbyChat } from "@/app/multiplayer/LobbyChat"
 import { SpectatorStage } from "@/components/game/SpectatorStage"
+import { useServerClock } from "@/hooks/useServerClock"
 import { audioManager } from "@/lib/audioManager"
 import { lateJoinBanner } from "@/lib/lateJoin"
 import type { MultiplayerGameState } from "@/lib/types"
@@ -77,6 +78,8 @@ export function LateJoinerView({ state, currentUserId, serverNow, chatMessages, 
   useRejoinIfUnknown(state, currentUserId, onRejoin)
   const withSound = state.mode !== "event"
   useWaitingPreview(state, withSound && sound, serverNow)
+  // Heure serveur fine pour le 3-2-1 et la barre des ecrans entre deux manches (T38).
+  const clock = useServerClock(serverNow)
   const banner = lateJoinBanner(state)
 
   return (
@@ -114,7 +117,7 @@ export function LateJoinerView({ state, currentUserId, serverNow, chatMessages, 
         </div>
       </section>
 
-      <SpectatorStage game={state} members={[]} clockOffset={0} now={serverNow} />
+      <SpectatorStage game={state} members={[]} clockOffset={0} now={clock} />
 
       <Panel label="Le chat de la salle" dot={accentColor ?? "#c65133"}>
         <LobbyChat
