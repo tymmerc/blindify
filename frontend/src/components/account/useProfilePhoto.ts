@@ -41,14 +41,23 @@ export function useProfilePhoto(): ProfilePhoto {
     return () => URL.revokeObjectURL(preview)
   }, [preview])
 
-  const upload = useCallback(async (image: Blob): Promise<boolean> => {
+  // keepOnFail : l'ecran du debut garde la photo pour un nouvel essai au
+  // prochain « Continuer ». Ailleurs (Mon compte), un echec remet la photo en
+  // ligne : le rond ne montre jamais une photo qui n'est pas enregistree.
+  const upload = useCallback(async (image: Blob, keepOnFail: boolean): Promise<boolean> => {
     try {
       const { avatar } = await api.uploadPhoto(image)
       setOnline(avatar)
       setPending(null)
+      // La version du serveur (carre, 256 px) : celle que voient les autres.
+      setPreview(null)
       return true
     } catch (err) {
-      setPending(image)
+      if (keepOnFail) setPending(image)
+      else {
+        setPending(null)
+        setPreview(null)
+      }
       setError(sendError(err))
       return false
     }
@@ -61,7 +70,7 @@ export function useProfilePhoto(): ProfilePhoto {
       try {
         const image = await shrinkPhoto(file)
         setPreview(URL.createObjectURL(image))
-        if (send) await upload(image)
+        if (send) await upload(image, false)
         else setPending(image)
       } catch (err) {
         setError(photoPickMessage(err))
@@ -77,7 +86,7 @@ export function useProfilePhoto(): ProfilePhoto {
     setError(null)
     setBusy(true)
     try {
-      return await upload(pending)
+      return await upload(pending, true)
     } finally {
       setBusy(false)
     }

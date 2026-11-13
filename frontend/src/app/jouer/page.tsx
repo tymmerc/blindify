@@ -159,10 +159,18 @@ export default function EntryWizard() {
   // Premier ecran : sans photo en attente, on avance tout de suite comme avant.
   // Avec une photo, on l'envoie d'abord ; si l'envoi rate, on reste ici avec le
   // message, et le joueur peut reessayer ou retirer la photo.
+  const leaving = useRef(false)
   const leaveNameStep = async () => {
     if (!photo.hasPending) { void ensureName(); setStep("musique"); return }
-    await ensureName()
-    if (await photo.sendPending()) setStep("musique")
+    // Un second clic ou Entree pendant l'envoi ne relance pas tout.
+    if (leaving.current) return
+    leaving.current = true
+    try {
+      await ensureName()
+      if (await photo.sendPending()) setStep("musique")
+    } finally {
+      leaving.current = false
+    }
   }
 
   // Importe la musique puis affiche la confirmation. Le meme bouton sert ensuite a continuer.

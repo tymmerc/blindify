@@ -64,7 +64,7 @@ export function PhotoPicker({ src, busy = false, error, onPick, onRemove, emptyL
       </label>
       {src ? (
         <div className="flex items-center gap-3 text-[12px] font-semibold">
-          <label htmlFor={inputId} className="cursor-pointer text-ink-2 underline decoration-[1.5px] underline-offset-2 transition hover:text-ink">
+          <label htmlFor={inputId} className="cursor-pointer text-ink-2 underline decoration-[1.5px] underline-offset-2 transition hover:text-ink" aria-hidden>
             Changer
           </label>
           <button
