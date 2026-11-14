@@ -10,6 +10,8 @@ router.get("/:code/state", roomsController.state);
 router.post("/:code/preferences", roomsController.preferences);
 router.get("/:code", roomsController.details);
 router.post("/:code/start", roomsController.startGame);
+// Retour a la salle d'attente apres une partie (T40), pour tout le monde.
+router.post("/:code/lobby", roomsController.backToLobby);
 router.post("/:code/config", roomsController.updateConfig);
 router.get("/:code/rounds", roomsController.roundsSummary);
 // Mode streamer (T5) : lien d'overlay OBS signe, pour l'hote.

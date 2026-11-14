@@ -127,7 +127,10 @@ setInterval(() => {
      -- nouvelle ligne dans room_participants : on lui laisse 6 heures.
      AND (mode IS DISTINCT FROM 'streamer' OR created_at < NOW() - INTERVAL '6 hours')
      AND (SELECT MAX(joined_at) FROM room_participants WHERE room_id = multiplayer_rooms.id)
-         < NOW() - INTERVAL '30 minutes'`
+         < NOW() - INTERVAL '30 minutes'
+     -- Revenue en attente apres une partie (relance T27, retour a la salle T40) :
+     -- 30 min a partir de ce retour, meme si tout le monde est arrive bien avant.
+     AND (completed_at IS NULL OR completed_at < NOW() - INTERVAL '30 minutes')`
   ).then(res => {
     if (res.rowCount && res.rowCount > 0) {
       logger.info("stale_rooms_cleaned", { count: res.rowCount });

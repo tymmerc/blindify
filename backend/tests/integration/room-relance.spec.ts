@@ -231,3 +231,51 @@ describe("relancer dans la meme salle (T27)", () => {
     expect((await room(code)).status).toBe("in_progress");
   });
 });
+
+describe("revenir a la salle apres une partie (T40)", () => {
+  const backToLobby = (code: string, userId: number) => call(roomsController.backToLobby, userId, { params: { code } });
+
+  it("fin, retour salle, relance : meme code, memes joueurs, reglages gardes", async () => {
+    const code = await newRoom([hote, invite]);
+    expect((await start(code, hote)).status).toBe(200);
+    const first = (await room(code)).session_id!;
+    playToTheEnd(io, code);
+    await sleep(300); // l'ecriture de fin de partie est passee
+
+    const emit = jest.fn();
+    jest.spyOn(io, "to").mockReturnValue({ emit } as unknown as ReturnType<Server["to"]>);
+    const back = await backToLobby(code, hote);
+    expect(back.status).toBe(200);
+    expect(emit).toHaveBeenCalledWith("room:lobby", { roomCode: code });
+    jest.restoreAllMocks();
+
+    expect(await room(code)).toEqual({ status: "waiting", session_id: null });
+    expect(getGameState(code)).toBeUndefined();
+    expect(await sessionState(first)).toBe("finished");
+    const { rows } = await pool.query(
+      `SELECT r.question_count, r.completed_at > NOW() - INTERVAL '1 minute' AS recent,
+              (SELECT count(*)::int FROM room_participants p WHERE p.room_id = r.id) AS players
+       FROM multiplayer_rooms r WHERE r.room_code = $1`,
+      [code],
+    );
+    // completed_at recent : le menage des salles en attente la laisse tranquille.
+    expect(rows[0]).toEqual({ question_count: 3, recent: true, players: 2 });
+
+    // Un deuxieme clic ne casse rien.
+    expect((await backToLobby(code, hote)).status).toBe(200);
+
+    const relaunch = await start(code, hote);
+    expect(relaunch.status).toBe(200);
+    expect(getGameState(code)?.phase).toBe("GUESSING");
+    expect((await room(code)).status).toBe("in_progress");
+  });
+
+  it("seul l'hote ramene tout le monde, et jamais pendant une partie", async () => {
+    const code = await newRoom([hote, invite]);
+    expect((await start(code, hote)).status).toBe(200);
+    expect((await backToLobby(code, hote)).status).toBe(409);
+    playToTheEnd(io, code);
+    expect((await backToLobby(code, invite)).status).toBe(403);
+    expect(getGameState(code)?.phase).toBe("FINISHED");
+  });
+});
