@@ -164,7 +164,7 @@ export function MultiplayerGameClient({
   useWakeLock(mode === "event")
 
   // Le 3-2-1 avant chaque manche (T38) : horloge serveur fine.
-  const clock = useServerClock(serverNow, state?.phase === "GUESSING" || state?.phase === "REVEAL")
+  const clock = useServerClock(serverNow, state?.phase === "GUESSING" || state?.phase === "REVEAL", state?.paused === true)
 
   // Petit buzz quand une manche demarre : ramene le joueur qui regardait ailleurs.
   const lastVibratedRoundRef = useRef(0)

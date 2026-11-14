@@ -673,9 +673,9 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
       }
       const state = getRealtimeState(roomCode);
       if (!state || state.phase !== "REVEAL" || state.paused) return;
-      const round = toIntOrNull(payload?.round);
-      if (round !== null && round !== state.currentRound) return;
-      if (typeof payload?.step === "string" && payload.step !== state.pacing?.step) return;
+      // Manche et ecran obligatoires : un onglet en retard ne saute jamais un ecran.
+      if (toIntOrNull(payload?.round) !== state.currentRound) return;
+      if (typeof payload?.step !== "string" || payload.step !== state.pacing?.step) return;
       advanceRevealStep(io, roomCode);
     });
 
