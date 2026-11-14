@@ -96,7 +96,9 @@ export function RoundAnswerScreen({ track, players, meId, large = false }: Round
   const head = (
     <div className="flex flex-col gap-4">
       <div className={`flex gap-4 ${large ? "flex-col" : "items-center"}`}>
-        <div className={`relative shrink-0 ${large ? "h-48 w-48" : "h-24 w-24 sm:h-28 sm:w-28"}`}>
+        {/* Le disque depasse de 22 % a droite de la pochette : la marge a droite
+            lui reserve sa place, le titre ne passe jamais dessus. */}
+        <div className={`relative shrink-0 ${large ? "mr-12 h-48 w-48" : "mr-6 h-24 w-24 sm:mr-7 sm:h-28 sm:w-28"}`}>
           <span aria-hidden className="absolute inset-y-[6%] -right-[22%] aspect-square rounded-full border-2 border-line bg-ink-block" />
           {track?.albumCover ? (
             // eslint-disable-next-line @next/next/no-img-element
