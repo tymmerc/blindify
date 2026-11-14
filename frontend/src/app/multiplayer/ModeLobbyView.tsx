@@ -277,6 +277,9 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     round: number
     payload: { roomCode: string; guessTitle: string; guessArtist: string; sourceUserId?: number | null; round: number }
   } | null>(null)
+  // Numero de la partie cote client : change a chaque retour a la salle (T42).
+  // Un accuse de reponse qui arrive apres l'arret ne remet rien en attente.
+  const gameGenRef = useRef(0)
   const userRef = useRef<CurrentUserPayload | null>(null)
   const currentUserId = userPayload?.user.id ?? 0
 
@@ -923,6 +926,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         // Partie arretee en pleine manche (T42) : une reponse en attente ne
         // doit jamais repartir sur la manche 1 de la partie suivante.
         pendingAnswerRef.current = null
+        gameGenRef.current += 1
         setGameState(null)
         setError(null)
         setErrorAction(null)
@@ -1712,6 +1716,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       // Les autres changent d'ecran a la reception de room:lobby ; l'hote
       // tout de suite, meme si son socket vient de couper.
       pendingAnswerRef.current = null
+      gameGenRef.current += 1
       setGameState(null)
       setView("hosting")
       dispatchLobby({ type: "hosting" })
@@ -1777,8 +1782,11 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
             // On attend la CONFIRMATION du serveur. Sans ca, une coupure reseau
             // silencieuse (socket.io met ~20s a la detecter) laisse la reponse
             // partir dans le vide et le joueur bloque a 0.
+            const answerGen = gameGenRef.current
             socket.timeout(4000).emit("game:answer", payload, (err: unknown, res?: { ok?: boolean; reason?: string }) => {
               if (!err && res?.ok) return
+              // Partie arretee entre-temps (T42) : rien a renvoyer.
+              if (gameGenRef.current !== answerGen) return
               // Manche deja terminee : reessayer ne servirait qu'a faire compter
               // la reponse sur la chanson suivante. On le dit franchement.
               if (!err && (res?.reason === "round_over" || res?.reason === "stale_round")) {
