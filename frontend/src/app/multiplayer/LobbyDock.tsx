@@ -14,6 +14,8 @@
 //   la bulle. Seules des transformations sont animees, pas de clip-path.
 // - Dans le panneau, deux onglets et un curseur qui glisse de l'un a l'autre.
 // Rien de tout ca si l'utilisateur a demande a reduire les animations.
+// La meme bulle sert au chat pendant la partie (ecran de jeu « autour d'une
+// table »), sans pierre-feuille-ciseaux et avec un autre titre.
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { AnimatePresence, LayoutGroup, motion, useReducedMotion, type Variants } from "framer-motion"
@@ -21,6 +23,7 @@ import { MessageCircle, Scissors, X } from "lucide-react"
 import { LobbyChat } from "./LobbyChat"
 import { LobbyRps } from "./LobbyRps"
 import type { LobbyChatMessage, LobbyRpsState } from "./lobbyTypes"
+import { countUnread, lastStamp } from "@/lib/chatUnread"
 
 type Tab = "chat" | "rps"
 type Pose = "idle" | "fight" | "punch" | "strike"
@@ -66,6 +69,7 @@ export function LobbyDock({
   raised,
   placeholder,
   emptyLabel,
+  title = "En attendant",
 }: {
   messages: LobbyChatMessage[]
   onSend: (message: string) => void
@@ -77,32 +81,40 @@ export function LobbyDock({
   raised: boolean
   placeholder?: string
   emptyLabel?: string
+  /** Titre du panneau ouvert. */
+  title?: string
 }) {
   const reduce = useReducedMotion()
   const rootRef = useRef<HTMLDivElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+  const bubbleRef = useRef<HTMLButtonElement>(null)
+  // Fermeture au clavier ou par la croix : le focus revient sur la bulle.
+  // Pas apres un clic ailleurs (il irait voler le champ de reponse).
+  const refocusBubble = useRef(false)
   const [open, setOpen] = useState(false)
   const [tab, setTab] = useState<Tab>("chat")
   const [dir, setDir] = useState(1)
   const [hovered, setHovered] = useState(false)
   const [hit, setHit] = useState<"punch" | "strike" | null>(null)
-  const [seen, setSeen] = useState(messages.length)
+  const [seenAt, setSeenAt] = useState(() => lastStamp(messages))
   const everOpened = useRef(false)
 
   const rpsCalls = Boolean(rps && (rps.incoming || (rps.active && !rps.active.myMove)))
-  const unread = Math.max(0, messages.length - seen)
-  useEffect(() => { if (open && tab === "chat") setSeen(messages.length) }, [open, tab, messages.length])
+  const unread = countUnread(messages, seenAt, currentUserId)
+  const newest = lastStamp(messages)
+  useEffect(() => { if (open && tab === "chat") setSeenAt(newest) }, [open, tab, newest])
 
   // Les coups uniques : un message des autres (le chat frappe), un defi recu
   // (les ciseaux attaquent). Ils rejouent a chaque nouvel evenement.
-  const lastCount = useRef(messages.length)
+  const lastHeard = useRef(newest)
   useEffect(() => {
-    const fresh = messages.length > lastCount.current && messages[messages.length - 1]?.userId !== currentUserId
-    lastCount.current = messages.length
+    const fresh = newest > lastHeard.current && messages[messages.length - 1]?.userId !== currentUserId
+    lastHeard.current = newest
     if (!fresh || reduce) return
     setHit("punch")
     const t = setTimeout(() => setHit(null), 650)
     return () => clearTimeout(t)
-  }, [messages, currentUserId, reduce])
+  }, [messages, newest, currentUserId, reduce])
   useEffect(() => {
     if (!rpsCalls || reduce) return
     setHit("strike")
@@ -115,13 +127,20 @@ export function LobbyDock({
 
   const show = (next: Tab) => { setDir(next === "rps" ? 1 : -1); setTab(next) }
   const openPanel = () => { everOpened.current = true; setHovered(false); setOpen(true) }
-  const close = useCallback(() => setOpen(false), [])
+  const close = useCallback((refocus: boolean) => { refocusBubble.current = refocus; setOpen(false) }, [])
+
+  // A l'ouverture, le focus entre dans le panneau (sans ouvrir le clavier du
+  // telephone) ; a la fermeture par Echap ou la croix, il revient sur la bulle.
+  useEffect(() => {
+    if (open) panelRef.current?.focus()
+    else if (refocusBubble.current) { refocusBubble.current = false; bubbleRef.current?.focus() }
+  }, [open])
 
   // Echap et clic a l'exterieur ferment le panneau.
   useEffect(() => {
     if (!open) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") close() }
-    const onDown = (e: PointerEvent) => { if (rootRef.current && !rootRef.current.contains(e.target as Node)) close() }
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") close(true) }
+    const onDown = (e: PointerEvent) => { if (rootRef.current && !rootRef.current.contains(e.target as Node)) close(false) }
     document.addEventListener("keydown", onKey)
     document.addEventListener("pointerdown", onDown)
     return () => { document.removeEventListener("keydown", onKey); document.removeEventListener("pointerdown", onDown) }
@@ -129,6 +148,11 @@ export function LobbyDock({
 
   const bottom = raised ? "bottom-[calc(96px+env(safe-area-inset-bottom))] lg:bottom-6" : "bottom-5 lg:bottom-6"
   const badge = rpsCalls ? "!" : unread > 0 ? (unread > 9 ? "9+" : String(unread)) : null
+  const bubbleLabel = [
+    rps ? "Chat et pierre-feuille-ciseaux" : "Chat",
+    unread > 0 ? `${unread} message${unread > 1 ? "s" : ""} non lu${unread > 1 ? "s" : ""}` : null,
+    rpsCalls ? "un défi t'attend" : null,
+  ].filter(Boolean).join(", ")
   const morph = reduce ? { duration: 0 } : MORPH
 
   const tabBtn = (key: Tab, label: string, extra?: ReactNode) => (
@@ -159,6 +183,8 @@ export function LobbyDock({
         {open ? (
           <motion.div
             key="panneau"
+            ref={panelRef}
+            tabIndex={-1}
             layoutId="lobby-dock"
             role="dialog"
             aria-label={rps ? "Chat et pierre-feuille-ciseaux" : "Chat"}
@@ -169,7 +195,7 @@ export function LobbyDock({
             initial={{ backgroundColor: INK }}
             animate={{ backgroundColor: CARD }}
             transition={{ layout: morph, backgroundColor: { duration: reduce ? 0 : 0.22 } }}
-            className="flex h-[min(480px,64vh)] w-[min(380px,calc(100vw-2rem))] flex-col overflow-hidden border-2 border-line shadow-[5px_5px_0_rgb(var(--c-shadow)/.25)]"
+            className="flex h-[min(480px,64vh)] w-[min(380px,calc(100vw-2rem))] flex-col overflow-hidden border-2 border-line outline-none shadow-[5px_5px_0_rgb(var(--c-shadow)/.25)]"
           >
             <motion.div
               className="flex min-h-0 flex-1 flex-col"
@@ -177,10 +203,10 @@ export function LobbyDock({
               animate={{ opacity: 1, y: 0, transition: { delay: reduce ? 0 : 0.14, duration: 0.2, ease: "easeOut" } }}
             >
               <div className="flex shrink-0 items-center justify-between gap-2 px-4 pb-2 pt-3">
-                <span className="font-display text-lg font-semibold text-ink">En attendant</span>
+                <span className="font-display text-lg font-semibold text-ink">{title}</span>
                 <button
                   type="button"
-                  onClick={close}
+                  onClick={() => close(true)}
                   aria-label="Fermer"
                   className="flex h-8 w-8 items-center justify-center rounded-full border-[1.5px] border-line text-ink transition hover:bg-ink-block hover:text-on-ink"
                 >
@@ -244,12 +270,13 @@ export function LobbyDock({
         ) : (
           <motion.button
             key="bulle"
+            ref={bubbleRef}
             layoutId="lobby-dock"
             type="button"
             onClick={openPanel}
             onHoverStart={() => setHovered(true)}
             onHoverEnd={() => setHovered(false)}
-            aria-label={rps ? "Chat et pierre-feuille-ciseaux" : "Chat"}
+            aria-label={bubbleLabel}
             aria-haspopup="dialog"
             style={{ borderRadius: 30 }}
             // Au retour du panneau, la bulle repasse du papier a l'encre.
@@ -274,7 +301,7 @@ export function LobbyDock({
               <Scissors size={17} strokeWidth={2.4} />
             </motion.span>
             {badge ? (
-              <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full border-2 border-line px-1 text-[10px] font-bold text-ink" style={{ background: accent }}>
+              <span aria-hidden className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full border-2 border-line px-1 text-[10px] font-bold text-on-accent" style={{ background: accent }}>
                 {rpsCalls && !reduce ? <span className="absolute inset-0 animate-ping rounded-full opacity-60" style={{ background: accent }} /> : null}
                 <span className="relative">{badge}</span>
               </span>

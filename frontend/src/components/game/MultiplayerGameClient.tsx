@@ -19,6 +19,7 @@ import { showOwnerQuestion } from "@/lib/ownerQuestion"
 import { SpectatorBadge } from "./SpectatorBadge"
 import { DeezerCredit, SpotifyTrackLink } from "./SourceCredits"
 import { ANSWER_INPUT_PROPS } from "@/lib/answerInput"
+import { LobbyDock } from "@/app/multiplayer/LobbyDock"
 
 const VINYL_GROOVES = "repeating-radial-gradient(circle at 50% 50%, #241a10 0 2.5px, #3a2a1a 2.5px 5px)"
 
@@ -661,6 +662,11 @@ export function MultiplayerGameClient({
     <RoundCountdown round={state.currentRound} totalRounds={state.totalRounds} startAt={state.phase === "GUESSING" ? state.timing?.startAt : null} now={clock} large={isEventPresenter} />
   ) : null
 
+  // Le chat de la partie : une bulle en bas a droite (l'ancienne colonne de
+  // droite doublait le classement et le numero de manche). Pas sur l'ecran
+  // projete de l'hote qui presente seulement, comme avant.
+  const showChatBubble = !isEventPresenter && Boolean(onSendChat)
+
   // Partie plus courte que demandee (titres sans extrait) : dit pendant la 1re manche.
   const shortNotice = shortGameNotice(state)
 
@@ -863,7 +869,10 @@ export function MultiplayerGameClient({
         )}
 
         {/* Main content */}
-        <div className="mx-auto flex w-full flex-1 flex-col gap-5 px-5 pb-8 pt-5 lg:flex-row lg:items-stretch lg:px-10">
+        {/* Avec la bulle de chat, une marge la garde a l'ecart du jeu : en bas
+            sur telephone et tablette (bulle surelevee au-dessus du pied
+            « Suivant »), sur les cotes sur ordi (bulle dans la marge droite). */}
+        <div className={`mx-auto flex w-full flex-1 flex-col gap-5 px-5 pt-5 ${showChatBubble ? "pb-[calc(10rem+env(safe-area-inset-bottom))] lg:px-24 lg:pb-8" : "pb-8 lg:px-10"}`}>
           <main className="flex flex-1 flex-col gap-5">
             <AnimatePresence mode="wait">
               {/* ===== EVENT PRESENTER VIEW (projection-optimized) ===== */}
@@ -1218,113 +1227,21 @@ export function MultiplayerGameClient({
 
           </main>
 
-          {/* Sidebar with scoreboard + activity (hidden for event presenter only) */}
-          {!isEventPresenter && (
-            <motion.aside
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.1 }}
-              className="flex w-full flex-col overflow-hidden rounded-md border-2 border-line bg-[var(--surface)] shadow-[4px_4px_0_rgb(var(--c-shadow)/.18)] lg:sticky lg:top-4 lg:h-[calc(100vh-100px)] lg:w-72"
-            >
-              {/* Scoreboard */}
-              <div className="border-b-2 border-line px-4 py-3">
-                <p className="text-[10px] font-bold uppercase tracking-[0.3em]" style={{ color: accentTexte(accent) }}>Face B · Classement</p>
-                <div className="mt-2 space-y-1">
-                  {sortedPlayersFixed.map((p, idx) => (
-                    <div
-                      key={p.userId}
-                      className={`flex items-center gap-2.5 rounded-md px-2 py-1.5 ${idx === 0 ? "border-[1.5px] border-[rgb(var(--c-line)/.35)]" : ""}`}
-                      style={idx === 0 ? { background: `${accent}1c` } : undefined}
-                    >
-                      <span
-                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-[1.5px] border-line font-display text-[11px] font-bold ${idx === 0 ? "text-ink" : "text-[var(--muted)]"}`}
-                        style={idx === 0 ? { background: accent } : undefined}
-                      >
-                        {idx + 1}
-                      </span>
-                      <span
-                        className="min-w-0 truncate font-display text-base font-semibold"
-                        style={{ color: p.userId === user.id ? accent : "var(--ink)" }}
-                      >
-                        {p.username || `J${p.userId}`}
-                      </span>
-                      {/* Status indicator */}
-                      {isPlaying && p.hasAnswered && (
-                        <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: accent }} />
-                      )}
-                      {isRevealed && p.isReady && (
-                        <Check className="h-3 w-3 shrink-0" style={{ color: "var(--success)" }} />
-                      )}
-                      <span className="flex-1 border-b-2 border-dotted border-[rgb(var(--c-line)/.35)]" />
-                      <motion.span
-                        key={`${p.userId}-${p.score}`}
-                        initial={{ scale: 1.45 }}
-                        animate={{ scale: 1 }}
-                        transition={{ duration: 0.45, ease: [0.2, 0.8, 0.2, 1] }}
-                        className="font-display text-lg font-bold text-[var(--ink)]"
-                      >
-                        {p.score}
-                      </motion.span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Round status */}
-              <div className="border-b-2 border-line px-4 py-2">
-                <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[var(--muted)]">
-                  Round {state?.currentRound ?? 0}/{state?.totalRounds ?? 0}
-                </p>
-                <p className="mt-1 text-xs text-[var(--muted)]">
-                  {isPlaying ? `${answeredCount}/${playerCount} ont répondu` :
-                   isLocked ? `${answeredCount}/${playerCount} ont répondu · ${remaining}s` :
-                   isRevealed ? "Entre deux manches" : ""}
-                </p>
-              </div>
-
-              {/* Chat */}
-              <div className="flex items-center justify-between border-b-2 border-line px-4 py-2">
-                <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[var(--muted)]">Chat</p>
-              </div>
-              <div ref={chatScrollRef} className="flex-1 space-y-1 overflow-auto px-3 py-2 text-xs">
-                {chatMessages.length === 0 && (
-                  <div className="px-1 py-1 text-[11px] text-[var(--muted)] italic">
-                    Aucun message
-                  </div>
-                )}
-                {chatMessages.map((msg, idx) => (
-                  <div key={idx} className="px-1 py-0.5 text-[11px]">
-                    <span className="font-semibold" style={{ color: msg.userId === user.id ? accent : "var(--muted)" }}>
-                      {msg.username}
-                    </span>{" "}
-                    <span className="text-[var(--ink)]">{msg.message}</span>
-                  </div>
-                ))}
-              </div>
-              {onSendChat && (
-                <form
-                  className="border-t-2 border-line px-3 py-2"
-                  onSubmit={e => {
-                    e.preventDefault()
-                    const text = chatInput.trim()
-                    if (!text) return
-                    onSendChat(text)
-                    setChatInput("")
-                  }}
-                >
-                  <input
-                    value={chatInput}
-                    onChange={e => setChatInput(e.target.value)}
-                    placeholder="Message..."
-                    maxLength={200}
-                    className="w-full rounded-md border-[1.5px] border-[rgb(var(--c-line)/.35)] bg-[var(--surface-strong)] px-2.5 py-1.5 text-xs text-[var(--ink)] outline-none transition placeholder:italic placeholder:text-pale focus:border-line"
-                  />
-                </form>
-              )}
-            </motion.aside>
-          )}
         </div>
       </div>
+      {showChatBubble && onSendChat ? (
+        <LobbyDock
+          messages={chatMessages}
+          onSend={onSendChat}
+          currentUserId={user.id}
+          players={[]}
+          accent={accent}
+          raised
+          title="Le chat"
+          placeholder="Dis quelque chose..."
+          emptyLabel="Aucun message pour l'instant."
+        />
+      ) : null}
     </div>
   )
 }
