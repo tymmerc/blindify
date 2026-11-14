@@ -1807,7 +1807,11 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
           try {
             setError(null)
             await api.backToLobby(room.room_code)
-            // Tout le monde, l'hote compris, change d'ecran a la reception de room:lobby.
+            // Les autres changent d'ecran a la reception de room:lobby ; l'hote
+            // tout de suite, meme si son socket vient de couper.
+            setGameState(null)
+            setView("hosting")
+            dispatchLobby({ type: "hosting" })
           } catch (err) {
             console.error("back_to_lobby_failed", err)
             setError(err instanceof ApiError && err.message ? err.message : "Impossible de revenir à la salle. Réessaie.")
