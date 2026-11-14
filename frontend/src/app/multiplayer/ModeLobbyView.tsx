@@ -262,6 +262,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     roundReveal?: (payload: { roomCode: string; round: number; players: MultiplayerGameState["players"]; timing: { startAt: number | null; revealAt: number | null }; track?: MultiplayerGameState["currentTrack"] }) => void
     gameOver?: (payload: { roomCode: string; players: MultiplayerGameState["players"] }) => void
     gameLost?: (payload: { roomCode: string }) => void
+    backToLobby?: (payload: { roomCode: string }) => void
     roomError?: (payload: { code?: string; message?: string }) => void
     hostChange?: (payload: { roomCode: string; hostUserId: number }) => void
   }>({})
@@ -413,6 +414,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
           socket.off("game:game:over", handlersRef.current.gameOver)
         }
         if (handlersRef.current.gameLost) socket.off("game:lost", handlersRef.current.gameLost)
+        if (handlersRef.current.backToLobby) socket.off("room:lobby", handlersRef.current.backToLobby)
         if (handlersRef.current.roomError) socket.off("room:error", handlersRef.current.roomError)
         if (handlersRef.current.hostChange) socket.off("room:host", handlersRef.current.hostChange)
       }
@@ -712,6 +714,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         socket.off("game:game:over", handlersRef.current.gameOver)
       }
       if (handlersRef.current.gameLost) socket.off("game:lost", handlersRef.current.gameLost)
+      if (handlersRef.current.backToLobby) socket.off("room:lobby", handlersRef.current.backToLobby)
       if (handlersRef.current.roomError) socket.off("room:error", handlersRef.current.roomError)
       if (handlersRef.current.hostChange) socket.off("room:host", handlersRef.current.hostChange)
 
@@ -893,6 +896,19 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         dispatchLobby({ type: viewToLobbyAction("landing") })
       }
 
+      // « Revenir à la salle » (T40) : l'hote a ramene tout le monde dans la salle
+      // d'attente. Meme salle, memes joueurs : on change d'ecran sans recharger
+      // (activite Discord), l'hote retrouve sa vue avec le bouton lancer.
+      const backToLobbyHandler = (payload: { roomCode: string }) => {
+        if (payload?.roomCode !== roomCode) return
+        const host = roomRef.current?.host_user_id != null && roomRef.current.host_user_id === userRef.current?.user?.id
+        setGameState(null)
+        setError(null)
+        setErrorAction(null)
+        setView(host ? "hosting" : "waiting")
+        dispatchLobby({ type: host ? "hosting" : "waiting" })
+      }
+
       // Chat listener is owned by the useRoomChat hook at component top-level.
 
       socket.on("room:presence", presenceHandler)
@@ -904,6 +920,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       socket.on("game:over", gameOverHandler)
       socket.on("game:game:over", gameOverHandler)
       socket.on("game:lost", gameLostHandler)
+      socket.on("room:lobby", backToLobbyHandler)
 
       const roomErrorHandler = (payload: { code?: string; message?: string }) => {
         const msg = payload?.message || "Une action a ete refusee par le serveur."
@@ -935,6 +952,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         roundReveal: roundRevealHandler,
         gameOver: gameOverHandler,
         gameLost: gameLostHandler,
+        backToLobby: backToLobbyHandler,
         roomError: roomErrorHandler,
         hostChange: hostChangeHandler,
       }
@@ -1784,6 +1802,17 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         // jusqu'au Rejouer de l'hote, le bouton grise le dit deja.
         onReturn={onLeave ? undefined : () => router.replace("/modes")}
         onEditMusic={openMusic}
+        onBackToLobby={isHost ? () => runExclusive(restartingRef, async () => {
+          if (!room) return
+          try {
+            setError(null)
+            await api.backToLobby(room.room_code)
+            // Tout le monde, l'hote compris, change d'ecran a la reception de room:lobby.
+          } catch (err) {
+            console.error("back_to_lobby_failed", err)
+            setError(err instanceof ApiError && err.message ? err.message : "Impossible de revenir à la salle. Réessaie.")
+          }
+        }) : undefined}
         onReplay={() => runExclusive(restartingRef, async () => {
           if (!room || !isHost) return
           // Les resultats d'avant, pour y revenir si la revanche ne part pas.

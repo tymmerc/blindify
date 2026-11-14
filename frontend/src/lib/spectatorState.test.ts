@@ -60,6 +60,10 @@ describe("spectatorReducer", () => {
     expect(v.game?.currentTrack?.title).toBe("")
     v = spectatorReducer(v, { type: "game:over", payload: { roomCode: "ABCD12", players } })
     expect(v.game?.phase).toBe("FINISHED")
+    // L'hote ramene tout le monde dans la salle (T40) : retour aux membres.
+    expect(spectatorReducer(v, { type: "room:lobby", payload: { roomCode: "AUTRE1" } }).game?.phase).toBe("FINISHED")
+    v = spectatorReducer(v, { type: "room:lobby", payload: { roomCode: "ABCD12" } })
+    expect(v.game).toBeNull()
   })
 
   it("trames d'une autre salle ignorees", () => {

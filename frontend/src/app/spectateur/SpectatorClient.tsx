@@ -22,7 +22,7 @@ const SAGE = "#7d9471"
 const MODE_LABEL: Record<string, string> = { friends: "À distance", event: "Autour d'une table", streamer: "Streamer" }
 
 /** Les trames que la page ecoute. Aucune n'est emise vers le serveur, sauf la resynchro. */
-const FORWARDED = ["game:state", "game:round:start", "game:round:reveal", "game:over", "room:presence"] as const
+const FORWARDED = ["game:state", "game:round:start", "game:round:reveal", "game:over", "room:presence", "room:lobby"] as const
 
 function useSpectatorSocket(salle: string | null, jeton: string | null): SpectatorView {
   const [view, dispatch] = useReducer(spectatorReducer, initialSpectatorView)

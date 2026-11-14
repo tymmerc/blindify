@@ -30,6 +30,7 @@ export type SpectatorEvent =
   | { type: "game:round:reveal"; payload: { roomCode: string; round: number; track?: MultiplayerGameState["currentTrack"]; timing: MultiplayerGameState["timing"]; players: MultiplayerGameState["players"]; pacing?: MultiplayerGameState["pacing"] } }
   | { type: "game:over"; payload: { roomCode: string; players: MultiplayerGameState["players"] } }
   | { type: "room:presence"; payload: { roomCode?: string; type?: string; members?: SpectatorMember[] } }
+  | { type: "room:lobby"; payload: { roomCode: string } }
   | { type: "error"; code: SpectatorErrorCode }
 
 export const initialSpectatorView: SpectatorView = {
@@ -91,6 +92,11 @@ export function spectatorReducer(view: SpectatorView, event: SpectatorEvent): Sp
       const p = event.payload
       if (!view.game || !sameRoom(view, p.roomCode)) return view
       return { ...view, game: { ...view.game, phase: "FINISHED", players: p.players } }
+    }
+    case "room:lobby": {
+      // Retour a la salle d'attente (T40) : on remontre les membres, plus le podium.
+      if (!view.game || !sameRoom(view, event.payload?.roomCode)) return view
+      return { ...view, game: null }
     }
     case "room:presence": {
       const p = event.payload
