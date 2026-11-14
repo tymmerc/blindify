@@ -250,6 +250,10 @@ export function cleanupGame(roomCode: string): void {
 export async function hostNext(clients: GameClient[], roomCode: string, opts: { twice?: boolean } = {}): Promise<void> {
   const host = clients.find(c => c.user.id === c.lastState()?.hostUserId);
   if (!host) throw new Error("hostNext: l'hote n'est pas parmi les clients");
+  // L'hote doit voir le reveal avant de cliquer : sinon son etat encore en
+  // GUESSING passerait pour « deja a la manche suivante ».
+  await waitFor(() => host.lastState()?.phase === "REVEAL" || host.lastState()?.phase === "FINISHED", 4000, "reveal chez l'hote");
+  if (host.lastState()?.phase === "FINISHED") return;
   const round = host.lastState()?.currentRound;
   const emit = (step: string) => {
     host.socket.emit("game:next", { roomCode, round, step });

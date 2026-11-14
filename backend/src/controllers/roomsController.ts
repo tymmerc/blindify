@@ -739,9 +739,11 @@ export const roomsController = {
       if (!existingState || existingState.phase === "FINISHED") {
         // Atomic reset: only succeeds if status hasn't changed since our read
         clearGame(room.room_code);
+        // « finished » aussi : l'ecriture de fin de la partie d'avant peut passer
+        // entre notre lecture et ici (relance dans la seconde du game over).
         const { rowCount } = await pool.query(
           `UPDATE multiplayer_rooms SET status='waiting', session_id=NULL, started_at=NULL
-           WHERE id=$1 AND status=$2`,
+           WHERE id=$1 AND (status=$2 OR status='finished')`,
           [room.id, room.status]
         );
         if (!rowCount) {

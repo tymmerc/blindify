@@ -187,7 +187,8 @@ describe("grace de reconnexion apres une coupure reseau", () => {
   });
 
   it("le minuteur de manche qui finit pendant la grace revele a l'heure, une seule fois", async () => {
-    const t = await openTable(3, { roundMs: 1_500, grace: 4_000 });
+    // Grace de 8 s : la manche (3-2-1 de 3 s puis 1,5 s, T38) finit bien pendant.
+    const t = await openTable(3, { roundMs: 1_500, grace: 8_000 });
     const [a, b, late] = t.clients;
     const clock = revealClock(a);
     try {
@@ -199,9 +200,9 @@ describe("grace de reconnexion apres une coupure reseau", () => {
       await waitFor(inPhase([a, b], "REVEAL"), 6000, "REVEAL by the round timer");
       // A l'heure du minuteur de manche : ni a la coupure, ni a la fin de la grace.
       expect(clock.get(1) ?? 0).toBeGreaterThanOrEqual(revealAt - 50);
-      expect((clock.get(1) ?? 0) - dropAt).toBeLessThan(4_000);
+      expect((clock.get(1) ?? 0) - dropAt).toBeLessThan(8_000);
 
-      await sleep(dropAt + 4_000 + 500 - Date.now());
+      await sleep(dropAt + 8_000 + 500 - Date.now());
       for (const c of [a, b]) {
         expect(c.reveals.filter(r => r.round === 1)).toHaveLength(1);
         expect(c.lastState()?.currentRound).toBe(1);
