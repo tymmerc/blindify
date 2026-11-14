@@ -30,7 +30,7 @@ const probe = p => p.evaluate(() => {
   return {
     round: r ? Number(r[1]) : null,
     input: !!document.querySelector('input[placeholder*="morceau qui tourne"]'),
-    fin: /FIN DE LA FACE|On rejoue \?/i.test(txt),
+    fin: /FIN DE LA FACE|PARTIE TERMINÉE|On rejoue \?/i.test(txt),
     attente: /tu joues dès la prochaine manche|tu joues la prochaine partie/i.test(txt),
     organiser: /ORGANISER/i.test(txt) && /Lancer une partie/i.test(txt),
     lancerVisible: /LANCER LA PARTIE/i.test(txt),

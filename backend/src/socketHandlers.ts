@@ -664,7 +664,8 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
     socket.on("game:next", async (payload: { roomCode?: unknown; round?: unknown; step?: unknown }) => {
       const roomCode = validRoomCode(payload?.roomCode);
       if (!roomCode) return;
-      if (!allowEvent(socket.id, "next", 4, 2_000)) return;
+      // Large : manche et ecran sont verifies juste apres, un double clic ne saute rien.
+      if (!allowEvent(socket.id, "next", 10, 2_000)) return;
       const access = await requireRoomAccess(roomCode, currentUser.id);
       if (!access?.isHost) {
         emitRoomError(socket, roomCode, "Seul l'hôte peut passer à la suite.");

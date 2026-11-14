@@ -140,7 +140,7 @@ while (Date.now() - t0 < 4 * 60 * 1000) {
       round: r ? Number(r[1]) : null,
       input: !!document.querySelector('input[placeholder="Titre du morceau"]'),
       recap: !!document.querySelector(".theater-recap"),
-      fin: /On rejoue \?|FIN DE LA FACE/i.test(txt),
+      fin: /On rejoue \?|FIN DE LA FACE|PARTIE TERMINÉE/i.test(txt),
       txt: txt.replace(/\s+/g, " "),
     }
   }).catch(() => ({}))

@@ -157,7 +157,7 @@ while (Date.now() - t0 < 5 * 60 * 1000) {
     return {
       round: r ? Number(r[1]) : null,
       reveal: /REVEAL/.test(txt),
-      fin: /FIN DE LA FACE|On rejoue \?/i.test(txt),
+      fin: /FIN DE LA FACE|PARTIE TERMINÉE|On rejoue \?/i.test(txt),
     }
   }).catch(() => ({}))
   if (hs.fin) break

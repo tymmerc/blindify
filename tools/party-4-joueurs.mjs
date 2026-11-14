@@ -50,7 +50,7 @@ const probe = p => p.evaluate(() => {
     input: !!document.querySelector('input[placeholder*="morceau qui tourne"]'),
     noted: /C'est noté/.test(txt),
     reveal: /Reveal dans|Bonne réponse|La réponse était/i.test(txt),
-    podium: /FIN DE LA FACE|Classement final|On rejoue \?/i.test(txt),
+    podium: /FIN DE LA FACE|PARTIE TERMINÉE|Classement final|On rejoue \?/i.test(txt),
     deconnexion: /Connexion perdue|Resynchronisation|n'est pas passée/i.test(txt),
     tooLate: /Trop tard, la manche/i.test(txt),
     hostGone: /organisateur a quitté/i.test(txt),
