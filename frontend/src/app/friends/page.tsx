@@ -46,7 +46,7 @@ function StepShell({
             <button
               type="button"
               onClick={onBack}
-              className="flex items-center gap-1 rounded-full border-[1.5px] border-[#2e2014] bg-[#ece1c8] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb] sm:gap-1.5 sm:px-3 sm:py-1.5 sm:text-[11px] sm:tracking-[0.14em]"
+              className="flex items-center gap-1 rounded-full border-[1.5px] border-line bg-paper-deep px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-ink transition hover:bg-ink-block hover:text-on-ink sm:gap-1.5 sm:px-3 sm:py-1.5 sm:text-[11px] sm:tracking-[0.14em]"
             >
               <ArrowLeft size={11} />
               Retour
@@ -54,7 +54,7 @@ function StepShell({
           ) : (
             <span />
           )}
-          <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-[#c65133]">Friends · Mode</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-terra-txt">Friends · Mode</p>
         </div>
 
         {/* Progress dots */}
@@ -197,8 +197,8 @@ function FriendsEntryContent() {
     return (
       <StepShell step="nickname" totalSteps={totalSteps} currentIndex={currentIndex} onBack={() => router.push("/modes")}>
         <div className="space-y-3 text-center">
-          <h1 className="font-display text-3xl font-semibold text-[#2e2014] sm:text-4xl">Comment tu t'<em className="font-medium italic text-[#c65133]">appelles</em> ?</h1>
-          <p className="text-sm text-[#6b573f]">C'est le nom que tes rivaux verront.</p>
+          <h1 className="font-display text-3xl font-semibold text-ink sm:text-4xl">Comment tu t'<em className="font-medium italic text-terra-txt">appelles</em> ?</h1>
+          <p className="text-sm text-ink-2">C'est le nom que tes rivaux verront.</p>
         </div>
 
         <div className="mt-10 space-y-6">
@@ -211,14 +211,14 @@ function FriendsEntryContent() {
             }}
             placeholder="Ton pseudo"
             maxLength={20}
-            className="w-full border-0 border-b-2 border-[#2e2014] bg-transparent px-2 py-3 text-center font-display text-2xl text-[#2e2014] outline-none placeholder:italic placeholder:text-[#b3a182] focus:border-[#c65133]"
+            className="w-full border-0 border-b-2 border-line bg-transparent px-2 py-3 text-center font-display text-2xl text-ink outline-none placeholder:italic placeholder:text-pale focus:border-terra"
             autoComplete="off"
           />
           <button
             type="button"
             disabled={!canContinue}
             onClick={goNext}
-            className="flex w-full items-center justify-center gap-2 rounded-md border-2 border-[#2e2014] bg-[#c65133] px-5 py-3.5 text-sm font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#2e2014] disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex w-full items-center justify-center gap-2 rounded-md border-2 border-line bg-terra px-5 py-3.5 text-sm font-bold text-on-ink shadow-[4px_4px_0_rgb(var(--c-shadow))] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgb(var(--c-shadow))] disabled:cursor-not-allowed disabled:opacity-40"
           >
             Continuer
             <ArrowRight size={15} />
@@ -237,15 +237,15 @@ function FriendsEntryContent() {
     return (
       <StepShell step="music" totalSteps={totalSteps} currentIndex={currentIndex} onBack={goBack}>
         <div className="space-y-3 text-center">
-          <h1 className="font-display text-3xl font-semibold text-[#2e2014] sm:text-4xl">Ta <em className="font-medium italic text-[#c65133]">musique</em></h1>
-          <p className="text-sm text-[#6b573f]">
+          <h1 className="font-display text-3xl font-semibold text-ink sm:text-4xl">Ta <em className="font-medium italic text-terra-txt">musique</em></h1>
+          <p className="text-sm text-ink-2">
             Colle ton lien de profil Spotify ou Deezer, ou d'une playlist YouTube, pour jouer avec tes propres playlists.
           </p>
         </div>
 
         <div className="mt-10 space-y-4">
           <div className="relative">
-            <Music size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#8a7558]" />
+            <Music size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-sourd" />
             <input
               ref={musicRef}
               value={profileUrl}
@@ -254,7 +254,7 @@ function FriendsEntryContent() {
                 if (e.key === "Enter") handleMusicNext()
               }}
               placeholder="https://open.spotify.com/user/..."
-              className="w-full rounded-md border-[1.5px] border-[rgba(46,32,20,.35)] bg-[#efe5d0] py-4 pl-10 pr-5 text-sm text-[#2e2014] outline-none placeholder:italic placeholder:text-[#b3a182] focus:border-[#c65133]"
+              className="w-full rounded-md border-[1.5px] border-[rgb(var(--c-line)/.35)] bg-well py-4 pl-10 pr-5 text-sm text-ink outline-none placeholder:italic placeholder:text-pale focus:border-terra"
               autoComplete="off"
             />
           </div>
@@ -263,7 +263,7 @@ function FriendsEntryContent() {
             type="button"
             disabled={isLastStep && navigating}
             onClick={handleMusicNext}
-            className="flex w-full items-center justify-center gap-2 rounded-md border-2 border-[#2e2014] bg-[#c65133] px-5 py-3.5 text-sm font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#2e2014] disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex w-full items-center justify-center gap-2 rounded-md border-2 border-line bg-terra px-5 py-3.5 text-sm font-bold text-on-ink shadow-[4px_4px_0_rgb(var(--c-shadow))] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgb(var(--c-shadow))] disabled:cursor-not-allowed disabled:opacity-60"
           >
             {navigating && isLastStep ? "Chargement..." : buttonLabel}
             {!(navigating && isLastStep) && <ArrowRight size={15} />}
@@ -274,14 +274,14 @@ function FriendsEntryContent() {
               type="button"
               disabled={isLastStep && navigating}
               onClick={handleMusicNext}
-              className="w-full py-2 text-xs font-medium text-[#8a7558] transition hover:text-[#2e2014]"
+              className="w-full py-2 text-xs font-medium text-sourd transition hover:text-ink"
             >
               {isLastStep ? "Rejoindre sans importer" : "Passer cette étape"}
             </button>
           )}
         </div>
 
-        <p className="mt-6 text-center text-[10px] text-[#8a7558]">
+        <p className="mt-6 text-center text-[10px] text-sourd">
           Tu pourras aussi importer ta musique dans le lobby.
         </p>
       </StepShell>
@@ -293,8 +293,8 @@ function FriendsEntryContent() {
     return (
       <StepShell step="intent" totalSteps={totalSteps} currentIndex={currentIndex} onBack={goBack}>
         <div className="space-y-3 text-center">
-          <h1 className="font-display text-3xl font-semibold text-[#2e2014] sm:text-4xl">Qu'est-ce que tu veux <em className="font-medium italic text-[#c65133]">faire</em> ?</h1>
-          <p className="text-sm text-[#6b573f]">Lance un blind test avec tes amis.</p>
+          <h1 className="font-display text-3xl font-semibold text-ink sm:text-4xl">Qu'est-ce que tu veux <em className="font-medium italic text-terra-txt">faire</em> ?</h1>
+          <p className="text-sm text-ink-2">Lance un blind test avec tes amis.</p>
         </div>
 
         <div className="mt-10 grid gap-3">
@@ -310,16 +310,16 @@ function FriendsEntryContent() {
               const profileParam = profileUrl.trim() ? `&profileUrl=${encodeURIComponent(profileUrl.trim())}` : ""
               await router.push(`/multiplayer?mode=friends&intent=host${nicknameParam}${profileParam}`)
             }}
-            className="group flex items-center gap-4 rounded-md border-2 border-[#2e2014] bg-[#ece1c8] px-6 py-5 text-left shadow-[4px_4px_0_rgba(46,32,20,.18)] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgba(46,32,20,.18)]"
+            className="group flex items-center gap-4 rounded-md border-2 border-line bg-paper-deep px-6 py-5 text-left shadow-[4px_4px_0_rgb(var(--c-shadow)/.18)] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgb(var(--c-shadow)/.18)]"
           >
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 border-[#2e2014] bg-[#c65133] transition group-hover:scale-105">
-              <Users size={20} className="text-[#f4ecdb]" />
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 border-line bg-terra transition group-hover:scale-105">
+              <Users size={20} className="text-on-ink" />
             </div>
             <div className="flex-1">
-              <p className="text-sm font-semibold text-[#2e2014]">Créer une partie</p>
-              <p className="mt-0.5 text-xs text-[#6b573f]">Deviens hôte, partage le code à tes amis.</p>
+              <p className="text-sm font-semibold text-ink">Créer une partie</p>
+              <p className="mt-0.5 text-xs text-ink-2">Deviens hôte, partage le code à tes amis.</p>
             </div>
-            <ArrowRight size={16} className="text-[#8a7558] transition group-hover:text-[#2e2014]" />
+            <ArrowRight size={16} className="text-sourd transition group-hover:text-ink" />
           </button>
 
           <button
@@ -328,16 +328,16 @@ function FriendsEntryContent() {
               setIntent("join")
               setStep("code")
             }}
-            className="group flex items-center gap-4 rounded-md border-2 border-[#2e2014] bg-[#ece1c8] px-6 py-5 text-left shadow-[4px_4px_0_rgba(46,32,20,.18)] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgba(46,32,20,.18)]"
+            className="group flex items-center gap-4 rounded-md border-2 border-line bg-paper-deep px-6 py-5 text-left shadow-[4px_4px_0_rgb(var(--c-shadow)/.18)] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgb(var(--c-shadow)/.18)]"
           >
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 border-[#2e2014] bg-[#2e2014] transition group-hover:scale-105">
-              <LogIn size={20} className="text-[#f4ecdb]" />
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 border-line bg-ink-block transition group-hover:scale-105">
+              <LogIn size={20} className="text-on-ink" />
             </div>
             <div className="flex-1">
-              <p className="text-sm font-semibold text-[#2e2014]">Rejoindre une partie</p>
-              <p className="mt-0.5 text-xs text-[#6b573f]">Un ami t'a envoyé un code ? Entre-le ici.</p>
+              <p className="text-sm font-semibold text-ink">Rejoindre une partie</p>
+              <p className="mt-0.5 text-xs text-ink-2">Un ami t'a envoyé un code ? Entre-le ici.</p>
             </div>
-            <ArrowRight size={16} className="text-[#8a7558] transition group-hover:text-[#2e2014]" />
+            <ArrowRight size={16} className="text-sourd transition group-hover:text-ink" />
           </button>
         </div>
         {/* Discret, sous les deux choix : en appel Discord, l'Activite evite le code. */}
@@ -352,8 +352,8 @@ function FriendsEntryContent() {
     return (
       <StepShell step="code" totalSteps={totalSteps} currentIndex={currentIndex} onBack={goBack}>
         <div className="space-y-3 text-center">
-          <h1 className="font-display text-3xl font-semibold text-[#2e2014] sm:text-4xl">Code de la <em className="font-medium italic text-[#c65133]">salle</em></h1>
-          <p className="text-sm text-[#6b573f]">Demande le code à ton ami qui a créé la partie.</p>
+          <h1 className="font-display text-3xl font-semibold text-ink sm:text-4xl">Code de la <em className="font-medium italic text-terra-txt">salle</em></h1>
+          <p className="text-sm text-ink-2">Demande le code à ton ami qui a créé la partie.</p>
         </div>
 
         <div className="mt-10 space-y-6">
@@ -366,15 +366,15 @@ function FriendsEntryContent() {
             }}
             placeholder="EX : A3F7K2"
             maxLength={8}
-            className="w-full rounded-md border-2 border-[#2e2014] bg-[#efe5d0] px-5 py-4 text-center font-display text-3xl font-bold tracking-[0.3em] text-[#2e2014] shadow-[4px_4px_0_rgba(46,32,20,.18)] outline-none placeholder:font-sans placeholder:text-lg placeholder:font-normal placeholder:italic placeholder:tracking-[0.15em] placeholder:text-[#b3a182] focus:border-[#c65133]"
+            className="w-full rounded-md border-2 border-line bg-well px-5 py-4 text-center font-display text-3xl font-bold tracking-[0.3em] text-ink shadow-[4px_4px_0_rgb(var(--c-shadow)/.18)] outline-none placeholder:font-sans placeholder:text-lg placeholder:font-normal placeholder:italic placeholder:tracking-[0.15em] placeholder:text-pale focus:border-terra"
             autoComplete="off"
           />
-          {joinError ? <p className="text-center text-xs font-bold text-[#9c2f1d]">{joinError}</p> : null}
+          {joinError ? <p className="text-center text-xs font-bold text-rouge-txt">{joinError}</p> : null}
           <button
             type="button"
             disabled={!canContinue || navigating}
             onClick={handleGo}
-            className="flex w-full items-center justify-center gap-2 rounded-md border-2 border-[#2e2014] bg-[#c65133] px-5 py-3.5 text-sm font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#2e2014] disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex w-full items-center justify-center gap-2 rounded-md border-2 border-line bg-terra px-5 py-3.5 text-sm font-bold text-on-ink shadow-[4px_4px_0_rgb(var(--c-shadow))] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgb(var(--c-shadow))] disabled:cursor-not-allowed disabled:opacity-40"
           >
             {navigating ? "Chargement..." : "Rejoindre"}
             {!navigating && <ArrowRight size={15} />}
@@ -389,7 +389,7 @@ function FriendsEntryContent() {
 
 export default function FriendsEntryPage() {
   return (
-    <Suspense fallback={<div className="grid min-h-screen place-items-center text-sm text-[#8a7558]">Chargement...</div>}>
+    <Suspense fallback={<div className="grid min-h-screen place-items-center text-sm text-sourd">Chargement...</div>}>
       <FriendsEntryContent />
     </Suspense>
   )

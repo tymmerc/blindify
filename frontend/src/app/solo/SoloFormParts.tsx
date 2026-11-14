@@ -5,15 +5,15 @@ import { PROFILE_URL_KEY, readStored } from "@/lib/soloSetup"
 
 // Briques communes aux trois onglets du lobby solo (classique, chrono, defi).
 
-export const FIELD_LABEL = "text-[11px] font-bold uppercase tracking-[0.22em] text-[#6b573f]"
+export const FIELD_LABEL = "text-[11px] font-bold uppercase tracking-[0.22em] text-ink-2"
 
 export function FormCard({ title, intro, children }: { title: string; intro: ReactNode; children: ReactNode }) {
   return (
-    <section className="flex flex-col gap-5 rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-5 shadow-[4px_4px_0_rgba(46,32,20,.18)] sm:p-7">
+    <section className="flex flex-col gap-5 rounded-md border-2 border-line bg-paper-deep p-5 shadow-[4px_4px_0_rgb(var(--c-shadow)/.18)] sm:p-7">
       <div className="space-y-2">
         {/* tabIndex -1 : le focus vient ici quand un lien du formulaire change d'onglet. */}
-        <h2 tabIndex={-1} className="font-display text-2xl font-semibold text-[#2e2014] outline-none">{title}</h2>
-        <p className="text-sm leading-relaxed text-[#6b573f]">{intro}</p>
+        <h2 tabIndex={-1} className="font-display text-2xl font-semibold text-ink outline-none">{title}</h2>
+        <p className="text-sm leading-relaxed text-ink-2">{intro}</p>
       </div>
       {children}
     </section>
@@ -54,11 +54,11 @@ export function useStoredLink(): StoredLink {
 export function MusicLinkField({ id, link }: { id: string; link: StoredLink }) {
   if (!link.showInput) {
     return (
-      <div className="flex items-center justify-between gap-3 rounded-md border-[1.5px] border-[#7d9471] bg-[#eef1e8] px-4 py-3">
-        <span className="flex items-center gap-2 text-sm font-semibold text-[#2e2014]">
-          <span aria-hidden className="text-base text-[#5d7252]">✓</span> Ta musique : {link.provider}
+      <div className="flex items-center justify-between gap-3 rounded-md border-[1.5px] border-sage bg-[#eef1e8] dark:bg-sage/15 px-4 py-3">
+        <span className="flex items-center gap-2 text-sm font-semibold text-ink">
+          <span aria-hidden className="text-base text-sage-deep-txt">✓</span> Ta musique : {link.provider}
         </span>
-        <button type="button" onClick={link.startEditing} className="text-[12px] font-bold text-[#6b573f] underline underline-offset-2 hover:text-[#2e2014]">
+        <button type="button" onClick={link.startEditing} className="text-[12px] font-bold text-ink-2 underline underline-offset-2 hover:text-ink">
           Changer
         </button>
       </div>
@@ -77,7 +77,7 @@ export function MusicLinkField({ id, link }: { id: string; link: StoredLink }) {
         value={link.url}
         onChange={e => link.setUrl(e.target.value)}
         placeholder="https://open.spotify.com/user/... ou deezer.com/profile/..."
-        className="w-full rounded-md border-[1.5px] border-[rgba(46,32,20,.35)] bg-[#efe5d0] px-4 py-3 text-sm text-[#2e2014] outline-none transition placeholder:italic placeholder:text-[#b3a182] focus:border-[#c65133]"
+        className="w-full rounded-md border-[1.5px] border-[rgb(var(--c-line)/.35)] bg-well px-4 py-3 text-sm text-ink outline-none transition placeholder:italic placeholder:text-pale focus:border-terra"
       />
     </div>
   )
@@ -110,8 +110,8 @@ export function OptionPicker({ label, options, value, onChange }: {
               onClick={() => onChange(opt.value)}
               className={`flex-1 rounded-md border-[1.5px] py-2.5 font-display text-sm font-semibold transition ${
                 isActive
-                  ? "border-[#2e2014] bg-[#c65133] text-[#f4ecdb] shadow-[2px_2px_0_#2e2014]"
-                  : "border-[rgba(46,32,20,.35)] bg-[#efe5d0] text-[#6b573f] hover:border-[#2e2014]"
+                  ? "border-line bg-terra text-on-ink shadow-[2px_2px_0_rgb(var(--c-shadow))]"
+                  : "border-[rgb(var(--c-line)/.35)] bg-well text-ink-2 hover:border-line"
               }`}
             >
               {opt.label}

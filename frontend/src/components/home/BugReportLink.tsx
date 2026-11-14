@@ -11,7 +11,7 @@ export function BugReportLink({ children }: { children: ReactNode }) {
     <button
       type="button"
       onClick={openBugReport}
-      className="border-b-2 border-[#d88418] font-bold transition hover:border-[#f4ecdb] hover:text-[#d88418]"
+      className="border-b-2 border-ambre font-bold transition hover:border-on-ink hover:text-ambre-txt"
     >
       {children}
     </button>

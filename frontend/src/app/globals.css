@@ -4,33 +4,150 @@
 
 :root {
   /* ============================================================
-     CLUB ANALOGIQUE — la DA de Blindify.
+     CLUB ANALOGIQUE, la DA de Blindz.
      Papier creme, encre espresso, terracotta, or. Serif Fraunces
      pour le display, Karla pour l'UI. Grain papier global.
-     Reference canonique : maquettes/explore-analog.html
+     Mode sombre (T30) : « nuit chaude », pose par data-theme="dark"
+     sur <html> avant le premier affichage (script du <head>, layout.tsx).
+     Les jetons --c-* sont des triplets RGB : rgb(var(--c-ink) / .5)
+     marche, et Tailwind les expose (text-ink, bg-paper, border-line...).
      ============================================================ */
-  --app-bg: #f4ecdb;
-  --app-surface: #ece1c8;
-  --app-surface-strong: #ece1c8;
-  --app-surface-well: #efe5d0;
-  --app-border: rgba(46, 32, 20, 0.22);
-  --app-border-soft: rgba(46, 32, 20, 0.12);
-  --app-border-hover: rgba(198, 81, 51, 0.6);
-  --app-primary: #c65133;
-  --app-primary-soft: rgba(198, 81, 51, 0.14);
-  --app-accent: #e0a32e;
-  --app-foreground: #2e2014;
-  --app-muted: #8a7558;
-  --app-card-shadow: 4px 4px 0 rgba(46, 32, 20, 0.16);
+  --c-paper: 244 236 219; /* #f4ecdb fond de page */
+  --c-paper-deep: 236 225 200; /* #ece1c8 cartes */
+  --c-well: 239 229 208; /* #efe5d0 puits, champs */
+  --c-paper-strong: 224 212 186; /* #e0d4ba surface appuyee */
+  --c-paper-light: 251 246 234; /* #fbf6ea papier plus clair */
+  --c-ink: 46 32 20; /* #2e2014 texte */
+  --c-line: 46 32 20; /* #2e2014 traits et bordures d'encre */
+  --c-ink-block: 46 32 20; /* #2e2014 blocs d'encre (fond) */
+  --c-ink-block-hover: 29 20 11; /* #1d140b survol d'un bloc d'encre */
+  --c-on-ink: 244 236 219; /* #f4ecdb texte sur bloc d'encre ou de couleur */
+  --c-on-accent: 46 32 20; /* #2e2014 texte sur bloc or, ambre, sauge (fixe) */
+  --c-ink-2: 107 87 63; /* #6b573f texte secondaire */
+  --c-sourd: 111 91 68; /* #6f5b44 texte sourd (etait #8a7558, 3,4:1 : remonte AA) */
+  --c-pale: 116 96 74; /* #74604a indications (etait #b3a182, 1,9:1 : remonte AA) */
+  --c-terra: 198 81 51; /* #c65133 terre cuite en fond */
+  --c-terra-txt: 198 81 51; /* #c65133 terre cuite en texte */
+  --c-vermillon: 204 72 48; /* #cc4830 vermillon en fond */
+  --c-vermillon-txt: 204 72 48; /* #cc4830 vermillon en texte */
+  --c-rouge: 156 47 29; /* #9c2f1d rouge en fond */
+  --c-rouge-txt: 156 47 29; /* #9c2f1d rouge en texte */
+  --c-gold: 224 163 46; /* #e0a32e or en fond */
+  --c-gold-txt: 224 163 46; /* #e0a32e or en texte */
+  --c-gold-deep-txt: 168 119 20; /* #a87714 or fonce en texte */
+  --c-ambre: 216 132 24; /* #d88418 ambre en fond */
+  --c-ambre-txt: 216 132 24; /* #d88418 ambre en texte */
+  --c-sage: 125 148 113; /* #7d9471 sauge en fond */
+  --c-sage-txt: 125 148 113; /* #7d9471 sauge en texte */
+  --c-sage-deep-txt: 93 114 82; /* #5d7252 sauge foncee en texte */
+  --c-acier: 72 96 144; /* #486090 bleu acier en fond */
+  --c-acier-txt: 72 96 144; /* #486090 bleu acier en texte */
+  --c-shadow: 46 32 20; /* #2e2014 ombres dures */
+  --c-scrim: 46 32 20; /* #2e2014 voile sous une fenetre modale */
+
+  color-scheme: light;
+}
+
+/* Valeurs derivees : recalculees aussi dans un bloc .reste-clair (sinon elles
+   garderaient la valeur calculee sur :root, celle du theme sombre). */
+:root,
+.reste-clair {
+  --app-bg: rgb(var(--c-paper));
+  --app-surface: rgb(var(--c-paper-deep));
+  --app-surface-strong: rgb(var(--c-paper-deep));
+  --app-surface-well: rgb(var(--c-well));
+  --app-border: rgb(var(--c-line) / 0.22);
+  --app-border-soft: rgb(var(--c-line) / 0.12);
+  --app-border-hover: rgb(var(--c-terra) / 0.6);
+  --app-primary: rgb(var(--c-terra));
+  --app-primary-soft: rgb(var(--c-terra) / 0.14);
+  --app-accent: rgb(var(--c-gold));
+  --app-foreground: rgb(var(--c-ink));
+  --app-muted: rgb(var(--c-sourd));
+  --app-card-shadow: 4px 4px 0 rgb(var(--c-shadow) / 0.16);
   --app-transition: all 160ms ease;
 
   /* Raccourcis palette */
-  --ink: #2e2014;
-  --terra: #c65133;
-  --gold: #e0a32e;
-  --paper: #f4ecdb;
-  --paper-deep: #ece1c8;
+  --ink: rgb(var(--c-ink));
+  --line: rgb(var(--c-line));
+  --shadow: rgb(var(--c-shadow));
+  --ink-block: rgb(var(--c-ink-block));
+  --terra: rgb(var(--c-terra));
+  --terra-txt: rgb(var(--c-terra-txt));
+  --gold: rgb(var(--c-gold));
+  --paper: rgb(var(--c-paper));
+  --paper-deep: rgb(var(--c-paper-deep));
+  --on-ink: rgb(var(--c-on-ink));
+}
+
+html[data-theme="dark"] {
+  --c-paper: 27 20 14;
+  --c-paper-deep: 38 28 20;
+  --c-well: 33 24 17;
+  --c-paper-strong: 51 38 27;
+  --c-paper-light: 34 26 19;
+  --c-ink: 216 200 170;
+  --c-line: 196 180 150;
+  --c-ink-block: 14 10 7;
+  --c-ink-block-hover: 6 4 3;
+  --c-ink-2: 184 165 134;
+  --c-sourd: 168 149 122;
+  --c-pale: 154 135 112;
+  --c-terra-txt: 232 113 79;
+  --c-vermillon-txt: 232 113 79;
+  --c-rouge-txt: 236 134 112;
+  --c-gold-txt: 232 176 74;
+  --c-gold-deep-txt: 224 163 46;
+  --c-ambre-txt: 232 154 53;
+  --c-sage-txt: 157 180 146;
+  --c-sage-deep-txt: 168 192 155;
+  --c-acier-txt: 147 170 219;
+  --c-shadow: 5 3 2;
+  --c-scrim: 0 0 0;
+  color-scheme: dark;
+}
+
+/* Un bloc de couleur claire (ambre, or) garde ses textes et traits d'encre
+   en sombre : on y remet les jetons du theme clair. */
+html[data-theme="dark"] .reste-clair {
+  --c-paper: 244 236 219;
+  --c-paper-deep: 236 225 200;
+  --c-well: 239 229 208;
+  --c-paper-strong: 224 212 186;
+  --c-paper-light: 251 246 234;
+  --c-ink: 46 32 20;
+  --c-line: 46 32 20;
+  --c-ink-block: 46 32 20;
+  --c-ink-block-hover: 29 20 11;
+  --c-on-ink: 244 236 219;
+  --c-on-accent: 46 32 20;
+  --c-ink-2: 107 87 63;
+  --c-sourd: 111 91 68;
+  --c-pale: 116 96 74;
+  --c-terra: 198 81 51;
+  --c-terra-txt: 198 81 51;
+  --c-vermillon: 204 72 48;
+  --c-vermillon-txt: 204 72 48;
+  --c-rouge: 156 47 29;
+  --c-rouge-txt: 156 47 29;
+  --c-gold: 224 163 46;
+  --c-gold-txt: 224 163 46;
+  --c-gold-deep-txt: 168 119 20;
+  --c-ambre: 216 132 24;
+  --c-ambre-txt: 216 132 24;
+  --c-sage: 125 148 113;
+  --c-sage-txt: 125 148 113;
+  --c-sage-deep-txt: 93 114 82;
+  --c-acier: 72 96 144;
+  --c-acier-txt: 72 96 144;
+  --c-shadow: 46 32 20;
   color-scheme: light;
+}
+
+/* Le grain papier en multiply disparait sur fond sombre : en screen, plus leger. */
+html[data-theme="dark"] body::after {
+  mix-blend-mode: screen;
+  opacity: 0.22;
 }
 
 @layer base {
@@ -75,7 +192,7 @@
   }
 
   a:hover {
-    color: var(--terra);
+    color: var(--terra-txt);
   }
 
   h1, h2, h3, h4 {
@@ -85,7 +202,7 @@
   }
 
   ::selection {
-    background: rgba(198, 81, 51, 0.3);
+    background: rgb(var(--c-terra) / 0.3);
     color: var(--ink);
   }
 
@@ -108,7 +225,7 @@
   .glass-panel {
     position: relative;
     background: var(--app-surface);
-    border: 2px solid var(--ink);
+    border: 2px solid var(--line);
     border-radius: 8px;
     box-shadow: var(--app-card-shadow);
     transition: var(--app-transition);
@@ -116,14 +233,14 @@
 
   .glass-panel:hover {
     transform: translateY(-2px);
-    box-shadow: 5px 6px 0 rgba(46, 32, 20, 0.2);
+    box-shadow: 5px 6px 0 rgb(var(--c-shadow) / 0.2);
   }
 
   .glass-panel-strong {
     background: var(--app-surface);
-    border: 2px solid var(--ink);
+    border: 2px solid var(--line);
     border-radius: 10px;
-    box-shadow: 5px 5px 0 rgba(46, 32, 20, 0.18);
+    box-shadow: 5px 5px 0 rgb(var(--c-shadow) / 0.18);
   }
 
   /* Legacy compat */
@@ -136,9 +253,9 @@
 
   .surface-strong {
     background: var(--app-surface);
-    border: 2px solid var(--ink);
+    border: 2px solid var(--line);
     border-radius: 10px;
-    box-shadow: 5px 5px 0 rgba(46, 32, 20, 0.18);
+    box-shadow: 5px 5px 0 rgb(var(--c-shadow) / 0.18);
   }
 
   /* Anciennes classes neon/grille — degradent en analog, plus aucun glow. */
@@ -146,7 +263,7 @@
   .neon-stage { background: transparent; }
   .neon-stage::before, .neon-stage::after { content: none; }
   .text-glow { text-shadow: none; }
-  .text-glow-pink { color: var(--terra); text-shadow: none; }
+  .text-glow-pink { color: var(--terra-txt); text-shadow: none; }
   .text-glow-cyan { color: var(--gold); text-shadow: none; }
   .scanlines::after { content: none; }
 
@@ -167,10 +284,10 @@
     font-weight: 700;
     font-size: 0.95rem;
     letter-spacing: 0.02em;
-    color: var(--paper);
+    color: var(--on-ink);
     background: var(--terra);
-    border: 2px solid var(--ink);
-    box-shadow: 4px 4px 0 var(--ink);
+    border: 2px solid var(--line);
+    box-shadow: 4px 4px 0 var(--shadow);
     text-shadow: none;
     text-transform: none;
     cursor: pointer;
@@ -182,22 +299,22 @@
   .ma-btn-primary:hover,
   .uiverse-launch:hover {
     transform: translate(2px, 2px);
-    box-shadow: 2px 2px 0 var(--ink);
+    box-shadow: 2px 2px 0 var(--shadow);
     background: #b8492d;
-    color: var(--paper);
+    color: var(--on-ink);
   }
 
   /* Variante secondaire : encre pleine. */
   .btn-neon-pink {
-    color: var(--paper);
-    background: var(--ink);
-    border-color: var(--ink);
-    box-shadow: 4px 4px 0 rgba(46, 32, 20, 0.3);
+    color: var(--on-ink);
+    background: var(--ink-block);
+    border-color: var(--line);
+    box-shadow: 4px 4px 0 rgb(var(--c-shadow) / 0.3);
   }
   .btn-neon-pink:hover {
-    background: #1d140b;
+    background: rgb(var(--c-ink-block-hover));
     transform: translate(2px, 2px);
-    box-shadow: 2px 2px 0 rgba(46, 32, 20, 0.3);
+    box-shadow: 2px 2px 0 rgb(var(--c-shadow) / 0.3);
   }
 
   .uiverse-launch svg { margin-right: 3px; transition: transform 0.25s ease; }
@@ -215,7 +332,7 @@
   }
 
   .text-neon {
-    color: var(--terra);
+    color: var(--terra-txt);
   }
 
   .text-label {
@@ -253,8 +370,8 @@
     content: "";
     position: absolute;
     inset: 0;
-    background-image: linear-gradient(rgba(46, 32, 20, 0.04) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(46, 32, 20, 0.04) 1px, transparent 1px);
+    background-image: linear-gradient(rgb(var(--c-line) / 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(var(--c-line) / 0.04) 1px, transparent 1px);
     background-size: 48px 48px;
     mask-image: radial-gradient(circle at center, rgba(255, 255, 255, 0.5), transparent 70%);
     pointer-events: none;
@@ -331,17 +448,18 @@
 }
 
 /* ========== App Styles (tokens legacy --ma-*) ========== */
-:root {
-  --ma-bg: #f4ecdb;
-  --ma-surface: #ece1c8;
-  --ma-surface-card: #ece1c8;
-  --ma-surface-well: #efe5d0;
-  --ma-border: rgba(46, 32, 20, 0.22);
-  --ma-border-strong: rgba(46, 32, 20, 0.55);
-  --ma-muted: #8a7558;
-  --ma-text: #2e2014;
-  --ma-gradient: #c65133;
-  --ma-shadow-strong: 5px 5px 0 rgba(46, 32, 20, 0.18);
+:root,
+.reste-clair {
+  --ma-bg: rgb(var(--c-paper));
+  --ma-surface: rgb(var(--c-paper-deep));
+  --ma-surface-card: rgb(var(--c-paper-deep));
+  --ma-surface-well: rgb(var(--c-well));
+  --ma-border: rgb(var(--c-line) / 0.22);
+  --ma-border-strong: rgb(var(--c-line) / 0.55);
+  --ma-muted: rgb(var(--c-sourd));
+  --ma-text: rgb(var(--c-ink));
+  --ma-gradient: rgb(var(--c-terra));
+  --ma-shadow-strong: 5px 5px 0 rgb(var(--c-shadow) / 0.18);
 }
 
 body {
@@ -386,16 +504,16 @@ body {
 }
 
 .ma-quick {
-  background: var(--terra); border: 2px solid var(--ink); border-radius: 10px; padding: 40px;
-  color: var(--paper);
+  background: var(--terra); border: 2px solid var(--line); border-radius: 10px; padding: 40px;
+  color: var(--on-ink);
   display: flex; justify-content: space-between; align-items: center;
   box-shadow: var(--ma-shadow-strong);
 }
 
 .ma-nav-bottom {
   position: fixed; inset: auto 0 0 0;
-  background: rgba(244, 236, 219, 0.94);
-  border-top: 2px solid var(--ink);
+  background: rgb(var(--c-paper) / 0.94);
+  border-top: 2px solid var(--line);
   padding: 6px 8px; z-index: 40;
   backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
 }
@@ -414,7 +532,7 @@ body {
 
 .ma-pill {
   display: inline-block; background: transparent;
-  border: 1.5px solid var(--ink); border-radius: 999px;
+  border: 1.5px solid var(--line); border-radius: 999px;
   padding: 7px 12px; font-family: var(--font-sans, "Karla", sans-serif);
   font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
   color: var(--ink);
@@ -423,7 +541,7 @@ body {
 /* ========== Game Layout ========== */
 .game-layout { display: grid; grid-template-columns: 1fr 320px; min-height: 100vh; background: var(--ma-bg); }
 .sidebar-right {
-  background: var(--ma-surface-card); border-left: 2px solid var(--ink);
+  background: var(--ma-surface-card); border-left: 2px solid var(--line);
   display: flex; flex-direction: column;
 }
 .sidebar-header { padding: 24px 20px; border-bottom: 1.5px solid var(--ma-border); }
@@ -437,9 +555,9 @@ body {
   background: var(--ma-surface-well); border: 1.5px solid var(--ma-border);
   border-radius: 8px; padding: 16px; margin-bottom: 12px; transition: all 200ms ease;
 }
-.round-item.current { border-color: var(--ink); background: var(--paper); }
-.round-item.correct { border-color: rgba(125, 148, 113, 0.7); background: rgba(125, 148, 113, 0.12); }
-.round-item.incorrect { border-color: rgba(198, 81, 51, 0.55); background: rgba(198, 81, 51, 0.08); }
+.round-item.current { border-color: var(--line); background: var(--paper); }
+.round-item.correct { border-color: rgb(var(--c-sage) / 0.7); background: rgb(var(--c-sage) / 0.12); }
+.round-item.incorrect { border-color: rgb(var(--c-terra) / 0.55); background: rgb(var(--c-terra) / 0.08); }
 .round-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
 .round-number {
   font-family: var(--font-sans, "Karla", sans-serif);
@@ -448,10 +566,10 @@ body {
 .round-status {
   font-family: var(--font-sans, "Karla", sans-serif);
   font-size: 10px; font-weight: 700; letter-spacing: 0.08em; padding: 4px 8px;
-  border-radius: 4px; background: rgba(46, 32, 20, 0.07);
+  border-radius: 4px; background: rgb(var(--c-line) / 0.07);
 }
-.round-status.correct { background: rgba(125, 148, 113, 0.2); color: #4f6a45; }
-.round-status.incorrect { background: rgba(198, 81, 51, 0.16); color: var(--terra); }
+.round-status.correct { background: rgb(var(--c-sage) / 0.2); color: rgb(var(--c-sage-deep-txt)); }
+.round-status.incorrect { background: rgb(var(--c-terra) / 0.16); color: var(--terra-txt); }
 .round-track { font-size: 13px; font-weight: 700; margin-bottom: 2px; }
 .round-artist { font-size: 12px; color: var(--ma-muted); }
 

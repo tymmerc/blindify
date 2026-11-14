@@ -42,29 +42,29 @@ function LoginForm() {
   }
 
   return (
-    <main className="relative min-h-screen text-[#2e2014]">
+    <main className="relative min-h-screen text-ink">
       <div className="relative z-10 mx-auto flex min-h-screen max-w-md flex-col px-6 py-10">
         <header className="mb-8 flex items-center justify-between">
           <Logo withText priority className="w-fit" />
           <button
             onClick={() => router.push("/modes")}
-            className="rounded-full border-[1.5px] border-[#2e2014] bg-[#ece1c8] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+            className="rounded-full border-[1.5px] border-line bg-paper-deep px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-ink transition hover:bg-ink-block hover:text-on-ink"
           >
             ← Retour
           </button>
         </header>
 
         <div className="flex-1 flex flex-col justify-center">
-          <div className="rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-8 shadow-[5px_5px_0_rgba(46,32,20,.18)]">
+          <div className="rounded-md border-2 border-line bg-paper-deep p-8 shadow-[5px_5px_0_rgb(var(--c-shadow)/.18)]">
             {/* Tab switch */}
-            <div className="mb-6 flex gap-1 rounded-full border-[1.5px] border-[#2e2014] bg-[#efe5d0] p-1">
+            <div className="mb-6 flex gap-1 rounded-full border-[1.5px] border-line bg-well p-1">
               <button
                 type="button"
                 onClick={() => { setMode("login"); setError(null) }}
                 className={`flex-1 rounded-full py-2 text-[11px] font-bold uppercase tracking-[0.14em] transition ${
                   mode === "login"
-                    ? "bg-[#2e2014] text-[#f4ecdb]"
-                    : "text-[#6b573f] hover:text-[#2e2014]"
+                    ? "bg-ink-block text-on-ink"
+                    : "text-ink-2 hover:text-ink"
                 }`}
               >
                 Connexion
@@ -74,8 +74,8 @@ function LoginForm() {
                 onClick={() => { setMode("register"); setError(null) }}
                 className={`flex-1 rounded-full py-2 text-[11px] font-bold uppercase tracking-[0.14em] transition ${
                   mode === "register"
-                    ? "bg-[#2e2014] text-[#f4ecdb]"
-                    : "text-[#6b573f] hover:text-[#2e2014]"
+                    ? "bg-ink-block text-on-ink"
+                    : "text-ink-2 hover:text-ink"
                 }`}
               >
                 Inscription
@@ -86,7 +86,7 @@ function LoginForm() {
               <h1 className="font-display text-2xl font-semibold">
                 {mode === "login" ? "Content de te revoir" : "Crée ton compte"}
               </h1>
-              <p className="mt-1 text-sm text-[#6b573f]">
+              <p className="mt-1 text-sm text-ink-2">
                 {mode === "login"
                   ? "Connecte-toi pour retrouver tes parties. Ce que tu viens de jouer sans compte sur ce téléphone rejoint ton compte."
                   : "Un pseudo et un mot de passe, c'est tout. Tes parties et ta musique de ce téléphone restent à toi."}
@@ -100,7 +100,7 @@ function LoginForm() {
                 onChange={e => setUsername(e.target.value)}
                 placeholder="Pseudo"
                 autoComplete="username"
-                className="w-full rounded-md border-[1.5px] border-[rgba(46,32,20,.35)] bg-[#efe5d0] px-4 py-3 text-sm text-[#2e2014] placeholder:italic placeholder:text-[#b3a182] outline-none transition focus:border-[#c65133]"
+                className="w-full rounded-md border-[1.5px] border-[rgb(var(--c-line)/.35)] bg-well px-4 py-3 text-sm text-ink placeholder:italic placeholder:text-pale outline-none transition focus:border-terra"
               />
               <input
                 type="password"
@@ -108,13 +108,13 @@ function LoginForm() {
                 onChange={e => setPassword(e.target.value)}
                 placeholder="Mot de passe"
                 autoComplete={mode === "register" ? "new-password" : "current-password"}
-                className="w-full rounded-md border-[1.5px] border-[rgba(46,32,20,.35)] bg-[#efe5d0] px-4 py-3 text-sm text-[#2e2014] placeholder:italic placeholder:text-[#b3a182] outline-none transition focus:border-[#c65133]"
+                className="w-full rounded-md border-[1.5px] border-[rgb(var(--c-line)/.35)] bg-well px-4 py-3 text-sm text-ink placeholder:italic placeholder:text-pale outline-none transition focus:border-terra"
               />
-              {error && <p className="text-xs text-[#9c2f1d] text-center">{error}</p>}
+              {error && <p className="text-xs text-rouge-txt text-center">{error}</p>}
               <button
                 type="submit"
                 disabled={loading || !username.trim() || !password}
-                className="w-full rounded-md border-2 border-[#2e2014] bg-[#c65133] px-6 py-3 text-sm font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#2e2014] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-x-0 disabled:hover:translate-y-0 disabled:hover:shadow-[4px_4px_0_#2e2014]"
+                className="w-full rounded-md border-2 border-line bg-terra px-6 py-3 text-sm font-bold text-on-ink shadow-[4px_4px_0_rgb(var(--c-shadow))] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgb(var(--c-shadow))] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-x-0 disabled:hover:translate-y-0 disabled:hover:shadow-[4px_4px_0_rgb(var(--c-shadow))]"
               >
                 {loading
                   ? "Chargement..."
@@ -125,14 +125,14 @@ function LoginForm() {
             </form>
 
             <div className="mt-6 flex items-center gap-3">
-              <span className="h-px flex-1 bg-[rgba(46,32,20,.25)]" />
-              <span className="text-[10px] font-bold uppercase tracking-[0.4em] text-[#8a7558]">ou</span>
-              <span className="h-px flex-1 bg-[rgba(46,32,20,.25)]" />
+              <span className="h-px flex-1 bg-[rgb(var(--c-line)/.25)]" />
+              <span className="text-[10px] font-bold uppercase tracking-[0.4em] text-sourd">ou</span>
+              <span className="h-px flex-1 bg-[rgb(var(--c-line)/.25)]" />
             </div>
 
             <button
               onClick={() => router.push(safeReturnTo(returnTo, "/solo"))}
-              className="mt-4 w-full rounded-md border-2 border-[#2e2014] bg-transparent px-6 py-3 text-sm font-bold text-[#2e2014] transition hover:bg-[rgba(46,32,20,0.07)]"
+              className="mt-4 w-full rounded-md border-2 border-line bg-transparent px-6 py-3 text-sm font-bold text-ink transition hover:bg-[rgb(var(--c-ink-block)/0.07)]"
             >
               Jouer sans compte
             </button>
@@ -145,7 +145,7 @@ function LoginForm() {
 
 export default function AuthLoginPage() {
   return (
-    <Suspense fallback={<div className="grid min-h-screen place-items-center text-[#8a7558]">Chargement...</div>}>
+    <Suspense fallback={<div className="grid min-h-screen place-items-center text-sourd">Chargement...</div>}>
       <LoginForm />
     </Suspense>
   )

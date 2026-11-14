@@ -79,7 +79,7 @@ import { ensureUserTracksSchema, linkTrackToUser } from "../../src/services/user
 import { roomsController } from "../../src/controllers/roomsController";
 import { gamesController } from "../../src/controllers/gamesController";
 import { clearGame } from "../../src/services/realtimeGame";
-import { clearAdvanceTimer, clearRevealTimer } from "../../src/services/realtimeOrchestrator";
+import { clearPacingTimer, clearRevealTimer } from "../../src/services/realtimeOrchestrator";
 import { LOOKUPS_PER_ROUND, START_LIMITS } from "../../src/services/lookupGuard";
 import { HYDRATE_CONCURRENCY, collectPlayableBatch } from "../../src/services/trackResolution";
 import * as deezerModule from "../../src/services/deezerPreviewService";
@@ -221,7 +221,7 @@ async function roomStatus(code: string): Promise<string> {
 
 function stopGame(code: string): void {
   clearRevealTimer(code);
-  clearAdvanceTimer(code);
+  clearPacingTimer(code);
   clearGame(code);
 }
 

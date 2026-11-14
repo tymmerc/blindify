@@ -16,7 +16,7 @@ export const BLUE = "#486090"
 
 export function Tag({ color, children, light }: { color: string; children: ReactNode; light?: boolean }) {
   return (
-    <p className={`flex items-center gap-2 font-mono text-[11px] font-bold uppercase tracking-[0.26em] ${light ? "text-[#f4ecdb]" : "text-[#2e2014]"}`}>
+    <p className={`flex items-center gap-2 font-mono text-[11px] font-bold uppercase tracking-[0.26em] ${light ? "text-on-ink" : "text-ink"}`}>
       <span aria-hidden className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: color }} />
       {children}
     </p>
@@ -24,7 +24,7 @@ export function Tag({ color, children, light }: { color: string; children: React
 }
 
 const CTA =
-  "inline-block rounded-md border-2 border-[#2e2014] bg-[#cc4830] px-7 py-4 font-display text-xl font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:bg-[#b83f29] hover:text-[#f4ecdb] hover:shadow-[2px_2px_0_#2e2014]"
+  "inline-block rounded-md border-2 border-line bg-vermillon px-7 py-4 font-display text-xl font-bold text-on-ink shadow-[4px_4px_0_rgb(var(--c-shadow))] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:bg-[#b83f29] hover:text-on-ink hover:shadow-[2px_2px_0_rgb(var(--c-shadow))]"
 
 export function GuideShell({
   tag,
@@ -53,7 +53,7 @@ export function GuideShell({
 }) {
   const playHref = playMode ? `/jouer/?mode=${playMode}` : "/jouer/"
   return (
-    <div className="min-h-screen text-[#2e2014]">
+    <div className="min-h-screen text-ink">
       {jsonLd.map((obj, i) => (
         <script key={i} type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(obj) }} />
       ))}
@@ -72,12 +72,12 @@ export function GuideShell({
               </Link>
             </p>
           )}
-          <p className="mt-5 font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-[#6b573f]">
+          <p className="mt-5 font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-ink-2">
             Mis à jour le {updated} · Lecture 4 min
           </p>
         </header>
         {children}
-        <section className="border-t-2 border-[#2e2014]">
+        <section className="border-t-2 border-line">
           <div className="mx-auto max-w-4xl px-5 py-[4.5rem] sm:px-8">
             <Tag color={VERMILION}>Prêt ?</Tag>
             <h2 className="mt-5 font-display text-[2.4rem] font-semibold leading-[1] sm:text-[3.4rem]">On lance ?</h2>
@@ -87,17 +87,17 @@ export function GuideShell({
               </Link>
               <Link
                 href="/faq/"
-                className="border-b-2 border-[#2e2014] pb-0.5 text-[13px] font-bold uppercase tracking-[0.14em] transition hover:border-[#cc4830] hover:text-[#cc4830]"
+                className="border-b-2 border-line pb-0.5 text-[13px] font-bold uppercase tracking-[0.14em] transition hover:border-vermillon hover:text-vermillon-txt"
               >
                 Une question ? La FAQ
               </Link>
             </div>
-            <nav aria-label="Autres guides" className="mt-12 border-t-2 border-[rgba(46,32,20,.18)] pt-6">
-              <p className="font-mono text-[11px] font-bold uppercase tracking-[0.2em] text-[#6b573f]">À lire aussi</p>
+            <nav aria-label="Autres guides" className="mt-12 border-t-2 border-[rgb(var(--c-line)/.18)] pt-6">
+              <p className="font-mono text-[11px] font-bold uppercase tracking-[0.2em] text-ink-2">À lire aussi</p>
               <ul className="mt-3 flex flex-wrap gap-x-6 gap-y-2">
                 {GUIDES.filter(g => g.href !== currentHref).map(g => (
                   <li key={g.href}>
-                    <Link href={g.href} className="border-b-2 border-[#2e2014] pb-0.5 text-[15px] font-semibold transition hover:border-[#cc4830] hover:text-[#cc4830]">
+                    <Link href={g.href} className="border-b-2 border-line pb-0.5 text-[15px] font-semibold transition hover:border-vermillon hover:text-vermillon-txt">
                       {g.label}
                     </Link>
                   </li>
@@ -114,17 +114,17 @@ export function GuideShell({
 
 type Tone = "paper" | "deep" | "ink" | "blue" | "amber"
 const TONES: Record<Tone, { bg: string; text: string; tagColor: string; light: boolean; rule: string }> = {
-  paper: { bg: "bg-[#f4ecdb]", text: "text-[#2e2014]", tagColor: VERMILION, light: false, rule: "border-[rgba(46,32,20,.18)]" },
-  deep: { bg: "bg-[#ece1c8]", text: "text-[#2e2014]", tagColor: BLUE, light: false, rule: "border-[rgba(46,32,20,.18)]" },
-  ink: { bg: "bg-[#2e2014]", text: "text-[#f4ecdb]", tagColor: AMBER, light: true, rule: "border-[rgba(244,236,219,.22)]" },
-  blue: { bg: "bg-[#486090]", text: "text-[#f4ecdb]", tagColor: CREAM, light: true, rule: "border-[rgba(244,236,219,.45)]" },
-  amber: { bg: "bg-[#d88418]", text: "text-[#2e2014]", tagColor: INK, light: false, rule: "border-[rgba(46,32,20,.3)]" },
+  paper: { bg: "bg-paper", text: "text-ink", tagColor: VERMILION, light: false, rule: "border-[rgb(var(--c-line)/.18)]" },
+  deep: { bg: "bg-paper-deep", text: "text-ink", tagColor: BLUE, light: false, rule: "border-[rgb(var(--c-line)/.18)]" },
+  ink: { bg: "bg-ink-block", text: "text-on-ink", tagColor: AMBER, light: true, rule: "border-[rgb(var(--c-on-ink)/.22)]" },
+  blue: { bg: "bg-acier", text: "text-on-ink", tagColor: CREAM, light: true, rule: "border-[rgb(var(--c-on-ink)/.45)]" },
+  amber: { bg: "reste-clair bg-ambre", text: "text-ink", tagColor: INK, light: false, rule: "border-[rgb(var(--c-line)/.3)]" },
 }
 
 export function Section({ id, tag, title, tone = "paper", children }: { id?: string; tag: string; title: ReactNode; tone?: Tone; children: ReactNode }) {
   const t = TONES[tone]
   return (
-    <section id={id} className={`border-t-2 border-[#2e2014] ${t.bg} ${t.text}`}>
+    <section id={id} className={`border-t-2 border-line ${t.bg} ${t.text}`}>
       <div className="mx-auto max-w-4xl px-5 py-[4rem] sm:px-8">
         <Tag color={t.tagColor} light={t.light}>{tag}</Tag>
         <h2 className="mt-4 font-display text-[1.9rem] font-semibold leading-[1.08] sm:text-[2.5rem]">{title}</h2>
@@ -153,8 +153,8 @@ export function Steps({ items, light }: { items: Array<{ t: string; b: ReactNode
   return (
     <ol className="mt-2 grid gap-8 sm:grid-cols-2">
       {items.map((s, i) => (
-        <li key={s.t} className={`border-t-2 pt-4 ${light ? "border-[rgba(244,236,219,.45)]" : "border-[#2e2014]"}`}>
-          <span className={`font-display text-4xl font-medium italic ${light ? "" : "text-[#cc4830]"}`}>{i + 1}</span>
+        <li key={s.t} className={`border-t-2 pt-4 ${light ? "border-[rgb(var(--c-on-ink)/.45)]" : "border-line"}`}>
+          <span className={`font-display text-4xl font-medium italic ${light ? "" : "text-vermillon-txt"}`}>{i + 1}</span>
           <h3 className="mt-2 font-display text-xl font-semibold">{s.t}</h3>
           <p className="mt-2 leading-relaxed">{s.b}</p>
         </li>

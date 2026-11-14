@@ -32,6 +32,8 @@ import { DEAD_GUEST_FILTER } from "./services/deadGuests";
 import quickPlayRoutes from "./routes/quickPlay";
 import challengeRoutes from "./routes/challenges";
 import discordRoutes from "./routes/discord";
+import photosRoutes from "./routes/photos";
+import { ensureUserPhotosSchema } from "./services/userPhotos";
 import { ensureDiscordSchema } from "./services/discordRooms";
 import { readDiscordCredentials } from "./config/discord";
 import { fail, ok } from "./utils/response";
@@ -127,7 +129,10 @@ setInterval(() => {
      -- nouvelle ligne dans room_participants : on lui laisse 6 heures.
      AND (mode IS DISTINCT FROM 'streamer' OR created_at < NOW() - INTERVAL '6 hours')
      AND (SELECT MAX(joined_at) FROM room_participants WHERE room_id = multiplayer_rooms.id)
-         < NOW() - INTERVAL '30 minutes'`
+         < NOW() - INTERVAL '30 minutes'
+     -- Revenue en attente apres une partie (relance T27, retour a la salle T40) :
+     -- 30 min a partir de ce retour, meme si tout le monde est arrive bien avant.
+     AND (completed_at IS NULL OR completed_at < NOW() - INTERVAL '30 minutes')`
   ).then(res => {
     if (res.rowCount && res.rowCount > 0) {
       logger.info("stale_rooms_cleaned", { count: res.rowCount });
@@ -328,6 +333,7 @@ app.use("/api/challenges", challengeRoutes);
 app.use("/api/reports", reportsRoutes);
 app.use("/api/feedback", feedbackRoutes);
 app.use("/api/discord", discordRoutes);
+app.use("/api/photos", photosRoutes);
 
 app.use((_req, res) => {
   fail(res, "not_found", "Ressource introuvable", 404);
@@ -365,7 +371,10 @@ const userTracksReady = ensureLinksSchema()
   .catch(err => logger.error("user_tracks_schema_boot_failed", { error: err }))
   // Salle par salon Discord (migration 006) : meme regle, la prod l'a deja.
   .then(() => ensureDiscordSchema())
-  .catch(err => logger.error("discord_schema_boot_failed", { error: err }));
+  .catch(err => logger.error("discord_schema_boot_failed", { error: err }))
+  // Photos de profil (migration 008, T39) : meme regle.
+  .then(() => ensureUserPhotosSchema())
+  .catch(err => logger.error("user_photos_schema_boot_failed", { error: err }));
 ensureResponseSchema().catch(err => logger.error("response_schema_boot_failed", { error: err }));
 // Retours de fin de partie : la migration 004 cree la table en prod ; le
 // demarrage la cree la ou elle manque encore (pile de test, CI).

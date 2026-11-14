@@ -39,7 +39,7 @@ jest.mock("../../src/config/db", () => ({
 import { isExpiredPreview, previewExpiresAt } from "../../src/utils/previewExpiry";
 import { bootstrapGameState, clearGame, getGameState, pauseGame, resumeGame, type RoundTrack } from "../../src/services/realtimeGame";
 import {
-  clearAdvanceTimer,
+  clearPacingTimer,
   clearGraceTimer,
   clearRevealTimer,
   refreshRoundPreviews,
@@ -103,7 +103,7 @@ beforeEach(() => {
 
 afterEach(() => {
   clearRevealTimer(room);
-  clearAdvanceTimer(room);
+  clearPacingTimer(room);
   clearGraceTimer(room);
   clearGame(room);
   jest.useRealTimers();

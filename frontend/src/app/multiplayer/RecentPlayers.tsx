@@ -58,10 +58,10 @@ export function RecentPlayers({
   if (shown.length === 0) return null
 
   const dark = tone === "dark"
-  const line = dark ? "#6b573f" : "rgba(46,32,20,.4)"
-  const chipBorder = dark ? "#e9dcc0" : "#2e2014"
+  const line = dark ? "#6b573f" : "rgb(var(--c-line) / .4)"
+  const chipBorder = dark ? "#e9dcc0" : "rgb(var(--c-line))"
   // Sur l'or de la table, un bouton or disparaitrait : il passe a l'encre.
-  const btnBg = dark ? accent : "#2e2014"
+  const btnBg = dark ? accent : "rgb(var(--c-ink-block))"
 
   return (
     <div className="mt-4 border-t-2 border-dashed pt-3" style={{ borderColor: line }}>
@@ -87,7 +87,7 @@ export function RecentPlayers({
               <button
                 type="button"
                 onClick={() => void invite(p.userId)}
-                className="flex shrink-0 items-center gap-1 rounded-full border-2 border-[#2e2014] px-2.5 py-0.5 text-[11px] font-bold text-[#f4ecdb] transition hover:brightness-110"
+                className="flex shrink-0 items-center gap-1 rounded-full border-2 border-line px-2.5 py-0.5 text-[11px] font-bold text-on-ink transition hover:brightness-110"
                 style={{ background: state ? "#7d9471" : btnBg }}
               >
                 {state === "copied" ? (<><Check className="h-3 w-3" /> Lien copié</>) :
@@ -98,7 +98,7 @@ export function RecentPlayers({
         })}
       </ul>
       {copyFailed ? (
-        <p className="mb-0 mt-2 rounded bg-[#f4ecdb] px-2 py-1 text-xs font-bold text-[#9c2f1d]">
+        <p className="mb-0 mt-2 rounded bg-paper px-2 py-1 text-xs font-bold text-rouge-txt">
           Copie impossible ici, donne-leur le code {roomCode}.
         </p>
       ) : null}

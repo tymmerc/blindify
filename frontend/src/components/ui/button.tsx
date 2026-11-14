@@ -23,12 +23,12 @@ export function Button({
 
   const variants: Record<NonNullable<ButtonProps["variant"]>, string> = {
     default:
-      "rounded-md border-2 border-[#2e2014] bg-[#c65133] text-[#f4ecdb] font-bold shadow-[4px_4px_0_#2e2014] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#2e2014] hover:bg-[#b8492d]",
+      "rounded-md border-2 border-line bg-terra text-on-ink font-bold shadow-[4px_4px_0_rgb(var(--c-shadow))] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgb(var(--c-shadow))] hover:bg-[#b8492d]",
     outline:
-      "rounded-md border-2 border-[#2e2014] bg-transparent text-[#2e2014] hover:bg-[rgba(46,32,20,0.07)]",
-    ghost: "rounded-md text-[#2e2014] hover:bg-[rgba(46,32,20,0.07)]",
-    link: "rounded-none border-none bg-transparent text-[#c65133] underline-offset-8 hover:underline",
-    glow: "rounded-md border-2 border-[#2e2014] bg-[#2e2014] text-[#f4ecdb] font-bold shadow-[4px_4px_0_rgba(46,32,20,0.3)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgba(46,32,20,0.3)] hover:bg-[#1d140b]",
+      "rounded-md border-2 border-line bg-transparent text-ink hover:bg-[rgb(var(--c-ink-block)/0.07)]",
+    ghost: "rounded-md text-ink hover:bg-[rgb(var(--c-ink-block)/0.07)]",
+    link: "rounded-none border-none bg-transparent text-terra-txt underline-offset-8 hover:underline",
+    glow: "rounded-md border-2 border-line bg-ink-block text-on-ink font-bold shadow-[4px_4px_0_rgb(var(--c-shadow)/0.3)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgb(var(--c-shadow)/0.3)] hover:bg-ink-block-hover",
   }
 
   const sizes: Record<NonNullable<ButtonProps["size"]>, string> = {
@@ -42,7 +42,7 @@ export function Button({
     <Comp
       className={cn(
         "relative inline-flex items-center justify-center gap-2 font-semibold transition-all duration-200",
-        "focus:outline-none focus-visible:ring-2 focus-visible:ring-[#c65133]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#f4ecdb]",
+        "focus:outline-none focus-visible:ring-2 focus-visible:ring-terra/60 focus-visible:ring-offset-2 focus-visible:ring-offset-paper",
         "disabled:cursor-not-allowed disabled:opacity-50",
         variants[variant],
         sizes[size],

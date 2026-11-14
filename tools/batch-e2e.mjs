@@ -51,7 +51,7 @@ const host = await hostCtx.newPage()
 host.on("pageerror", e => bad(`HOTE crash: ${String(e).slice(0, 130)}`))
 const hostIdP = grabUserId(host)
 await host.goto(`${B}/jouer/`, { waitUntil: "networkidle", timeout: 90000 })
-await host.locator("input").first().fill("Tymeo")
+await host.locator("input:not([type=file])").first().fill("Tymeo")
 await host.getByRole("button", { name: /continuer/i }).click()
 const cont = host.getByRole("button", { name: /^continuer$/i })
 for (let i = 0; i < 30 && !(await cont.isEnabled().catch(() => false)); i++) await sleep(500)
@@ -93,7 +93,7 @@ const lea = await leaCtx.newPage()
 lea.on("pageerror", e => bad(`LEA crash: ${String(e).slice(0, 130)}`))
 const leaIdP = grabUserId(lea)
 await lea.goto(`${B}/?join=${code}`, { waitUntil: "networkidle", timeout: 90000 })
-await lea.locator("input").first().fill("Lea")
+await lea.locator("input:not([type=file])").first().fill("Lea")
 await lea.getByRole("button", { name: /continuer/i }).click()
 const leaId = entier(await leaIdP)
 await seedLink(leaId, "PlaylistLea", 12)
@@ -140,7 +140,7 @@ while (Date.now() - t0 < 4 * 60 * 1000) {
       round: r ? Number(r[1]) : null,
       input: !!document.querySelector('input[placeholder="Titre du morceau"]'),
       recap: !!document.querySelector(".theater-recap"),
-      fin: /On rejoue \?|FIN DE LA FACE/i.test(txt),
+      fin: /On rejoue \?|FIN DE LA FACE|PARTIE TERMINÉE/i.test(txt),
       txt: txt.replace(/\s+/g, " "),
     }
   }).catch(() => ({}))

@@ -48,7 +48,7 @@ import { ensureLinksSchema } from "../../src/controllers/linksController";
 import { ensureUserTracksSchema, linkTrackToUser } from "../../src/services/userTracks";
 import { roomsController } from "../../src/controllers/roomsController";
 import { clearGame } from "../../src/services/realtimeGame";
-import { clearAdvanceTimer, clearRevealTimer } from "../../src/services/realtimeOrchestrator";
+import { clearPacingTimer, clearRevealTimer } from "../../src/services/realtimeOrchestrator";
 
 resolveTestDatabaseUrl(process.env.TEST_DATABASE_URL);
 jest.setTimeout(60000);
@@ -137,7 +137,7 @@ beforeAll(async () => {
 afterEach(() => {
   for (const code of started.splice(0)) {
     clearRevealTimer(code);
-    clearAdvanceTimer(code);
+    clearPacingTimer(code);
     clearGame(code);
   }
 });

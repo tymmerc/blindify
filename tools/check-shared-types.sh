@@ -45,3 +45,14 @@ if [[ $MISSING -gt 0 ]]; then
 fi
 
 echo "OK: all shared types are mirrored in backend and frontend ($(echo "$NAMES" | wc -w) types)"
+
+# Le juge des reponses : une seule logique, copiee a l'identique cote serveur
+# (multi, streamer, Discord) et cote navigateur (solo, chrono, buzzer).
+JUDGE="$ROOT/shared/src/guessMatching.ts"
+for copy in "$ROOT/backend/src/services/guessMatching.ts" "$ROOT/frontend/src/lib/guessMatching.ts"; do
+  if ! cmp -s "$JUDGE" "$copy"; then
+    echo "FAIL: $copy differe de $JUDGE (recopier le fichier tel quel)"
+    exit 1
+  fi
+done
+echo "OK: le juge des reponses est identique dans shared, backend et frontend"

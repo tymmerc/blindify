@@ -62,7 +62,7 @@ export function MultiplayerRouter() {
   if (!modeConfig || !effectiveMode || needsName) {
     return (
       <div className="grid min-h-screen place-items-center">
-        <Loader2 className="h-6 w-6 animate-spin text-[#c65133]" />
+        <Loader2 className="h-6 w-6 animate-spin text-terra-txt" />
       </div>
     )
   }

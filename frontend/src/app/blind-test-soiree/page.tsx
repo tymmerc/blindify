@@ -64,7 +64,7 @@ export default function Page() {
     <GuideShell
       tag="Guide soirée"
       tagColor={VERMILION}
-      title={<>Organiser un blind test en <em className="font-medium italic text-[#cc4830]">soirée</em> ou à l'apéro</>}
+      title={<>Organiser un blind test en <em className="font-medium italic text-vermillon-txt">soirée</em> ou à l'apéro</>}
       intro="Un écran au milieu et les téléphones des invités, ou un seul téléphone qui passe de main en main. Dans les deux cas il n'y a rien à préparer : chacun ramène sa playlist, la partie se génère toute seule. Voilà comment ça se déroule, et les deux ou trois pièges à éviter."
       updated="5 octobre 2026"
       currentHref="/blind-test-soiree/"
@@ -109,10 +109,10 @@ export default function Page() {
           plus de cinq doigts à la fois). Les règles :
         </p>
         <ul>
-          <Li color="#2e2014"><span>Chacun pose un doigt sur sa zone de l'écran. La musique ne démarre que quand toutes les zones sont tenues.</span></Li>
-          <Li color="#2e2014"><span>Le premier qui lâche prend le téléphone, se cache des autres, et tape sa réponse.</span></Li>
-          <Li color="#2e2014"><span>S'il se plante, on passe au deuxième qui a lâché, sans révéler le titre. Titre et artiste : 3 points, l'un des deux seulement : 1 point. Parties de 5, 10 ou 15 manches.</span></Li>
-          <Li color="#2e2014"><span>Ici on joue sur la musique importée sur ce téléphone, ou sur le fonds commun de tout ce que les joueurs de blindz.app ont déjà ramené si rien n'est importé. Pas de « qui a mis quoi » dans ce mode : un seul tel, une seule bibliothèque.</span></Li>
+          <Li color="var(--line)"><span>Chacun pose un doigt sur sa zone de l'écran. La musique ne démarre que quand toutes les zones sont tenues.</span></Li>
+          <Li color="var(--line)"><span>Le premier qui lâche prend le téléphone, se cache des autres, et tape sa réponse.</span></Li>
+          <Li color="var(--line)"><span>S'il se plante, on passe au deuxième qui a lâché, sans révéler le titre. Titre et artiste : 3 points, l'un des deux seulement : 1 point. Parties de 5, 10 ou 15 manches.</span></Li>
+          <Li color="var(--line)"><span>Ici on joue sur la musique importée sur ce téléphone, ou sur le fonds commun de tout ce que les joueurs de blindz.app ont déjà ramené si rien n'est importé. Pas de « qui a mis quoi » dans ce mode : un seul tel, une seule bibliothèque.</span></Li>
         </ul>
       </Section>
 

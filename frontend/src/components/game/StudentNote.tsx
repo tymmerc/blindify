@@ -35,7 +35,7 @@ const isFailure = (status: SendStatus): status is FeedbackFailure =>
   status === "failed" || status === "rate_limited"
 
 const FIELD =
-  "w-full rounded-md border-[1.5px] border-[rgba(46,32,20,.35)] bg-[#efe5d0] px-3 py-2 text-sm text-[#2e2014] outline-none placeholder:italic placeholder:text-[#8a7558] focus:border-[#c65133]"
+  "w-full rounded-md border-[1.5px] border-[rgb(var(--c-line)/.35)] bg-well px-3 py-2 text-sm text-ink outline-none placeholder:italic placeholder:text-sourd focus:border-terra"
 
 export interface StudentNoteProps {
   context: NoteContext
@@ -83,16 +83,16 @@ export function StudentNote({ context, className = "" }: StudentNoteProps) {
         ref={doneRef}
         tabIndex={-1}
         data-testid="student-note-thanks"
-        className={`flex items-start gap-1.5 text-sm font-semibold text-[#2e2014] outline-none ${className}`}
+        className={`flex items-start gap-1.5 text-sm font-semibold text-ink outline-none ${className}`}
       >
-        <Check aria-hidden className="mt-0.5 h-4 w-4 shrink-0 text-[#7d9471] animate-in zoom-in-50 spin-in-12 duration-300" />
+        <Check aria-hidden className="mt-0.5 h-4 w-4 shrink-0 text-sage-txt animate-in zoom-in-50 spin-in-12 duration-300" />
         {withContact ? NOTE_THANKS_CONTACT : NOTE_THANKS}
       </p>
     )
   }
 
   return (
-    <form onSubmit={submit} aria-labelledby={introId} data-testid="student-note" className={`space-y-3 text-left text-[#2e2014] ${className}`}>
+    <form onSubmit={submit} aria-labelledby={introId} data-testid="student-note" className={`space-y-3 text-left text-ink ${className}`}>
       <p id={introId} className="font-display text-base font-semibold italic leading-snug">
         {NOTE_INTRO}
       </p>
@@ -108,12 +108,12 @@ export function StudentNote({ context, className = "" }: StudentNoteProps) {
           rows={3}
           className={`${FIELD} resize-none`}
         />
-        <p className="text-right text-[11px] tabular-nums text-[#6b573f]">
+        <p className="text-right text-[11px] tabular-nums text-ink-2">
           {message.length}/{FEEDBACK_MESSAGE_MAX}
         </p>
       </div>
       <div>
-        <label htmlFor={contactId} className="block text-xs font-semibold text-[#6b573f]">
+        <label htmlFor={contactId} className="block text-xs font-semibold text-ink-2">
           {NOTE_CONTACT_LABEL}
         </label>
         <input
@@ -128,12 +128,12 @@ export function StudentNote({ context, className = "" }: StudentNoteProps) {
           aria-describedby={hintId}
           className={`${FIELD} mt-1`}
         />
-        <p id={hintId} className="mt-1 text-[11px] text-[#6b573f]">
+        <p id={hintId} className="mt-1 text-[11px] text-ink-2">
           {NOTE_CONTACT_HINT}
         </p>
       </div>
       {isFailure(status) ? (
-        <p role="alert" className="text-xs font-semibold text-[#9c2f1d]">
+        <p role="alert" className="text-xs font-semibold text-rouge-txt">
           {FAILURE_TEXT[status]}
         </p>
       ) : null}
@@ -141,7 +141,7 @@ export function StudentNote({ context, className = "" }: StudentNoteProps) {
         <button
           type="submit"
           disabled={empty || status === "sending"}
-          className="inline-flex min-h-[40px] items-center gap-1.5 rounded-md border-[1.5px] border-[#2e2014] bg-[#c65133] px-4 text-sm font-bold text-[#f4ecdb] shadow-[2px_2px_0_#2e2014] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_#2e2014] disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex min-h-[40px] items-center gap-1.5 rounded-md border-[1.5px] border-line bg-terra px-4 text-sm font-bold text-on-ink shadow-[2px_2px_0_rgb(var(--c-shadow))] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_rgb(var(--c-shadow))] disabled:cursor-not-allowed disabled:opacity-50"
         >
           {status === "sending" ? <Loader2 aria-hidden className="h-3.5 w-3.5 animate-spin" /> : null}
           Envoyer

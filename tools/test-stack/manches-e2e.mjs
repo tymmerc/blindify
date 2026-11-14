@@ -60,7 +60,7 @@ async function shortGameOn({ tag, engine, opts, from }) {
     const phone = await newPage(browser, opts, tag, problems)
     const p = phone.page
     await p.goto(`${APP}/jouer/`, { waitUntil: "networkidle", timeout: 90000 })
-    await p.locator("input").first().fill("Hote")
+    await p.locator("input:not([type=file])").first().fill("Hote")
     await p.getByRole("button", { name: /continuer/i }).click()
     for (let i = 0; i < 40 && !p.__uid; i++) await sleep(250)
     if (!p.__uid) throw new Error("pas d'identifiant d'invite pour l'hote")

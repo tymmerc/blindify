@@ -24,6 +24,7 @@ jest.mock("../../src/utils/logger", () => ({
 import type { Request, Response } from "express";
 import { pool } from "../../src/config/db";
 import { authController } from "../../src/controllers/authController";
+import { ensureUserPhotosSchema } from "../../src/services/userPhotos";
 
 const DAY = 24 * 60 * 60 * 1000;
 const created: number[] = [];
@@ -102,6 +103,11 @@ async function counts(userId: number) {
     [userId]);
   return r;
 }
+
+// La reprise d'un invite deplace aussi sa photo (migration 008, T39).
+beforeAll(async () => {
+  await ensureUserPhotosSchema();
+});
 
 beforeEach(() => {
   tag = Math.random().toString(36).slice(2, 8);

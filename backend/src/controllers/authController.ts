@@ -259,6 +259,7 @@ export const authController = {
       await client.query(`DELETE FROM round_responses WHERE user_id=$1`, [userId]);
       await client.query(`DELETE FROM room_participants WHERE user_id=$1`, [userId]);
       await client.query(`DELETE FROM user_connections WHERE user_id=$1`, [userId]);
+      await client.query(`DELETE FROM user_photos WHERE user_id=$1`, [userId]);
       await client.query(`DELETE FROM user_sessions WHERE user_id=$1`, [userId]);
       await client.query(`DELETE FROM users WHERE id=$1`, [userId]);
 

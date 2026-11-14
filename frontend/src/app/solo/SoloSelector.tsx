@@ -46,7 +46,7 @@ function TabBar({ active, onChange }: { active: SoloTab; onChange: (t: SoloTab) 
     <div
       role="tablist"
       aria-label="Type de partie"
-      className="flex gap-1 rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-1 shadow-[4px_4px_0_rgba(46,32,20,.18)]"
+      className="flex gap-1 rounded-md border-2 border-line bg-paper-deep p-1 shadow-[4px_4px_0_rgb(var(--c-shadow)/.18)]"
     >
       {TABS.map(tab => {
         const isActive = active === tab.key
@@ -67,7 +67,7 @@ function TabBar({ active, onChange }: { active: SoloTab; onChange: (t: SoloTab) 
             onClick={() => onChange(tab.key)}
             onKeyDown={handleKeyDown}
             className={`flex-1 rounded px-2 py-2.5 text-[13px] font-bold leading-tight transition sm:text-sm ${
-              isActive ? "bg-[#c65133] text-[#f4ecdb]" : "text-[#6b573f] hover:text-[#2e2014]"
+              isActive ? "bg-terra text-on-ink" : "text-ink-2 hover:text-ink"
             }`}
           >
             {tab.label}
@@ -108,16 +108,17 @@ export function SoloSelector() {
   }, [focusHeading, tab])
 
   return (
-    <div className="min-h-screen px-4 py-5 text-[#2e2014] sm:px-6 sm:py-8">
+    <div className="min-h-screen px-4 py-5 text-ink sm:px-6 sm:py-8">
       <div className="mx-auto flex max-w-2xl flex-col gap-6">
 
         {/* En-tete commun a tous les modes (meme gabarit que les salles d'attente) */}
-        <header className="flex items-center justify-between gap-3 border-b-2 border-[#2e2014] pb-3 sm:pb-4">
+        <header className="flex items-center justify-between gap-3 border-b-2 border-line pb-3 sm:pb-4">
           <div className="flex min-w-0 items-center gap-3">
-            <img src={publicPath("/logo-mark.png")} alt="blindz.app" className="h-10 w-10 shrink-0 object-contain sm:h-11 sm:w-11" />
+            <img src={publicPath("/logo-mark.png")} alt="blindz.app" className="h-10 w-10 shrink-0 object-contain sm:h-11 sm:w-11 dark:hidden" />
+            <img src={publicPath("/logo-mark-nuit.png")} alt="blindz.app" className="h-10 w-10 shrink-0 object-contain sm:h-11 sm:w-11 hidden dark:block" />
             <div className="min-w-0">
               <p className="m-0 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.22em] sm:text-[11px]">
-                <span aria-hidden className="h-2.5 w-2.5 rounded-full border-[1.5px] border-[#2e2014] bg-[#a8b8c8]" />
+                <span aria-hidden className="h-2.5 w-2.5 rounded-full border-[1.5px] border-line bg-[#a8b8c8]" />
                 Nouvelle partie
               </p>
               <h1 className="m-0 mt-0.5 font-display text-xl font-semibold sm:text-2xl">Solo</h1>
@@ -126,7 +127,7 @@ export function SoloSelector() {
           <button
             type="button"
             onClick={() => router.push("/modes")}
-            className="flex shrink-0 items-center gap-1.5 rounded-full border-[1.5px] border-[#2e2014] px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+            className="flex shrink-0 items-center gap-1.5 rounded-full border-[1.5px] border-line px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-ink transition hover:bg-ink-block hover:text-on-ink"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
             Quitter
@@ -140,7 +141,7 @@ export function SoloSelector() {
           {tab === "chrono" && <ChronoForm settings={settings} />}
           {tab === "challenge" && <ChallengeTab settings={settings} />}
 
-          <p className="px-1 text-[13px] leading-relaxed text-[#6b573f]">{HELP[tab]}</p>
+          <p className="px-1 text-[13px] leading-relaxed text-ink-2">{HELP[tab]}</p>
         </div>
       </div>
     </div>

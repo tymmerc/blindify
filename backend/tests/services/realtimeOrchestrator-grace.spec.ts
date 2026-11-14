@@ -21,12 +21,13 @@ import {
   type RoundTrack,
 } from "../../src/services/realtimeGame";
 import {
-  clearAdvanceTimer,
+  clearPacingTimer,
   clearGraceTimer,
   clearRevealTimer,
   startRoundAndBroadcast,
   tryEarlyReveal,
 } from "../../src/services/realtimeOrchestrator";
+import { ROUND_PACING } from "../../src/services/roundPacing";
 
 type Emitted = { event: string; payload: unknown };
 
@@ -54,7 +55,9 @@ function makeTracks(count: number): RoundTrack[] {
 }
 
 // Pre-roll de startRoundAndBroadcast : la musique part 1,6 s apres l'annonce.
-const PREROLL_MS = 1_600;
+const PREROLL_MS = ROUND_PACING.countdownMs;
+// Reponse puis classement (T38) : la manche suivante part ensuite toute seule.
+const REVEAL_MS = ROUND_PACING.answerMs + ROUND_PACING.scoresMs;
 let roomSeq = 0;
 let room = "";
 
@@ -90,7 +93,7 @@ beforeEach(() => {
 afterEach(() => {
   clearGraceTimer(room);
   clearRevealTimer(room);
-  clearAdvanceTimer(room);
+  clearPacingTimer(room);
   clearGame(room);
   jest.useRealTimers();
 });
@@ -181,16 +184,16 @@ describe("grace de reconnexion : minuteurs de l'orchestrateur", () => {
     expect(getGameState(room)?.currentRound).toBe(2);
   });
 
-  it("le minuteur de manche finit comme les revelations anticipees : etat diffuse, filet anti-AFK", () => {
+  it("le minuteur de manche finit comme les revelations anticipees : etat diffuse, rythme du reveal", () => {
     const { io, emitted } = fakeIo();
     roundWithTwoAnswers(io, 2_000);
     jest.advanceTimersByTime(PREROLL_MS + 2_000);
     expect(reveals(emitted)).toHaveLength(1);
     const after = emitted.slice(emitted.findIndex(e => e.event === "game:round:reveal"));
     expect(after.some(e => e.event === "game:state" && (e.payload as { phase: string }).phase === "REVEAL")).toBe(true);
-    // Filet anti-AFK pose : la manche 2 part seule 10 s plus tard.
+    // Rythme du reveal pose (T38) : reponse, classement, puis la manche 2 part seule.
     expect(jest.getTimerCount()).toBe(1);
-    jest.advanceTimersByTime(10_000);
+    jest.advanceTimersByTime(REVEAL_MS);
     expect(getGameState(room)?.currentRound).toBe(2);
   });
 

@@ -86,40 +86,40 @@ function QuickPlayInner() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-6 text-[#2e2014]">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-6 text-ink">
         <div
-          className="relative h-16 w-16 rounded-full border-2 border-[#2e2014]"
+          className="relative h-16 w-16 rounded-full border-2 border-line"
           style={{
             background: "repeating-radial-gradient(circle at 50% 50%, #241a10 0 2.5px, #3a2a1a 2.5px 5px)",
             animation: "vinyl-spin 2s linear infinite",
           }}
         >
-          <span className="absolute inset-[33%] rounded-full border-2 border-[#2e2014] bg-[#c65133]" />
-          <span className="absolute inset-[45%] rounded-full bg-[#f4ecdb]" />
+          <span className="absolute inset-[33%] rounded-full border-2 border-line bg-terra" />
+          <span className="absolute inset-[45%] rounded-full bg-paper" />
         </div>
-        <p className="text-sm text-[#6b573f]">{progress}</p>
-        <p className="text-xs text-[#8a7558]">Cela peut prendre quelques secondes...</p>
+        <p className="text-sm text-ink-2">{progress}</p>
+        <p className="text-xs text-sourd">Cela peut prendre quelques secondes...</p>
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-6 px-6 text-[#2e2014]">
-        <div className="w-full max-w-md space-y-4 rounded-md border-2 border-[#9c2f1d] bg-[#ece1c8] p-8 text-center shadow-[4px_4px_0_rgba(46,32,20,.18)]">
-          <p className="text-sm font-bold text-[#9c2f1d]">{error}</p>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-6 px-6 text-ink">
+        <div className="w-full max-w-md space-y-4 rounded-md border-2 border-rouge-txt bg-paper-deep p-8 text-center shadow-[4px_4px_0_rgb(var(--c-shadow)/.18)]">
+          <p className="text-sm font-bold text-rouge-txt">{error}</p>
           <div className="flex justify-center gap-3">
             <Button
               variant="outline"
               onClick={() => router.push("/")}
-              className="rounded-full border-[1.5px] border-[#2e2014] bg-[#f4ecdb] px-4 py-2 text-sm font-bold text-[#2e2014] hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+              className="rounded-full border-[1.5px] border-line bg-paper px-4 py-2 text-sm font-bold text-ink hover:bg-ink-block hover:text-on-ink"
             >
               Retour
             </Button>
             <Button
               variant="outline"
               onClick={() => window.location.reload()}
-              className="rounded-md border-2 border-[#2e2014] bg-[#c65133] px-4 py-2 text-sm font-bold text-[#f4ecdb] shadow-[3px_3px_0_#2e2014] hover:translate-x-[2px] hover:translate-y-[2px] hover:bg-[#b8492d] hover:text-[#f4ecdb] hover:shadow-[1px_1px_0_#2e2014]"
+              className="rounded-md border-2 border-line bg-terra px-4 py-2 text-sm font-bold text-on-ink shadow-[3px_3px_0_rgb(var(--c-shadow))] hover:translate-x-[2px] hover:translate-y-[2px] hover:bg-[#b8492d] hover:text-on-ink hover:shadow-[1px_1px_0_rgb(var(--c-shadow))]"
             >
               Réessayer
             </Button>
@@ -131,25 +131,25 @@ function QuickPlayInner() {
 
   if (!session || tracks.length === 0) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-6 px-6 text-[#2e2014]">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-6 px-6 text-ink">
         <div className="flex w-full max-w-md flex-col items-center space-y-3 text-center">
           <span
             aria-hidden
-            className="relative mb-1 block h-12 w-12 rounded-full border-2 border-[#2e2014]"
+            className="relative mb-1 block h-12 w-12 rounded-full border-2 border-line"
             style={{ background: "repeating-radial-gradient(circle at 50% 50%, #241a10 0 2px, #3a2a1a 2px 4px)" }}
           >
-            <span className="absolute inset-[33%] rounded-full border border-[#2e2014] bg-[#c65133]" />
-            <span className="absolute inset-[45%] rounded-full bg-[#f4ecdb]" />
+            <span className="absolute inset-[33%] rounded-full border border-line bg-terra" />
+            <span className="absolute inset-[45%] rounded-full bg-paper" />
           </span>
           <p className="font-display text-lg font-semibold">Aucun titre jouable trouvé</p>
-          <p className="text-sm text-[#6b573f]">
+          <p className="text-sm text-ink-2">
             Les playlists de ce profil sont peut-être privées, ou aucun titre ne dispose d'un aperçu audio.
             Essaie avec un autre profil ou une playlist publique.
           </p>
         </div>
         <Link
           href="/solo"
-          className="rounded-md border-2 border-[#2e2014] bg-[#c65133] px-6 py-2 text-sm font-bold text-[#f4ecdb] shadow-[3px_3px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[1px_1px_0_#2e2014]"
+          className="rounded-md border-2 border-line bg-terra px-6 py-2 text-sm font-bold text-on-ink shadow-[3px_3px_0_rgb(var(--c-shadow))] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[1px_1px_0_rgb(var(--c-shadow))]"
         >
           Essayer un autre lien
         </Link>
@@ -158,7 +158,7 @@ function QuickPlayInner() {
   }
 
   return (
-    <main className="min-h-screen text-[#2e2014]">
+    <main className="min-h-screen text-ink">
       <SoloGameClient
         user={{ id: 0, provider: "guest", provider_id: "quick", username: "Joueur", email: null, avatar: null }}
         tracks={tracks}
@@ -176,7 +176,7 @@ export default function QuickPlayPage() {
   return (
     <Suspense
       fallback={
-        <div className="grid min-h-screen place-items-center text-sm text-[#6b573f]">
+        <div className="grid min-h-screen place-items-center text-sm text-ink-2">
           Chargement...
         </div>
       }

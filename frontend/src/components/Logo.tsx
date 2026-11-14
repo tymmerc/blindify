@@ -14,6 +14,8 @@ type LogoProps = {
 
 export function Logo({ withText = false, className, imageClassName, priority = false, href = "/" }: LogoProps) {
   const logoSrc = publicPath("/logo-mark.png")
+  // Le B est noir : en sombre, la version au B creme (T30).
+  const logoNuit = publicPath("/logo-mark-nuit.png")
 
   return (
     <Link
@@ -36,7 +38,14 @@ export function Logo({ withText = false, className, imageClassName, priority = f
         fill
         sizes="56px"
         priority={priority}
-        className="object-contain"
+        className="object-contain dark:hidden"
+      />
+      <Image
+        src={logoNuit}
+        alt="Blindz"
+        fill
+        sizes="56px"
+        className="object-contain hidden dark:block"
       />
       </div>
       {withText ? (

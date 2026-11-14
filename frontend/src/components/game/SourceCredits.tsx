@@ -12,6 +12,7 @@ import { publicPath } from "@/lib/publicPath"
  * - Spotify : logo complet et lien retour sur les morceaux importes de Spotify.
  *   Logo noir monochrome : le vert est reserve aux fonds noir ou blanc, pas au
  *   papier creme. Au moins 70 px de large, marge de la moitie de l'icone.
+ *   En mode sombre : logo blanc monochrome (autorise sur fond sombre).
  *
  * Le lien Spotify donne la reponse : on ne le rend que dans les cartes de
  * reveal. Pendant la manche, la piste est caviardee (trackId "hidden", pas de
@@ -33,9 +34,11 @@ type DeezerCreditProps = {
 
 export function DeezerCredit({ notice = true, className = "" }: DeezerCreditProps) {
   return (
-    <p className={`flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[11px] leading-tight text-[#6b573f] ${className}`}>
-      <span className="font-bold uppercase tracking-[0.18em] text-[#8a7558]">Extraits</span>
-      <Image src={publicPath("/marques/deezer-logo.png")} alt="Deezer" width={71} height={20} className="h-5 w-auto" unoptimized />
+    <p className={`flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[11px] leading-tight text-ink-2 ${className}`}>
+      <span className="font-bold uppercase tracking-[0.18em] text-sourd">Extraits</span>
+      {/* Lockup officiel noir et violet ; sur fond sombre, sa version blanche et violette (T30). */}
+      <Image src={publicPath("/marques/deezer-logo.png")} alt="Deezer" width={71} height={20} className="h-5 w-auto dark:hidden" unoptimized />
+      <Image src={publicPath("/marques/deezer-logo-blanc.png")} alt="Deezer" width={71} height={20} className="hidden h-5 w-auto dark:block" unoptimized />
       {notice ? <span>pour une écoute privée, entre amis ou en famille</span> : null}
     </p>
   )
@@ -56,9 +59,10 @@ export function SpotifyTrackLink({ provider, trackId, className = "" }: SpotifyT
       target="_blank"
       rel="noopener noreferrer"
       onClick={event => followExternalLink(event, href)}
-      className={`inline-flex items-center gap-3 rounded-md border-[1.5px] border-[rgba(46,32,20,.35)] bg-[#f4ecdb] px-3 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[#2e2014] transition hover:border-[#2e2014] ${className}`}
+      className={`inline-flex items-center gap-3 rounded-md border-[1.5px] border-[rgb(var(--c-line)/.35)] bg-paper px-3 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-ink transition hover:border-line ${className}`}
     >
-      <Image src={publicPath("/marques/spotify-logo-noir.svg")} alt="" width={80} height={22} className="h-[22px] w-auto" unoptimized />
+      <Image src={publicPath("/marques/spotify-logo-noir.svg")} alt="" width={80} height={22} className="h-[22px] w-auto dark:hidden" unoptimized />
+      <Image src={publicPath("/marques/spotify-logo-blanc.svg")} alt="" width={80} height={22} className="hidden h-[22px] w-auto dark:block" unoptimized />
       <span>Écouter sur Spotify</span>
     </a>
   )

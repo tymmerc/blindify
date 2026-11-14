@@ -33,7 +33,7 @@ host.on("response", async r => {
   if (/\/api\/auth\/(guest|me)/.test(r.url())) { try { hostId = (await r.json())?.data?.user?.id ?? hostId } catch { /* autre */ } }
 })
 await host.goto(`${B}/jouer/`, { waitUntil: "networkidle", timeout: 90000 })
-await host.locator("input").first().fill("Tymeo")
+await host.locator("input:not([type=file])").first().fill("Tymeo")
 await host.getByRole("button", { name: /continuer/i }).click()
 if (PILE) {
   // Profil factice different a chaque passage : la regle "le premier importeur
@@ -81,7 +81,7 @@ const p2Ctx = await mk({ viewport: { width: 1280, height: 800 } })
 const p2 = await p2Ctx.newPage()
 p2.on("pageerror", e => bad(`LEA crash: ${String(e).slice(0, 120)}`))
 await p2.goto(`${B}/jouer/`, { waitUntil: "networkidle", timeout: 90000 })
-await p2.locator("input").first().fill("Lea")
+await p2.locator("input:not([type=file])").first().fill("Lea")
 await p2.getByRole("button", { name: /continuer/i }).click()
 // etape musique : URL vide -> le bouton principal sert de "Continuer"
 await p2.getByRole("button", { name: /^continuer$/i }).click({ timeout: 20000 })

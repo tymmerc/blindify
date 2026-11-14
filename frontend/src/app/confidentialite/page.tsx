@@ -12,23 +12,23 @@ export const metadata: Metadata = {
 
 export default function ConfidentialitePage() {
   return (
-    <div className="min-h-screen text-[#2e2014] pb-20">
+    <div className="min-h-screen text-ink pb-20">
       <div className="mx-auto max-w-2xl px-5 pt-10">
         <div className="mb-8">
           <Link
             href="/"
-            className="inline-flex items-center gap-2 rounded-full border-[1.5px] border-[#2e2014] bg-[#ece1c8] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+            className="inline-flex items-center gap-2 rounded-full border-[1.5px] border-line bg-paper-deep px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-ink transition hover:bg-ink-block hover:text-on-ink"
           >
             Retour à l'accueil
           </Link>
         </div>
 
         <div className="mb-10 space-y-2">
-          <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-[#c65133]">Légal</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-terra-txt">Légal</p>
           <h1 className="font-display text-4xl font-semibold md:text-5xl">
-            Politique de <em className="font-medium italic text-[#c65133]">confidentialité</em>
+            Politique de <em className="font-medium italic text-terra-txt">confidentialité</em>
           </h1>
-          <p className="text-sm text-[#8a7558]">Dernière mise à jour : 8 novembre 2026</p>
+          <p className="text-sm text-sourd">Dernière mise à jour : 8 novembre 2026</p>
         </div>
 
         <div className="space-y-6">
@@ -46,6 +46,13 @@ export default function ConfidentialitePage() {
               <Item>
                 <strong>Un pseudo</strong> (obligatoire pour jouer). C'est le nom affiché dans le jeu et
                 les classements.
+              </Item>
+              {/* T39 (13/11/2026) : texte propose, a valider par Tym. */}
+              <Item>
+                <strong>Une photo de profil</strong>, seulement si tu en ajoutes une. On la recadre et on la
+                réduit, et on retire ce qu&apos;elle contient d&apos;autre (date, appareil, position). Elle
+                s&apos;affiche à côté de ton pseudo pour les joueurs de ta salle. Tu peux la retirer quand tu
+                veux dans « Mon compte », et elle part avec ton compte s&apos;il est supprimé.
               </Item>
               <Item>
                 <strong>Un mot de passe</strong>, uniquement si tu crées un compte. Il n'est jamais stocké
@@ -179,19 +186,19 @@ export default function ConfidentialitePage() {
         <div className="mt-12 flex flex-wrap gap-3">
           <Link
             href="/conditions/"
-            className="inline-flex items-center gap-2 rounded-full border-[1.5px] border-[#2e2014] bg-transparent px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+            className="inline-flex items-center gap-2 rounded-full border-[1.5px] border-line bg-transparent px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-ink transition hover:bg-ink-block hover:text-on-ink"
           >
             Conditions
           </Link>
           <Link
             href="/mentions-legales"
-            className="inline-flex items-center gap-2 rounded-full border-[1.5px] border-[#2e2014] bg-transparent px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+            className="inline-flex items-center gap-2 rounded-full border-[1.5px] border-line bg-transparent px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-ink transition hover:bg-ink-block hover:text-on-ink"
           >
             Mentions légales
           </Link>
           <Link
             href="/"
-            className="inline-flex items-center gap-2 rounded-full border-2 border-[#2e2014] bg-[#c65133] px-5 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#f4ecdb] shadow-[3px_3px_0_#2e2014] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_#2e2014]"
+            className="inline-flex items-center gap-2 rounded-full border-2 border-line bg-terra px-5 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-on-ink shadow-[3px_3px_0_rgb(var(--c-shadow))] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_rgb(var(--c-shadow))]"
           >
             Jouer
           </Link>
@@ -204,7 +211,7 @@ export default function ConfidentialitePage() {
 function Item({ children }: { children: React.ReactNode }) {
   return (
     <li className="flex gap-2">
-      <span className="mt-[6px] h-1.5 w-1.5 shrink-0 rounded-full bg-[#c65133]" />
+      <span className="mt-[6px] h-1.5 w-1.5 shrink-0 rounded-full bg-terra" />
       <span>{children}</span>
     </li>
   )

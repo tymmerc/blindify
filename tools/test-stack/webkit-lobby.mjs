@@ -365,7 +365,7 @@ async function joinAs({ browser, name, code, tag, opts, device }) {
     await p.goto(entree, { waitUntil: "networkidle", timeout: 60000 }); step("page")
     const go = p.getByRole("button", { name: /continuer/i })
     for (let i = 0; i < 6 && !(await go.isEnabled().catch(() => false)); i++) {
-      await p.locator("input").first().fill(name, { timeout: 30000 })
+      await p.locator("input:not([type=file])").first().fill(name, { timeout: 30000 })
       await p.waitForTimeout(300)
     }
     step("pseudo")

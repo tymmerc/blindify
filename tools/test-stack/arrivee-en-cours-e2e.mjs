@@ -35,7 +35,7 @@ const ROUNDS = 10
 
 async function wizard(page, name, code) {
   await page.goto(`${APP}/jouer/?join=${code}`, { waitUntil: "networkidle", timeout: 60000 })
-  await page.locator("input").first().fill(name)
+  await page.locator("input:not([type=file])").first().fill(name)
   await page.getByRole("button", { name: /continuer/i }).click()
   for (let i = 0; i < 40 && !page.__uid; i++) await sleep(250)
   if (!page.__uid) throw new Error(`${name} : aucune identite creee`)
@@ -218,7 +218,7 @@ async function table(browser) {
     screen = await newPage(browser, { viewport: { width: 1440, height: 900 } }, "ecran central", problems)
     const s = screen.page
     await s.goto(`${APP}/jouer/`, { waitUntil: "networkidle", timeout: 60000 })
-    await s.locator("input").first().fill("Ecran")
+    await s.locator("input:not([type=file])").first().fill("Ecran")
     await s.getByRole("button", { name: /continuer/i }).click()
     for (let i = 0; i < 40 && !s.__uid; i++) await sleep(250)
     seedUser(s.__uid, [24, 25, 26, 27, 28, 29, 30, 31])

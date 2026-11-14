@@ -17,6 +17,9 @@ const DEMO_USER: UserSummary = {
   avatar: null,
 }
 
+// Copie des durees du serveur (backend/src/services/roundPacing.ts) pour la demo hors ligne.
+const DEMO_PACING = { answerMs: 8000, scoresMs: 5000, countdownMs: 3000 }
+
 const MOCK_TRACKS = [
   { title: "Echoes of Neon", artist: "Kairo Drive" },
   { title: "Midnight Relay", artist: "Velvet Loop" },
@@ -39,7 +42,8 @@ function resetPlayers(players: Record<number, MultiplayerPlayerState>): Record<n
 
 function createRoundState(index: number, players: Record<number, MultiplayerPlayerState>): MultiplayerGameState {
   const track = MOCK_TRACKS[index]
-  const startAt = Date.now()
+  // Meme rythme que le serveur (T38) : 3-2-1, puis la manche.
+  const startAt = Date.now() + (index > 0 ? DEMO_PACING.countdownMs : 0)
   const revealAt = startAt + 12000
   return {
     roomCode: "DEMO",
@@ -95,13 +99,17 @@ function simulateReveal(state: MultiplayerGameState): MultiplayerGameState {
     ...state,
     phase: "REVEAL",
     players: updatedPlayers,
+    pacing: { step: "answer", endsAt: Date.now() + DEMO_PACING.answerMs, ms: DEMO_PACING.answerMs },
   }
 }
 
+/** Ecran suivant : le classement, puis la manche suivante (la reponse mene a la fin apres la derniere). */
 function advanceFromReveal(state: MultiplayerGameState): MultiplayerGameState {
-  if (state.currentRound >= state.totalRounds) {
-    return { ...state, phase: "FINISHED" }
+  const last = state.currentRound >= state.totalRounds
+  if (state.pacing?.step === "answer" && !last) {
+    return { ...state, pacing: { step: "scores", endsAt: Date.now() + DEMO_PACING.scoresMs, ms: DEMO_PACING.scoresMs } }
   }
+  if (last) return { ...state, phase: "FINISHED", pacing: null }
   return createRoundState(state.currentRound, state.players)
 }
 
@@ -185,25 +193,19 @@ export default function DemoPage() {
     })
   }, [])
 
-  const handleReady = useCallback(() => {
+  useEffect(() => {
     setState(prev => {
-      if (prev.phase !== "REVEAL") return prev
-      const self = prev.players[DEMO_USER.id]
-      if (!self) return prev
-      const updatedPlayers = {
-        ...prev.players,
-        [DEMO_USER.id]: { ...self, isReady: true },
-      }
-      const allReady = Object.values(updatedPlayers).every(p => p.isReady)
-      if (!allReady) {
-        return { ...prev, players: updatedPlayers }
-      }
-      return advanceFromReveal({ ...prev, players: updatedPlayers })
+      if (prev.phase !== "REVEAL" || !prev.pacing || serverNow < prev.pacing.endsAt) return prev
+      return advanceFromReveal(prev)
     })
+  }, [serverNow])
+
+  const handleNext = useCallback(() => {
+    setState(prev => (prev.phase === "REVEAL" ? advanceFromReveal(prev) : prev))
   }, [])
 
   return (
-    <div className="min-h-screen px-6 py-10 text-[#2e2014]">
+    <div className="min-h-screen px-6 py-10 text-ink">
       <div className="mx-auto flex max-w-6xl flex-col gap-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="space-y-2">
@@ -211,20 +213,20 @@ export default function DemoPage() {
               Simulation
             </p>
             <h1 className="font-display text-4xl font-semibold leading-tight">Démo sans configuration</h1>
-            <p className="text-sm text-[#6b573f]">Parcours complet offline : timings réels, réponses simulées, audio coupé.</p>
+            <p className="text-sm text-ink-2">Parcours complet offline : timings réels, réponses simulées, audio coupé.</p>
           </div>
           <Button
             variant="outline"
             onClick={() => router.push("/modes?from=/demo")}
-            className="rounded-full border-[1.5px] border-[#2e2014] bg-transparent px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-[#2e2014] hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+            className="rounded-full border-[1.5px] border-line bg-transparent px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-ink hover:bg-ink-block hover:text-on-ink"
           >
             Retour modes
           </Button>
         </div>
 
         <SurfaceCard className="space-y-2">
-          <h3 className="font-display text-lg font-semibold text-[#2e2014]">Comment ça marche</h3>
-          <p className="text-sm text-[#6b573f]">Pas de compte ni de Spotify. Les titres et scores sont simulés pour montrer le flow complet.</p>
+          <h3 className="font-display text-lg font-semibold text-ink">Comment ça marche</h3>
+          <p className="text-sm text-ink-2">Pas de compte ni de Spotify. Les titres et scores sont simulés pour montrer le flow complet.</p>
         </SurfaceCard>
 
         <MultiplayerGameClient
@@ -232,7 +234,7 @@ export default function DemoPage() {
           state={state}
           serverNow={serverNow}
           onAnswer={(title, artist) => handleAnswer(`${title} ${artist}`.trim())}
-          onReady={handleReady}
+          onNext={handleNext}
           onExit={() => router.push("/modes?from=/demo")}
           disabled={state.phase === "FINISHED"}
           autoAdvance

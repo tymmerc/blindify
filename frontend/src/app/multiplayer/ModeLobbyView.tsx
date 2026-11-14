@@ -262,6 +262,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     roundReveal?: (payload: { roomCode: string; round: number; players: MultiplayerGameState["players"]; timing: { startAt: number | null; revealAt: number | null }; track?: MultiplayerGameState["currentTrack"] }) => void
     gameOver?: (payload: { roomCode: string; players: MultiplayerGameState["players"] }) => void
     gameLost?: (payload: { roomCode: string }) => void
+    backToLobby?: (payload: { roomCode: string }) => void
     roomError?: (payload: { code?: string; message?: string }) => void
     hostChange?: (payload: { roomCode: string; hostUserId: number }) => void
   }>({})
@@ -413,6 +414,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
           socket.off("game:game:over", handlersRef.current.gameOver)
         }
         if (handlersRef.current.gameLost) socket.off("game:lost", handlersRef.current.gameLost)
+        if (handlersRef.current.backToLobby) socket.off("room:lobby", handlersRef.current.backToLobby)
         if (handlersRef.current.roomError) socket.off("room:error", handlersRef.current.roomError)
         if (handlersRef.current.hostChange) socket.off("room:host", handlersRef.current.hostChange)
       }
@@ -428,9 +430,9 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     roomRef.current = room
   }, [room])
 
-  // Filet anti-gel : si on reste bloque en REVEAL trop longtemps (un game:ready
-  // perdu empeche tout le monde d'avancer), on resynchronise une fois via
-  // game:sync et on previent le joueur. Borne a un seul declenchement par phase.
+  // Filet anti-gel : le serveur fait avancer les ecrans entre les manches (T38).
+  // Si on reste en REVEAL bien plus longtemps que prevu (evenement perdu), on
+  // resynchronise une fois via game:sync. Borne a un seul declenchement par phase.
   useEffect(() => {
     const gs = gameState as MultiplayerGameState | null
     if (!gs || gs.phase !== "REVEAL" || !room) return
@@ -441,12 +443,28 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       const still = gameStateRef.current as MultiplayerGameState | null
       if (still?.phase === "REVEAL" && still.currentRound === round) {
         socket.emit("game:sync", { roomCode: room.room_code })
-        socket.emit("game:ready", { roomCode: room.room_code })
         showNotice("Resynchronisation de la partie…")
       }
     }, 25000)
     return () => clearTimeout(t)
   }, [gameState, room, showNotice])
+
+  // Filet du retour a la salle (T40) : un joueur dont le socket a rate
+  // room:lobby (coupure, iframe Discord en arriere-plan) resterait sur l'ecran
+  // de fin. Toutes les 5 s sur cet ecran, on regarde si la salle est repassee
+  // en attente sans partie : alors meme bascule que room:lobby.
+  useEffect(() => {
+    if (view !== "results" || mode === "streamer" || !room?.room_code) return
+    const code = room.room_code
+    const id = setInterval(() => {
+      api.roomState(code)
+        .then(latest => {
+          if (latest.room?.status === "waiting" && !latest.gameState) handlersRef.current.backToLobby?.({ roomCode: code })
+        })
+        .catch(() => { /* reseau : on reessaie au tour suivant */ })
+    }, 5000)
+    return () => clearInterval(id)
+  }, [view, mode, room?.room_code])
 
   // Filet anti-gel GUESSING : si le temps de la manche est ecoule depuis longtemps
   // et qu'on est toujours en train de "deviner", c'est qu'on a rate le reveal
@@ -713,6 +731,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         socket.off("game:game:over", handlersRef.current.gameOver)
       }
       if (handlersRef.current.gameLost) socket.off("game:lost", handlersRef.current.gameLost)
+      if (handlersRef.current.backToLobby) socket.off("room:lobby", handlersRef.current.backToLobby)
       if (handlersRef.current.roomError) socket.off("room:error", handlersRef.current.roomError)
       if (handlersRef.current.hostChange) socket.off("room:host", handlersRef.current.hostChange)
 
@@ -733,8 +752,8 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       const presenceHandler = (payload: RoomPresenceEvent) => {
         if (payload.roomCode !== roomCode) return
         if ((payload as { type?: string }).type === "members") {
-          const members = (payload as unknown as { members?: Array<{ userId: number; username: string | null; status: "active" | "away" | "disconnected" }> }).members ?? []
-          setParticipants(members.map(m => ({ user_id: m.userId, username: m.username ?? null, status: m.status })))
+          const members = (payload as unknown as { members?: Array<{ userId: number; username: string | null; status: "active" | "away" | "disconnected"; avatar?: string | null }> }).members ?? []
+          setParticipants(members.map(m => ({ user_id: m.userId, username: m.username ?? null, status: m.status, avatar: m.avatar ?? null })))
           return
         }
         if (payload.type === "joined") {
@@ -834,6 +853,8 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         round: number
         players: MultiplayerGameState["players"]
         timing: { startAt: number | null; revealAt: number | null }
+        // Ecran entre deux manches et son echeance (T38), decides par le serveur.
+        pacing?: MultiplayerGameState["pacing"]
         // Le serveur caviarde la piste pendant la manche (anti-triche) :
         // la version complete (titre/artiste/pochette) arrive AVEC le reveal.
         track?: MultiplayerGameState["currentTrack"]
@@ -854,6 +875,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
             currentTrack: payload.track ?? multi.currentTrack,
             players: payload.players,
             timing: payload.timing,
+            pacing: payload.pacing ?? null,
           }
         })
       }
@@ -891,6 +913,19 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         dispatchLobby({ type: viewToLobbyAction("landing") })
       }
 
+      // « Revenir à la salle » (T40) : l'hote a ramene tout le monde dans la salle
+      // d'attente. Meme salle, memes joueurs : on change d'ecran sans recharger
+      // (activite Discord), l'hote retrouve sa vue avec le bouton lancer.
+      const backToLobbyHandler = (payload: { roomCode: string }) => {
+        if (payload?.roomCode !== roomCode) return
+        const host = roomRef.current?.host_user_id != null && roomRef.current.host_user_id === userRef.current?.user?.id
+        setGameState(null)
+        setError(null)
+        setErrorAction(null)
+        setView(host ? "hosting" : "waiting")
+        dispatchLobby({ type: host ? "hosting" : "waiting" })
+      }
+
       // Chat listener is owned by the useRoomChat hook at component top-level.
 
       socket.on("room:presence", presenceHandler)
@@ -902,6 +937,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       socket.on("game:over", gameOverHandler)
       socket.on("game:game:over", gameOverHandler)
       socket.on("game:lost", gameLostHandler)
+      socket.on("room:lobby", backToLobbyHandler)
 
       const roomErrorHandler = (payload: { code?: string; message?: string }) => {
         const msg = payload?.message || "Une action a ete refusee par le serveur."
@@ -933,6 +969,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         roundReveal: roundRevealHandler,
         gameOver: gameOverHandler,
         gameLost: gameLostHandler,
+        backToLobby: backToLobbyHandler,
         roomError: roomErrorHandler,
         hostChange: hostChangeHandler,
       }
@@ -1530,23 +1567,23 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       <div className="grid min-h-screen place-items-center px-6 text-center">
         {rateLimited ? (
           <div className="max-w-sm space-y-3">
-            <p className="font-display text-xl font-semibold text-[#2e2014]">Un instant…</p>
-            <p className="text-sm text-[#6b573f]">Beaucoup de monde se connecte en même temps. On réessaie tout seul dans quelques secondes.</p>
-            <Loader2 className="mx-auto h-6 w-6 animate-spin text-[#c65133]" />
+            <p className="font-display text-xl font-semibold text-ink">Un instant…</p>
+            <p className="text-sm text-ink-2">Beaucoup de monde se connecte en même temps. On réessaie tout seul dans quelques secondes.</p>
+            <Loader2 className="mx-auto h-6 w-6 animate-spin text-terra-txt" />
           </div>
         ) : error ? (
           <div className="max-w-sm space-y-3">
-            <p className="text-sm font-semibold text-[#9c2f1d]">{error}</p>
+            <p className="text-sm font-semibold text-rouge-txt">{error}</p>
             <button
               type="button"
               onClick={() => (onRetry ? onRetry() : window.location.reload())}
-              className="rounded-md border-2 border-[#2e2014] bg-[#c65133] px-5 py-2.5 text-sm font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014]"
+              className="rounded-md border-2 border-line bg-terra px-5 py-2.5 text-sm font-bold text-on-ink shadow-[4px_4px_0_rgb(var(--c-shadow))]"
             >
               Réessayer
             </button>
           </div>
         ) : (
-          <Loader2 className="h-8 w-8 animate-spin text-[#c65133]" />
+          <Loader2 className="h-8 w-8 animate-spin text-terra-txt" />
         )}
       </div>
     )
@@ -1560,17 +1597,17 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
 
   if (isPendingIntent) {
     return (
-      <div className="grid min-h-screen place-items-center px-6 text-[#6b573f]">
+      <div className="grid min-h-screen place-items-center px-6 text-ink-2">
         <div className="space-y-3 text-center">
-          <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#c65133]" />
+          <Loader2 className="mx-auto h-8 w-8 animate-spin text-terra-txt" />
           <p className="text-sm">Préparation du lobby…</p>
-          <p className="text-xs text-[#8a7558]">
+          <p className="text-xs text-sourd">
             {joinRetrying ? "Le réseau traîne, on réessaie tout seul…" : "Si l’attente dure, reviens au menu et relance."}
           </p>
           <button
             type="button"
             onClick={handleLeaveRoom}
-            className="rounded-full border-[1.5px] border-[#2e2014] bg-transparent px-4 py-2 text-sm font-bold text-[#2e2014] hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+            className="rounded-full border-[1.5px] border-line bg-transparent px-4 py-2 text-sm font-bold text-ink hover:bg-ink-block hover:text-on-ink"
           >
             Retour au menu
           </button>
@@ -1652,11 +1689,11 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
 
   const loadingGame =
     view === "playing" && room && !gameState ? (
-      <div className="grid min-h-[50vh] place-items-center text-center text-sm text-[#6b573f]">
+      <div className="grid min-h-[50vh] place-items-center text-center text-sm text-ink-2">
         <div className="space-y-3">
-          <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#c65133]" />
+          <Loader2 className="mx-auto h-8 w-8 animate-spin text-terra-txt" />
           <p>Synchronisation de la partie…</p>
-          <p className="text-xs text-[#8a7558]">Si rien ne se passe, reste sur cette page quelques secondes.</p>
+          <p className="text-xs text-sourd">Si rien ne se passe, reste sur cette page quelques secondes.</p>
         </div>
       </div>
     ) : null
@@ -1736,14 +1773,14 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
             })
             return true
           }}
-          onReady={() => {
+          onNext={(round, step) => {
             const socket = socketRef.current
             if (!socket || !socket.connected) {
               showNotice("Connexion perdue. Reconnexion…")
               ensureSocket()
               return
             }
-            socket.emit("game:ready", { roomCode: room.room_code })
+            socket.emit("game:next", { roomCode: room.room_code, round, step })
           }}
           onPauseToggle={() => {
             const socket = socketRef.current
@@ -1755,15 +1792,6 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
           modeConfig={modeConfig}
           accentColor={accentColor}
           onExit={handleLeaveRoom}
-          onRematch={isHost ? () => runExclusive(restartingRef, async () => {
-            try {
-              const { tracks: newTracks, gameState: newState } = await api.startMultiplayerGame(room.room_code, { source: "library" })
-              setTracks(newTracks)
-              if (newState) setGameState(newState)
-            } catch (err) {
-              console.error("rematch_failed", err)
-            }
-          }) : undefined}
           chatMessages={chatMessages}
           spectators={spectators}
           onSendChat={sendChat}
@@ -1791,6 +1819,21 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         // jusqu'au Rejouer de l'hote, le bouton grise le dit deja.
         onReturn={onLeave ? undefined : () => router.replace("/modes")}
         onEditMusic={openMusic}
+        onBackToLobby={isHost ? () => runExclusive(restartingRef, async () => {
+          if (!room) return
+          try {
+            setError(null)
+            await api.backToLobby(room.room_code)
+            // Les autres changent d'ecran a la reception de room:lobby ; l'hote
+            // tout de suite, meme si son socket vient de couper.
+            setGameState(null)
+            setView("hosting")
+            dispatchLobby({ type: "hosting" })
+          } catch (err) {
+            console.error("back_to_lobby_failed", err)
+            setError(err instanceof ApiError && err.message ? err.message : "Impossible de revenir à la salle. Réessaie.")
+          }
+        }) : undefined}
         onReplay={() => runExclusive(restartingRef, async () => {
           if (!room || !isHost) return
           // Les resultats d'avant, pour y revenir si la revanche ne part pas.
@@ -1850,8 +1893,8 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         {socketNotice ? (
           <div
             role={noticeTone === "alert" ? "alert" : "status"}
-            className={`flex items-center justify-between gap-3 rounded-md border-2 bg-[#efe5d0] px-4 py-3 text-sm font-semibold shadow-[4px_4px_0_rgba(46,32,20,.18)] ${
-              noticeTone === "alert" ? "border-[#9c2f1d] text-[#9c2f1d]" : "border-[#2e2014] text-[#2e2014]"
+            className={`flex items-center justify-between gap-3 rounded-md border-2 bg-well px-4 py-3 text-sm font-semibold shadow-[4px_4px_0_rgb(var(--c-shadow)/.18)] ${
+              noticeTone === "alert" ? "border-rouge-txt text-rouge-txt" : "border-line text-ink"
             }`}
           >
             <span>{socketNotice}</span>
@@ -1868,7 +1911,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
           aussi quand le lancement bloque faute de musique. */}
       {showMusicImport ? (
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-[#2e2014]/40 p-4"
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-scrim/40 p-4"
           onClick={() => setShowMusicImport(false)}
         >
           <div
@@ -1876,27 +1919,27 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
             aria-modal="true"
             aria-label="Ta musique"
             data-testid="musique-salle"
-            className="max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-md border-2 border-[#2e2014] bg-[#f4ecdb] p-5 shadow-[6px_6px_0_rgba(46,32,20,.25)]"
+            className="max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-md border-2 border-line bg-paper p-5 shadow-[6px_6px_0_rgb(var(--c-shadow)/.25)]"
             onClick={e => e.stopPropagation()}
           >
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="m-0 font-display text-lg font-semibold text-[#2e2014]">Ta musique</h3>
+              <h3 className="m-0 font-display text-lg font-semibold text-ink">Ta musique</h3>
               <button
                 type="button"
                 onClick={() => setShowMusicImport(false)}
                 aria-label="Fermer"
-                className="flex h-8 w-8 items-center justify-center rounded-full border-[1.5px] border-[#2e2014] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+                className="flex h-8 w-8 items-center justify-center rounded-full border-[1.5px] border-line text-ink transition hover:bg-ink-block hover:text-on-ink"
               >
                 ✕
               </button>
             </div>
-            <p className="mb-4 text-sm text-[#6b573f]">
+            <p className="mb-4 text-sm text-ink-2">
               Colle un lien Spotify, Deezer ou YouTube, ou choisis la playlist qui doit passer. Tu restes dans la salle avec les autres : la prochaine partie prendra ta nouvelle musique.
             </p>
             <div className="max-h-[220px] overflow-y-auto pr-1">
               <MusicLibrary accent={accentColor ?? "#c65133"} refreshSignal={musicRefresh} />
             </div>
-            <div className="mt-4 border-t-2 border-dotted border-[rgba(46,32,20,.35)] pt-4">
+            <div className="mt-4 border-t-2 border-dotted border-[rgb(var(--c-line)/.35)] pt-4">
               <ProfileImportBlock
                 accent={mode === "event" ? "#e0a32e" : mode === "streamer" ? "#7d9471" : "#c65133"}
                 initialUrl={initialProfileUrl ?? undefined}
@@ -1908,7 +1951,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
             <button
               type="button"
               onClick={() => { setShowMusicImport(false); setError(null); setErrorAction(null) }}
-              className="mt-4 w-full rounded-md border-2 border-[#2e2014] bg-[#ece1c8] px-4 py-2.5 text-sm font-bold text-[#2e2014] transition hover:bg-[#e0d4ba]"
+              className="mt-4 w-full rounded-md border-2 border-line bg-paper-deep px-4 py-2.5 text-sm font-bold text-ink transition hover:bg-paper-strong"
             >
               C'est bon, revenir à la salle
             </button>

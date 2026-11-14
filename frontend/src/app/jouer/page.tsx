@@ -1,5 +1,6 @@
 "use client"
 
+import { ThemeButton } from "@/components/ThemeButton"
 import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { ArrowLeft, ArrowRight, Plus, LogIn, Check, ExternalLink, Loader2 } from "lucide-react"
@@ -12,6 +13,8 @@ import { findHostedRoom } from "@/lib/hostedRooms"
 import { ApiError } from "@/lib/apiClient"
 import { createRoute, parsePreferredMode, situationFor, type SituationMode } from "@/lib/playSituations"
 import { InAppBrowserNote } from "@/components/account/InAppBrowserNote"
+import { PhotoPicker } from "@/components/account/PhotoPicker"
+import { useProfilePhoto } from "@/components/account/useProfilePhoto"
 
 const NAME_KEY = "blindify_nickname"
 const URL_KEY = "blindify_profile_url"
@@ -26,13 +29,18 @@ function Shell({ dots, index, onBack, wide, children }: { dots: number; index: n
           <img
             src={publicPath("/logo-mark.png")}
             alt="Blindz"
-            className="h-8 w-8 object-contain sm:h-10 sm:w-10"
+            className="h-8 w-8 object-contain sm:h-10 sm:w-10 dark:hidden"
+          />
+          <img
+            src={publicPath("/logo-mark-nuit.png")}
+            alt="Blindz"
+            className="h-8 w-8 object-contain sm:h-10 sm:w-10 hidden dark:block"
           />
           {onBack ? (
             <button
               type="button"
               onClick={onBack}
-              className="flex items-center gap-1 rounded-full border-[1.5px] border-[#2e2014] bg-[#ece1c8] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb] sm:gap-1.5 sm:px-3 sm:py-1.5 sm:text-[11px] sm:tracking-[0.14em]"
+              className="flex items-center gap-1 rounded-full border-[1.5px] border-line bg-paper-deep px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-ink transition hover:bg-ink-block hover:text-on-ink sm:gap-1.5 sm:px-3 sm:py-1.5 sm:text-[11px] sm:tracking-[0.14em]"
             >
               <ArrowLeft size={11} />
               Retour
@@ -54,12 +62,14 @@ function Shell({ dots, index, onBack, wide, children }: { dots: number; index: n
         {/* La FAQ en petit rond « ? » dans le coin (demande de Tym, 05/11) : le lien
             texte sous le bouton chargeait l'ecran. Reste un vrai lien, decouvrable
             par les crawlers (le sitemap ne suffit pas toujours). */}
+        {/* Rond clair / sombre (T30), range au-dessus du « ? ». */}
+        <ThemeButton className="fixed bottom-16 right-4 z-30 sm:bottom-[4.5rem] sm:right-6" />
         <a
           href={publicPath("/faq/")}
           aria-label="Questions fréquentes"
           title="Questions fréquentes"
           data-testid="jouer-faq"
-          className="fixed bottom-4 right-4 z-30 flex h-9 w-9 items-center justify-center rounded-full border-[1.5px] border-[#2e2014] bg-[#ece1c8] font-display text-base font-bold text-[#2e2014] shadow-[2px_2px_0_#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb] sm:bottom-6 sm:right-6"
+          className="fixed bottom-4 right-4 z-30 flex h-9 w-9 items-center justify-center rounded-full border-[1.5px] border-line bg-paper-deep font-display text-base font-bold text-ink shadow-[2px_2px_0_rgb(var(--c-shadow))] transition hover:bg-ink-block hover:text-on-ink sm:bottom-6 sm:right-6"
         >
           ?
         </a>
@@ -86,6 +96,11 @@ export default function EntryWizard() {
   const [tuto, setTuto] = useState<null | "spotify" | "deezer">(null)
   const nameRef = useRef<HTMLInputElement>(null)
   const codeRef = useRef<HTMLInputElement>(null)
+  // Photo de profil facultative (T39). Le joueur n'existe cote serveur qu'une
+  // fois son pseudo connu : avant, la photo choisie attend le « Continuer ».
+  const photo = useProfilePhoto()
+  const { setOnline: setOnlinePhoto } = photo
+  const [registered, setRegistered] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -106,10 +121,16 @@ export default function EntryWizard() {
     // qui revient (pseudo en memoire) retrouve bien sa session tout de suite.
     ;(async () => {
       if (!storedName.trim()) return
-      try { await api.ensureUserSession(storedName.trim()) } catch { /* ignore */ }
+      try {
+        const me = await api.ensureUserSession(storedName.trim())
+        if (active && me?.user) {
+          setRegistered(true)
+          setOnlinePhoto(me.user.avatar ?? null)
+        }
+      } catch { /* ignore */ }
     })()
     return () => { active = false }
-  }, [])
+  }, [setOnlinePhoto])
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -129,7 +150,27 @@ export default function EntryWizard() {
     const pseudo = name.trim()
     if (!pseudo) return
     try { localStorage.setItem(NAME_KEY, pseudo) } catch { /* ignore */ }
-    try { await api.ensureUserSession(pseudo) } catch { /* ignore */ }
+    try {
+      const me = await api.ensureUserSession(pseudo)
+      if (me?.user) setRegistered(true)
+    } catch { /* ignore */ }
+  }
+
+  // Premier ecran : sans photo en attente, on avance tout de suite comme avant.
+  // Avec une photo, on l'envoie d'abord ; si l'envoi rate, on reste ici avec le
+  // message, et le joueur peut reessayer ou retirer la photo.
+  const leaving = useRef(false)
+  const leaveNameStep = async () => {
+    if (!photo.hasPending) { void ensureName(); setStep("musique"); return }
+    // Un second clic ou Entree pendant l'envoi ne relance pas tout.
+    if (leaving.current) return
+    leaving.current = true
+    try {
+      await ensureName()
+      if (await photo.sendPending()) setStep("musique")
+    } finally {
+      leaving.current = false
+    }
   }
 
   // Importe la musique puis affiche la confirmation. Le meme bouton sert ensuite a continuer.
@@ -244,36 +285,43 @@ export default function EntryWizard() {
       <Shell dots={3} index={0} onBack={null}>
         <div className="space-y-3 text-center">
           {/* Phrase de positionnement (SEO + les visiteurs comprennent direct) */}
-          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#c65133]">
+          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-terra-txt">
             Le blind test avec tes propres musiques
           </p>
-          <h1 className="font-display text-3xl font-semibold text-[#2e2014] sm:text-4xl">
-            Comment tu t'<em className="font-medium italic text-[#c65133]">appelles</em> ?
+          <h1 className="font-display text-3xl font-semibold text-ink sm:text-4xl">
+            Comment tu t'<em className="font-medium italic text-terra-txt">appelles</em> ?
           </h1>
-          <p className="text-sm text-[#6b573f]">C'est le nom que les autres verront.</p>
+          <p className="text-sm text-ink-2">C'est le nom que les autres verront.</p>
           <InAppBrowserNote className="mx-auto max-w-xs pt-1" />
         </div>
-        <div className="mt-10 space-y-6">
+        <div className="mt-8 space-y-6">
+          <PhotoPicker
+            src={photo.src}
+            busy={photo.busy}
+            error={photo.error}
+            onPick={file => { void photo.pick(file, registered) }}
+            onRemove={() => { void photo.remove() }}
+          />
           <input
             ref={nameRef}
             value={name}
             onChange={e => setName(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter" && ok) { void ensureName(); setStep("musique") } }}
+            onKeyDown={e => { if (e.key === "Enter" && ok && !photo.busy) void leaveNameStep() }}
             placeholder="Ton nom"
             maxLength={24}
-            className="w-full border-0 border-b-2 border-[#2e2014] bg-transparent px-2 py-3 text-center font-display text-2xl text-[#2e2014] outline-none placeholder:italic placeholder:text-[#b3a182] focus:border-[#c65133]"
+            className="w-full border-0 border-b-2 border-line bg-transparent px-2 py-3 text-center font-display text-2xl text-ink outline-none placeholder:italic placeholder:text-pale focus:border-terra"
             autoComplete="off"
           />
           <button
             type="button"
-            disabled={!ok}
+            disabled={!ok || photo.busy}
             /* On enregistre le joueur des que son pseudo est valide. Attendre
                l'etape suivante laissait sans identite quiconque saute l'import
                de musique, et le pseudo est deja connu ici. */
-            onClick={() => { void ensureName(); setStep("musique") }}
-            className="flex w-full items-center justify-center gap-2 rounded-md border-2 border-[#2e2014] bg-[#c65133] px-5 py-4 text-sm font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#2e2014] disabled:cursor-not-allowed disabled:opacity-40"
+            onClick={() => { void leaveNameStep() }}
+            className="flex w-full items-center justify-center gap-2 rounded-md border-2 border-line bg-terra px-5 py-4 text-sm font-bold text-on-ink shadow-[4px_4px_0_rgb(var(--c-shadow))] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgb(var(--c-shadow))] disabled:cursor-not-allowed disabled:opacity-40"
           >
-            Continuer
+            {photo.busy && photo.hasPending ? "Envoi de ta photo..." : "Continuer"}
             <ArrowRight size={15} />
           </button>
           {/* Pas pour un QR scanne : ce joueur rejoint une partie deja lancee. */}
@@ -304,10 +352,10 @@ export default function EntryWizard() {
     return (
       <Shell dots={3} index={1} onBack={() => setStep("nom")} wide>
         <div className="space-y-3 text-center">
-          <h1 className="font-display text-3xl font-semibold text-[#2e2014] sm:text-4xl">
-            Ta <em className="font-medium italic text-[#c65133]">musique</em>
+          <h1 className="font-display text-3xl font-semibold text-ink sm:text-4xl">
+            Ta <em className="font-medium italic text-terra-txt">musique</em>
           </h1>
-          <p className="text-sm text-[#6b573f]">Colle ton lien Spotify, Deezer ou YouTube pour jouer avec tes propres titres.</p>
+          <p className="text-sm text-ink-2">Colle ton lien Spotify, Deezer ou YouTube pour jouer avec tes propres titres.</p>
         </div>
         {/* Sur PC : saisie a gauche, aides/tutos en colonne a droite. Mobile : pile inchangee. */}
         <div className="mt-9 lg:grid lg:grid-cols-[minmax(0,1fr)_320px] lg:grid-rows-[auto_1fr] lg:items-start lg:gap-x-10">
@@ -317,21 +365,21 @@ export default function EntryWizard() {
               onChange={e => { setUrl(e.target.value); setSynced(null); setImportError(null) }}
               onKeyDown={e => { if (e.key === "Enter") onPrimary() }}
               placeholder="https://open.spotify.com/..."
-              className="w-full rounded-md border-2 border-[#2e2014] bg-[#efe5d0] py-5 pl-4 pr-24 text-base text-[#2e2014] outline-none transition placeholder:italic placeholder:text-[#b3a182] focus:border-[#c65133]"
+              className="w-full rounded-md border-2 border-line bg-well py-5 pl-4 pr-24 text-base text-ink outline-none transition placeholder:italic placeholder:text-pale focus:border-terra"
               autoComplete="off"
               inputMode="url"
             />
             <button
               type="button"
               onClick={handlePaste}
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md border-2 border-[#2e2014] bg-[#ece1c8] px-3 py-2 text-[13px] font-bold text-[#2e2014] shadow-[2px_2px_0_#2e2014] transition active:translate-x-[1px] active:translate-y-[1px] active:shadow-[1px_1px_0_#2e2014]"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md border-2 border-line bg-paper-deep px-3 py-2 text-[13px] font-bold text-ink shadow-[2px_2px_0_rgb(var(--c-shadow))] transition active:translate-x-[1px] active:translate-y-[1px] active:shadow-[1px_1px_0_rgb(var(--c-shadow))]"
             >
               Coller
             </button>
           </div>
 
-          <div className="mt-5 space-y-2.5 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:mt-0 lg:rounded-md lg:border-[1.5px] lg:border-[rgba(46,32,20,.25)] lg:bg-[#ece1c8] lg:p-5">
-            <p className="text-center text-[12px] text-[#6b573f]">Besoin de ton lien&nbsp;?</p>
+          <div className="mt-5 space-y-2.5 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:mt-0 lg:rounded-md lg:border-[1.5px] lg:border-[rgb(var(--c-line)/.25)] lg:bg-paper-deep lg:p-5">
+            <p className="text-center text-[12px] text-ink-2">Besoin de ton lien&nbsp;?</p>
             <div className="flex flex-wrap justify-center gap-2">
               {/* Nouvel onglet : on ne perd JAMAIS le wizard Blindz derriere. Le rebond
                   app<->web est le comportement de Spotify/Deezer, pas le notre. */}
@@ -339,7 +387,7 @@ export default function EntryWizard() {
                 href="https://open.spotify.com/collection/playlists"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 rounded-full border-[1.5px] border-[#2e2014] bg-[#ece1c8] px-3 py-1.5 text-[12px] font-bold text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+                className="inline-flex items-center gap-1 rounded-full border-[1.5px] border-line bg-paper-deep px-3 py-1.5 text-[12px] font-bold text-ink transition hover:bg-ink-block hover:text-on-ink"
               >
                 Ouvrir Spotify <ExternalLink className="h-3 w-3" />
               </a>
@@ -347,23 +395,23 @@ export default function EntryWizard() {
                 href="https://www.deezer.com/"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 rounded-full border-[1.5px] border-[#2e2014] bg-[#ece1c8] px-3 py-1.5 text-[12px] font-bold text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+                className="inline-flex items-center gap-1 rounded-full border-[1.5px] border-line bg-paper-deep px-3 py-1.5 text-[12px] font-bold text-ink transition hover:bg-ink-block hover:text-on-ink"
               >
                 Ouvrir Deezer <ExternalLink className="h-3 w-3" />
               </a>
             </div>
             <div className="flex justify-center gap-4 text-[12px] font-semibold">
-              <button type="button" onClick={() => setTuto(t => (t === "spotify" ? null : "spotify"))} className="underline decoration-[1.5px] underline-offset-2 text-[#6b573f] transition hover:text-[#2e2014]">
+              <button type="button" onClick={() => setTuto(t => (t === "spotify" ? null : "spotify"))} className="underline decoration-[1.5px] underline-offset-2 text-ink-2 transition hover:text-ink">
                 Comment copier mon lien Spotify&nbsp;?
               </button>
             </div>
             <div className="flex justify-center text-[12px] font-semibold">
-              <button type="button" onClick={() => setTuto(t => (t === "deezer" ? null : "deezer"))} className="underline decoration-[1.5px] underline-offset-2 text-[#6b573f] transition hover:text-[#2e2014]">
+              <button type="button" onClick={() => setTuto(t => (t === "deezer" ? null : "deezer"))} className="underline decoration-[1.5px] underline-offset-2 text-ink-2 transition hover:text-ink">
                 Comment copier mon lien Deezer&nbsp;?
               </button>
             </div>
             {tuto && (
-              <ol className="mx-auto max-w-sm space-y-1.5 rounded-xl border-[1.5px] border-[#2e2014] bg-[#ece1c8] p-4 text-left text-[13px] text-[#6b573f]">
+              <ol className="mx-auto max-w-sm space-y-1.5 rounded-xl border-[1.5px] border-line bg-paper-deep p-4 text-left text-[13px] text-ink-2">
                 {(tuto === "spotify"
                   ? [
                       "Ouvre Spotify et va sur ton profil (ton nom en haut).",
@@ -379,7 +427,7 @@ export default function EntryWizard() {
                     ]
                 ).map((s, i) => (
                   <li key={i} className="flex gap-2">
-                    <span className="font-bold text-[#c65133]">{i + 1}.</span>
+                    <span className="font-bold text-terra-txt">{i + 1}.</span>
                     <span>{s}</span>
                   </li>
                 ))}
@@ -388,9 +436,9 @@ export default function EntryWizard() {
           </div>
 
           <div className="mt-5 space-y-4 lg:col-start-1 lg:row-start-2">
-          {importError && <p className="text-center text-[12px] font-bold text-[#9c2f1d]">{importError}</p>}
+          {importError && <p className="text-center text-[12px] font-bold text-rouge-txt">{importError}</p>}
           {formatError && !importError && (
-            <p className="text-center text-[12px] font-bold text-[#9c2f1d]">
+            <p className="text-center text-[12px] font-bold text-rouge-txt">
               {recognition.kind === "refused"
                 ? YOUTUBE_REFUSAL[recognition.reason]
                 : "Lien non reconnu. Mets un lien de playlist Spotify, Deezer ou YouTube, ou de profil Spotify ou Deezer."}
@@ -402,10 +450,10 @@ export default function EntryWizard() {
             type="button"
             disabled={importing || going || formatError}
             onClick={onPrimary}
-            className={`flex w-full items-center justify-center gap-2 overflow-hidden rounded-md border-2 border-[#2e2014] px-5 py-4 text-base font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] transition-all duration-300 disabled:cursor-default ${
+            className={`flex w-full items-center justify-center gap-2 overflow-hidden rounded-md border-2 border-line px-5 py-4 text-base font-bold text-on-ink shadow-[4px_4px_0_rgb(var(--c-shadow))] transition-all duration-300 disabled:cursor-default ${
               synced !== null
-                ? "scale-[1.02] bg-[#7d9471] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#2e2014]"
-                : "bg-[#c65133] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#2e2014] disabled:opacity-60"
+                ? "scale-[1.02] bg-sage hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgb(var(--c-shadow))]"
+                : "bg-terra hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgb(var(--c-shadow))] disabled:opacity-60"
             }`}
           >
             {synced !== null ? (
@@ -430,9 +478,9 @@ export default function EntryWizard() {
             )}
           </button>
           {synced !== null && youtube && youtubeDetail(youtube) && (
-            <p className="text-center text-[12px] text-[#6b573f]" role="status">{youtubeDetail(youtube)}</p>
+            <p className="text-center text-[12px] text-ink-2" role="status">{youtubeDetail(youtube)}</p>
           )}
-          <p className="text-center text-[11px] text-[#8a7558]">
+          <p className="text-center text-[11px] text-sourd">
             Pas de lien ? Tu peux continuer : il suffit qu&apos;une personne ramène une playlist (2 joueurs minimum).
           </p>
           </div>
@@ -446,10 +494,10 @@ export default function EntryWizard() {
     return (
       <Shell dots={3} index={2} onBack={() => setStep("musique")}>
         <div className="space-y-3 text-center">
-          <h1 className="font-display text-3xl font-semibold text-[#2e2014] sm:text-4xl">
-            Tu veux <em className="font-medium italic text-[#c65133]">jouer</em> comment ?
+          <h1 className="font-display text-3xl font-semibold text-ink sm:text-4xl">
+            Tu veux <em className="font-medium italic text-terra-txt">jouer</em> comment ?
           </h1>
-          <p className="text-sm text-[#6b573f]">
+          <p className="text-sm text-ink-2">
             {preferredMode
               ? `Tu crées une partie « ${situationFor(preferredMode).modeName} », ou tu rejoins celle d'un ami.`
               : "Lance une nouvelle partie, ou rejoins celle d'un ami."}
@@ -460,7 +508,7 @@ export default function EntryWizard() {
             type="button"
             disabled={going}
             onClick={handleCreate}
-            className={`flex w-full items-center justify-between gap-3 rounded-md border-2 border-[#2e2014] bg-[#c65133] px-5 py-4 text-left font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#2e2014] disabled:cursor-default disabled:opacity-100 ${going ? "animate-pulse" : ""}`}
+            className={`flex w-full items-center justify-between gap-3 rounded-md border-2 border-line bg-terra px-5 py-4 text-left font-bold text-on-ink shadow-[4px_4px_0_rgb(var(--c-shadow))] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgb(var(--c-shadow))] disabled:cursor-default disabled:opacity-100 ${going ? "animate-pulse" : ""}`}
           >
             {going ? (
               <span className="flex w-full items-center justify-center gap-2">
@@ -477,17 +525,17 @@ export default function EntryWizard() {
             type="button"
             disabled={going}
             onClick={() => setStep("code")}
-            className="flex w-full items-center justify-between gap-3 rounded-md border-2 border-[#2e2014] bg-[#ece1c8] px-5 py-4 text-left font-bold text-[#2e2014] shadow-[4px_4px_0_rgba(46,32,20,.22)] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgba(46,32,20,.22)] disabled:opacity-50"
+            className="flex w-full items-center justify-between gap-3 rounded-md border-2 border-line bg-paper-deep px-5 py-4 text-left font-bold text-ink shadow-[4px_4px_0_rgb(var(--c-shadow)/.22)] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgb(var(--c-shadow)/.22)] disabled:opacity-50"
           >
             <span className="flex items-center gap-3"><LogIn size={18} /> Rejoindre avec un code</span>
             <ArrowRight size={16} />
           </button>
           {preferredMode ? (
-            <p className="pt-2 text-center text-[12px] text-[#8a7558]">
+            <p className="pt-2 text-center text-[12px] text-sourd">
               <button
                 type="button"
                 onClick={() => setPreferredMode(null)}
-                className="underline decoration-[1.5px] underline-offset-2 transition hover:text-[#2e2014]"
+                className="underline decoration-[1.5px] underline-offset-2 transition hover:text-ink"
               >
                 Voir les autres façons de jouer
               </button>
@@ -502,10 +550,10 @@ export default function EntryWizard() {
   return (
     <Shell dots={4} index={3} onBack={() => { setCode(""); setCodeError(null); setStep("action") }}>
       <div className="space-y-3 text-center">
-        <h1 className="font-display text-3xl font-semibold text-[#2e2014] sm:text-4xl">
-          Le <em className="font-medium italic text-[#c65133]">code</em> de la partie
+        <h1 className="font-display text-3xl font-semibold text-ink sm:text-4xl">
+          Le <em className="font-medium italic text-terra-txt">code</em> de la partie
         </h1>
-        <p className="text-sm text-[#6b573f]">Demande-le à la personne qui a créé la partie.</p>
+        <p className="text-sm text-ink-2">Demande-le à la personne qui a créé la partie.</p>
       </div>
       <div className="mt-10 space-y-4">
         <input
@@ -514,15 +562,15 @@ export default function EntryWizard() {
           onChange={e => { setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8)); setCodeError(null) }}
           onKeyDown={e => { if (e.key === "Enter") handleJoin() }}
           placeholder="CODE"
-          className="w-full rounded-md border-2 border-[#2e2014] bg-[#efe5d0] px-4 py-4 text-center font-display text-3xl font-semibold uppercase tracking-[0.4em] text-[#2e2014] outline-none placeholder:text-base placeholder:tracking-[0.2em] placeholder:italic placeholder:text-[#b3a182] focus:border-[#c65133]"
+          className="w-full rounded-md border-2 border-line bg-well px-4 py-4 text-center font-display text-3xl font-semibold uppercase tracking-[0.4em] text-ink outline-none placeholder:text-base placeholder:tracking-[0.2em] placeholder:italic placeholder:text-pale focus:border-terra"
           autoComplete="off"
         />
-        {codeError && <p className="text-center text-[12px] font-bold text-[#9c2f1d]">{codeError}</p>}
+        {codeError && <p className="text-center text-[12px] font-bold text-rouge-txt">{codeError}</p>}
         <button
           type="button"
           disabled={going || code.trim().length < 4}
           onClick={handleJoin}
-          className="flex w-full items-center justify-center gap-2 rounded-md border-2 border-[#2e2014] bg-[#c65133] px-5 py-4 text-sm font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#2e2014] disabled:cursor-not-allowed disabled:opacity-40"
+          className="flex w-full items-center justify-center gap-2 rounded-md border-2 border-line bg-terra px-5 py-4 text-sm font-bold text-on-ink shadow-[4px_4px_0_rgb(var(--c-shadow))] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgb(var(--c-shadow))] disabled:cursor-not-allowed disabled:opacity-40"
         >
           {going ? "Connexion..." : "Rejoindre"}
           {!going && <ArrowRight size={15} />}

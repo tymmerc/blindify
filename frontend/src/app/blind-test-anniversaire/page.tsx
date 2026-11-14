@@ -78,7 +78,7 @@ export default function Page() {
     <GuideShell
       tag="Guide anniversaire"
       tagColor={AMBER}
-      title={<>Un blind test pour un <em className="font-medium italic text-[#cc4830]">anniversaire</em></>}
+      title={<>Un blind test pour un <em className="font-medium italic text-vermillon-txt">anniversaire</em></>}
       intro="Le principe reste celui d'une soirée normale : chaque invité ramène sa playlist et la partie se fabrique toute seule. Sauf qu'ici il y a quelqu'un à fêter. Voilà comment tourner le blind test vers lui ou vers elle, pour qu'on ne parle pas seulement de musique."
       updated="5 octobre 2026"
       currentHref="/blind-test-anniversaire/"
@@ -138,10 +138,10 @@ export default function Page() {
           deux ou trois parties, une playlist de trente ou quarante chansons n'est pas de trop.
         </p>
         <ul>
-          <Li color="#2e2014"><span>La musique démarre quand tous les doigts sont posés. Le premier qui lâche prend le téléphone et tape sa réponse.</span></Li>
-          <Li color="#2e2014"><span>Titre et artiste : 3 points, l'un des deux seulement : 1 point. Parties de 5, 10 ou 15 manches, et 5 manches suffisent aux plus petits.</span></Li>
-          <Li color="#2e2014"><span>La correction tolère les fautes de frappe et les accents oubliés, ce qui aide beaucoup à huit ans.</span></Li>
-          <Li color="#2e2014"><span>Plus de cinq enfants ? On fait tourner les équipes entre deux parties.</span></Li>
+          <Li color="var(--line)"><span>La musique démarre quand tous les doigts sont posés. Le premier qui lâche prend le téléphone et tape sa réponse.</span></Li>
+          <Li color="var(--line)"><span>Titre et artiste : 3 points, l'un des deux seulement : 1 point. Parties de 5, 10 ou 15 manches, et 5 manches suffisent aux plus petits.</span></Li>
+          <Li color="var(--line)"><span>La correction tolère les fautes de frappe et les accents oubliés, ce qui aide beaucoup à huit ans.</span></Li>
+          <Li color="var(--line)"><span>Plus de cinq enfants ? On fait tourner les équipes entre deux parties.</span></Li>
         </ul>
       </Section>
 

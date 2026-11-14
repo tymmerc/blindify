@@ -27,9 +27,10 @@ export type SpectatorEvent =
   | { type: "init"; payload: { roomCode: string; mode: string; discord?: boolean; expiresAt: number; members: SpectatorMember[]; serverTimestamp?: number }; now: number }
   | { type: "game:state"; payload: MultiplayerGameState }
   | { type: "game:round:start"; payload: { roomCode: string; round: number; track: MultiplayerGameState["currentTrack"]; timing: MultiplayerGameState["timing"] } }
-  | { type: "game:round:reveal"; payload: { roomCode: string; round: number; track?: MultiplayerGameState["currentTrack"]; timing: MultiplayerGameState["timing"]; players: MultiplayerGameState["players"] } }
+  | { type: "game:round:reveal"; payload: { roomCode: string; round: number; track?: MultiplayerGameState["currentTrack"]; timing: MultiplayerGameState["timing"]; players: MultiplayerGameState["players"]; pacing?: MultiplayerGameState["pacing"] } }
   | { type: "game:over"; payload: { roomCode: string; players: MultiplayerGameState["players"] } }
   | { type: "room:presence"; payload: { roomCode?: string; type?: string; members?: SpectatorMember[] } }
+  | { type: "room:lobby"; payload: { roomCode: string } }
   | { type: "error"; code: SpectatorErrorCode }
 
 export const initialSpectatorView: SpectatorView = {
@@ -84,13 +85,18 @@ export function spectatorReducer(view: SpectatorView, event: SpectatorEvent): Sp
       if (!view.game || !sameRoom(view, p.roomCode)) return view
       return {
         ...view,
-        game: { ...view.game, phase: "REVEAL", currentRound: p.round, currentTrack: p.track ?? view.game.currentTrack, timing: p.timing, players: p.players },
+        game: { ...view.game, phase: "REVEAL", currentRound: p.round, currentTrack: p.track ?? view.game.currentTrack, timing: p.timing, players: p.players, pacing: p.pacing ?? null },
       }
     }
     case "game:over": {
       const p = event.payload
       if (!view.game || !sameRoom(view, p.roomCode)) return view
       return { ...view, game: { ...view.game, phase: "FINISHED", players: p.players } }
+    }
+    case "room:lobby": {
+      // Retour a la salle d'attente (T40) : on remontre les membres, plus le podium.
+      if (!view.game || !sameRoom(view, event.payload?.roomCode)) return view
+      return { ...view, game: null }
     }
     case "room:presence": {
       const p = event.payload

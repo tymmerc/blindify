@@ -67,7 +67,7 @@ describe("T35 : extrait illisible en pleine partie", () => {
     audio.play.mockRejectedValue(notSupported())
     const onPreviewBroken = vi.fn()
     const now = Date.now()
-    const props = { user, serverNow: now, onAnswer: vi.fn(), onReady: vi.fn(), mode: "event" as const, onPreviewBroken }
+    const props = { user, serverNow: now, onAnswer: vi.fn(), mode: "event" as const, onPreviewBroken }
     const { rerender } = render(<MultiplayerGameClient {...props} state={guessing(18, "https://cdnt-preview.dzcdn.net/mort.mp3", now)} />)
     await act(async () => { await Promise.resolve() })
     expect(onPreviewBroken).toHaveBeenCalledWith(18)
@@ -88,9 +88,32 @@ describe("T35 : extrait illisible en pleine partie", () => {
     audio.play.mockRejectedValue(Object.assign(new Error("blocked"), { name: "NotAllowedError" }))
     const onPreviewBroken = vi.fn()
     const now = Date.now()
-    render(<MultiplayerGameClient user={user} serverNow={now} onAnswer={vi.fn()} onReady={vi.fn()} mode="event" onPreviewBroken={onPreviewBroken} state={guessing(3, "https://cdnt-preview.dzcdn.net/ok.mp3", now)} />)
+    render(<MultiplayerGameClient user={user} serverNow={now} onAnswer={vi.fn()} mode="event" onPreviewBroken={onPreviewBroken} state={guessing(3, "https://cdnt-preview.dzcdn.net/ok.mp3", now)} />)
     await act(async () => { await Promise.resolve() })
     expect(onPreviewBroken).not.toHaveBeenCalled()
     expect(screen.getAllByTitle("Lancer la musique").length).toBeGreaterThan(0)
+  })
+})
+
+describe("Autour d'une table : le chat en bulle, plus de colonne de droite", () => {
+  const chat = [{ userId: 1, username: "joueur", message: "qui a mis ca", timestamp: 1 }]
+
+  it("chez un joueur : la bulle, sans l'ancien bloc « Face B · Classement »", async () => {
+    audio.play.mockResolvedValue({})
+    const now = Date.now()
+    const joueur = { id: 2, username: "hote", provider: "guest" } as never
+    render(<MultiplayerGameClient user={joueur} serverNow={now} onAnswer={vi.fn()} mode="event" chatMessages={chat} onSendChat={vi.fn()} state={guessing(2, "https://cdnt-preview.dzcdn.net/ok.mp3", now)} />)
+    await act(async () => { await Promise.resolve() })
+    expect(screen.queryByText(/Face B/)).toBeNull()
+    expect(screen.queryByText(/Entre deux manches/)).toBeNull()
+    expect(screen.getByRole("button", { name: /^Chat/ })).toBeTruthy()
+  })
+
+  it("sur l'ecran projete de l'hote qui presente seulement : pas de bulle", async () => {
+    audio.play.mockResolvedValue({})
+    const now = Date.now()
+    render(<MultiplayerGameClient user={user} serverNow={now} onAnswer={vi.fn()} mode="event" chatMessages={chat} onSendChat={vi.fn()} state={guessing(2, "https://cdnt-preview.dzcdn.net/ok.mp3", now)} />)
+    await act(async () => { await Promise.resolve() })
+    expect(screen.queryByRole("button", { name: /^Chat/ })).toBeNull()
   })
 })

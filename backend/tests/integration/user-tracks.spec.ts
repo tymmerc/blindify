@@ -63,6 +63,7 @@ import { getSessionContext } from "../../src/utils/session";
 import { fetchPlaylistTracksChecked, fetchPublicPlaylists, type ImportedTrack } from "../../src/services/profileImportService";
 import { ensureLinksSchema } from "../../src/controllers/linksController";
 import { bySmallestLibrary, ensureUserTracksSchema, linkTrackToUser } from "../../src/services/userTracks";
+import { ensureUserPhotosSchema } from "../../src/services/userPhotos";
 import { DEAD_GUEST_FILTER } from "../../src/services/deadGuests";
 import { importController } from "../../src/controllers/importController";
 import { linksController } from "../../src/controllers/linksController";
@@ -72,7 +73,7 @@ import { authController } from "../../src/controllers/authController";
 import { audioSourcesController } from "../../src/controllers/audioSourcesController";
 import * as realtimeGame from "../../src/services/realtimeGame";
 import { clearGame } from "../../src/services/realtimeGame";
-import { clearAdvanceTimer, clearRevealTimer } from "../../src/services/realtimeOrchestrator";
+import { clearPacingTimer, clearRevealTimer } from "../../src/services/realtimeOrchestrator";
 
 // Sans base de test jetable, la suite s'arrete ici, avant toute requete.
 resolveTestDatabaseUrl(process.env.TEST_DATABASE_URL);
@@ -250,7 +251,7 @@ async function startRoom(code: string, hostId: number): Promise<Reply & { tracks
 
 function stopGame(code: string): void {
   clearRevealTimer(code);
-  clearAdvanceTimer(code);
+  clearPacingTimer(code);
   clearGame(code);
 }
 
@@ -273,6 +274,8 @@ beforeAll(async () => {
   initSocket(httpServer, ["*"]);
   await ensureLinksSchema();
   await ensureUserTracksSchema();
+  // La suppression de compte efface aussi la photo (migration 008, T39).
+  await ensureUserPhotosSchema();
 });
 
 afterEach(() => {

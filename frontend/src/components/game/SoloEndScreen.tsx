@@ -27,8 +27,8 @@ interface SoloEndScreenProps {
   footer?: ReactNode
 }
 
-const QUIET_LINK = "font-bold text-[#6b573f] underline underline-offset-2 hover:text-[#2e2014] disabled:opacity-50"
-const OUTLINE_BUTTON = "inline-flex items-center justify-center gap-2 rounded-md border-2 border-[#2e2014] px-5 py-3 text-sm font-bold text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+const QUIET_LINK = "font-bold text-ink-2 underline underline-offset-2 hover:text-ink disabled:opacity-50"
+const OUTLINE_BUTTON = "inline-flex items-center justify-center gap-2 rounded-md border-2 border-line px-5 py-3 text-sm font-bold text-ink transition hover:bg-ink-block hover:text-on-ink"
 
 function ShareScoreButton({ stats, roundStates }: { stats: ChallengeScore; roundStates: string[] }) {
   const [label, setLabel] = useState("Copier mon score")
@@ -69,12 +69,12 @@ export function SoloEndScreen({ stats, accuracy, roundStates, tracks, playerName
   // Venu pour defier : le defi passe juste sous le score, rejouer apres.
   const challengeFirst = showChallenge && challengeIntent
   return (
-    <div className="mx-auto w-full max-w-xl space-y-6 px-4 py-6 text-[#2e2014] sm:py-12">
-      <section className="space-y-5 rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-5 text-center shadow-[4px_4px_0_rgba(46,32,20,.18)] sm:p-7">
+    <div className="mx-auto w-full max-w-xl space-y-6 px-4 py-6 text-ink sm:py-12">
+      <section className="space-y-5 rounded-md border-2 border-line bg-paper-deep p-5 text-center shadow-[4px_4px_0_rgb(var(--c-shadow)/.18)] sm:p-7">
         <div className="space-y-1">
           <h2 className="font-display text-2xl font-semibold">Partie terminée !</h2>
-          <p className="font-display text-5xl font-bold text-[#c65133]">{stats.points} pts</p>
-          <p className="text-sm text-[#6b573f]">
+          <p className="font-display text-5xl font-bold text-terra-txt">{stats.points} pts</p>
+          <p className="text-sm text-ink-2">
             {goodAnswers} · série max {stats.bestStreak} · précision {accuracy}&nbsp;%
           </p>
         </div>

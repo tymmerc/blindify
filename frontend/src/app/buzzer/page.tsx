@@ -11,7 +11,7 @@ import { api } from "@/lib/api"
 import type { SoloTrack } from "@/lib/types"
 import { audioManager } from "@/lib/audioManager"
 import { useWakeLock } from "@/lib/useWakeLock"
-import { evaluateGuess, type GuessVerdict } from "@/lib/guessMatch"
+import { evaluateGuessDetail, type Verdict } from "@/lib/guessMatching"
 import { publicPath } from "@/lib/publicPath"
 import { FingerBoard, type BoardPhase } from "./FingerBoard"
 import { EndFeedback } from "@/components/game/EndFeedback"
@@ -57,7 +57,7 @@ function BuzzerContent() {
   const [liftQueue, setLiftQueue] = useState<number[]>([])
   const [answerer, setAnswerer] = useState<number | null>(null)
   const [eliminated, setEliminated] = useState<Set<number>>(new Set())
-  const [lastVerdict, setLastVerdict] = useState<GuessVerdict | null>(null)
+  const [lastVerdict, setLastVerdict] = useState<Verdict | null>(null)
   const [roundWinner, setRoundWinner] = useState<number | null>(null)
   const [guessTitle, setGuessTitle] = useState("")
   const [guessArtist, setGuessArtist] = useState("")
@@ -173,7 +173,7 @@ function BuzzerContent() {
   const submitRef = useRef<((timeout?: boolean) => void) | null>(null)
   submitRef.current = (timeout = false) => {
     if (phaseRef.current !== "answering" || answerer === null || !track) return
-    const verdict = timeout ? "wrong" : evaluateGuess(guessTitle, guessArtist, track).verdict
+    const verdict = timeout ? "wrong" : evaluateGuessDetail("", track, guessTitle, guessArtist).verdict
     setGuessTitle("")
     setGuessArtist("")
     if (verdict === "wrong") {
@@ -264,15 +264,16 @@ function BuzzerContent() {
   useEffect(() => () => { audioManager.stop("buzzer_unmount", "buzzer") }, [])
 
   // ------------------------------------------------------------------ rendu
-  const frame = "min-h-dvh bg-[#f4ecdb] text-[#2e2014]"
+  const frame = "min-h-dvh bg-paper text-ink"
 
   if (stage === "setup" || stage === "loading") {
     return (
       <div className={`${frame} flex flex-col px-6 py-8`}>
-        <img src={publicPath("/logo-mark.png")} alt="Blindz" className="mb-4 h-10 w-10 object-contain" />
-        <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-[#5b7d99]">Un seul tel</p>
+        <img src={publicPath("/logo-mark.png")} alt="Blindz" className="mb-4 h-10 w-10 object-contain dark:hidden" />
+        <img src={publicPath("/logo-mark-nuit.png")} alt="Blindz" className="mb-4 h-10 w-10 object-contain hidden dark:block" />
+        <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-[#5b7d99] dark:text-acier-txt">Un seul tel</p>
         <h1 className="font-display text-3xl font-semibold leading-tight">Tous les doigts sur ce téléphone.</h1>
-        <p className="mt-1 text-sm text-[#6b573f]">
+        <p className="mt-1 text-sm text-ink-2">
           La musique démarre quand tout le monde tient sa zone. Le premier qui lâche prend le tel,
           se cache, et répond. Faux ? Le tel passe au suivant, sans révéler la réponse.
         </p>
@@ -280,19 +281,19 @@ function BuzzerContent() {
         <div className="mt-6 space-y-2">
           {players.map((p, i) => (
             <div key={i} className="flex items-center gap-2">
-              <span className="h-9 w-9 shrink-0 rounded-md border-2 border-[#2e2014]" style={{ background: p.color }} />
+              <span className="h-9 w-9 shrink-0 rounded-md border-2 border-line" style={{ background: p.color }} />
               <input
                 value={p.name}
                 onChange={e => setPlayers(prev => prev.map((q, j) => (j === i ? { ...q, name: e.target.value.slice(0, 16) } : q)))}
                 placeholder={`Joueur ${i + 1}`}
-                className="w-full rounded-md border-2 border-[#2e2014] bg-[#ece1c8] px-3 py-2 text-base outline-none placeholder:text-[#8a7558]"
+                className="w-full rounded-md border-2 border-line bg-paper-deep px-3 py-2 text-base outline-none placeholder:text-sourd"
               />
               {players.length > 2 && (
                 <button
                   type="button"
                   aria-label="Retirer ce joueur"
                   onClick={() => setPlayers(prev => prev.filter((_, j) => j !== i).map((q, j) => ({ ...q, color: ZONE_COLORS[j] })))}
-                  className="shrink-0 rounded-md border-2 border-[#2e2014] bg-[#ece1c8] px-3 py-2 text-sm font-bold"
+                  className="shrink-0 rounded-md border-2 border-line bg-paper-deep px-3 py-2 text-sm font-bold"
                 >
                   ✕
                 </button>
@@ -303,23 +304,23 @@ function BuzzerContent() {
             <button
               type="button"
               onClick={() => setPlayers(prev => [...prev, { name: "", color: ZONE_COLORS[prev.length], score: 0 }])}
-              className="w-full rounded-md border-2 border-dashed border-[#8a7558] px-3 py-2 text-sm font-semibold text-[#6b573f]"
+              className="w-full rounded-md border-2 border-dashed border-sourd px-3 py-2 text-sm font-semibold text-ink-2"
             >
               + Ajouter un joueur ({players.length}/{MAX_PLAYERS})
             </button>
           )}
-          <p className="text-[11px] text-[#8a7558]">5 joueurs max : la plupart des téléphones ne suivent pas plus de 5 doigts.</p>
+          <p className="text-[11px] text-sourd">5 joueurs max : la plupart des téléphones ne suivent pas plus de 5 doigts.</p>
         </div>
 
         <div className="mt-5">
-          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#8a7558]">Manches</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-sourd">Manches</p>
           <div className="mt-1 flex gap-2">
             {[5, 10, 15].map(n => (
               <button
                 key={n}
                 type="button"
                 onClick={() => setRoundsWanted(n)}
-                className={`rounded-md border-2 border-[#2e2014] px-4 py-2 font-display text-base font-bold ${roundsWanted === n ? "bg-[#2e2014] text-[#f4ecdb]" : "bg-[#ece1c8]"}`}
+                className={`rounded-md border-2 border-line px-4 py-2 font-display text-base font-bold ${roundsWanted === n ? "bg-ink-block text-on-ink" : "bg-paper-deep"}`}
               >
                 {n}
               </button>
@@ -327,18 +328,18 @@ function BuzzerContent() {
           </div>
         </div>
 
-        {error && <p className="mt-4 rounded-md border-2 border-[#b3261e] bg-[#b3261e]/10 px-3 py-2 text-sm font-semibold text-[#7a1712]">{error}</p>}
+        {error && <p className="mt-4 rounded-md border-2 border-[#b3261e] dark:border-rouge-txt bg-[#b3261e]/10 px-3 py-2 text-sm font-semibold text-[#7a1712] dark:text-rouge-txt">{error}</p>}
 
         <div className="mt-auto flex flex-col gap-2 pt-6">
           <button
             type="button"
             onClick={startGame}
             disabled={stage === "loading"}
-            className="w-full rounded-md border-2 border-[#2e2014] bg-[#5b7d99] px-5 py-4 font-display text-lg font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#2e2014] disabled:opacity-50"
+            className="w-full rounded-md border-2 border-line bg-[#5b7d99] px-5 py-4 font-display text-lg font-bold text-on-ink shadow-[4px_4px_0_rgb(var(--c-shadow))] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgb(var(--c-shadow))] disabled:opacity-50"
           >
             {stage === "loading" ? "Chargement de ta musique…" : "Lancer la partie"}
           </button>
-          <button type="button" onClick={() => router.push("/modes")} className="text-sm font-semibold text-[#6b573f] underline">
+          <button type="button" onClick={() => router.push("/modes")} className="text-sm font-semibold text-ink-2 underline">
             Retour aux modes
           </button>
         </div>
@@ -350,13 +351,13 @@ function BuzzerContent() {
     const ranked = [...players].sort((a, b) => b.score - a.score)
     return (
       <div className={`${frame} flex flex-col items-center px-6 py-10`}>
-        <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-[#5b7d99]">Fin de la face</p>
+        <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-[#5b7d99] dark:text-acier-txt">Fin de la face</p>
         <h1 className="mt-1 font-display text-4xl font-bold">{ranked[0]?.score ? ranked[0].name : "Personne n'a marqué…"}</h1>
         <div className="mt-6 w-full max-w-sm space-y-2">
           {ranked.map((p, i) => (
-            <div key={p.name} className="flex items-center justify-between rounded-md border-2 border-[#2e2014] bg-[#ece1c8] px-4 py-3" style={i === 0 ? { borderColor: "#e0a32e", boxShadow: "4px 4px 0 #e0a32e" } : undefined}>
+            <div key={p.name} className="flex items-center justify-between rounded-md border-2 border-line bg-paper-deep px-4 py-3" style={i === 0 ? { borderColor: "#e0a32e", boxShadow: "4px 4px 0 #e0a32e" } : undefined}>
               <span className="flex items-center gap-3">
-                <span className="h-6 w-6 rounded-full border-2 border-[#2e2014]" style={{ background: p.color }} />
+                <span className="h-6 w-6 rounded-full border-2 border-line" style={{ background: p.color }} />
                 <span className="font-display text-lg font-semibold">{i + 1}. {p.name}</span>
               </span>
               <span className="font-display text-lg font-bold">{p.score} pts</span>
@@ -364,10 +365,10 @@ function BuzzerContent() {
           ))}
         </div>
         <div className="mt-8 flex w-full max-w-sm flex-col gap-2">
-          <button type="button" onClick={() => { setStage("setup"); setPlayers(prev => prev.map(p => ({ ...p, score: 0 }))) }} className="w-full rounded-md border-2 border-[#2e2014] bg-[#5b7d99] px-5 py-3 font-display text-lg font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014]">
+          <button type="button" onClick={() => { setStage("setup"); setPlayers(prev => prev.map(p => ({ ...p, score: 0 }))) }} className="w-full rounded-md border-2 border-line bg-[#5b7d99] px-5 py-3 font-display text-lg font-bold text-on-ink shadow-[4px_4px_0_rgb(var(--c-shadow))]">
             Rejouer
           </button>
-          <button type="button" onClick={() => router.push("/modes")} className="text-center text-sm font-semibold text-[#6b573f] underline">
+          <button type="button" onClick={() => router.push("/modes")} className="text-center text-sm font-semibold text-ink-2 underline">
             Retour aux modes
           </button>
         </div>
@@ -382,9 +383,9 @@ function BuzzerContent() {
 
   return (
     <div className={`${frame} flex flex-col`}>
-      <header className="flex items-center justify-between border-b-2 border-[#2e2014] px-4 py-2">
+      <header className="flex items-center justify-between border-b-2 border-line px-4 py-2">
         <span className="font-display text-sm font-bold">MANCHE {round + 1}/{tracks.length}</span>
-        <span className="text-xs font-semibold text-[#6b573f]">
+        <span className="text-xs font-semibold text-ink-2">
           {players.map(p => `${p.name} ${p.score}`).join(" · ")}
         </span>
       </header>
@@ -392,7 +393,7 @@ function BuzzerContent() {
       <main className="relative flex-1">
         {(phase === "arming" || phase === "countdown" || phase === "holding" || phase === "grace") && (
           <div className="absolute inset-0 flex flex-col">
-            <p className="px-4 pt-3 text-center text-sm font-semibold text-[#6b573f]">
+            <p className="px-4 pt-3 text-center text-sm font-semibold text-ink-2">
               {phase === "holding" || phase === "grace"
                 ? "PREMIER QUI LÂCHE RÉPOND !"
                 : "Posez tous votre doigt sur votre zone et ne lâchez plus."}
@@ -413,12 +414,12 @@ function BuzzerContent() {
 
         {phase === "handoff" && answeringPlayer && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-8 text-center" style={{ background: answeringPlayer.color }}>
-            <p className="font-display text-4xl font-bold text-[#f4ecdb]">{answeringPlayer.name} !</p>
-            <p className="text-base font-semibold text-[#f4ecdb]">Prends le tel, cache l'écran des autres, et réponds.</p>
+            <p className="font-display text-4xl font-bold text-on-ink">{answeringPlayer.name} !</p>
+            <p className="text-base font-semibold text-on-ink">Prends le tel, cache l'écran des autres, et réponds.</p>
             <button
               type="button"
               onClick={() => setPhase("answering")}
-              className="rounded-md border-2 border-[#2e2014] bg-[#f4ecdb] px-6 py-4 font-display text-lg font-bold text-[#2e2014] shadow-[4px_4px_0_#2e2014]"
+              className="rounded-md border-2 border-line bg-paper px-6 py-4 font-display text-lg font-bold text-ink shadow-[4px_4px_0_rgb(var(--c-shadow))]"
             >
               Je suis caché, je réponds
             </button>
@@ -429,7 +430,7 @@ function BuzzerContent() {
           <div className="absolute inset-0 flex flex-col gap-3 px-6 pt-8">
             <div className="flex items-center justify-between">
               <p className="font-display text-xl font-bold">{answeringPlayer.name}, c'est quoi ce son ?</p>
-              <span className="rounded-md border-2 border-[#2e2014] px-2 py-1 font-display text-lg font-bold">{answerLeft}s</span>
+              <span className="rounded-md border-2 border-line px-2 py-1 font-display text-lg font-bold">{answerLeft}s</span>
             </div>
             <input
               {...ANSWER_INPUT_PROPS}
@@ -437,30 +438,30 @@ function BuzzerContent() {
               value={guessTitle}
               onChange={e => setGuessTitle(e.target.value)}
               placeholder="Titre du morceau"
-              className="w-full rounded-md border-2 border-[#2e2014] bg-[#ece1c8] px-3 py-3 text-base outline-none placeholder:text-[#8a7558]"
+              className="w-full rounded-md border-2 border-line bg-paper-deep px-3 py-3 text-base outline-none placeholder:text-sourd"
             />
             <input
               {...ANSWER_INPUT_PROPS}
               value={guessArtist}
               onChange={e => setGuessArtist(e.target.value)}
               placeholder="Artiste (bonus)"
-              className="w-full rounded-md border-2 border-[#2e2014] bg-[#ece1c8] px-3 py-3 text-base outline-none placeholder:text-[#8a7558]"
+              className="w-full rounded-md border-2 border-line bg-paper-deep px-3 py-3 text-base outline-none placeholder:text-sourd"
             />
             <button
               type="button"
               onClick={() => submitRef.current?.()}
-              className="mt-1 w-full rounded-md border-2 border-[#2e2014] bg-[#c65133] px-5 py-4 font-display text-lg font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014]"
+              className="mt-1 w-full rounded-md border-2 border-line bg-terra px-5 py-4 font-display text-lg font-bold text-on-ink shadow-[4px_4px_0_rgb(var(--c-shadow))]"
             >
               Valider
             </button>
-            <p className="text-center text-xs text-[#8a7558]">Titre trouvé = 3 pts · titre OU artiste = 1 pt · faux = éliminé de la manche</p>
+            <p className="text-center text-xs text-sourd">Titre trouvé = 3 pts · titre OU artiste = 1 pt · faux = éliminé de la manche</p>
           </div>
         )}
 
         {phase === "wrong" && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-[#7a1712] px-8 text-center">
-            <p className="font-display text-6xl font-bold text-[#f4ecdb]">FAUX.</p>
-            <p className="text-base font-semibold text-[#f4ecdb]">
+            <p className="font-display text-6xl font-bold text-on-ink">FAUX.</p>
+            <p className="text-base font-semibold text-on-ink">
               {liftQueue.length > 0
                 ? `Passe le tel à ${players[liftQueue[0]]?.name ?? "au suivant"}, sans rien dire.`
                 : players.some((_, i) => !eliminated.has(i))
@@ -470,7 +471,7 @@ function BuzzerContent() {
             <button
               type="button"
               onClick={continueAfterWrong}
-              className="rounded-md border-2 border-[#2e2014] bg-[#f4ecdb] px-6 py-4 font-display text-lg font-bold text-[#2e2014] shadow-[4px_4px_0_#2e2014]"
+              className="rounded-md border-2 border-line bg-paper px-6 py-4 font-display text-lg font-bold text-ink shadow-[4px_4px_0_rgb(var(--c-shadow))]"
             >
               Continuer
             </button>
@@ -480,11 +481,11 @@ function BuzzerContent() {
         {phase === "reveal" && track && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-8 text-center">
             {track.album_cover && (
-              <img src={track.album_cover} alt="" className="h-40 w-40 rounded-md border-2 border-[#2e2014] object-cover shadow-[4px_4px_0_rgba(46,32,20,.18)]" />
+              <img src={track.album_cover} alt="" className="h-40 w-40 rounded-md border-2 border-line object-cover shadow-[4px_4px_0_rgb(var(--c-shadow)/.18)]" />
             )}
             <p className="font-display text-2xl font-bold leading-tight">{track.title}</p>
-            <p className="text-base text-[#6b573f]">{track.artist}</p>
-            <p className="mt-2 rounded-md border-2 border-[#2e2014] bg-[#ece1c8] px-4 py-2 font-display text-base font-bold">
+            <p className="text-base text-ink-2">{track.artist}</p>
+            <p className="mt-2 rounded-md border-2 border-line bg-paper-deep px-4 py-2 font-display text-base font-bold">
               {roundWinner !== null
                 ? `${players[roundWinner].name} +${lastVerdict === "correct" ? POINTS.correct : POINTS.close} pt${(lastVerdict === "correct" ? POINTS.correct : POINTS.close) > 1 ? "s" : ""}${lastVerdict === "close" ? " (à moitié !)" : ""}`
                 : "Personne n'a trouvé 🙈"}
@@ -492,7 +493,7 @@ function BuzzerContent() {
             <button
               type="button"
               onClick={nextRound}
-              className="mt-3 rounded-md border-2 border-[#2e2014] bg-[#5b7d99] px-6 py-4 font-display text-lg font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014]"
+              className="mt-3 rounded-md border-2 border-line bg-[#5b7d99] px-6 py-4 font-display text-lg font-bold text-on-ink shadow-[4px_4px_0_rgb(var(--c-shadow))]"
             >
               {round + 1 >= tracks.length ? "Voir le classement" : "Manche suivante"}
             </button>

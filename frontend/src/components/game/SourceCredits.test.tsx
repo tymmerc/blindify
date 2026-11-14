@@ -16,8 +16,12 @@ const SPOTIFY_ID = "4uLU6hMCjMI75M1A2tKUQC"
 describe("DeezerCredit", () => {
   it("montre le logo officiel Deezer, nomme pour les lecteurs d'ecran", () => {
     render(<DeezerCredit />)
-    const logo = screen.getByRole("img", { name: "Deezer" })
-    expect(logo.getAttribute("src")).toMatch(/\/marques\/deezer-logo\.png$/)
+    // Deux lockups officiels : noir et violet en clair, blanc et violet en sombre (T30).
+    const [clair, sombre] = screen.getAllByRole("img", { name: "Deezer" })
+    expect(clair.getAttribute("src")).toMatch(/\/marques\/deezer-logo\.png$/)
+    expect(clair.className).toContain("dark:hidden")
+    expect(sombre.getAttribute("src")).toMatch(/\/marques\/deezer-logo-blanc\.png$/)
+    expect(sombre.className).toContain("dark:block")
   })
 
   it("previent que l'ecoute est reservee a un usage prive", () => {
@@ -27,7 +31,7 @@ describe("DeezerCredit", () => {
 
   it("version courte : le logo seul, sans la phrase", () => {
     render(<DeezerCredit notice={false} />)
-    expect(screen.getByRole("img", { name: "Deezer" })).toBeInTheDocument()
+    expect(screen.getAllByRole("img", { name: "Deezer" })).toHaveLength(2)
     expect(screen.queryByText(/écoute privée/i)).toBeNull()
   })
 })

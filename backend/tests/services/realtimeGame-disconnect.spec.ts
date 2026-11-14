@@ -14,6 +14,7 @@ import {
   recordAnswer,
   revealRound,
   markReady,
+  nextRevealStep,
   markDisconnected,
   markReconnected,
   allAnswerablePlayers,
@@ -118,9 +119,10 @@ describe("disconnected flag persists across rounds", () => {
     recordAnswer(ROOM, 3, "Song 1 Artist 1");
     revealRound(ROOM);
 
-    // Advance to round 2
-    markReady(ROOM, 1);
-    markReady(ROOM, 3);
+    // Advance to round 2 (fin du reveal decidee par le serveur, T38)
+    nextRevealStep(ROOM);
+    nextRevealStep(ROOM);
+    startNextRound(ROOM);
 
     // Player 2 must STILL be disconnected after the round transition.
     expect(getGameState(ROOM)?.players[2].disconnected).toBe(true);
@@ -138,9 +140,10 @@ describe("disconnected flag persists across rounds", () => {
     let state = revealRound(ROOM);
     expect(state?.phase).toBe("REVEAL");
 
-    // Only the 2 connected players need to ready up
-    markReady(ROOM, 1);
-    state = markReady(ROOM, 3);
+    // Le serveur enchaine sans attendre personne (T38).
+    nextRevealStep(ROOM);
+    nextRevealStep(ROOM);
+    state = startNextRound(ROOM);
     expect(state?.phase).toBe("GUESSING");
     expect(state?.currentRound).toBe(2);
 
@@ -151,44 +154,28 @@ describe("disconnected flag persists across rounds", () => {
     state = revealRound(ROOM);
     expect(state?.phase).toBe("REVEAL");
 
-    markReady(ROOM, 1);
-    state = markReady(ROOM, 3);
+    nextRevealStep(ROOM);
+    nextRevealStep(ROOM);
+    state = startNextRound(ROOM);
     expect(state?.phase).toBe("GUESSING");
     expect(state?.currentRound).toBe(3);
   });
 });
 
-describe("markReady auto-advance with disconnected players", () => {
+// T38 : les « pret » ne font plus avancer, joueur coupe ou pas.
+describe("markReady avec des joueurs coupes", () => {
   beforeEach(() => {
     setupGame();
     startNextRound(ROOM);
     revealRound(ROOM);
   });
 
-  it("auto-advances when all NON-DISCONNECTED players are ready", () => {
+  it("n'avance pas, meme quand tous les connectes sont prets", () => {
     markDisconnected(ROOM, 3);
     markReady(ROOM, 1);
     const state = markReady(ROOM, 2);
-    // Player 3 is offline so we should advance with just 1+2 ready.
-    expect(state?.phase === "GUESSING" || state?.phase === "FINISHED").toBe(true);
-  });
-
-  it("does NOT advance when a connected player has not readied", () => {
-    markDisconnected(ROOM, 3);
-    markReady(ROOM, 1);
-    const state = getGameState(ROOM);
     expect(state?.phase).toBe("REVEAL");
-  });
-
-  it("re-blocks advance after markReconnected on a player", () => {
-    markDisconnected(ROOM, 3);
-    markReady(ROOM, 1);
-    // Now player 3 reconnects mid-reveal
-    markReconnected(ROOM, 3);
-    // Even with player 1+2 ready, player 3 (now reconnected) must also be ready
-    const state = markReady(ROOM, 2);
-    expect(state?.phase).toBe("REVEAL");
-    expect(getGameState(ROOM)?.players[3].isReady).toBe(false);
+    expect(state?.players[2].isReady).toBe(true);
   });
 });
 

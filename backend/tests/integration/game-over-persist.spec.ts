@@ -21,6 +21,7 @@ import {
   closePool,
   pool,
   waitFor,
+  hostNext,
   type TestServer,
   type GameClient,
 } from "./helpers/socket-test-harness";
@@ -58,7 +59,7 @@ describe("fin de partie : resultats ecrits une seule fois", () => {
       }
       await waitFor(() => clients.every(c => c.reveals.length >= 1), 5000, "REVEAL round 1");
 
-      // Personne ne clique "pret" : le filet (10 s) termine la partie.
+      // Personne ne touche a rien : l'ecran de la reponse (8 s) mene a la fin.
       await waitFor(() => clients.every(c => c.gameOver !== null), 14_000, "game over by the anti-AFK net");
 
       const persisted = async () => {
@@ -117,7 +118,8 @@ describe("fin de partie : resultats ecrits une seule fois", () => {
         c.socket.emit("game:answer", { roomCode, guessTitle: "Title 1", guessArtist: "Artist 1" });
       }
       await waitFor(() => clients.every(c => c.reveals.length >= 1), 5000, "REVEAL round 1");
-      for (const c of clients) c.socket.emit("game:ready", { roomCode });
+      // Derniere manche : le « Suivant » de l'hote mene a la fin (T38).
+      await hostNext(clients, roomCode);
       await waitFor(() => clients.every(c => c.gameOver !== null), 5000, "game over");
       for (const deadline = Date.now() + 5000; Date.now() < deadline && (await totalGames()) < 2; ) {
         await sleep(100);

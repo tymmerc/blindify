@@ -33,22 +33,22 @@ export function ChallengeLeaderboard({ challenge, attempts, currentPlayerName }:
       <div className="space-y-6">
         <h1 className="text-center font-display text-3xl font-semibold">Résultats du défi</h1>
 
-        <ol className="rounded-md border-2 border-[#2e2014] bg-[#ece1c8] px-4 py-3 shadow-[4px_4px_0_rgba(46,32,20,.18)] sm:px-6">
+        <ol className="rounded-md border-2 border-line bg-paper-deep px-4 py-3 shadow-[4px_4px_0_rgb(var(--c-shadow)/.18)] sm:px-6">
           {rows.map((entry, idx) => (
             <li key={`${entry.playerName}-${idx}`} className="flex items-baseline gap-3 py-2.5">
-              <span className="w-5 shrink-0 text-sm font-bold text-[#6b573f]">{idx + 1}</span>
+              <span className="w-5 shrink-0 text-sm font-bold text-ink-2">{idx + 1}</span>
               <span className="flex min-w-0 flex-col">
-                <span className={`truncate font-display text-base font-semibold ${entry.isCurrent ? "text-[#c65133]" : "text-[#2e2014]"}`}>
+                <span className={`truncate font-display text-base font-semibold ${entry.isCurrent ? "text-terra-txt" : "text-ink"}`}>
                   {entry.playerName}
                 </span>
                 {(entry.isCreator || entry.isCurrent) && (
-                  <span className="text-[12px] text-[#6b573f]">{entry.isCreator ? "a lancé le défi" : "toi"}</span>
+                  <span className="text-[12px] text-ink-2">{entry.isCreator ? "a lancé le défi" : "toi"}</span>
                 )}
               </span>
-              <span className="flex-1 -translate-y-1 border-b-2 border-dotted border-[rgba(46,32,20,.45)]" />
+              <span className="flex-1 -translate-y-1 border-b-2 border-dotted border-[rgb(var(--c-line)/.45)]" />
               <span className="shrink-0 text-right">
-                <span className="font-display text-base font-bold text-[#2e2014]">{entry.score} pts</span>
-                <span className="block text-[11px] text-[#6b573f]">
+                <span className="font-display text-base font-bold text-ink">{entry.score} pts</span>
+                <span className="block text-[11px] text-ink-2">
                   {entry.correct}/{entry.total} · série {entry.bestStreak}
                 </span>
               </span>
@@ -63,8 +63,8 @@ export function ChallengeLeaderboard({ challenge, attempts, currentPlayerName }:
           <button
             type="button"
             onClick={handleCopy}
-            className={`inline-flex items-center justify-center gap-2 rounded-md border-2 border-[#2e2014] px-5 py-3 text-sm font-bold transition ${
-              copied ? "bg-[#7d9471] text-[#2e2014]" : "text-[#2e2014] hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+            className={`inline-flex items-center justify-center gap-2 rounded-md border-2 border-line px-5 py-3 text-sm font-bold transition ${
+              copied ? "bg-sage text-on-accent" : "text-ink hover:bg-ink-block hover:text-on-ink"
             }`}
           >
             {copied ? <Check className="h-4 w-4" /> : null}
@@ -72,7 +72,7 @@ export function ChallengeLeaderboard({ challenge, attempts, currentPlayerName }:
           </button>
         </div>
         {copied === false && (
-          <p role="alert" className="text-center text-sm text-[#9c2f1d]">
+          <p role="alert" className="text-center text-sm text-rouge-txt">
             Copie impossible ici. Le code du défi : <strong>{challenge.code}</strong>
           </p>
         )}

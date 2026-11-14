@@ -14,7 +14,7 @@ export function SpectatorBadge({ count, className = "" }: { count: number; class
       aria-label={`${label} regarde${count > 1 ? "nt" : ""} la partie`}
       title="L'éditeur de Blindz regarde la partie en direct, sans pouvoir jouer. Rien n'est enregistré."
       data-testid="spectator-badge"
-      className={`inline-flex shrink-0 items-center gap-1 rounded-full border-[1.5px] border-[#2e2014]/40 bg-[#efe5d0] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[#6b573f] ${className}`}
+      className={`inline-flex shrink-0 items-center gap-1 rounded-full border-[1.5px] border-line/40 bg-well px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-ink-2 ${className}`}
     >
       <span aria-hidden className="text-[12px] leading-none">👀</span>
       <span>{label}</span>

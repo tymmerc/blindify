@@ -33,7 +33,7 @@ const hostCtx = await mk({ viewport: { width: 1440, height: 900 } })
 const host = await hostCtx.newPage()
 const hostIdP = grabUserId(host)
 await host.goto(`${B}/jouer/`, { waitUntil: "networkidle", timeout: 90000 })
-await host.locator("input").first().fill("Tymeo")
+await host.locator("input:not([type=file])").first().fill("Tymeo")
 await host.getByRole("button", { name: /continuer/i }).click()
 // URL vide -> Continuer -> ecran Creer/Rejoindre
 await host.getByRole("button", { name: /^continuer$/i }).click({ timeout: 20000 })
@@ -58,7 +58,7 @@ for (const [name, seedFrom] of [["Lea", 3103], ["Max", null]]) {
   const p = await ctx.newPage()
   const idP = grabUserId(p)
   await p.goto(`${B}/?join=${code}`, { waitUntil: "networkidle", timeout: 90000 })
-  await p.locator("input").first().fill(name)
+  await p.locator("input:not([type=file])").first().fill(name)
   await p.getByRole("button", { name: /continuer/i }).click()
   if (seedFrom) {
     const uid = await idP
@@ -84,7 +84,7 @@ while (Date.now() - t0 < 5 * 60 * 1000) {
     const txt = document.body.innerText || ""
     const r = txt.match(/Événement\s+(?:REVEAL|\d+s)\s+(\d+)\s*\/\s*(\d+)/)
     const owner = (txt.match(/Proposé par ([^\n]+)/) || [])[1]
-    return { round: r ? Number(r[1]) : null, owner: owner?.trim() ?? null, fin: /FIN DE LA FACE|On rejoue \?/i.test(txt) }
+    return { round: r ? Number(r[1]) : null, owner: owner?.trim() ?? null, fin: /FIN DE LA FACE|PARTIE TERMINÉE|On rejoue \?/i.test(txt) }
   }).catch(() => ({}))
   if (hs.fin) break
   if (hs.round && hs.round !== lastRound) { lastRound = hs.round; roundStarts.push(Date.now()) }

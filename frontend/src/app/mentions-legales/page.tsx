@@ -10,23 +10,23 @@ export const metadata: Metadata = {
 
 export default function MentionsLegalesPage() {
   return (
-    <div className="min-h-screen text-[#2e2014] pb-20">
+    <div className="min-h-screen text-ink pb-20">
       <div className="mx-auto max-w-2xl px-5 pt-10">
         <div className="mb-8">
           <Link
             href="/"
-            className="inline-flex items-center gap-2 rounded-full border-[1.5px] border-[#2e2014] bg-[#ece1c8] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+            className="inline-flex items-center gap-2 rounded-full border-[1.5px] border-line bg-paper-deep px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-ink transition hover:bg-ink-block hover:text-on-ink"
           >
             Retour à l'accueil
           </Link>
         </div>
 
         <div className="mb-10 space-y-2">
-          <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-[#c65133]">Légal</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-terra-txt">Légal</p>
           <h1 className="font-display text-4xl font-semibold md:text-5xl">
-            Mentions <em className="font-medium italic text-[#c65133]">légales</em>
+            Mentions <em className="font-medium italic text-terra-txt">légales</em>
           </h1>
-          <p className="text-sm text-[#8a7558]">Dernière mise à jour : 29 octobre 2026</p>
+          <p className="text-sm text-sourd">Dernière mise à jour : 29 octobre 2026</p>
         </div>
 
         <div className="space-y-6">
@@ -102,7 +102,7 @@ export default function MentionsLegalesPage() {
               propre responsabilité. Les règles du jeu (écoute privée, comportement, âge) sont dans les{" "}
               <Link
                 href="/conditions/"
-                className="font-bold text-[#c65133] underline decoration-[#c65133]/40 underline-offset-2 transition hover:decoration-[#c65133]"
+                className="font-bold text-terra-txt underline decoration-terra-txt/40 underline-offset-2 transition hover:decoration-terra-txt"
               >
                 conditions d&apos;utilisation
               </Link>
@@ -115,7 +115,7 @@ export default function MentionsLegalesPage() {
               Le traitement de tes données personnelles est détaillé dans notre{" "}
               <Link
                 href="/confidentialite"
-                className="font-bold text-[#c65133] underline decoration-[#c65133]/40 underline-offset-2 transition hover:decoration-[#c65133]"
+                className="font-bold text-terra-txt underline decoration-terra-txt/40 underline-offset-2 transition hover:decoration-terra-txt"
               >
                 politique de confidentialité
               </Link>
@@ -127,19 +127,19 @@ export default function MentionsLegalesPage() {
         <div className="mt-12 flex flex-wrap gap-3">
           <Link
             href="/conditions/"
-            className="inline-flex items-center gap-2 rounded-full border-[1.5px] border-[#2e2014] bg-transparent px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+            className="inline-flex items-center gap-2 rounded-full border-[1.5px] border-line bg-transparent px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-ink transition hover:bg-ink-block hover:text-on-ink"
           >
             Conditions
           </Link>
           <Link
             href="/confidentialite"
-            className="inline-flex items-center gap-2 rounded-full border-[1.5px] border-[#2e2014] bg-transparent px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+            className="inline-flex items-center gap-2 rounded-full border-[1.5px] border-line bg-transparent px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-ink transition hover:bg-ink-block hover:text-on-ink"
           >
             Confidentialité
           </Link>
           <Link
             href="/"
-            className="inline-flex items-center gap-2 rounded-full border-2 border-[#2e2014] bg-[#c65133] px-5 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#f4ecdb] shadow-[3px_3px_0_#2e2014] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_#2e2014]"
+            className="inline-flex items-center gap-2 rounded-full border-2 border-line bg-terra px-5 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-on-ink shadow-[3px_3px_0_rgb(var(--c-shadow))] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_rgb(var(--c-shadow))]"
           >
             Jouer
           </Link>

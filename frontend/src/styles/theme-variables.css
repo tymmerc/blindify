@@ -1,19 +1,16 @@
-/* Club analogique — un seul theme chaud. Les deux data-theme pointent
-   sur la meme palette papier pour que rien ne casse (le toggle existe
-   encore mais ne change plus la DA). */
-:root,
-[data-theme="dark"],
-[data-theme="light"] {
-  --bg-primary: #f4ecdb;
-  --bg-surface: #ece1c8;
-  --bg-card: #ece1c8;
-  --bg-input: #efe5d0;
-  --border-subtle: rgba(46, 32, 20, 0.18);
-  --border-input: rgba(46, 32, 20, 0.35);
-  --border-focus: #c65133;
-  --text-primary: #2e2014;
-  --text-secondary: rgba(46, 32, 20, 0.8);
-  --text-muted: #8a7558;
-  --text-faint: rgba(46, 32, 20, 0.35);
-  --accent: #c65133;
+/* Variables historiques, branchees sur les jetons du theme (globals.css).
+   Elles suivent donc le mode sombre sans regle a part. */
+:root {
+  --bg-primary: rgb(var(--c-paper));
+  --bg-surface: rgb(var(--c-paper-deep));
+  --bg-card: rgb(var(--c-paper-deep));
+  --bg-input: rgb(var(--c-well));
+  --border-subtle: rgb(var(--c-line) / 0.18);
+  --border-input: rgb(var(--c-line) / 0.35);
+  --border-focus: rgb(var(--c-terra));
+  --text-primary: rgb(var(--c-ink));
+  --text-secondary: rgb(var(--c-ink) / 0.8);
+  --text-muted: rgb(var(--c-sourd));
+  --text-faint: rgb(var(--c-ink) / 0.35);
+  --accent: rgb(var(--c-terra));
 }

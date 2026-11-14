@@ -12,7 +12,7 @@ export interface ShareImageButtonProps {
   className?: string
 }
 
-const DEFAULT_CLASS = "rounded-md border-2 border-[#2e2014] bg-[#ece1c8] font-bold text-[#2e2014] shadow-[3px_3px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:bg-[#ece1c8] hover:text-[#2e2014] hover:shadow-[1px_1px_0_#2e2014]"
+const DEFAULT_CLASS = "rounded-md border-2 border-line bg-paper-deep font-bold text-ink shadow-[3px_3px_0_rgb(var(--c-shadow))] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:bg-paper-deep hover:text-ink hover:shadow-[1px_1px_0_rgb(var(--c-shadow))]"
 
 export function ShareImageButton({ stats, roundStates, tracks, className }: ShareImageButtonProps) {
   const [loading, setLoading] = useState(false)

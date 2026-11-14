@@ -141,6 +141,9 @@ export const api = {
   async roomRounds(code: string) {
     return clientApi.roomRounds(code)
   },
+  async backToLobby(code: string) {
+    return clientApi.backToLobby(code)
+  },
   async streamerStatus() {
     return clientApi.streamerStatus()
   },
@@ -241,6 +244,12 @@ export const api = {
   },
   async deleteAccount(): Promise<void> {
     await clientApi.deleteAccount()
+  },
+  async uploadPhoto(image: Blob): Promise<{ avatar: string }> {
+    return clientApi.uploadPhoto(image)
+  },
+  async deletePhoto(): Promise<{ avatar: null }> {
+    return clientApi.deletePhoto()
   },
   async startGuestSession(nickname?: string): Promise<void> {
     await clientApi.createGuestSession(nickname)

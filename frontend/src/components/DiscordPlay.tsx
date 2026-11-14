@@ -19,7 +19,7 @@ type Tone = "light" | "dark"
 const SR_NEW_TAB = <span className="sr-only"> (s&apos;ouvre dans un nouvel onglet)</span>
 
 function StepList({ tone, compact }: { tone: Tone; compact?: boolean }) {
-  const num = tone === "dark" ? "text-[#e0a32e]" : "text-[#c65133]"
+  const num = tone === "dark" ? "text-gold-txt" : "text-terra-txt"
   return (
     // compact : la ligne est souvent centree, la liste reste un bloc aligne a gauche au milieu.
     <ol className={`m-0 list-none p-0 ${compact ? "mx-auto w-fit max-w-full space-y-1 text-left text-[13px]" : "space-y-2 text-[0.98rem]"}`}>
@@ -37,15 +37,15 @@ function StepList({ tone, compact }: { tone: Tone; compact?: boolean }) {
 export function DiscordPlay({ tone = "light", heading = true, className = "" }: { tone?: Tone; heading?: boolean; className?: string }) {
   const dark = tone === "dark"
   const box = dark
-    ? "border-[rgba(244,236,219,.45)] text-[#f4ecdb]"
-    : "border-[#2e2014] bg-[#f4ecdb] text-[#2e2014] shadow-[4px_4px_0_rgba(46,32,20,.18)]"
+    ? "border-[rgb(var(--c-on-ink)/.45)] text-on-ink"
+    : "border-line bg-paper text-ink shadow-[4px_4px_0_rgb(var(--c-shadow)/.18)]"
   const button = dark
-    ? "border-[#f4ecdb] bg-[#f4ecdb] text-[#2e2014] shadow-[3px_3px_0_rgba(0,0,0,.35)] hover:bg-[#ece1c8] hover:text-[#2e2014]"
-    : "border-[#2e2014] bg-[#2e2014] text-[#f4ecdb] shadow-[3px_3px_0_rgba(46,32,20,.3)] hover:bg-[#46331f] hover:text-[#f4ecdb]"
-  const muted = dark ? "text-[#e9dcc0]" : "text-[#6b573f]"
+    ? "border-on-ink bg-paper text-ink shadow-[3px_3px_0_rgba(0,0,0,.35)] hover:bg-paper-deep hover:text-ink"
+    : "border-line bg-ink-block text-on-ink shadow-[3px_3px_0_rgb(var(--c-shadow)/.3)] hover:bg-[#46331f] hover:text-on-ink"
+  const muted = dark ? "text-[#e9dcc0]" : "text-ink-2"
   const supportLink = dark
-    ? "text-[#e9dcc0] decoration-[rgba(244,236,219,.5)] hover:text-[#f4ecdb]"
-    : "text-[#6b573f] decoration-[rgba(46,32,20,.35)] hover:text-[#2e2014]"
+    ? "text-[#e9dcc0] decoration-[rgb(var(--c-on-ink)/.5)] hover:text-on-ink"
+    : "text-ink-2 decoration-[rgb(var(--c-ink)/.35)] hover:text-ink"
   return (
     <div className={`rounded-md border-2 p-5 sm:p-6 ${box} ${className}`} data-testid="discord-play">
       {heading ? (
@@ -90,10 +90,10 @@ export function DiscordPlay({ tone = "light", heading = true, className = "" }: 
 
 export function DiscordHint({ tone = "light", className = "" }: { tone?: Tone; className?: string }) {
   const dark = tone === "dark"
-  const text = dark ? "text-[#e9dcc0]" : "text-[#6b573f]"
+  const text = dark ? "text-[#e9dcc0]" : "text-ink-2"
   const link = dark
-    ? "text-[#f4ecdb] decoration-[#f4ecdb] hover:text-[#e0a32e]"
-    : "text-[#2e2014] decoration-[#2e2014] hover:text-[#c65133]"
+    ? "text-on-ink decoration-on-ink hover:text-gold-txt"
+    : "text-ink decoration-ink hover:text-terra-txt"
   return (
     <div className={`text-[13px] leading-relaxed ${text} ${className}`} data-testid="discord-hint">
       <p className="m-0">

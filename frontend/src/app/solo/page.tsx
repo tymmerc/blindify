@@ -22,7 +22,7 @@ export default function SoloPage() {
   return (
     <Suspense
       fallback={
-        <div className="grid min-h-screen place-items-center text-[11px] font-bold uppercase tracking-[0.22em] text-[#6b573f]">
+        <div className="grid min-h-screen place-items-center text-[11px] font-bold uppercase tracking-[0.22em] text-ink-2">
           Chargement...
         </div>
       }

@@ -130,7 +130,7 @@ const both = (pages, opts) => Promise.all(pages.map(([role, p]) => check(p, { ..
 
 async function wizard(page, name, join) {
   await page.goto(`${APP}/jouer/${join ? `?join=${join}` : ""}`, { waitUntil: "networkidle", timeout: 90000 })
-  await page.locator("input").first().fill(name)
+  await page.locator("input:not([type=file])").first().fill(name)
   await page.getByRole("button", { name: /continuer/i }).click()
   for (let i = 0; i < 40 && !page.__uid; i++) await sleep(250)
   if (!page.__uid) throw new Error(`${name} : aucune identite creee`)
@@ -183,8 +183,8 @@ async function remote(browser, eng) {
       await sleep(1000)
       if (size) await both(pages, { eng, screen: "distance-revelation", size })
     }
-    // Fin : le podium du salon (« Fin de la face · Resultats ») remplace l'ecran de jeu.
-    await Promise.all(pages.map(([, p]) => p.getByText(/Fin de la face/).first().waitFor({ state: "visible", timeout: 60000 })))
+    // Fin : le podium du salon (« Partie terminée », T38) remplace l'ecran de jeu.
+    await Promise.all(pages.map(([, p]) => p.getByText(/Fin de la face|Partie terminée/i).first().waitFor({ state: "visible", timeout: 60000 })))
     await sleep(4000) // entree animee du podium
     for (const size of REMOTE_SIZES) await both(pages, { eng, screen: "distance-fin", size })
   } catch (e) {

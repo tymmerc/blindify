@@ -76,26 +76,26 @@ export function BugReportDialog() {
 
   return (
     <div
-      className="fixed inset-0 z-[60] grid place-items-center bg-[rgba(46,32,20,.5)] px-4"
+      className="fixed inset-0 z-[60] grid place-items-center bg-[rgb(var(--c-scrim)/.5)] px-4"
       onMouseDown={close}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="w-full max-w-md rounded-2xl border-2 border-[#2e2014] bg-[#f4ecdb] p-6 shadow-[6px_6px_0_rgba(46,32,20,.2)]"
+        className="w-full max-w-md rounded-2xl border-2 border-line bg-paper p-6 shadow-[6px_6px_0_rgb(var(--c-shadow)/.2)]"
         onMouseDown={e => e.stopPropagation()}
       >
         <div className="mb-3 flex items-start justify-between gap-3">
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#c65133]">Un souci ?</p>
-            <h2 id={titleId} className="font-display text-xl font-semibold text-[#2e2014]">Signaler un bug</h2>
+            <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-terra-txt">Un souci ?</p>
+            <h2 id={titleId} className="font-display text-xl font-semibold text-ink">Signaler un bug</h2>
           </div>
           <button
             type="button"
             aria-label="Fermer"
             onClick={close}
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-full border-[1.5px] border-[#2e2014] text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full border-[1.5px] border-line text-ink transition hover:bg-ink-block hover:text-on-ink"
           >
             <X size={15} />
           </button>
@@ -103,15 +103,15 @@ export function BugReportDialog() {
 
         {status === "sent" ? (
           <div className="flex flex-col items-center gap-2 py-8 text-center">
-            <span className="grid h-12 w-12 place-items-center rounded-full border-2 border-[#7d9471] text-[#7d9471]">
+            <span className="grid h-12 w-12 place-items-center rounded-full border-2 border-sage text-sage-txt">
               <Check size={24} />
             </span>
-            <p className="font-display text-base font-semibold text-[#2e2014]">Merci, c&apos;est noté !</p>
-            <p className="text-sm text-[#6b573f]">On regarde ça.</p>
+            <p className="font-display text-base font-semibold text-ink">Merci, c&apos;est noté !</p>
+            <p className="text-sm text-ink-2">On regarde ça.</p>
           </div>
         ) : (
           <form onSubmit={submit} className="space-y-3">
-            <p className="text-sm text-[#6b573f]">Dis-nous ce qui cloche, on prend tout : un bug, un truc bizarre, une idée.</p>
+            <p className="text-sm text-ink-2">Dis-nous ce qui cloche, on prend tout : un bug, un truc bizarre, une idée.</p>
             <textarea
               value={message}
               onChange={e => setMessage(e.target.value)}
@@ -119,23 +119,23 @@ export function BugReportDialog() {
               rows={5}
               autoFocus
               placeholder="Quand je fais X, il se passe Y au lieu de..."
-              className="w-full resize-none rounded-md border-[1.5px] border-[rgba(46,32,20,.35)] bg-[#efe5d0] px-3 py-2.5 text-sm text-[#2e2014] outline-none placeholder:italic placeholder:text-[#b3a182] focus:border-[#c65133]"
+              className="w-full resize-none rounded-md border-[1.5px] border-[rgb(var(--c-line)/.35)] bg-well px-3 py-2.5 text-sm text-ink outline-none placeholder:italic placeholder:text-pale focus:border-terra"
             />
             {status === "error" && (
-              <p className="text-sm font-semibold text-[#9c2f1d]">Envoi impossible, réessaie dans un instant.</p>
+              <p className="text-sm font-semibold text-rouge-txt">Envoi impossible, réessaie dans un instant.</p>
             )}
             <div className="flex justify-end gap-3">
               <button
                 type="button"
                 onClick={close}
-                className="rounded-full border-[1.5px] border-[#2e2014] bg-transparent px-4 py-2 text-sm font-bold text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+                className="rounded-full border-[1.5px] border-line bg-transparent px-4 py-2 text-sm font-bold text-ink transition hover:bg-ink-block hover:text-on-ink"
               >
                 Annuler
               </button>
               <button
                 type="submit"
                 disabled={!message.trim() || status === "sending"}
-                className="inline-flex items-center gap-2 rounded-full border-2 border-[#2e2014] bg-[#c65133] px-5 py-2 text-sm font-bold text-[#f4ecdb] shadow-[3px_3px_0_#2e2014] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_#2e2014] disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex items-center gap-2 rounded-full border-2 border-line bg-terra px-5 py-2 text-sm font-bold text-on-ink shadow-[3px_3px_0_rgb(var(--c-shadow))] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_rgb(var(--c-shadow))] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {status === "sending" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 Envoyer

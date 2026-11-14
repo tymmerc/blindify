@@ -30,7 +30,7 @@ const probe = p => p.evaluate(() => {
   return {
     round: r ? Number(r[1]) : null,
     input: !!document.querySelector('input[placeholder*="morceau qui tourne"]'),
-    fin: /FIN DE LA FACE|On rejoue \?/i.test(txt),
+    fin: /FIN DE LA FACE|PARTIE TERMINÉE|On rejoue \?/i.test(txt),
     attente: /tu joues dès la prochaine manche|tu joues la prochaine partie/i.test(txt),
     organiser: /ORGANISER/i.test(txt) && /Lancer une partie/i.test(txt),
     lancerVisible: /LANCER LA PARTIE/i.test(txt),
@@ -51,7 +51,7 @@ const grabUserId = page => new Promise(resolve => {
 })
 const hostIdP = grabUserId(host)
 await host.goto(`${B}/jouer/`, { waitUntil: "networkidle", timeout: 90000 })
-await host.locator("input").first().fill("Tymeo")
+await host.locator("input:not([type=file])").first().fill("Tymeo")
 await host.getByRole("button", { name: /continuer/i }).click()
 await host.getByRole("button", { name: /^continuer$/i }).click({ timeout: 20000 })
 const hostId = await hostIdP
@@ -76,7 +76,7 @@ for (const name of ["Megane", "Max", "Lea"]) {
   wire(p, name)
   const idP = grabUserId(p)
   await p.goto(`${B}/?join=${code}`, { waitUntil: "networkidle", timeout: 90000 })
-  await p.locator("input").first().fill(name)
+  await p.locator("input:not([type=file])").first().fill(name)
   await p.getByRole("button", { name: /continuer/i }).click()
   const uid = await idP
   await seedLibrary(uid, 20)
@@ -131,7 +131,7 @@ const zoeFlow = (async () => {
   while (![...answered.Megane].some(r => r >= 2)) await sleep(500)
   say("  [test] Zoe arrive en retard pendant la partie")
   await zoe.goto(`${B}/?join=${code}`, { waitUntil: "networkidle", timeout: 90000 })
-  await zoe.locator("input").first().fill("Zoe")
+  await zoe.locator("input:not([type=file])").first().fill("Zoe")
   await zoe.getByRole("button", { name: /continuer/i }).click()
   await zoe.getByRole("button", { name: /rejoindre la partie/i }).click().catch(() => {})
   await zoe.getByTestId("late-joiner-view").waitFor({ timeout: 30000 }).catch(() => {})

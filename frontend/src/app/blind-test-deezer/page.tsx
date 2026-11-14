@@ -62,7 +62,7 @@ export default function Page() {
     <GuideShell
       tag="Guide Deezer"
       tagColor={AMBER}
-      title={<>Un blind test avec <em className="font-medium italic text-[#cc4830]">vos</em> playlists Deezer</>}
+      title={<>Un blind test avec <em className="font-medium italic text-vermillon-txt">vos</em> playlists Deezer</>}
       intro="Le lien de ton profil Deezer ou d'une playlist publique, un pseudo, et la partie se génère avec les morceaux de tout le monde, y compris ceux des potes qui sont sur Spotify. Aucune connexion, rien à installer."
       updated="8 septembre 2026"
       currentHref="/blind-test-deezer/"
