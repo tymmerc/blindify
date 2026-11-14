@@ -43,7 +43,10 @@ export const PROBE = `(() => {
 export const LOUD = 0.003
 
 /** Juge le son releve contre les manches : demarrage, bonne chanson, arret. */
-export function judgeAudio(samples, windows, { expectSound, maxOnsetMs = 3000 }) {
+// continuesAfterReveal (T38) : l'extrait continue sur l'ecran de la reponse.
+// Entre la revelation et la manche suivante, seul CE morceau peut jouer :
+// un autre morceau (la manche suivante en avance) reste une erreur.
+export function judgeAudio(samples, windows, { expectSound, maxOnsetMs = 3000, continuesAfterReveal = false }) {
   const rounds = []
   const problems = []
   windows.forEach((w, i) => {
@@ -68,14 +71,19 @@ export function judgeAudio(samples, windows, { expectSound, maxOnsetMs = 3000 })
       const freq = freqs.length ? freqs[Math.floor(freqs.length / 2)] : null
       r.onsetMs = onset; r.coverage = Math.round(coverage * 100) / 100; r.freq = freq; r.expectedFreq = w.expectedFreq
       r.freqOk = freq != null && w.expectedFreq != null ? Math.abs(freq - w.expectedFreq) <= 30 : null
-      r.stopOk = after.length === 0 || afterLoud / after.length < 0.2
+      const otherTrack = after.filter(([, rms, f]) => rms > LOUD && w.expectedFreq != null && f != null && Math.abs(f - w.expectedFreq) > 30)
+      r.stopOk = continuesAfterReveal
+        ? after.length === 0 || otherTrack.length / after.length < 0.2
+        : after.length === 0 || afterLoud / after.length < 0.2
       if (onset == null) problems.push(`manche ${w.round} : aucun son`)
       else {
         if (onset > maxOnsetMs) problems.push(`manche ${w.round} : le son demarre ${(onset / 1000).toFixed(1)} s apres le debut`)
         if (coverage < 0.7) problems.push(`manche ${w.round} : son coupe (${Math.round(coverage * 100)} % de la manche)`)
         if (r.freqOk === false) problems.push(`manche ${w.round} : mauvais morceau (${freq} Hz entendu, ${w.expectedFreq} Hz attendu)`)
       }
-      if (!r.stopOk) problems.push(`manche ${w.round} : le son continue apres la revelation`)
+      if (!r.stopOk) problems.push(continuesAfterReveal
+        ? `manche ${w.round} : un autre morceau joue entre la revelation et la manche suivante`
+        : `manche ${w.round} : le son continue apres la revelation`)
       r.ok = onset != null && onset <= maxOnsetMs && coverage >= 0.7 && r.freqOk !== false && r.stopOk
     } else {
       r.ok = loud.length === 0 && afterLoud === 0

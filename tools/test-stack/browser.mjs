@@ -126,11 +126,11 @@ async function tableCheck(browser, seed, out) {
     await sleep(4000) // animations d'entree du podium
     await shot(p, "7-ecran-podium")
     const podium = await p.evaluate(() => document.body.innerText)
-    if (!/classement|on rejoue|résultats/i.test(podium)) problems.push("pas de podium sur l'ecran central")
+    if (!/classement|on rejoue|résultats|partie terminée|le podium/i.test(podium)) problems.push("pas de podium sur l'ecran central")
 
     // Son : l'ecran central joue chaque manche, le telephone reste muet.
     const windows = windowsFrom(bots[0], code)
-    const screenAudio = judgeAudio(await p.evaluate(() => window.__probe.samples), windows, { expectSound: true })
+    const screenAudio = judgeAudio(await p.evaluate(() => window.__probe.samples), windows, { expectSound: true, continuesAfterReveal: true })
     const phoneAudio = judgeAudio(await phone.page.evaluate(() => window.__probe.samples), windows, { expectSound: false })
     problems.push(...screenAudio.problems.map(x => `ecran central, ${x}`), ...phoneAudio.problems.map(x => `telephone, ${x}`))
     notes.push(`niveau de l'ecran central : ${screenAudio.levelDb ?? "?"} dB par rapport au fichier (curseur a 35 % par defaut sur ordinateur)`)
@@ -207,7 +207,7 @@ async function remoteCheck(browser, seed, out) {
     if (!host.over) problems.push("la partie ne s'est pas terminee a temps")
     await sleep(4000)
     await shot(p, "4-podium")
-    const audio = judgeAudio(await p.evaluate(() => window.__probe.samples), windowsFrom(host, code), { expectSound: true })
+    const audio = judgeAudio(await p.evaluate(() => window.__probe.samples), windowsFrom(host, code), { expectSound: true, continuesAfterReveal: true })
     problems.push(...audio.problems.map(x => `telephone, ${x}`))
     notes.push(`niveau du telephone : ${audio.levelDb ?? "?"} dB par rapport au fichier`)
     const ok = psql(`SELECT count(*) FROM round_responses r JOIN game_rounds gr ON gr.id=r.round_id JOIN multiplayer_rooms m ON m.session_id=gr.session_id
