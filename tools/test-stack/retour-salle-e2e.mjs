@@ -3,7 +3,7 @@
 // Demande de Tym le 12/11 : « revenir au lobby sans relancer la partie et sans
 // revenir aux modes ». Ici : l'hote (ordi, theme clair) et Zoe (telephone,
 // theme sombre) dans de vrais navigateurs, Tom (bot) qui repond juste.
-// - une partie de 3 manches va au bout, l'ecran de fin montre le podium et les
+// - une partie de 5 manches va au bout, l'ecran de fin montre le podium et les
 //   moments de la partie, « Revenir à la salle » chez l'hote seulement ;
 // - l'hote clique : TOUT le monde revient dans la salle d'attente, meme code,
 //   memes joueurs, reglages gardes, sans aucun rechargement de page (Activite
@@ -28,7 +28,7 @@ const bad = m => { problems.push(m); say(`  !! ${m}`) }
 const shots = []
 const shot = async (page, name, fullPage = false) => { const f = path.join(OUT, `${name}.png`); await page.screenshot({ path: f, fullPage }); shots.push(f) }
 
-const ROUNDS = 3
+const ROUNDS = 5
 const SECONDS = 10
 
 async function until(test, ms, what) {
@@ -95,12 +95,12 @@ try {
   // Zoe repond de travers a chaque manche : de quoi remplir « la reponse la plus a cote ».
   const answered = new Set()
   await until(async () => {
-    const input = zp.getByPlaceholder(/titre du morceau/i)
+    const input = zp.getByPlaceholder(/morceau qui tourne|titre du morceau/i)
     const round = tom.current?.round
     if (round && !answered.has(round) && await input.isVisible().catch(() => false)) {
       answered.add(round)
-      await input.fill(`la chanson du ${round}`).catch(() => {})
-      await zp.getByRole("button", { name: /valider/i }).first().click().catch(() => {})
+      await input.fill(`la chanson du ${round}`, { timeout: 3000 }).catch(() => {})
+      await zp.getByRole("button", { name: /valider/i }).first().click({ timeout: 3000 }).catch(() => {})
     }
     return tom.over
   }, ROUNDS * (SECONDS + 25) * 1000, "la partie 1 ne s'est pas terminee")
@@ -158,7 +158,7 @@ try {
   tom.over = false
   await page.getByRole("button", { name: /lancer la partie/i }).click()
   await until(() => tom.rounds.has(1), 30000, "la partie 2 n'a jamais commence")
-  await until(async () => await zp.getByPlaceholder(/titre du morceau/i).isVisible().catch(() => false), 20000, "Zoe n'a pas l'ecran de jeu de la partie 2")
+  await until(async () => await zp.getByPlaceholder(/morceau qui tourne|titre du morceau/i).isVisible().catch(() => false), 20000, "Zoe n'a pas l'ecran de jeu de la partie 2")
   ok("partie 2 lancee depuis la salle, Zoe est dedans")
   if (await stillSamePage(zp)) ok("toujours sans rechargement chez Zoe")
   else bad("la page de Zoe s'est rechargee au lancement de la partie 2")
