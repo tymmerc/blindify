@@ -81,18 +81,18 @@
 }
 
 html[data-theme="dark"] {
-  --c-paper: 36 23 15;
-  --c-paper-deep: 47 33 24;
-  --c-well: 42 28 19;
-  --c-paper-strong: 58 42 30;
-  --c-paper-light: 43 29 20;
-  --c-ink: 240 226 200;
+  --c-paper: 27 20 14;
+  --c-paper-deep: 38 28 20;
+  --c-well: 33 24 17;
+  --c-paper-strong: 51 38 27;
+  --c-paper-light: 34 26 19;
+  --c-ink: 239 227 203;
   --c-line: 220 205 176;
-  --c-ink-block: 21 14 9;
-  --c-ink-block-hover: 11 7 4;
-  --c-ink-2: 207 187 155;
-  --c-sourd: 176 156 128;
-  --c-pale: 168 147 122;
+  --c-ink-block: 14 10 7;
+  --c-ink-block-hover: 6 4 3;
+  --c-ink-2: 203 184 152;
+  --c-sourd: 168 149 122;
+  --c-pale: 154 135 112;
   --c-terra-txt: 232 113 79;
   --c-vermillon-txt: 232 113 79;
   --c-rouge-txt: 236 134 112;
@@ -102,7 +102,7 @@ html[data-theme="dark"] {
   --c-sage-txt: 157 180 146;
   --c-sage-deep-txt: 168 192 155;
   --c-acier-txt: 147 170 219;
-  --c-shadow: 10 6 4;
+  --c-shadow: 5 3 2;
   --c-scrim: 0 0 0;
   color-scheme: dark;
 }
