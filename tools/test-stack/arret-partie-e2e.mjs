@@ -198,6 +198,9 @@ try {
   else bad(`${zoeAnswers} reponse(s) de Zoe en base, attendu 0`)
 
   // ---- arreter depuis l'ecran de pause ----
+  // Tom repond d'abord : un bot qui repondrait apres l'arret recevrait un refus
+  // normal (« Partie introuvable »), que le vrai jeu ne provoque pas.
+  await until(() => Boolean(tom.intents.get(1)?.ack), 20000, "Tom n'a pas repondu a la manche 1 de la partie 2")
   await page.getByRole("button", { name: "Pause", exact: true }).first().click()
   const pauseScreen = page.locator("div.fixed").filter({ hasText: "La partie est gelée pour tout le monde." }).first()
   await pauseScreen.waitFor({ timeout: 10000 })
