@@ -9,7 +9,7 @@ import { VinylDisc } from "./VinylDisc"
 import { EndFeedback } from "./EndFeedback"
 import { audioManager } from "@/lib/audioManager"
 import { computeScore } from "@/lib/roundFlow"
-import { evaluateGuessSeparate, type Verdict } from "@/lib/matching"
+import { evaluateGuessDetail } from "@/lib/guessMatching"
 import { playCorrectSound, playPartialSound, playWrongSound } from "@/lib/audioManager"
 import { Flame, Timer, SkipForward, Check } from "lucide-react"
 import { DeezerCredit } from "./SourceCredits"
@@ -180,10 +180,7 @@ export function ChronoGameClient({ tracks, durationSeconds, onGameComplete }: Ch
     e.preventDefault()
     if (phase !== "playing" || !currentTrack) return
 
-    const result = evaluateGuessSeparate(guessTitle, guessArtist, {
-      title: currentTrack.title,
-      artist: currentTrack.artist,
-    })
+    const result = evaluateGuessDetail("", currentTrack, guessTitle, guessArtist)
 
     if (result.verdict === "wrong") {
       playWrongSound()
