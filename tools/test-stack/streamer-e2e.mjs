@@ -70,7 +70,7 @@ async function openHost(browser) {
   const host = await newPage(browser, { viewport: { width: 1440, height: 900 } }, "streamer", problems)
   const p = host.page
   await p.goto(`${APP}/jouer/`, { waitUntil: "networkidle", timeout: 60000 })
-  await p.locator("input").first().fill("Streamo")
+  await p.locator("input:not([type=file])").first().fill("Streamo")
   await p.getByRole("button", { name: /continuer/i }).click()
   for (let i = 0; i < 40 && !p.__uid; i++) await sleep(250)
   if (!p.__uid) throw new Error("streamer : aucune identite creee")

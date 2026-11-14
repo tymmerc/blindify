@@ -32,6 +32,8 @@ import { DEAD_GUEST_FILTER } from "./services/deadGuests";
 import quickPlayRoutes from "./routes/quickPlay";
 import challengeRoutes from "./routes/challenges";
 import discordRoutes from "./routes/discord";
+import photosRoutes from "./routes/photos";
+import { ensureUserPhotosSchema } from "./services/userPhotos";
 import { ensureDiscordSchema } from "./services/discordRooms";
 import { readDiscordCredentials } from "./config/discord";
 import { fail, ok } from "./utils/response";
@@ -328,6 +330,7 @@ app.use("/api/challenges", challengeRoutes);
 app.use("/api/reports", reportsRoutes);
 app.use("/api/feedback", feedbackRoutes);
 app.use("/api/discord", discordRoutes);
+app.use("/api/photos", photosRoutes);
 
 app.use((_req, res) => {
   fail(res, "not_found", "Ressource introuvable", 404);
@@ -365,7 +368,10 @@ const userTracksReady = ensureLinksSchema()
   .catch(err => logger.error("user_tracks_schema_boot_failed", { error: err }))
   // Salle par salon Discord (migration 006) : meme regle, la prod l'a deja.
   .then(() => ensureDiscordSchema())
-  .catch(err => logger.error("discord_schema_boot_failed", { error: err }));
+  .catch(err => logger.error("discord_schema_boot_failed", { error: err }))
+  // Photos de profil (migration 008, T39) : meme regle.
+  .then(() => ensureUserPhotosSchema())
+  .catch(err => logger.error("user_photos_schema_boot_failed", { error: err }));
 ensureResponseSchema().catch(err => logger.error("response_schema_boot_failed", { error: err }));
 // Retours de fin de partie : la migration 004 cree la table en prod ; le
 // demarrage la cree la ou elle manque encore (pile de test, CI).

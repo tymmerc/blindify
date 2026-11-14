@@ -68,7 +68,7 @@ try {
   const safari = await open(IPHONE, "safari")
   const page = safari.page
   await page.goto(`${APP}/jouer/`, { waitUntil: "networkidle", timeout: 60000 })
-  await page.locator("input").first().fill(PSEUDO)
+  await page.locator("input:not([type=file])").first().fill(PSEUDO)
   await page.getByRole("button", { name: /continuer/i }).click()
   for (let i = 0; i < 40 && !page.__uid; i++) await sleep(250)
   const me = page.__uid
@@ -130,7 +130,7 @@ try {
   check(await note.isVisible().catch(() => false), "la ligne « Tu es dans Snapchat » s'affiche sur /jouer")
   await shot(sp, "4a-jouer-dans-snapchat")
   // Comme un vrai joueur : son pseudo d'abord (Snapchat ne connait pas celui de Safari).
-  await sp.locator("input").first().fill(PSEUDO)
+  await sp.locator("input:not([type=file])").first().fill(PSEUDO)
   await sp.getByRole("button", { name: /continuer/i }).click()
   for (let i = 0; i < 40 && !sp.__uid; i++) await sleep(250)
   const room5 = await newRoom()

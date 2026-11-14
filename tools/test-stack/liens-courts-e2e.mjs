@@ -130,7 +130,7 @@ try {
   const phone = await newPage(browser, { ...devices["iPhone 13"] }, "tel", problems)
   const p = phone.page
   await p.goto(`${APP}/jouer/`, { waitUntil: "networkidle", timeout: 90000 })
-  await p.locator("input").first().fill("Lea")
+  await p.locator("input:not([type=file])").first().fill("Lea")
   await p.getByRole("button", { name: /continuer/i }).click()
   await p.locator('input[placeholder^="https://"]').fill(`https://link.deezer.com/s/pl${n + 3}`)
   await p.getByRole("button", { name: /importer ma musique/i }).click()

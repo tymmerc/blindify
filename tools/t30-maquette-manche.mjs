@@ -34,7 +34,7 @@ const page = async (opts, tag) => {
 }
 const wizard = async (p, nom, join) => {
   await p.goto(`${B}/jouer/${join ? `?join=${join}` : ""}`, { waitUntil: "networkidle", timeout: 90000 })
-  await p.locator("input").first().fill(nom)
+  await p.locator("input:not([type=file])").first().fill(nom)
   await p.getByRole("button", { name: /continuer/i }).click()
   if (join) await p.getByRole("button", { name: /rejoindre la partie/i }).click({ timeout: 20000 })
   else await p.getByRole("button", { name: /^continuer$/i }).click({ timeout: 20000 })
@@ -70,7 +70,7 @@ try {
   await g.reload({ waitUntil: "networkidle" })
   await sleep(1500)
   await h.getByRole("button", { name: /^Lancer/ }).first().click({ timeout: 20000 })
-  await g.locator("input").first().waitFor({ timeout: 60000 }).catch(() => bad("pas de champ de reponse cote invite"))
+  await g.locator("input:not([type=file])").first().waitFor({ timeout: 60000 }).catch(() => bad("pas de champ de reponse cote invite"))
   await sleep(3500)
   await deux(g, "manche-tel")
   await deux(h, "manche-ordi")

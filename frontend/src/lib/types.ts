@@ -80,6 +80,8 @@ export type MultiplayerRoom = {
 export type MultiplayerParticipant = {
   user_id: number
   username: string | null
+  /** Photo de profil ou avatar Discord : adresse a passer a PlayerAvatar (T39). */
+  avatar?: string | null
   status?: "active" | "away" | "disconnected"
   /** Nombre de titres que ce joueur amene (cartes actives de sa bibliotheque). */
   track_count?: number

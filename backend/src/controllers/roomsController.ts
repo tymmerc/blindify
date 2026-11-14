@@ -347,10 +347,10 @@ export const roomsController = {
       return;
     }
 
-    let participantRows: Array<{ user_id: number; username: string | null; track_count?: number }>;
+    let participantRows: Array<{ user_id: number; username: string | null; avatar: string | null; track_count?: number }>;
     try {
       participantRows = (await pool.query(
-        `SELECT rp.user_id, COALESCE(rp.nickname, u.username) AS username,
+        `SELECT rp.user_id, COALESCE(rp.nickname, u.username) AS username, u.avatar,
                 (SELECT count(*) FROM user_audio_sources ua
                   WHERE ua.user_id = rp.user_id AND ${PLAYS_TONIGHT("ua", "rp.user_id")})::int AS track_count
          FROM room_participants rp
@@ -364,7 +364,7 @@ export const roomsController = {
       // plutot que d'echouer, le lobby polle cet endpoint en continu.
       logger.error("details_track_count_failed", { error: err });
       participantRows = (await pool.query(
-        `SELECT rp.user_id, COALESCE(rp.nickname, u.username) AS username
+        `SELECT rp.user_id, COALESCE(rp.nickname, u.username) AS username, u.avatar
          FROM room_participants rp
          JOIN users u ON u.id = rp.user_id
          WHERE rp.room_id=$1

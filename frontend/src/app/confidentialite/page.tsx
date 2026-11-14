@@ -47,6 +47,13 @@ export default function ConfidentialitePage() {
                 <strong>Un pseudo</strong> (obligatoire pour jouer). C'est le nom affiché dans le jeu et
                 les classements.
               </Item>
+              {/* T39 (13/11/2026) : texte propose, a valider par Tym. */}
+              <Item>
+                <strong>Une photo de profil</strong>, seulement si tu en ajoutes une. On la recadre et on la
+                réduit, et on retire ce qu&apos;elle contient d&apos;autre (date, appareil, position). Elle
+                s&apos;affiche à côté de ton pseudo pour les joueurs de ta salle. Tu peux la retirer quand tu
+                veux dans « Mon compte », et elle part avec ton compte s&apos;il est supprimé.
+              </Item>
               <Item>
                 <strong>Un mot de passe</strong>, uniquement si tu crées un compte. Il n'est jamais stocké
                 en clair : on garde une empreinte chiffrée (bcrypt).

@@ -55,7 +55,7 @@ async function shotAt(page, loc, file) {
 
 /** Pseudo saisi sur /jouer/ : la session invite existe ensuite (cookie). */
 async function guest(page, name) {
-  await page.locator("input").first().fill(name)
+  await page.locator("input:not([type=file])").first().fill(name)
   await page.getByRole("button", { name: /continuer/i }).click()
   for (let i = 0; i < 40; i++) {
     const ok = await page.evaluate(() => fetch("/blindify/api/auth/me", { credentials: "include" }).then(r => r.ok)).catch(() => false)

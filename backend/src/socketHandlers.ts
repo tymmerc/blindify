@@ -462,7 +462,13 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
         serverTimestamp: Date.now(),
       });
       // Presence lobby : (re)devient actif, on annule une eventuelle grace de deconnexion.
-      roomPresence.upsertMember(roomCode, currentUser.id, currentUser.username ?? null, "active");
+      roomPresence.upsertMember(
+        roomCode,
+        currentUser.id,
+        currentUser.username ?? null,
+        "active",
+        (currentUser as { avatar?: string | null }).avatar ?? null
+      );
       roomPresence.cancelGrace(roomCode, currentUser.id);
       io.to(roomCode).emit("room:presence", {
         type: "members",

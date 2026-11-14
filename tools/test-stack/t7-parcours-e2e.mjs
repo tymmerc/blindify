@@ -36,7 +36,7 @@ const names = code => psql(`SELECT COALESCE(rp.nickname, u.username) FROM room_p
 const roomCode = page => page.locator("[data-code]").first().getAttribute("data-code")
 
 async function enterName(page, name) {
-  await page.locator("input").first().fill(name)
+  await page.locator("input:not([type=file])").first().fill(name)
   await page.getByRole("button", { name: /continuer/i }).click()
   for (let i = 0; i < 40 && !page.__uid; i++) await sleep(250)
   if (!page.__uid) throw new Error(`${name} : aucune identite creee`)

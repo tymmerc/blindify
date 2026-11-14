@@ -63,6 +63,7 @@ import { getSessionContext } from "../../src/utils/session";
 import { fetchPlaylistTracksChecked, fetchPublicPlaylists, type ImportedTrack } from "../../src/services/profileImportService";
 import { ensureLinksSchema } from "../../src/controllers/linksController";
 import { bySmallestLibrary, ensureUserTracksSchema, linkTrackToUser } from "../../src/services/userTracks";
+import { ensureUserPhotosSchema } from "../../src/services/userPhotos";
 import { DEAD_GUEST_FILTER } from "../../src/services/deadGuests";
 import { importController } from "../../src/controllers/importController";
 import { linksController } from "../../src/controllers/linksController";
@@ -273,6 +274,8 @@ beforeAll(async () => {
   initSocket(httpServer, ["*"]);
   await ensureLinksSchema();
   await ensureUserTracksSchema();
+  // La suppression de compte efface aussi la photo (migration 008, T39).
+  await ensureUserPhotosSchema();
 });
 
 afterEach(() => {

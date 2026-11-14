@@ -116,7 +116,7 @@ async function browserSpectator() {
     // Le joueur entre par l'interface, comme un vrai.
     const p = player.page
     await p.goto(`${APP}/jouer/?join=${code}`, { waitUntil: "networkidle", timeout: 60000 })
-    await p.locator("input").first().fill("Fanny")
+    await p.locator("input:not([type=file])").first().fill("Fanny")
     await p.getByRole("button", { name: /continuer/i }).click()
     for (let i = 0; i < 40 && !p.__uid; i++) await sleep(250)
     if (!p.__uid) throw new Error("Fanny : aucune identite creee")
