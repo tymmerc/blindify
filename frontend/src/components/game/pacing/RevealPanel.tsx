@@ -21,6 +21,9 @@ export interface RevealPanelProps {
   large?: boolean
   /** Remplit la hauteur de son parent et fait defiler son contenu (vue a distance). */
   fill?: boolean
+  /** Bulle de chat en bas a droite sur telephone et tablette : le pied colle
+   *  en bas lui laisse sa place a droite, « Suivant » reste a decouvert. */
+  dockRoom?: boolean
 }
 
 /**
@@ -28,7 +31,7 @@ export interface RevealPanelProps {
  * l'heure decidee par le serveur. En bas : le temps qui reste, et le bouton
  * « Suivant » chez l'hote.
  */
-export function RevealPanel({ state, players, meId, onNext, now, large = false, fill = false }: RevealPanelProps) {
+export function RevealPanel({ state, players, meId, onNext, now, large = false, fill = false, dockRoom = false }: RevealPanelProps) {
   const screen = pacingScreen(state, now)
   const step: RevealStep = screen === "scores" ? "scores" : "answer"
   const endsAt = state.pacing?.endsAt ?? null
@@ -63,7 +66,7 @@ export function RevealPanel({ state, players, meId, onNext, now, large = false, 
           </motion.div>
         </AnimatePresence>
       </div>
-      <div className="sticky bottom-0 flex shrink-0 items-center justify-between gap-3 rounded-b-md border-t border-line/20 bg-paper px-4 py-3 sm:px-6">
+      <div className={`sticky bottom-0 flex shrink-0 items-center justify-between gap-3 rounded-b-md border-t border-line/20 bg-paper px-4 py-3 sm:px-6 ${dockRoom ? "min-h-20 pr-20 sm:pr-20 lg:min-h-0 lg:pr-6" : ""}`}>
         <span className="text-sm text-ink-2" aria-live="off">
           {finished ? "Place au podium" : state.paused ? "En pause" : endsAt ? (
             <>Suite dans <b className="font-mono text-ink">{left}</b> s</>

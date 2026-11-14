@@ -52,6 +52,10 @@ const scissorsV: Variants = {
   punch: { x: [9, 15, 9], rotate: [14, 50, 14], scale: [1, 0.85, 1], transition: ONCE },
   strike: { x: [9, -3, 9], rotate: [14, -50, 14], scale: [1, 1.3, 1], transition: ONCE },
 }
+const soloV: Variants = {
+  idle: { rotate: 0, scale: 1, transition: REST },
+  punch: { rotate: [0, -14, 0], scale: [1, 1.25, 1], transition: ONCE },
+}
 const impactV: Variants = {
   idle: { scale: 0, opacity: 0, transition: { duration: 0.15 } },
   fight: { scale: [0, 0, 1.3, 0], opacity: [0, 0, 1, 0], rotate: [0, 0, 45, 90], transition: LOOP },
@@ -287,19 +291,29 @@ export function LobbyDock({
             transition={{ layout: morph, backgroundColor: { duration: reduce ? 0 : 0.2 }, scale: { type: "spring", stiffness: 420, damping: 22 } }}
             className="relative flex h-[60px] w-[60px] items-center justify-center border-2 border-line text-on-ink shadow-[3px_3px_0_rgb(var(--c-shadow)/.35)]"
           >
-            {/* La bagarre : un eclat au point de choc, la bulle de chat a
-                gauche, les ciseaux a droite. */}
-            <motion.span aria-hidden className="pointer-events-none absolute" variants={impactV} initial="idle" animate={pose}>
-              <svg width="26" height="26" viewBox="0 0 26 26">
-                <path d="M13 1l2.6 7.2L23 6l-4.7 5.8L25 15l-7.3.9L18 23l-5-5.2L8 23l.3-7.1L1 15l6.7-3.2L3 6l7.4 2.2z" fill={accent} stroke="var(--line)" strokeWidth="1.5" strokeLinejoin="round" />
-              </svg>
-            </motion.span>
-            <motion.span aria-hidden className="absolute flex" variants={chatV} initial="idle" animate={pose}>
-              <MessageCircle size={20} strokeWidth={2.4} />
-            </motion.span>
-            <motion.span aria-hidden className="absolute flex" variants={scissorsV} initial="idle" animate={pose}>
-              <Scissors size={17} strokeWidth={2.4} />
-            </motion.span>
+            {rps ? (
+              <>
+                {/* La bagarre : un eclat au point de choc, la bulle de chat a
+                    gauche, les ciseaux a droite. */}
+                <motion.span aria-hidden className="pointer-events-none absolute" variants={impactV} initial="idle" animate={pose}>
+                  <svg width="26" height="26" viewBox="0 0 26 26">
+                    <path d="M13 1l2.6 7.2L23 6l-4.7 5.8L25 15l-7.3.9L18 23l-5-5.2L8 23l.3-7.1L1 15l6.7-3.2L3 6l7.4 2.2z" fill={accent} stroke="var(--line)" strokeWidth="1.5" strokeLinejoin="round" />
+                  </svg>
+                </motion.span>
+                <motion.span aria-hidden className="absolute flex" variants={chatV} initial="idle" animate={pose}>
+                  <MessageCircle size={20} strokeWidth={2.4} />
+                </motion.span>
+                <motion.span aria-hidden className="absolute flex" variants={scissorsV} initial="idle" animate={pose}>
+                  <Scissors size={17} strokeWidth={2.4} />
+                </motion.span>
+              </>
+            ) : (
+              // Sans pierre-feuille-ciseaux (pendant la partie) : la bulle de
+              // chat seule, qui sursaute a chaque message des autres.
+              <motion.span aria-hidden className="flex" variants={soloV} initial="idle" animate={hit === "punch" && !reduce ? "punch" : "idle"}>
+                <MessageCircle size={22} strokeWidth={2.4} />
+              </motion.span>
+            )}
             {badge ? (
               <span aria-hidden className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full border-2 border-line px-1 text-[10px] font-bold text-on-accent" style={{ background: accent }}>
                 {rpsCalls && !reduce ? <span className="absolute inset-0 animate-ping rounded-full opacity-60" style={{ background: accent }} /> : null}

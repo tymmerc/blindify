@@ -654,9 +654,9 @@ export function MultiplayerGameClient({
     ? Object.values(state.players).filter(p => sortedPlayersFixed.some(s => s.userId === p.userId))
     : []
   const nextHandler = isHost && onNext ? onNext : undefined
-  const revealPanel = (opts: { large?: boolean; fill?: boolean; meId: number | null }) =>
+  const revealPanel = (opts: { large?: boolean; fill?: boolean; meId: number | null; dockRoom?: boolean }) =>
     state && (state.phase === "REVEAL" || state.phase === "FINISHED") && currentTrack ? (
-      <RevealPanel state={state} players={revealPlayers} meId={opts.meId} onNext={nextHandler} now={clock} large={opts.large} fill={opts.fill} />
+      <RevealPanel state={state} players={revealPlayers} meId={opts.meId} onNext={nextHandler} now={clock} large={opts.large} fill={opts.fill} dockRoom={opts.dockRoom} />
     ) : null
   const countdown = state ? (
     <RoundCountdown round={state.currentRound} totalRounds={state.totalRounds} startAt={state.phase === "GUESSING" ? state.timing?.startAt : null} now={clock} large={isEventPresenter} />
@@ -870,9 +870,9 @@ export function MultiplayerGameClient({
 
         {/* Main content */}
         {/* Avec la bulle de chat, une marge la garde a l'ecart du jeu : en bas
-            sur telephone et tablette (bulle surelevee au-dessus du pied
-            « Suivant »), sur les cotes sur ordi (bulle dans la marge droite). */}
-        <div className={`mx-auto flex w-full flex-1 flex-col gap-5 px-5 pt-5 ${showChatBubble ? "pb-[calc(10rem+env(safe-area-inset-bottom))] lg:px-24 lg:pb-8" : "pb-8 lg:px-10"}`}>
+            sur telephone et tablette (en fin de page, rien ne reste dessous),
+            sur les cotes sur ordi (la bulle vit dans la marge droite). */}
+        <div className={`mx-auto flex w-full flex-1 flex-col gap-5 px-5 pt-5 ${showChatBubble ? "pb-[calc(6rem+env(safe-area-inset-bottom))] lg:px-24 lg:pb-8" : "pb-8 lg:px-10"}`}>
           <main className="flex flex-1 flex-col gap-5">
             <AnimatePresence mode="wait">
               {/* ===== EVENT PRESENTER VIEW (projection-optimized) ===== */}
@@ -942,7 +942,7 @@ export function MultiplayerGameClient({
               ) : isRevealed && currentTrack ? (
                 /* ===== Entre deux manches (T38) ===== */
                 <motion.div key="reveal" className="flex-1" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                  {revealPanel({ meId: user.id })}
+                  {revealPanel({ meId: user.id, dockRoom: showChatBubble })}
                 </motion.div>
               ) : (
                 /* ===== GUESSING / LOCKED VIEW (form integrated) ===== */
@@ -1236,7 +1236,7 @@ export function MultiplayerGameClient({
           currentUserId={user.id}
           players={[]}
           accent={accent}
-          raised
+          raised={false}
           title="Le chat"
           placeholder="Dis quelque chose..."
           emptyLabel="Aucun message pour l'instant."
