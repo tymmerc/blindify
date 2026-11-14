@@ -131,7 +131,7 @@ export function TheaterGameView(props: Props) {
   )
 
   const timerUrgent = isPlaying && remaining <= 10 && remaining > 0
-  const timerLabel = isPlaying ? String(remaining).padStart(2, "0") : isLocked ? "--" : "GO"
+  const timerLabel = isPlaying ? String(remaining).padStart(2, "0") : isLocked || isRevealed || isFinished ? "--" : "GO"
 
 
   const me = user.id

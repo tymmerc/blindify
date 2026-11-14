@@ -16,7 +16,7 @@ fs.mkdirSync(OUT, { recursive: true })
 const problems = []
 const say = m => console.log(m)
 const PHONE = { viewport: { width: 375, height: 667 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true }
-const ROUNDS = 3
+const ROUNDS = 5
 const SECONDS = 10
 
 async function until(test, ms, what) {
@@ -61,9 +61,11 @@ async function shootGame(pages, bots, label, typer) {
     await until(() => lead.rounds.has(r), 60000, `${label} : manche ${r} absente`)
     if (typer) await typer(r)
     await until(() => lead.reveals.has(r), (SECONDS + 10) * 1000, `${label} : manche ${r} jamais revelee`)
+    const shoot = r <= 2 || r === ROUNDS
     await sleep(3200) // les reponses arrivent une par une
-    await snap(pages, `${label}-reponse-m${r}`)
+    if (shoot) await snap(pages, `${label}-reponse-m${r}`)
     if (r === ROUNDS) break
+    if (!shoot) continue
     const main = pages[0][1]
     await until(() => main.locator('[data-step="scores"]').count().then(n => n > 0), 12000, `${label} : pas de classement apres la manche ${r}`)
     await sleep(1400)
@@ -121,10 +123,10 @@ try {
   await sleep(2500)
   await hp.getByRole("button", { name: /lancer la partie/i }).click()
   await shootGame([["ecran-central", hp], ["telephone", zp]], bots, "table", async r => {
-    const input = zp.getByPlaceholder(/titre du morceau/i)
-    await input.waitFor({ timeout: 15000 }).catch(() => {})
-    await input.fill(["papaoutai", "jsp", "la macarena"][r - 1] ?? "jsp").catch(() => {})
-    await zp.getByRole("button", { name: /valider/i }).first().click().catch(() => {})
+    const input = zp.getByPlaceholder(/morceau qui tourne|titre du morceau/i)
+    await input.waitFor({ timeout: 8000 }).catch(() => {})
+    await input.fill(["papaoutai", "jsp", "la macarena", "", "formidable"][r - 1] ?? "jsp", { timeout: 3000 }).catch(() => {})
+    await zp.getByRole("button", { name: /valider/i }).first().click({ timeout: 3000 }).catch(() => {})
   })
   for (const b of bots.splice(0)) b.close()
 
@@ -154,13 +156,14 @@ try {
   await sleep(2500)
   await sp.getByRole("button", { name: /lancer la partie/i }).click()
   await shootGame([["telephone", sp]], bots, "distance", async r => {
-    const input = sp.getByPlaceholder(/titre du morceau/i)
-    await input.waitFor({ timeout: 15000 }).catch(() => {})
-    await input.fill(["alors on dance", "", "formidable"][r - 1] ?? "").catch(() => {})
-    await sp.getByRole("button", { name: /valider/i }).first().click().catch(() => {})
+    const input = sp.getByPlaceholder(/morceau qui tourne|titre du morceau/i)
+    await input.waitFor({ timeout: 8000 }).catch(() => {})
+    await input.fill(["alors on dance", "jsp", "formidable", "", "la macarena"][r - 1] ?? "", { timeout: 3000 }).catch(() => {})
+    await sp.getByRole("button", { name: /valider/i }).first().click({ timeout: 3000 }).catch(() => {})
   })
 } catch (e) {
-  problems.push(`arret : ${e.message.split("\n")[0]}`)
+  problems.push(`arret : ${e.message.split("\n").slice(0, 3).join(" | ")}`)
+  for (const [i, c] of contexts.entries()) for (const pg of c.pages()) await pg.screenshot({ path: path.join(OUT, `erreur-${i}.png`) }).catch(() => {})
 } finally {
   for (const b of bots) b.close()
   for (const c of contexts) await c.close().catch(() => {})
