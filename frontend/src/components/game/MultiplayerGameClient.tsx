@@ -2,15 +2,17 @@
 
 import { accentTexte } from "@/lib/accentText"
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
-import type { MultiplayerGameState, UserSummary } from "@/lib/types"
+import type { MultiplayerGameState, RevealStep, UserSummary } from "@/lib/types"
 import { Button } from "@/components/ui/button"
-import { Check, Clock, Crown, Lock, Play, Trophy, Users, Volume2, VolumeX, X } from "lucide-react"
+import { Check, Clock, Lock, Play, Users, Volume2, VolumeX, X } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { audioManager } from "@/lib/audioManager"
 import { GAME_MODES, type GameModeConfig, type GameMode } from "@/lib/gameModes"
 import { useWakeLock } from "@/lib/useWakeLock"
 import { shortGameNotice } from "@/lib/roundCount"
-import { ConfettiBurst } from "./ConfettiBurst"
+import { RevealPanel } from "./pacing/RevealPanel"
+import { RoundCountdown } from "./pacing/RoundCountdown"
+import { useServerClock } from "@/hooks/useServerClock"
 import { TheaterGameView } from "./TheaterGameView"
 import { showOwnerQuestion } from "@/lib/ownerQuestion"
 import { SpectatorBadge } from "./SpectatorBadge"
@@ -20,41 +22,6 @@ import { ANSWER_INPUT_PROPS } from "@/lib/answerInput"
 const VINYL_GROOVES = "repeating-radial-gradient(circle at 50% 50%, #241a10 0 2.5px, #3a2a1a 2.5px 5px)"
 
 const SAGE = "#7d9471"
-
-// Petit compteur qui grimpe en s'amortissant (ease-out cubic) jusqu'a `value`.
-// Remonte depuis la valeur precedente a chaque changement.
-function CountUp({ value, duration = 900 }: { value: number; duration?: number }) {
-  const [display, setDisplay] = useState(value)
-  const fromRef = useRef(value)
-  const rafRef = useRef<number | null>(null)
-
-  useEffect(() => {
-    const from = fromRef.current
-    const to = value
-    if (from === to) {
-      setDisplay(to)
-      return
-    }
-    const start = performance.now()
-    const tick = (now: number) => {
-      const t = Math.min(1, (now - start) / duration)
-      const eased = 1 - Math.pow(1 - t, 3)
-      setDisplay(Math.round(from + (to - from) * eased))
-      if (t < 1) {
-        rafRef.current = requestAnimationFrame(tick)
-      } else {
-        fromRef.current = to
-      }
-    }
-    rafRef.current = requestAnimationFrame(tick)
-    return () => {
-      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
-      fromRef.current = to
-    }
-  }, [value, duration])
-
-  return <>{display}</>
-}
 
 // Platine analogique : sillons sombres, label central couleur d'accent bordé d'encre, trou papier.
 function AnalogVinyl({
@@ -117,8 +84,8 @@ type Props = {
   state: MultiplayerGameState | null
   serverNow: number
   onAnswer: (guessTitle: string, guessArtist: string, sourceUserId?: number | null) => void
-  onReady: () => void
-  onRematch?: () => void
+  /** « Suivant » de l'hote entre deux manches (T38) : passe a l'ecran suivant. */
+  onNext?: (round: number, step: RevealStep) => void
   onExit?: () => void
   disabled?: boolean
   autoAdvance?: boolean
@@ -144,8 +111,7 @@ export function MultiplayerGameClient({
   state,
   serverNow,
   onAnswer,
-  onReady,
-  onRematch,
+  onNext,
   onExit,
   disabled,
   onPauseToggle,
@@ -161,9 +127,6 @@ export function MultiplayerGameClient({
   const resolvedConfig = modeConfig ?? GAME_MODES[mode] ?? GAME_MODES.friends
   const accent = accentColor ?? (resolvedConfig as { theme?: { accent?: string } }).theme?.accent ?? "#c65133"
   const gameConfig = resolvedConfig.game
-  const leaderboardMode = gameConfig.showLeaderboard
-  const isFastPace = gameConfig.pace === "fast"
-  const REVEAL_COUNTDOWN = isFastPace ? 4 : 7
   const isHost = user.id === state?.hostUserId
   // En event, l'hote presente seulement SAUF s'il a choisi "je joue aussi" (hostPlays) :
   // dans ce cas il joue comme un participant tout en restant la source audio.
@@ -193,35 +156,15 @@ export function MultiplayerGameClient({
   // Cle = heure de depart de la manche : une revanche repart a la manche 1 sans demontage.
   const previewAskedRef = useRef<number | null>(null)
   const [justSubmitted, setJustSubmitted] = useState(false)
-  const [revealCountdown, setRevealCountdown] = useState(isFastPace ? 4 : 7)
   const [chatInput, setChatInput] = useState("")
   const chatScrollRef = useRef<HTMLDivElement>(null)
-  const onReadyRef = useRef(onReady)
-  onReadyRef.current = onReady
 
   // Autour d'une table : aucun ecran ne doit se mettre en veille pendant la partie
   // (l'ecran central diffuse, les telephones servent de manette).
   useWakeLock(mode === "event")
 
-  // Compte a rebours 3-2-1 sur l'ecran central avant la toute premiere manche.
-  // Decompte cale sur l'heure de depart serveur : il se termine pile quand la
-  // musique demarre (avant, le decompte tournait pendant que le son jouait deja).
-  const [introCount, setIntroCount] = useState<number | null>(null)
-  useEffect(() => {
-    if (mode !== "event" || !isHost) return
-    if (state?.phase !== "GUESSING" || (state?.currentRound ?? 0) !== 1) return
-    const startAt = state?.timing?.startAt
-    if (!startAt) return
-    const tick = () => {
-      const left = startAt - Date.now()
-      if (left <= 0) { setIntroCount(null); return false }
-      setIntroCount(Math.max(1, Math.ceil(left / 1000)))
-      return true
-    }
-    if (!tick()) return
-    const id = setInterval(() => { if (!tick()) clearInterval(id) }, 200)
-    return () => clearInterval(id)
-  }, [mode, isHost, state?.phase, state?.currentRound, state?.timing?.startAt])
+  // Le 3-2-1 avant chaque manche (T38) : horloge serveur fine.
+  const clock = useServerClock(serverNow, state?.phase === "GUESSING" || state?.phase === "REVEAL", state?.paused === true)
 
   // Petit buzz quand une manche demarre : ramene le joueur qui regardait ailleurs.
   const lastVibratedRoundRef = useRef(0)
@@ -342,7 +285,9 @@ export function MultiplayerGameClient({
   }, [hostAbsent])
 
   const isPaused = state?.paused === true
-  const isAudioPhase = (uiPhase === "guessing" || uiPhase === "locked") && (!isEventParticipant || hostGone) && !isPaused
+  // L'extrait continue pendant la reponse et le classement (T38), il s'arrete
+  // au 3-2-1 de la manche suivante (nouvel extrait, qui attend son depart).
+  const isAudioPhase = (uiPhase === "guessing" || uiPhase === "locked" || backendPhase === "REVEAL") && (!isEventParticipant || hostGone) && !isPaused
 
   // Warmup audio on first user interaction in the game view.
   // This unlocks autoplay for non-host players who didn't click "Lancer".
@@ -532,32 +477,6 @@ export function MultiplayerGameClient({
     return () => clearTimeout(timer)
   }, [justSubmitted, hasAnswered, remaining, backendPhase, guessTitle, guessArtist, sourceGuess])
 
-  // Auto-advance countdown during reveal phase.
-  // Ne PAS tourner quand la partie est FINISHED : sinon on emet un game:ready
-  // fantome apres la fin (room nettoyee -> "Aucune partie en cours").
-  // `state?.currentRound` dans les deps : apres une coupure, on peut enchainer
-  // REVEAL(manche N) -> REVEAL(manche N+1) sans changer de uiPhase. Sans ca le
-  // compteur restait a 0, le "pret" ne partait jamais et TOUTE la salle attendait
-  // le filet serveur de 10s a chaque incident reseau.
-  useEffect(() => {
-    if (uiPhase !== "reveal" || disabled || player?.isReady || backendPhase === "FINISHED") {
-      setRevealCountdown(REVEAL_COUNTDOWN)
-      return
-    }
-    setRevealCountdown(REVEAL_COUNTDOWN)
-    const interval = setInterval(() => {
-      setRevealCountdown(prev => {
-        if (prev <= 0) return 0
-        if (prev === 1) {
-          onReadyRef.current()
-          return 0
-        }
-        return prev - 1
-      })
-    }, 1000)
-    return () => clearInterval(interval)
-  }, [uiPhase, disabled, player?.isReady, REVEAL_COUNTDOWN, backendPhase, state?.currentRound])
-
   // Auto-scroll chat
   useEffect(() => {
     const container = chatScrollRef.current
@@ -601,7 +520,6 @@ export function MultiplayerGameClient({
   const answeredCount = useMemo(() => activePlayers.filter(p => p.hasAnswered).length, [activePlayers])
   const displayAnsweredCount = Math.max(answeredCount, localHasAnswered ? 1 : 0)
   const playerCount = activePlayers.length
-  const readyCount = activePlayers.filter(p => p.isReady).length
 
   // Picker "qui a ajoute ?" : 3 candidats (le bon + 2 leurres) fournis par le serveur
   // via ownerChoices ; fallback sur tous les joueurs si absent (< 3 joueurs).
@@ -685,26 +603,6 @@ export function MultiplayerGameClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAudioPhase, currentTrack?.previewUrl, muted])
 
-  // Hex directs (pas des var()) : utilisés dans des templates `${color}14` pour les teintes.
-  const verdictColor = (verdict: string | null | undefined) => {
-    if (verdict === "correct") return "#7d9471"
-    if (verdict === "close") return "#e0a32e"
-    return "#9c2f1d"
-  }
-
-  // En texte : les variantes lisibles (la sauge et l'or clairs passaient sous 3:1 sur papier).
-  const verdictTextColor = (verdict: string | null | undefined) => {
-    if (verdict === "correct") return "rgb(var(--c-sage-deep-txt))"
-    if (verdict === "close") return "rgb(var(--c-gold-deep-txt))"
-    return "rgb(var(--c-rouge-txt))"
-  }
-
-  const verdictLabel = (verdict: string | null | undefined) => {
-    if (verdict === "correct") return "Trouvé"
-    if (verdict === "close") return "Presque"
-    return "À côté"
-  }
-
   const panelClassName =
     "rounded-md border-2 border-line bg-[var(--surface)] p-5 shadow-[4px_4px_0_rgb(var(--c-shadow)/.18)]"
 
@@ -749,6 +647,19 @@ export function MultiplayerGameClient({
     </div>
   ) : null
 
+  // Les ecrans entre deux manches (T38), les memes dans tous les modes.
+  const revealPlayers = state?.players
+    ? Object.values(state.players).filter(p => sortedPlayersFixed.some(s => s.userId === p.userId))
+    : []
+  const nextHandler = isHost && onNext ? onNext : undefined
+  const revealPanel = (opts: { large?: boolean; fill?: boolean; meId: number | null }) =>
+    state && (state.phase === "REVEAL" || state.phase === "FINISHED") && currentTrack ? (
+      <RevealPanel state={state} players={revealPlayers} meId={opts.meId} onNext={nextHandler} now={clock} large={opts.large} fill={opts.fill} />
+    ) : null
+  const countdown = state ? (
+    <RoundCountdown round={state.currentRound} totalRounds={state.totalRounds} startAt={state.phase === "GUESSING" ? state.timing?.startAt : null} now={clock} large={isEventPresenter} />
+  ) : null
+
   // Partie plus courte que demandee (titres sans extrait) : dit pendant la 1re manche.
   const shortNotice = shortGameNotice(state)
 
@@ -757,6 +668,7 @@ export function MultiplayerGameClient({
     return (
       <>
       {pauseOverlay}
+      {countdown}
       <TheaterGameView
         user={user}
         state={state}
@@ -773,7 +685,6 @@ export function MultiplayerGameClient({
         answeredCount={answeredCount}
         displayAnsweredCount={displayAnsweredCount}
         playerCount={playerCount}
-        readyCount={readyCount}
         guessTitle={guessTitle}
         setGuessTitle={setGuessTitle}
         guessArtist={guessArtist}
@@ -801,11 +712,7 @@ export function MultiplayerGameClient({
         isAudioPhase={isAudioPhase}
         onManualPlay={handleManualPlay}
         currentTrack={currentTrack}
-        trackOwnerUsername={trackOwnerUsername}
-        player={player}
-        revealCountdown={revealCountdown}
-        onReady={onReady}
-        onRematch={onRematch}
+        revealPanel={revealPanel({ fill: true, meId: user.id })}
         onExit={onExit}
         chatMessages={chatMessages}
         spectators={spectators}
@@ -823,29 +730,7 @@ export function MultiplayerGameClient({
       className="relative min-h-screen"
       style={{ ...theme, background: "var(--bg)", color: "var(--ink)" }}
     >
-      {/* 3-2-1 sur l'ecran central avant la premiere manche */}
-      <AnimatePresence>
-        {introCount !== null && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[70] flex items-center justify-center"
-            style={{ background: "rgb(var(--c-paper) / 0.94)" }}
-          >
-            <motion.span
-              key={introCount}
-              initial={{ scale: 2.2, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ duration: 0.35, ease: [0.2, 0.8, 0.2, 1] }}
-              className="font-display text-[9rem] font-bold leading-none sm:text-[13rem]"
-              style={{ color: accentTexte(accent) }}
-            >
-              {introCount}
-            </motion.span>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {countdown}
       {pauseOverlay}
       {audioBrokenNotice && (
         <div
@@ -990,148 +875,12 @@ export function MultiplayerGameClient({
                   exit={{ opacity: 0, y: -10 }}
                   transition={{ duration: 0.4 }}
                 >
+                  {isRevealed && currentTrack ? (
+                    /* --- PRESENTER: entre deux manches (T38) --- */
+                    revealPanel({ large: true, meId: null })
+                  ) : (
                   <div className={`${panelClassName} relative overflow-hidden h-full flex flex-col items-center justify-center min-h-[60vh]`}>
-                    {state?.phase === "FINISHED" ? (
-                      /* --- PRESENTER: FINISHED --- */
-                      <div className="relative flex flex-col items-center gap-8 py-6 w-full max-w-2xl">
-                        <ConfettiBurst />
-                        <div className="flex h-16 w-16 items-center justify-center rounded-full" style={{ background: `${accent}22` }}>
-                          <Trophy className="h-8 w-8" style={{ color: accentTexte(accent) }} />
-                        </div>
-                        <h2 className="text-center font-display text-5xl font-semibold">Partie terminée</h2>
-                        {/* Podium top 3 */}
-                        {sortedPlayersFixed.length >= 3 ? (
-                          <div className="flex items-end justify-center gap-4 mt-4">
-                            {/* 2nd place */}
-                            <div className="flex w-32 flex-col items-center">
-                              <div className="mb-2 text-sm font-bold text-[var(--muted)]">2e</div>
-                              {sortedPlayersFixed[1].avatar ? (
-                                <img src={sortedPlayersFixed[1].avatar} alt={sortedPlayersFixed[1].username ?? "2e joueur"} className="mb-2 h-12 w-12 rounded-full border-2 border-line object-cover" />
-                              ) : (
-                                <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-full border-2 border-line bg-paper text-lg font-bold text-[var(--muted)]">
-                                  {(sortedPlayersFixed[1].username || "?")[0].toUpperCase()}
-                                </div>
-                              )}
-                              <div className="flex h-24 w-full flex-col items-center justify-center rounded-t-md border-2 border-line bg-[var(--surface-strong)]">
-                                <span className="font-display text-lg font-semibold">{sortedPlayersFixed[1].username || "?"}</span>
-                                <span className="font-display text-2xl font-bold text-[var(--muted)]">{sortedPlayersFixed[1].score}</span>
-                              </div>
-                            </div>
-                            {/* 1st place */}
-                            <div className="flex w-36 flex-col items-center">
-                              <Crown className="mb-2 h-8 w-8" style={{ color: accentTexte(accent) }} />
-                              {sortedPlayersFixed[0].avatar ? (
-                                <img src={sortedPlayersFixed[0].avatar} alt={sortedPlayersFixed[0].username ?? "1er joueur"} className="mb-2 h-16 w-16 rounded-full object-cover border-2 border-line" style={{ boxShadow: `0 0 0 3px ${accent}` }} />
-                              ) : (
-                                <div className="mb-2 flex h-16 w-16 items-center justify-center rounded-full border-2 border-line text-xl font-bold text-on-ink" style={{ background: accent }}>
-                                  {(sortedPlayersFixed[0].username || "?")[0].toUpperCase()}
-                                </div>
-                              )}
-                              <div className="flex h-36 w-full flex-col items-center justify-center rounded-t-md border-2 border-line" style={{ background: `${accent}2b`, boxShadow: "4px 4px 0 rgb(var(--c-shadow) / .18)" }}>
-                                <span className="font-display text-xl font-bold">{sortedPlayersFixed[0].username || "?"}</span>
-                                <span className="font-display text-3xl font-bold" style={{ color: accentTexte(accent) }}>{sortedPlayersFixed[0].score}</span>
-                                <span className="text-sm text-[var(--muted)]">{Math.round(sortedPlayersFixed[0].accuracy ?? 0)}%</span>
-                              </div>
-                            </div>
-                            {/* 3rd place */}
-                            <div className="flex w-32 flex-col items-center">
-                              <div className="mb-2 text-sm font-bold text-[var(--muted)]">3e</div>
-                              {sortedPlayersFixed[2].avatar ? (
-                                <img src={sortedPlayersFixed[2].avatar} alt={sortedPlayersFixed[2].username ?? "3e joueur"} className="mb-2 h-12 w-12 rounded-full border-2 border-line object-cover" />
-                              ) : (
-                                <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-full border-2 border-line bg-paper text-lg font-bold text-[var(--muted)]">
-                                  {(sortedPlayersFixed[2].username || "?")[0].toUpperCase()}
-                                </div>
-                              )}
-                              <div className="flex h-20 w-full flex-col items-center justify-center rounded-t-md border-2 border-line bg-[var(--surface-strong)]">
-                                <span className="font-display text-lg font-semibold">{sortedPlayersFixed[2].username || "?"}</span>
-                                <span className="font-display text-2xl font-bold text-[var(--muted)]">{sortedPlayersFixed[2].score}</span>
-                              </div>
-                            </div>
-                          </div>
-                        ) : sortedPlayersFixed.length >= 1 ? (
-                          <div className="flex items-center justify-center gap-6 mt-4">
-                            {sortedPlayersFixed.slice(0, 2).map((p, idx) => (
-                              <div key={p.userId} className="flex flex-col items-center gap-2">
-                                {idx === 0 && <Crown className="h-6 w-6" style={{ color: accentTexte(accent) }} />}
-                                <div className="flex h-28 w-28 flex-col items-center justify-center rounded-md border-2 border-line shadow-[4px_4px_0_rgb(var(--c-shadow)/.18)]"
-                                  style={{ background: idx === 0 ? `${accent}2b` : "var(--surface-strong)" }}>
-                                  <span className="font-display text-lg font-semibold">{p.username || "?"}</span>
-                                  <span className="font-display text-2xl font-bold" style={{ color: idx === 0 ? accent : "var(--muted)" }}>{p.score}</span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        ) : null}
-                        {onRematch && (
-                          <button
-                            onClick={onRematch}
-                            className="mt-4 rounded-md border-2 border-line px-8 py-3 text-lg font-bold shadow-[4px_4px_0_rgb(var(--c-shadow))] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgb(var(--c-shadow))]"
-                            style={{ background: accent, color: "#f4ecdb" }}
-                          >
-                            Rejouer
-                          </button>
-                        )}
-                      </div>
-                    ) : isRevealed && currentTrack ? (
-                      /* --- PRESENTER: REVEAL --- */
-                      <div className="relative flex flex-col items-center gap-6 py-4 w-full max-w-2xl">
-                        <motion.div
-                          initial={{ scale: 0.8, opacity: 0 }}
-                          animate={{ scale: 1, opacity: 1 }}
-                          transition={{ duration: 0.5 }}
-                        >
-                          <AnalogVinyl size={200} spinning={false} accentColor={accent} coverUrl={currentTrack.albumCover} blurred={false} />
-                        </motion.div>
-                        <motion.div
-                          className="text-center"
-                          initial={{ y: 12, opacity: 0 }}
-                          animate={{ y: 0, opacity: 1 }}
-                          transition={{ duration: 0.4, delay: 0.15 }}
-                        >
-                          <p className="text-sm font-bold uppercase tracking-[0.32em]" style={{ color: accentTexte(accent) }}>La réponse était</p>
-                          <h2 className="mt-3 font-display text-5xl font-semibold">{currentTrack.title}</h2>
-                          <p className="mt-2 font-display text-2xl italic text-ink-2">{currentTrack.artist}</p>
-                          {trackOwnerUsername && (
-                            <p className="mt-3 text-base text-[var(--muted)]">Proposé par <span className="font-semibold" style={{ color: accentTexte(accent) }}>{trackOwnerUsername}</span></p>
-                          )}
-                          {/* Lien retour Spotify (guidelines) : la reponse, donc reveal seulement. */}
-                          <SpotifyTrackLink provider={currentTrack.provider} trackId={currentTrack.trackId} className="mt-4" />
-                          <DeezerCredit notice={false} className="mt-3" />
-                        </motion.div>
-                        {/* Mini top 3 */}
-                        <motion.div
-                          className="flex items-center gap-3 mt-2"
-                          initial={{ y: 12, opacity: 0 }}
-                          animate={{ y: 0, opacity: 1 }}
-                          transition={{ duration: 0.4, delay: 0.3 }}
-                        >
-                          {sortedPlayersFixed.slice(0, 3).map((p, idx) => (
-                            <div
-                              key={p.userId}
-                              className="flex items-center gap-2 rounded-md border-[1.5px] border-line px-3 py-2"
-                              style={{
-                                background: idx === 0 ? `${accent}2b` : "var(--surface-strong)",
-                              }}
-                            >
-                              <span className="flex h-6 w-6 items-center justify-center rounded-full border border-line text-[10px] font-bold"
-                                style={{ background: idx === 0 ? accent : "rgb(var(--c-paper))", color: idx === 0 ? "rgb(var(--c-on-ink))" : "var(--muted)" }}>
-                                {idx + 1}
-                              </span>
-                              {p.avatar ? (
-                                <img src={p.avatar} alt={p.username ?? "Joueur"} className="h-6 w-6 rounded-full border border-line object-cover" />
-                              ) : null}
-                              <span className="font-display text-sm font-medium">{p.username || "?"}</span>
-                              <span className="text-sm font-bold" style={{ color: idx === 0 ? accent : "var(--muted)" }}>{p.score}</span>
-                            </div>
-                          ))}
-                        </motion.div>
-                        <div className="text-center text-base text-[var(--muted)]">
-                          {readyCount}/{playerCount} prêts · prochain round dans {revealCountdown}s
-                        </div>
-                      </div>
-                    ) : (
-                      /* --- PRESENTER: GUESSING / LOCKED --- */
+                    {/* --- PRESENTER: GUESSING / LOCKED --- */}
                       <div className="relative flex flex-col items-center gap-8 py-6">
                         <AnalogVinyl size={320} spinning={isPlaying && !manualPlayRequired && needleStage === "down"} accentColor={accent} coverUrl={currentTrack?.albumCover} blurred={!isRevealed} />
                         {manualPlayRequired && isAudioPhase && (
@@ -1177,112 +926,14 @@ export function MultiplayerGameClient({
                           ))}
                         </div>
                       </div>
-                    )}
                   </div>
+                  )}
                 </motion.section>
               ) : isRevealed && currentTrack ? (
-                /* ===== REVEAL VIEW ===== */
-                <motion.section
-                  key="reveal"
-                  className="flex-1"
-                  initial={{ opacity: 0, scale: 0.97 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  transition={{ duration: 0.45 }}
-                >
-                  <div className={`${panelClassName} relative overflow-hidden h-full`}>
-                    <div className="relative flex flex-col items-center gap-5 py-2">
-                      {/* Vinyl with unblurred cover */}
-                      <motion.div
-                        initial={{ scale: 0.8, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        transition={{ duration: 0.5 }}
-                      >
-                        <AnalogVinyl size={160} spinning={false} accentColor={accent} coverUrl={currentTrack.albumCover} blurred={false} />
-                      </motion.div>
-
-                      {/* Track info */}
-                      <motion.div
-                        className="text-center"
-                        initial={{ y: 12, opacity: 0 }}
-                        animate={{ y: 0, opacity: 1 }}
-                        transition={{ duration: 0.4, delay: 0.15 }}
-                      >
-                        <p className="text-[10px] font-bold uppercase tracking-[0.32em]" style={{ color: accentTexte(accent) }}>La réponse était</p>
-                        <h2 className={`mt-2 ${isLargeUI ? "text-4xl" : "text-3xl"} font-display font-semibold`}>{currentTrack.title}</h2>
-                        <p className={`mt-1 ${isLargeUI ? "text-lg" : "text-base"} font-display italic text-ink-2`}>{currentTrack.artist}</p>
-                        {trackOwnerUsername && (
-                          <p className="mt-1 text-xs text-[var(--muted)]">Proposé par <span style={{ color: accentTexte(accent) }}>{trackOwnerUsername}</span></p>
-                        )}
-                        <SpotifyTrackLink provider={currentTrack.provider} trackId={currentTrack.trackId} className="mt-3" />
-                      </motion.div>
-
-                      {/* Verdict card */}
-                      <motion.div
-                        className="w-full max-w-sm rounded-md border-2 px-4 py-3"
-                        style={{ borderColor: verdictColor(player?.lastVerdict), background: `${verdictColor(player?.lastVerdict)}14` }}
-                        initial={{ y: 12, opacity: 0 }}
-                        animate={{ y: 0, opacity: 1 }}
-                        transition={{ duration: 0.4, delay: 0.3 }}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-xs text-[var(--muted)]">Ta réponse</p>
-                            <p className="mt-0.5 text-sm font-medium">{player?.lastGuess || "(pas de réponse)"}</p>
-                          </div>
-                          <span
-                            className="rounded-full px-3 py-1 text-xs font-bold uppercase tracking-[0.14em] text-on-ink"
-                            style={{ background: verdictColor(player?.lastVerdict) }}
-                          >
-                            {verdictLabel(player?.lastVerdict)}
-                          </span>
-                        </div>
-                      </motion.div>
-
-                      {/* Les reponses des autres + points gagnes : le vrai sel du reveal */}
-                      <motion.div
-                        className="w-full max-w-sm space-y-1"
-                        initial={{ y: 12, opacity: 0 }}
-                        animate={{ y: 0, opacity: 1 }}
-                        transition={{ duration: 0.4, delay: 0.4 }}
-                      >
-                        {sortedPlayersFixed.filter(p => p.userId !== user.id).map(p => {
-                          const answered = Boolean((p.lastGuess ?? "").trim())
-                          return (
-                            <div key={p.userId} className="flex items-center justify-between gap-2 rounded-md border-[1.5px] border-[rgb(var(--c-line)/.25)] bg-[var(--surface-strong)] px-3 py-1.5 text-xs">
-                              <span className="shrink-0 font-bold">{p.username || `J${p.userId}`}</span>
-                              <span className="min-w-0 flex-1 truncate text-right" style={{ color: answered ? verdictTextColor(p.lastVerdict) : "var(--muted)", fontStyle: answered ? "normal" : "italic" }}>
-                                {answered ? `« ${p.lastGuess} »` : p.hasAnswered ? "a passé" : "pas de réponse"}
-                              </span>
-                              <span className="shrink-0 font-bold" style={{ color: (p.lastGained ?? 0) > 0 ? "rgb(var(--c-sage-deep-txt))" : "var(--muted)" }}>
-                                +{p.lastGained ?? 0}
-                              </span>
-                            </div>
-                          )
-                        })}
-                      </motion.div>
-
-                      {/* Ready button with countdown */}
-                      <motion.div
-                        initial={{ y: 12, opacity: 0 }}
-                        animate={{ y: 0, opacity: 1 }}
-                        transition={{ duration: 0.4, delay: 0.45 }}
-                      >
-                        <Button
-                          onClick={onReady}
-                          disabled={disabled || player?.isReady}
-                          variant="outline"
-                          className="rounded-full border-2 bg-paper px-5 py-2 text-sm font-bold shadow-[3px_3px_0_rgb(var(--c-shadow)/.25)]"
-                          style={{ borderColor: "rgb(var(--c-line))", color: accentTexte(accent) }}
-                        >
-                          {player?.isReady
-                            ? `En attente (${readyCount}/${playerCount})`
-                            : `Prêt pour la suite (${revealCountdown}s)`}
-                        </Button>
-                      </motion.div>
-                    </div>
-                  </div>
-                </motion.section>
+                /* ===== Entre deux manches (T38) ===== */
+                <motion.div key="reveal" className="flex-1" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                  {revealPanel({ meId: user.id })}
+                </motion.div>
               ) : (
                 /* ===== GUESSING / LOCKED VIEW (form integrated) ===== */
                 <motion.section
@@ -1564,169 +1215,6 @@ export function MultiplayerGameClient({
               )}
             </AnimatePresence>
 
-            {/* Leaderboard in reveal */}
-            {isRevealed && (
-              <motion.section
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.35, delay: 0.2 }}
-                className={panelClassName}
-              >
-                <div className="flex items-center justify-between">
-                  <h3 className="text-[11px] font-bold uppercase tracking-[0.3em]" style={{ color: accentTexte(accent) }}>Face B · Classement</h3>
-                  <span className="text-xs text-[var(--muted)]">Manche {state?.currentRound}</span>
-                </div>
-
-                <div className="mt-4">
-                  {(leaderboardMode === "top3" ? sortedPlayersFixed.slice(0, 3) : sortedPlayersFixed).map((p, idx) => (
-                    <motion.div
-                      key={p.userId}
-                      initial={{ opacity: 0, x: -12 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ duration: 0.4, delay: 0.25 + idx * 0.09, ease: [0.2, 0.8, 0.2, 1] }}
-                      className={`flex items-baseline gap-2.5 ${isLargeUI ? "py-2.5 text-lg" : "py-1.5 text-base"}`}
-                    >
-                      <span className="w-7 shrink-0 text-xs text-[var(--muted)]">A{idx + 1}</span>
-                      <span
-                        className="font-display font-semibold"
-                        style={{ color: p.userId === user.id ? accent : "var(--ink)" }}
-                      >
-                        {p.username || `Joueur ${p.userId}`}
-                      </span>
-                      <span className="text-[11px] text-[var(--muted)]">
-                        {p.lastVerdict === "correct" ? "Trouvé" : p.lastVerdict === "close" ? "Presque" : "À côté"}
-                      </span>
-                      {p.streak >= 2 && (
-                        <span className="text-xs font-bold" style={{ color: "var(--warn)" }}>
-                          {p.streak}x
-                        </span>
-                      )}
-                      <span className="flex-1 -translate-y-1 border-b-2 border-dotted border-[rgb(var(--c-line)/.45)]" />
-                      <span className="font-bold tabular-nums"><CountUp value={p.score} /></span>
-                    </motion.div>
-                  ))}
-                </div>
-              </motion.section>
-            )}
-
-            {/* Game over (presenter has its own FINISHED view) */}
-            {state?.phase === "FINISHED" && !isEventPresenter && (
-              <motion.section
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.5 }}
-                className={`relative overflow-hidden ${panelClassName}`}
-              >
-                <ConfettiBurst />
-                <div className="text-center">
-                  <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full border-2 border-line" style={{ background: `${accent}22` }}>
-                    <Trophy className="h-6 w-6" style={{ color: accentTexte(accent) }} />
-                  </div>
-                  <h3 className="font-display text-xl font-semibold">Partie terminée</h3>
-                  <p className="mt-1 text-xs text-[var(--muted)]">
-                    {state.totalRounds ?? 10} round(s) joué(s)
-                  </p>
-                </div>
-
-                {/* Podium for 3+ players */}
-                {sortedPlayersFixed.length >= 3 && (
-                  <div className="mt-5 flex items-end justify-center gap-2">
-                    <div className="flex w-20 flex-col items-center">
-                      <div className="mb-1 text-[10px] font-bold text-[var(--muted)]">2e</div>
-                      <div className="flex h-16 w-full flex-col items-center justify-center rounded-t-md border-2 border-line bg-[var(--surface-strong)]">
-                        <span className="font-display text-xs font-semibold">{sortedPlayersFixed[1].username || "?"}</span>
-                        <span className="text-[11px] text-[var(--muted)]">{sortedPlayersFixed[1].score}</span>
-                      </div>
-                    </div>
-                    <div className="flex w-24 flex-col items-center">
-                      <Crown className="mb-1 h-4 w-4" style={{ color: accentTexte(accent) }} />
-                      <div
-                        className="flex h-24 w-full flex-col items-center justify-center rounded-t-md border-2 border-line"
-                        style={{ background: `${accent}2b`, boxShadow: "3px 3px 0 rgb(var(--c-shadow) / .18)" }}
-                      >
-                        <span className="font-display text-sm font-semibold">{sortedPlayersFixed[0].username || "?"}</span>
-                        <span className="font-display text-base font-bold" style={{ color: accentTexte(accent) }}>{sortedPlayersFixed[0].score}</span>
-                        <span className="text-[10px] text-[var(--muted)]">{Math.round(sortedPlayersFixed[0].accuracy ?? 0)}%</span>
-                      </div>
-                    </div>
-                    <div className="flex w-20 flex-col items-center">
-                      <div className="mb-1 text-[10px] font-bold text-[var(--muted)]">3e</div>
-                      <div className="flex h-14 w-full flex-col items-center justify-center rounded-t-md border-2 border-line bg-[var(--surface-strong)]">
-                        <span className="font-display text-xs font-semibold">{sortedPlayersFixed[2].username || "?"}</span>
-                        <span className="text-[11px] text-[var(--muted)]">{sortedPlayersFixed[2].score}</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Duel layout for 2 players */}
-                {sortedPlayersFixed.length === 2 && (
-                  <div className="mt-5 flex items-center justify-center gap-4">
-                    {sortedPlayersFixed.map((p, idx) => (
-                      <div key={p.userId} className="flex flex-col items-center gap-1.5">
-                        {idx === 0 && <Crown className="h-4 w-4" style={{ color: accentTexte(accent) }} />}
-                        {idx === 1 && <div className="h-4" />}
-                        <div
-                          className="flex h-20 w-24 flex-col items-center justify-center rounded-md border-2 border-line"
-                          style={{
-                            background: idx === 0 ? `${accent}2b` : "var(--surface-strong)",
-                            boxShadow: idx === 0 ? "3px 3px 0 rgb(var(--c-shadow) / .18)" : "none",
-                          }}
-                        >
-                          <span className="font-display text-sm font-semibold">{p.username || "?"}</span>
-                          <span className="font-display text-base font-bold" style={{ color: idx === 0 ? accent : "var(--muted)" }}>
-                            {p.score}
-                          </span>
-                          <span className="text-[10px] text-[var(--muted)]">{Math.round(p.accuracy ?? 0)}%</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Full leaderboard */}
-                <p className="mt-5 text-[11px] font-bold uppercase tracking-[0.3em]" style={{ color: accentTexte(accent) }}>Face B · Classement final</p>
-                <div className="mt-2">
-                  {sortedPlayersFixed.map((p, idx) => (
-                    <div key={p.userId} className="flex items-baseline gap-2.5 py-1.5 text-sm">
-                      <span className="w-7 shrink-0 text-xs text-[var(--muted)]">A{idx + 1}</span>
-                      <span
-                        className="font-display text-base font-semibold"
-                        style={{ color: idx === 0 ? accent : "var(--ink)" }}
-                      >
-                        {p.username || `Joueur ${p.userId}`}
-                      </span>
-                      {p.bestStreak >= 2 && (
-                        <span className="text-xs font-bold" style={{ color: "var(--warn)" }}>{p.bestStreak}x</span>
-                      )}
-                      <span className="text-[10px] text-[var(--muted)]">{Math.round(p.accuracy ?? 0)}%</span>
-                      <span className="flex-1 -translate-y-1 border-b-2 border-dotted border-[rgb(var(--c-line)/.45)]" />
-                      <span className="font-bold">{p.score}</span>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
-                  {onRematch && (
-                    <button
-                      onClick={onRematch}
-                      className="rounded-md border-2 border-line px-5 py-2 text-sm font-bold shadow-[3px_3px_0_rgb(var(--c-shadow))] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[1px_1px_0_rgb(var(--c-shadow))]"
-                      style={{ background: accent, color: "#f4ecdb" }}
-                    >
-                      Rejouer
-                    </button>
-                  )}
-                  {onExit && (
-                    <button
-                      onClick={onExit}
-                      className="rounded-full border-[1.5px] border-line bg-paper px-5 py-2 text-sm font-bold text-[var(--ink)] transition hover:bg-ink-block hover:text-on-ink"
-                    >
-                      Retour au lobby
-                    </button>
-                  )}
-                </div>
-              </motion.section>
-            )}
           </main>
 
           {/* Sidebar with scoreboard + activity (hidden for event presenter only) */}
@@ -1789,7 +1277,7 @@ export function MultiplayerGameClient({
                 <p className="mt-1 text-xs text-[var(--muted)]">
                   {isPlaying ? `${answeredCount}/${playerCount} ont répondu` :
                    isLocked ? `${answeredCount}/${playerCount} ont répondu · ${remaining}s` :
-                   isRevealed ? `${readyCount}/${playerCount} prêts` : ""}
+                   isRevealed ? "Entre deux manches" : ""}
                 </p>
               </div>
 

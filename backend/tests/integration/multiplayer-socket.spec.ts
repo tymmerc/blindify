@@ -20,6 +20,7 @@ import {
   cleanupSession,
   pool,
   waitFor,
+  hostNext,
   type TestServer,
   type GameClient,
 } from "./helpers/socket-test-harness";
@@ -62,8 +63,9 @@ async function allAnswer(clients: GameClient[], roomCode: string, round: number)
   }
 }
 
+/** Fin du reveal : l'hote passe la reponse puis le classement (T38). */
 async function allReady(clients: GameClient[], roomCode: string): Promise<void> {
-  for (const c of clients) c.socket.emit("game:ready", { roomCode });
+  await hostNext(clients, roomCode);
 }
 
 // ---- tests -----------------------------------------------------------------
@@ -250,12 +252,10 @@ describe("multiplayer socket integration — N players, no desync", () => {
           expect(c.reveals.filter(r => r.round === round)).toHaveLength(1);
         }
 
-        // Everyone readies TWICE in shuffled order.
-        const readyOrder = [...clients].reverse();
-        for (const c of readyOrder) {
-          c.socket.emit("game:ready", { roomCode });
-          c.socket.emit("game:ready", { roomCode });
-        }
+        // Tout le monde envoie « pret » (sans effet depuis T38) et l'hote
+        // clique DEUX fois sur « Suivant » a chaque ecran : un seul ecran passe.
+        for (const c of [...clients].reverse()) c.socket.emit("game:ready", { roomCode });
+        await hostNext(clients, roomCode, { twice: true });
       }
 
       await waitFor(() => clients.every(c => c.gameOver !== null), 5000, "game over");

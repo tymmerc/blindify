@@ -84,7 +84,7 @@ while (Date.now() - t0 < 5 * 60 * 1000) {
     const txt = document.body.innerText || ""
     const r = txt.match(/Événement\s+(?:REVEAL|\d+s)\s+(\d+)\s*\/\s*(\d+)/)
     const owner = (txt.match(/Proposé par ([^\n]+)/) || [])[1]
-    return { round: r ? Number(r[1]) : null, owner: owner?.trim() ?? null, fin: /FIN DE LA FACE|On rejoue \?/i.test(txt) }
+    return { round: r ? Number(r[1]) : null, owner: owner?.trim() ?? null, fin: /FIN DE LA FACE|PARTIE TERMINÉE|On rejoue \?/i.test(txt) }
   }).catch(() => ({}))
   if (hs.fin) break
   if (hs.round && hs.round !== lastRound) { lastRound = hs.round; roundStarts.push(Date.now()) }

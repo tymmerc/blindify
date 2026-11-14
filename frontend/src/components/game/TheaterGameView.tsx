@@ -1,15 +1,16 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react"
+import { useMemo, type CSSProperties, type ReactNode, type RefObject } from "react"
 import { avatarSrc } from "@/lib/photo"
 import { showOwnerQuestion } from "@/lib/ownerQuestion"
 import { motion, AnimatePresence } from "framer-motion"
-import { Pause, Play, Trophy, Volume2, VolumeX, X } from "lucide-react"
+import { Pause, Volume2, VolumeX, X } from "lucide-react"
 import type { MultiplayerGameState, UserSummary } from "@/lib/types"
 import { shortGameNotice } from "@/lib/roundCount"
-import { DeezerCredit, SpotifyTrackLink } from "./SourceCredits"
+import { DeezerCredit } from "./SourceCredits"
 import { SpectatorBadge } from "./SpectatorBadge"
 import { ANSWER_INPUT_PROPS } from "@/lib/answerInput"
+import { VERDICT_LABEL } from "@/lib/roundPacing"
 
 type ChatMessage = {
   userId: number
@@ -54,7 +55,6 @@ type Props = {
   answeredCount: number
   displayAnsweredCount: number
   playerCount: number
-  readyCount: number
   guessTitle: string
   setGuessTitle: (s: string) => void
   guessArtist: string
@@ -74,11 +74,8 @@ type Props = {
   isAudioPhase: boolean
   onManualPlay: () => void
   currentTrack: MultiplayerGameState["currentTrack"] | null
-  trackOwnerUsername: string | null
-  player: PlayerRow | null
-  revealCountdown: number
-  onReady: () => void
-  onRematch?: () => void
+  /** Les ecrans entre deux manches (T38) : reponse puis classement, rythmes par le serveur. */
+  revealPanel: ReactNode
   onExit?: () => void
   chatMessages: ChatMessage[]
   chatInput: string
@@ -104,13 +101,12 @@ const initial = (name: string | null | undefined) =>
 export function TheaterGameView(props: Props) {
   const {
     user, state, uiPhase, isPlaying, needleStage = "down", isHost, onPauseToggle, isLocked, isRevealed,
-    remaining, totalSeconds, sortedPlayers, displayAnsweredCount, playerCount, readyCount,
+    remaining, totalSeconds, sortedPlayers, displayAnsweredCount, playerCount,
     guessTitle, setGuessTitle, guessArtist, setGuessArtist, sourceGuess, setSourceGuess,
     localHasAnswered, onSubmit, onPass, disabled,
     muted, volume, onToggleMute, onVolumeChange,
     manualPlayRequired, isAudioPhase, onManualPlay,
-    currentTrack, trackOwnerUsername, player, revealCountdown,
-    onReady, onRematch, onExit,
+    currentTrack, revealPanel, onExit,
     chatMessages, chatInput, setChatInput, onSendChat, chatScrollRef,
     spectators = 0,
   } = props
@@ -136,12 +132,8 @@ export function TheaterGameView(props: Props) {
   )
 
   const timerUrgent = isPlaying && remaining <= 10 && remaining > 0
-  const timerLabel = isPlaying ? String(remaining).padStart(2, "0") : isLocked ? "--" : "GO"
+  const timerLabel = isPlaying ? String(remaining).padStart(2, "0") : isLocked || isRevealed || isFinished ? "--" : "GO"
 
-  const verdictTone = (v: string | null | undefined) =>
-    v === "correct" ? SAGE : v === "close" ? GOLD : "#9c2f1d"
-  const verdictLabel = (v: string | null | undefined) =>
-    v === "correct" ? "Validé" : v === "close" ? "Partiel" : "Raté"
 
   const me = user.id
 
@@ -221,21 +213,17 @@ export function TheaterGameView(props: Props) {
         {/* ====================== CENTER ====================== */}
         <div className="grid items-center gap-9 min-h-0" style={{ gridTemplateColumns: "minmax(0, 1fr) 320px" }}>
           <AnimatePresence mode="wait">
-            {isRevealed ? (
-              <RevealStage
+            {isRevealed || isFinished ? (
+              <motion.div
                 key="reveal"
-                sortedPlayers={sortedPlayers}
-                me={me}
-                currentTrack={currentTrack}
-                trackOwnerUsername={trackOwnerUsername}
-                player={player}
-                revealCountdown={revealCountdown}
-                onReady={onReady}
-                readyCount={readyCount}
-                playerCount={playerCount}
-                isFinished={isFinished}
-                onRematch={onRematch}
-              />
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.98 }}
+                transition={{ duration: 0.3 }}
+                className="h-full min-h-0 self-stretch"
+              >
+                {revealPanel}
+              </motion.div>
             ) : (
               <GuessingStage
                 needleStage={needleStage}
@@ -265,11 +253,11 @@ export function TheaterGameView(props: Props) {
                 const isLead = idx === 0
                 const statusText = p.disconnected
                   ? "Parti"
-                  : isRevealed
-                    ? (p.isReady ? "Prêt" : "Regarde")
+                  : isRevealed || isFinished
+                    ? VERDICT_LABEL[p.lastVerdict === "correct" || p.lastVerdict === "close" ? p.lastVerdict : "wrong"]
                     : (p.hasAnswered ? "A répondu" : (isMe && (guessTitle || guessArtist) ? "Écrit..." : "Attend"))
                 const statusCls = p.disconnected ? "gone"
-                  : isRevealed && p.isReady ? "locked"
+                  : (isRevealed || isFinished) && p.lastVerdict === "correct" ? "locked"
                   : !isRevealed && p.hasAnswered ? "locked"
                   : isMe && !p.hasAnswered && (guessTitle || guessArtist) ? "typing"
                   : ""
@@ -446,14 +434,6 @@ export function TheaterGameView(props: Props) {
           </form>
         ) : null}
 
-        {isFinished && (
-          <TheaterFinale
-            players={sortedPlayers}
-            meId={me}
-            onRematch={onRematch}
-            onExit={onExit}
-          />
-        )}
       </div>
 
     </div>
@@ -522,220 +502,6 @@ function GuessingStage({
 
       {/* Logo Deezer et usage prive : obligatoires la ou les extraits jouent. */}
       <DeezerCredit className="mt-2" />
-    </motion.div>
-  )
-}
-
-/* ============================ REVEAL STAGE ============================ */
-
-function RevealStage({
-  sortedPlayers,
-  me,
-  currentTrack,
-  trackOwnerUsername,
-  player,
-  revealCountdown,
-  onReady,
-  readyCount,
-  playerCount,
-  isFinished,
-  onRematch,
-}: {
-  sortedPlayers: PlayerRow[]
-  me: number
-  currentTrack: MultiplayerGameState["currentTrack"] | null
-  trackOwnerUsername: string | null
-  player: PlayerRow | null
-  revealCountdown: number
-  onReady: () => void
-  readyCount: number
-  playerCount: number
-  isFinished: boolean
-  onRematch?: () => void
-}) {
-  const verdict = player?.lastVerdict
-  const verdictColor = verdict === "correct" ? SAGE : verdict === "close" ? GOLD : "#9c2f1d"
-  const verdictLabel = verdict === "correct" ? "Validé" : verdict === "close" ? "Partiel" : "Raté"
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.96 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.96 }}
-      transition={{ duration: 0.45 }}
-      className="theater-show"
-    >
-      <span className="theater-show-label" style={{ color: GOLD }}>
-        <span className="bullet" style={{ background: GOLD }} />
-        Reveal
-      </span>
-
-      <div className="theater-reveal-card">
-        <div className="theater-reveal-cover">
-          {currentTrack?.albumCover ? (
-            <img src={currentTrack.albumCover} alt="" />
-          ) : (
-            <div className="theater-reveal-cover-fallback" />
-          )}
-        </div>
-        <div className="theater-reveal-meta">
-          <span className="label">La réponse était</span>
-          <h2 className="title">{currentTrack?.title ?? "—"}</h2>
-          <p className="artist">{currentTrack?.artist ?? ""}</p>
-          {trackOwnerUsername && (
-            <p className="owner">
-              <span>Ajouté par</span>
-              <b>{trackOwnerUsername}</b>
-            </p>
-          )}
-          {/* Lien retour Spotify (guidelines) : la reponse, donc reveal seulement. */}
-          <SpotifyTrackLink provider={currentTrack?.provider} trackId={currentTrack?.trackId} className="mt-3 self-start" />
-        </div>
-      </div>
-      <DeezerCredit notice={false} />
-
-      {/* Recap central : la reponse de CHACUN + points gagnes, classe par score.
-          C'est le moment le plus drole de la manche, il merite le centre. */}
-      <div className="theater-recap">
-        {sortedPlayers.map((p, idx) => {
-          const v = p.lastVerdict
-          const color = v === "correct" ? SAGE : v === "close" ? GOLD : "#9c2f1d"
-          const answered = Boolean((p.lastGuess ?? "").trim())
-          const label = answered ? `« ${p.lastGuess} »` : p.hasAnswered ? "a passé" : "n'a pas répondu"
-          return (
-            <div key={p.userId} className={`theater-recap-row ${p.userId === me ? "you" : ""}`}>
-              <span className="rank">{idx + 1}</span>
-              <span className="who">{p.username || `J${p.userId}`}{p.userId === me ? " (toi)" : ""}</span>
-              <span className="ans" style={{ color: answered ? color: "rgb(var(--c-sourd))", fontStyle: answered ? "normal" : "italic" }}>
-                {label}
-              </span>
-              <span className="gain" style={{ color: (p.lastGained ?? 0) > 0 ? "rgb(var(--c-sage-deep-txt))" : "rgb(var(--c-sourd))" }}>
-                {(p.lastGained ?? 0) > 0 ? `+${p.lastGained}` : "+0"}
-              </span>
-              <span className="total">{p.score} pts</span>
-            </div>
-          )
-        })}
-      </div>
-
-      {!isFinished && (
-        <button
-          className="theater-ready"
-          onClick={onReady}
-          disabled={Boolean(player?.isReady)}
-        >
-          {player?.isReady
-            ? `En attente (${readyCount}/${playerCount})`
-            : `Prêt pour la suite (${revealCountdown}s)`}
-        </button>
-      )}
-
-      {isFinished && onRematch && (
-        <button className="theater-ready" onClick={onRematch}>Rejouer</button>
-      )}
-    </motion.div>
-  )
-}
-
-/* ===================== FINALE (fin de partie) ===================== */
-
-function TheaterFinale({
-  players,
-  meId,
-  onRematch,
-  onExit,
-}: {
-  players: PlayerRow[]
-  meId: number
-  onRematch?: () => void
-  onExit?: () => void
-}) {
-  // Classement : points, puis vitesse cumulee en departage.
-  const ranked = [...players].sort((a, b) => {
-    if (b.score !== a.score) return b.score - a.score
-    return (a.totalReactionMs ?? Infinity) - (b.totalReactionMs ?? Infinity)
-  })
-  const winner = ranked[0]
-  const meWins = winner?.userId === meId
-  const initial = (winner?.username || "?").charAt(0).toUpperCase()
-
-  return (
-    <motion.div
-      className="finale-overlay"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.45 }}
-    >
-      <motion.p
-        className="finale-label"
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-      >
-        <span className="bullet" /> Fin de la face · Résultats
-      </motion.p>
-
-      <motion.div
-        className="finale-vinyl"
-        initial={{ scale: 0.4, opacity: 0, rotate: -120 }}
-        animate={{ scale: 1, opacity: 1, rotate: 0 }}
-        transition={{ delay: 0.35, type: "spring", stiffness: 120, damping: 14 }}
-      >
-        <div className="finale-disc">
-          <span className="finale-disc-label">{initial}</span>
-          <span className="finale-disc-hole" />
-        </div>
-      </motion.div>
-
-      <motion.h2
-        className="finale-winner"
-        initial={{ opacity: 0, y: 18 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.7, duration: 0.5 }}
-      >
-        {winner?.username || "Mystère"}
-      </motion.h2>
-      <motion.p
-        className="finale-sub"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.95 }}
-      >
-        {winner
-          ? winner.score > 0
-            ? `${winner.score} ${winner.score > 1 ? "bonnes réponses" : "bonne réponse"} · disque d'or de la session`
-            : "Personne n'a marqué. On rejoue ?"
-          : ""}
-        {meWins && (winner?.score ?? 0) > 0 ? " - et c'est toi." : ""}
-      </motion.p>
-
-      <div className="finale-board">
-        {ranked.map((p, i) => (
-          <motion.div
-            key={p.userId}
-            className={`finale-row ${i === 0 ? "gold" : ""} ${p.userId === meId ? "me" : ""}`}
-            initial={{ opacity: 0, x: -16 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 1.1 + i * 0.14 }}
-          >
-            <span className="frank">{String(i + 1).padStart(2, "0")}</span>
-            <span className="fname">{p.username || `Joueur ${p.userId}`}{p.userId === meId ? " (toi)" : ""}</span>
-            <span className="fdots" />
-            {Boolean(p.bestStreak && p.bestStreak >= 3) && <span className="fstreak">série x{p.bestStreak}</span>}
-            <span className="fscore">{p.score} {p.score > 1 ? "pts" : "pt"}</span>
-          </motion.div>
-        ))}
-      </div>
-
-      <motion.div
-        className="finale-actions"
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 1.2 + ranked.length * 0.14 }}
-      >
-        {onRematch && <button className="finale-btn primary" onClick={onRematch}>Remettre un disque</button>}
-        {onExit && <button className="finale-btn" onClick={onExit}>Retour au lobby</button>}
-      </motion.div>
     </motion.div>
   )
 }
@@ -1158,110 +924,6 @@ const theaterStyles = `
     box-shadow:none;
   }
 
-  /* Reveal */
-  .theater-recap{
-    display:flex; flex-direction:column; gap:6px;
-    width:min(640px, 92%); margin:0 auto;
-  }
-  .theater-recap-row{
-    display:grid; grid-template-columns:26px minmax(90px, 150px) 1fr auto auto;
-    align-items:center; gap:10px;
-    border:1.5px solid rgb(var(--c-line) / .28); border-radius:8px;
-    background:rgb(var(--c-paper-deep) / .55); padding:7px 12px;
-    font-family:var(--font-sans, 'Karla'), sans-serif; font-size:13px; color:rgb(var(--c-ink));
-  }
-  .theater-recap-row.you{ border-color:rgb(var(--c-line)); background:rgba(224,163,46,.14) }
-  .theater-recap-row .rank{ font-family:var(--font-display, 'Fraunces'), serif; font-weight:700; color:rgb(var(--c-sourd)) }
-  .theater-recap-row .who{ font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
-  .theater-recap-row .ans{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
-  .theater-recap-row .gain{ font-weight:700 }
-  .theater-recap-row .total{ font-family:var(--font-display, 'Fraunces'), serif; font-weight:700 }
-  .theater-reveal-card{
-    display:flex; gap:24px; align-items:center;
-    padding:24px;
-    background:var(--paper-deep); border:2px solid rgb(var(--c-line)); border-radius:6px;
-    box-shadow:4px 4px 0 rgb(var(--c-shadow) / .18);
-    max-width:560px; width:100%;
-  }
-  .theater-reveal-cover{
-    width:140px; height:140px; flex-shrink:0;
-    border:2px solid rgb(var(--c-line));
-    overflow:hidden; background:var(--well);
-    box-shadow:4px 4px 0 rgb(var(--c-shadow) / .18);
-  }
-  .theater-reveal-cover img{width:100%; height:100%; object-fit:cover}
-  .theater-reveal-cover-fallback{
-    width:100%; height:100%;
-    background:repeating-radial-gradient(circle at 50% 50%, #241a10 0 2.5px, #3a2a1a 2.5px 5px);
-  }
-  .theater-reveal-meta{display:flex; flex-direction:column; gap:6px; min-width:0}
-  .theater-reveal-meta .label{
-    font-family:var(--font-sans, 'Karla'), sans-serif; font-weight:700;
-    font-size:9px; letter-spacing:.3em; text-transform:uppercase;
-    color:rgb(var(--c-terra-txt));
-  }
-  .theater-reveal-meta .title{
-    font-family:var(--font-display, 'Fraunces'), serif; font-weight:600;
-    font-size:32px; line-height:1.1; color:rgb(var(--c-ink));
-  }
-  .theater-reveal-meta .artist{
-    font-size:16px; color:var(--soft);
-  }
-  .theater-reveal-meta .owner{
-    display:flex; align-items:center; gap:8px; margin-top:8px;
-    font-family:var(--font-sans, 'Karla'), sans-serif; font-weight:700;
-    font-size:10px; letter-spacing:.16em; text-transform:uppercase;
-    color:var(--muted);
-  }
-  .theater-reveal-meta .owner b{color:rgb(var(--c-terra-txt))}
-
-  .theater-verdict{
-    display:flex; align-items:center; justify-content:space-between; gap:14px;
-    padding:14px 18px;
-    background:var(--well);
-    border:2px solid; border-radius:6px;
-    max-width:560px; width:100%;
-  }
-  .theater-verdict .label{
-    font-family:var(--font-sans, 'Karla'), sans-serif; font-weight:700;
-    font-size:9px; letter-spacing:.24em;
-    color:var(--muted); text-transform:uppercase;
-    display:block; margin-bottom:4px;
-  }
-  .theater-verdict p{font-size:15px; color:rgb(var(--c-ink)); font-family:var(--font-display, 'Fraunces'), serif}
-  .theater-verdict .badge{
-    font-family:var(--font-sans, 'Karla'), sans-serif; font-weight:700;
-    font-size:11px; padding:6px 14px; border-radius:999px;
-    border:1.5px solid currentColor; letter-spacing:.14em; text-transform:uppercase;
-  }
-
-  .theater-ready{
-    padding:14px 28px;
-    font-family:var(--font-sans, 'Karla'), sans-serif; font-weight:700;
-    font-size:14px; letter-spacing:.04em;
-    background:rgb(var(--c-ink-block));
-    border:2px solid rgb(var(--c-line)); border-radius:6px; color:rgb(var(--c-on-ink));
-    cursor:pointer;
-    box-shadow:4px 4px 0 rgb(var(--c-shadow) / .3);
-    transition:transform .12s, box-shadow .12s;
-  }
-  .theater-ready:hover:not(:disabled){
-    transform:translate(2px,2px); box-shadow:2px 2px 0 rgb(var(--c-shadow) / .3);
-  }
-  .theater-ready:disabled{
-    opacity:.7; cursor:not-allowed;
-    background:var(--paper-deep); color:var(--soft); box-shadow:none;
-  }
-
-  .theater-finished{
-    display:flex; align-items:center; gap:12px;
-    padding:14px 20px;
-    background:var(--paper-deep); border:2px solid rgb(var(--c-line)); border-radius:6px;
-    font-family:var(--font-display, 'Fraunces'), serif; font-weight:600;
-    font-size:17px; color:rgb(var(--c-ink));
-    box-shadow:4px 4px 0 rgb(var(--c-shadow) / .18);
-  }
-
   /* Chat drawer */
   .theater-chat-inline{
     display:flex; flex-direction:column; flex:1; min-height:120px;
@@ -1307,72 +969,6 @@ const theaterStyles = `
     .theater-stage{padding:14px 16px 16px}
     .theater-stage > div:nth-child(2){grid-template-columns:minmax(0,1fr) 260px !important; gap:20px !important}
   }
-  /* ---------- Finale ---------- */
-  .finale-overlay{
-    position:fixed; inset:0; z-index:80;
-    background:rgb(var(--c-paper));
-    display:flex; flex-direction:column; align-items:center; justify-content:center;
-    gap:10px; padding:28px 20px; overflow-y:auto;
-  }
-  .finale-label{
-    display:flex; align-items:center; gap:10px;
-    font-family:var(--font-sans,'Karla'),sans-serif; font-weight:700;
-    font-size:11px; letter-spacing:.3em; text-transform:uppercase; color:rgb(var(--c-terra-txt));
-  }
-  .finale-label .bullet{width:6px; height:6px; border-radius:50%; background:${TERRA}; animation:rec 1.2s ease-in-out infinite}
-  .finale-vinyl{margin-top:6px}
-  .finale-disc{
-    position:relative; width:128px; height:128px; border-radius:50%;
-    background:repeating-radial-gradient(circle at 50% 50%, #241a10 0 2.5px, #3a2a1a 2.5px 5px);
-    border:3px solid rgb(var(--c-line)); box-shadow:6px 6px 0 rgb(var(--c-shadow) / .18);
-    animation:vinyl-spin 8s linear infinite;
-    display:grid; place-items:center;
-  }
-  .finale-disc-label{
-    position:absolute; inset:30%; border-radius:50%;
-    background:${GOLD}; border:3px solid rgb(var(--c-line));
-    display:grid; place-items:center;
-    font-family:var(--font-display,'Fraunces'),serif; font-weight:700; font-size:28px; color:rgb(var(--c-on-accent));
-  }
-  .finale-disc-hole{position:absolute; inset:46%; border-radius:50%; background:rgb(var(--c-paper)); border:2px solid rgb(var(--c-line)); z-index:2}
-  .finale-winner{
-    margin:8px 0 0;
-    font-family:var(--font-display,'Fraunces'),serif; font-weight:700;
-    font-size:clamp(2rem, 7vw, 3.4rem); line-height:1.05; color:rgb(var(--c-ink));
-    text-align:center; max-width:90vw; overflow-wrap:anywhere;
-  }
-  .finale-sub{
-    margin:0; font-size:14px; color:rgb(var(--c-ink-2)); text-align:center;
-  }
-  .finale-board{
-    margin-top:18px; width:100%; max-width:460px;
-    display:flex; flex-direction:column; gap:8px;
-  }
-  .finale-row{
-    display:flex; align-items:baseline; gap:10px;
-    padding:9px 14px; border-radius:6px;
-    border:1.5px solid var(--line); background:var(--paper-deep);
-  }
-  .finale-row.gold{border:2px solid rgb(var(--c-line)); background:${GOLD}22; box-shadow:4px 4px 0 rgb(var(--c-shadow) / .16)}
-  .finale-row.me .fname{color:rgb(var(--c-terra-txt))}
-  .finale-row .frank{font-family:var(--font-sans,'Karla'),sans-serif; font-weight:700; font-size:11px; color:var(--muted); min-width:22px}
-  .finale-row .fname{font-family:var(--font-display,'Fraunces'),serif; font-weight:600; font-size:17px; color:rgb(var(--c-ink)); overflow-wrap:anywhere}
-  .finale-row .fdots{flex:1; border-bottom:2px dotted rgb(var(--c-line) / .4); transform:translateY(-4px); min-width:18px}
-  .finale-row .fstreak{font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.1em; color:rgb(var(--c-terra-txt))}
-  .finale-row .fscore{font-family:var(--font-display,'Fraunces'),serif; font-weight:700; font-size:17px; color:rgb(var(--c-ink))}
-  .finale-actions{display:flex; gap:10px; margin-top:20px; flex-wrap:wrap; justify-content:center}
-  .finale-btn{
-    font-family:var(--font-sans,'Karla'),sans-serif; font-weight:700; font-size:13px;
-    padding:13px 24px; border-radius:6px; cursor:pointer;
-    border:2px solid rgb(var(--c-line)); background:transparent; color:rgb(var(--c-ink));
-    transition:transform .12s, box-shadow .12s;
-  }
-  .finale-btn.primary{
-    background:${TERRA}; color:rgb(var(--c-on-ink)); box-shadow:4px 4px 0 rgb(var(--c-shadow));
-  }
-  .finale-btn.primary:hover{transform:translate(2px,2px); box-shadow:2px 2px 0 rgb(var(--c-shadow))}
-  .finale-btn:not(.primary):hover{background:rgb(var(--c-ink-block)); color:rgb(var(--c-on-ink))}
-
   @media (max-width:900px){
     .theater-stage > div:nth-child(2){grid-template-columns:minmax(0,1fr) !important}
     /* Tablette, telephone couche : l'en-tete complet fait ~750 px. */
@@ -1432,12 +1028,6 @@ const theaterStyles = `
     .theater-pick .pick-name{font-size:10px}
     .theater-submit{padding:14px; font-size:14px}
     .theater-actions .theater-submit{min-width:0}
-    .theater-reveal-card{flex-direction:column; text-align:center; gap:14px}
-    .theater-recap{width:100%}
-    .theater-recap-row{grid-template-columns:18px minmax(56px, 110px) minmax(0, 1fr) auto auto; gap:8px; padding:7px 10px}
-    .theater-reveal-cover{width:120px; height:120px}
-    .finale-disc{width:104px; height:104px}
-    .finale-board{max-width:100%}
   }
   /* Petits telephones (iPhone SE 1re generation, 320 px) : la marque saute et
      le bouton dit juste « Valider », pour garder Valider et Je sais pas sur

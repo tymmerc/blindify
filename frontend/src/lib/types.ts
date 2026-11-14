@@ -95,7 +95,15 @@ export type MultiplayerPlayerState = {
   hasAnswered: boolean
   isReady: boolean
   lastGuess?: string
+  /** Au reveal : le titre et l'artiste tapes, et le pari « qui a ajoute ? » (userId). */
+  lastGuessTitle?: string | null
+  lastGuessArtist?: string | null
+  lastSourceGuess?: number | null
   lastVerdict?: "correct" | "close" | "wrong"
+  /** Au reveal (T38) : le titre, l'artiste, le « de qui » de sa reponse etaient-ils justes ? */
+  lastTitleOk?: boolean
+  lastArtistOk?: boolean
+  lastOwnerOk?: boolean
   answerAt?: number | null
   lastGained?: number
   totalReactionMs?: number
@@ -151,6 +159,8 @@ export type MultiplayerGameState = {
   waiting?: WaitingPlayer[]
   /** Partie mise en pause par l'hote. */
   paused?: boolean
+  /** Ecran en cours du reveal (T38) : la reponse puis le classement ; null hors REVEAL. */
+  pacing?: RoundPacing | null
   /** L'hote (source audio en mode event) est-il toujours connecte ? */
   hostConnected?: boolean
   timing: {
@@ -201,6 +211,10 @@ export interface PlayerState {
   lastGuessArtist?: string | null
   lastSourceGuess?: number | null
   lastVerdict?: Verdict
+  /** Au reveal (T38) : le titre, l'artiste, le « de qui » de sa reponse etaient-ils justes ? */
+  lastTitleOk?: boolean
+  lastArtistOk?: boolean
+  lastOwnerOk?: boolean
   answerAt?: number | null
   lastGained?: number
   totalReactionMs?: number
@@ -221,6 +235,20 @@ export interface GameConfig {
   roundDurationMs: number
 }
 
+/**
+ * Les deux ecrans de la phase REVEAL (T38) : la reponse, puis le classement.
+ * Le 3-2-1 qui suit est le debut de la manche suivante (startAt dans le futur).
+ */
+export type RevealStep = "answer" | "scores"
+
+/** Ecran en cours du reveal et heure serveur (ms) de sa fin. */
+export interface RoundPacing {
+  step: RevealStep
+  endsAt: number
+  /** Duree de l'ecran (ms), pour la barre qui se vide. */
+  ms: number
+}
+
 export interface GameState {
   roomCode: string
   hostUserId: number | null
@@ -236,6 +264,8 @@ export interface GameState {
   currentTrack: RoundTrack | null
   players: Record<number, PlayerState>
   paused?: boolean
+  /** Ecran en cours du reveal (T38) ; null hors REVEAL. */
+  pacing?: RoundPacing | null
   timing: GameTiming
   config: GameConfig
 }

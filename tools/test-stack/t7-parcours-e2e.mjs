@@ -46,7 +46,7 @@ async function enterName(page, name) {
 async function waitForEnd(pages, timeoutMs) {
   const t0 = Date.now()
   while (Date.now() - t0 < timeoutMs) {
-    if (/Fin de la face/i.test(await text(pages[0]))) return true
+    if (/Fin de la face|Partie terminée/i.test(await text(pages[0]))) return true
     for (const p of pages) {
       const btn = p.locator('button[type="submit"]').first()
       if (await btn.isEnabled({ timeout: 200 }).catch(() => false)) await btn.click({ timeout: 1000 }).catch(() => {})

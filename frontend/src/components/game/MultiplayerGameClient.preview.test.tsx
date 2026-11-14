@@ -67,7 +67,7 @@ describe("T35 : extrait illisible en pleine partie", () => {
     audio.play.mockRejectedValue(notSupported())
     const onPreviewBroken = vi.fn()
     const now = Date.now()
-    const props = { user, serverNow: now, onAnswer: vi.fn(), onReady: vi.fn(), mode: "event" as const, onPreviewBroken }
+    const props = { user, serverNow: now, onAnswer: vi.fn(), mode: "event" as const, onPreviewBroken }
     const { rerender } = render(<MultiplayerGameClient {...props} state={guessing(18, "https://cdnt-preview.dzcdn.net/mort.mp3", now)} />)
     await act(async () => { await Promise.resolve() })
     expect(onPreviewBroken).toHaveBeenCalledWith(18)
@@ -88,7 +88,7 @@ describe("T35 : extrait illisible en pleine partie", () => {
     audio.play.mockRejectedValue(Object.assign(new Error("blocked"), { name: "NotAllowedError" }))
     const onPreviewBroken = vi.fn()
     const now = Date.now()
-    render(<MultiplayerGameClient user={user} serverNow={now} onAnswer={vi.fn()} onReady={vi.fn()} mode="event" onPreviewBroken={onPreviewBroken} state={guessing(3, "https://cdnt-preview.dzcdn.net/ok.mp3", now)} />)
+    render(<MultiplayerGameClient user={user} serverNow={now} onAnswer={vi.fn()} mode="event" onPreviewBroken={onPreviewBroken} state={guessing(3, "https://cdnt-preview.dzcdn.net/ok.mp3", now)} />)
     await act(async () => { await Promise.resolve() })
     expect(onPreviewBroken).not.toHaveBeenCalled()
     expect(screen.getAllByTitle("Lancer la musique").length).toBeGreaterThan(0)

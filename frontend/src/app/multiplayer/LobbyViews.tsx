@@ -1,12 +1,11 @@
 "use client"
 
 import { accentTexte } from "@/lib/accentText"
-import { avatarSrc } from "@/lib/photo"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { ArrowLeft, PartyPopper, ShieldCheck, Share2, ChevronDown, Music } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { ConfettiBurst } from "@/components/game/ConfettiBurst"
+import { GamePodium } from "@/components/game/pacing/GamePodium"
 import { InstallApp } from "@/components/InstallApp"
 import { EndFeedback } from "@/components/game/EndFeedback"
 import { DiscordServerLine } from "@/components/game/DiscordServerLine"
@@ -265,94 +264,18 @@ export function ResultsView({
 
   return (
     <section className="relative flex flex-col gap-5 overflow-hidden rounded-md border-2 border-line bg-paper-deep p-4 text-center shadow-[4px_4px_0_rgb(var(--c-shadow)/.18)] sm:p-7">
-      <ConfettiBurst />
       <style>{`
         @keyframes res-rise { from { opacity: 0; transform: translateY(18px) } to { opacity: 1; transform: translateY(0) } }
         @keyframes res-pop { from { opacity: 0; transform: scale(.4) rotate(-90deg) } to { opacity: 1; transform: scale(1) rotate(0) } }
         .res-rise { animation: res-rise .55s cubic-bezier(.22,1,.36,1) backwards }
         .res-pop { animation: res-pop .6s cubic-bezier(.22,1,.36,1) backwards }
       `}</style>
-      <div className="flex flex-col items-center gap-2 text-center">
-        <p className="res-rise flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.3em]" style={{ color: accentTexte(accent), animationDelay: "0.05s" }}>
-          <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full" style={{ background: accent }} />
-          Fin de la face · Résultats
-        </p>
-        {podium[0] && (
-          <>
-            <div
-              className="res-pop relative grid h-28 w-28 place-items-center rounded-full border-[3px] border-line shadow-[5px_5px_0_rgb(var(--c-shadow)/.18)]"
-              style={{
-                background: "repeating-radial-gradient(circle at 50% 50%, #241a10 0 2.5px, #3a2a1a 2.5px 5px)",
-                animation: "res-pop .6s cubic-bezier(.22,1,.36,1) backwards, vinyl-spin 9s linear 0.6s infinite",
-                animationDelay: "0.2s",
-              }}
-            >
-              <span className="absolute inset-[30%] grid place-items-center rounded-full border-[3px] border-line bg-gold font-display text-2xl font-bold text-on-accent">
-                {initials(podium[0].username, podium[0].userId)}
-              </span>
-              <span className="absolute inset-[46%] z-10 rounded-full border-2 border-line bg-paper" />
-            </div>
-            <h2 className="res-rise font-display text-4xl font-bold leading-tight text-ink" style={{ animationDelay: "0.45s" }}>
-              {podium[0].username || `Joueur ${podium[0].userId}`}
-            </h2>
-            <p className="res-rise text-sm text-ink-2" style={{ animationDelay: "0.6s" }}>
-              {/* score = des POINTS (2 par manche parfaite), pas un nombre de bonnes reponses */}
-              {podium[0].score > 0
-                ? `${podium[0].score} ${podium[0].score > 1 ? "points" : "point"} · ${podium[0].accuracy}% de précision · disque d'or de la session`
-                : "Personne n'a marqué. On rejoue ?"}
-            </p>
-          </>
-        )}
-      </div>
-
-      <div className="flex flex-col items-center">
-        {/* Desktop : rangee centree. La grille en 3 colonnes fixes laissait un trou
-            beant des qu'on n'etait pas exactement 3 joueurs. */}
-        <div className="flex w-full max-w-4xl flex-col gap-4 md:flex-row md:items-end md:justify-center md:gap-6">
-          {podiumOrdered.map((entry, idx) => {
-            const rank = idx === 1 ? 1 : idx === 0 ? 2 : 3
-            // Mobile : marches basses et pastilles reduites (le podium empile
-            // prenait presque un ecran entier). Desktop garde la hauteur d'origine.
-            const height = rank === 1 ? "min-h-[5rem] md:min-h-[13rem]" : rank === 2 ? "min-h-[4.5rem] md:min-h-[11rem]" : "min-h-[4.5rem] md:min-h-[10rem]"
-            const colOrder = rank === 1 ? "md:order-2" : rank === 2 ? "md:order-1" : "md:order-3"
-            const borderColor = rank === 1 ? accent : "rgb(var(--c-line))"
-            return (
-              <div key={entry!.userId} className={`res-rise flex flex-row items-center gap-3 md:flex-col ${colOrder}`} style={{ animationDelay: `${0.75 + idx * 0.15}s` }}>
-                <div
-                  className={`relative flex shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-line bg-paper font-bold text-ink ${rank === 1 ? "h-14 w-14 text-base md:h-24 md:w-24 md:text-xl" : "h-12 w-12 text-sm md:h-20 md:w-20 md:text-xl"}`}
-                >
-                  {rank === 1 && (
-                    <span
-                      aria-hidden
-                      className="absolute -top-2 -right-2 z-10 grid h-7 w-7 place-items-center rounded-full border-2 border-line bg-gold text-[9px] font-bold text-on-accent"
-                    >
-                      N°1
-                    </span>
-                  )}
-                  {avatarSrc(entry!.avatar) ? (
-                    <img src={avatarSrc(entry!.avatar) ?? ""} alt={entry!.username ?? `Joueur ${entry!.userId}`} className="h-full w-full object-cover" />
-                  ) : (
-                    <span>{initials(entry!.username, entry!.userId)}</span>
-                  )}
-                </div>
-                <div
-                  className={`flex w-full flex-row items-center gap-3 rounded-md border-2 px-4 py-3 text-left text-ink md:w-48 md:flex-col md:justify-end md:px-4 md:pb-4 md:pt-5 md:text-center ${height}`}
-                  style={{ borderColor, backgroundColor: "rgb(var(--c-paper))", boxShadow: rank === 1 ? `4px 4px 0 ${accent}` : "4px 4px 0 rgb(var(--c-shadow) / .18)" }}
-                >
-                  <div className="font-display text-2xl font-black md:text-4xl" style={{ color: rank === 1 ? accentTexte(accent) : "rgb(var(--c-sourd))" }}>
-                    {rank}
-                  </div>
-                  <div className="min-w-0 flex-1 md:flex-none">
-                    <div className="truncate text-base font-semibold text-ink md:mt-1">{entry!.username || `Joueur ${entry!.userId}`}</div>
-                    <div className="text-sm text-ink-2">{entry!.score} pts • {entry!.accuracy}%</div>
-                  </div>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-        {podium.length === 0 && <div className="text-sm text-sourd">Aucun score.</div>}
-      </div>
+      {/* Le podium revele place par place (T38), le meme partout. */}
+      {leaderboard.length > 0 ? (
+        <GamePodium ranked={leaderboard} meId={currentUserId ?? null} />
+      ) : (
+        <div className="text-sm text-sourd">Aucun score.</div>
+      )}
 
       {/* Titres de la soiree : chacun repart avec quelque chose. Le piege est du
           meme format, il tient donc dans la meme rangee au lieu de trainer tout

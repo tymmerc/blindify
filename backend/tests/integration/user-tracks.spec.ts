@@ -73,7 +73,7 @@ import { authController } from "../../src/controllers/authController";
 import { audioSourcesController } from "../../src/controllers/audioSourcesController";
 import * as realtimeGame from "../../src/services/realtimeGame";
 import { clearGame } from "../../src/services/realtimeGame";
-import { clearAdvanceTimer, clearRevealTimer } from "../../src/services/realtimeOrchestrator";
+import { clearPacingTimer, clearRevealTimer } from "../../src/services/realtimeOrchestrator";
 
 // Sans base de test jetable, la suite s'arrete ici, avant toute requete.
 resolveTestDatabaseUrl(process.env.TEST_DATABASE_URL);
@@ -251,7 +251,7 @@ async function startRoom(code: string, hostId: number): Promise<Reply & { tracks
 
 function stopGame(code: string): void {
   clearRevealTimer(code);
-  clearAdvanceTimer(code);
+  clearPacingTimer(code);
   clearGame(code);
 }
 

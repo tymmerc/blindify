@@ -27,6 +27,7 @@ import {
   closePool,
   pool,
   waitFor,
+  hostNext,
   type TestServer,
   type GameClient,
 } from "./helpers/socket-test-harness";
@@ -71,8 +72,9 @@ function answerAll(clients: GameClient[], roomCode: string, round: number): void
   }
 }
 
-function readyAll(clients: GameClient[], roomCode: string): void {
-  for (const c of clients) c.socket.emit("game:ready", { roomCode });
+/** Fin du reveal : l'hote passe la reponse puis le classement (T38). */
+async function readyAll(clients: GameClient[], roomCode: string): Promise<void> {
+  await hostNext(clients, roomCode);
 }
 
 /**
@@ -114,7 +116,7 @@ describe("arrivee en cours de partie", () => {
 
       answerAll(clients, roomCode, 1);
       await waitFor(() => getGameState(roomCode)?.phase === "REVEAL", 4000, "reveal manche 1");
-      readyAll(clients, roomCode);
+      await readyAll(clients, roomCode);
       await waitFor(() => getGameState(roomCode)?.currentRound === 2, 4000, "manche 2");
 
       // Le retardataire entre pendant la manche 2.
@@ -150,7 +152,7 @@ describe("arrivee en cours de partie", () => {
       expect(getGameState(roomCode)!.players[late.id]).toBeUndefined();
 
       // Manche 3 : il est joueur, a 0 point.
-      readyAll(clients, roomCode);
+      await readyAll(clients, roomCode);
       await waitFor(() => getGameState(roomCode)?.currentRound === 3, 4000, "manche 3");
       await waitFor(() => lateClient!.lastState()?.players?.[late.id] !== undefined, 3000, "promu dans l'etat diffuse");
       expect(lateClient.lastState().players[late.id].score).toBe(0);
@@ -159,7 +161,7 @@ describe("arrivee en cours de partie", () => {
       answerAll([...clients, lateClient], roomCode, 3);
       await waitFor(() => getGameState(roomCode)?.phase === "REVEAL", 4000, "reveal manche 3");
       expect(getGameState(roomCode)!.players[late.id].score).toBe(2);
-      readyAll([...clients, lateClient], roomCode);
+      await readyAll([...clients, lateClient], roomCode);
       await waitFor(() => lateClient!.gameOver !== null, 4000, "fin de partie");
 
       // Score ecrit en base, alors qu'aucune ligne n'avait ete posee au lancement.

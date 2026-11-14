@@ -11,7 +11,7 @@ import {
   earlyRevealDecision,
   endReconnectGrace,
   markDisconnected,
-  markReady,
+  nextRevealStep,
   markReconnected,
   pauseGame,
   recordAnswer,
@@ -220,8 +220,9 @@ describe("grace de reconnexion : la decision de revelation anticipee", () => {
     drop(3, T0);
     recordAnswer(ROOM, 2, "Song 1 Artist 1");
     revealRound(ROOM);
-    markReady(ROOM, 1);
-    const next = markReady(ROOM, 2);
+    nextRevealStep(ROOM);
+    nextRevealStep(ROOM);
+    const next = startNextRound(ROOM);
     expect(next?.currentRound).toBe(2);
     // Le joueur 3 est toujours absent, mais sa grace etait celle de la manche 1.
     recordAnswer(ROOM, 1, "Song 2 Artist 2");

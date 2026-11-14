@@ -27,7 +27,7 @@ export type SpectatorEvent =
   | { type: "init"; payload: { roomCode: string; mode: string; discord?: boolean; expiresAt: number; members: SpectatorMember[]; serverTimestamp?: number }; now: number }
   | { type: "game:state"; payload: MultiplayerGameState }
   | { type: "game:round:start"; payload: { roomCode: string; round: number; track: MultiplayerGameState["currentTrack"]; timing: MultiplayerGameState["timing"] } }
-  | { type: "game:round:reveal"; payload: { roomCode: string; round: number; track?: MultiplayerGameState["currentTrack"]; timing: MultiplayerGameState["timing"]; players: MultiplayerGameState["players"] } }
+  | { type: "game:round:reveal"; payload: { roomCode: string; round: number; track?: MultiplayerGameState["currentTrack"]; timing: MultiplayerGameState["timing"]; players: MultiplayerGameState["players"]; pacing?: MultiplayerGameState["pacing"] } }
   | { type: "game:over"; payload: { roomCode: string; players: MultiplayerGameState["players"] } }
   | { type: "room:presence"; payload: { roomCode?: string; type?: string; members?: SpectatorMember[] } }
   | { type: "error"; code: SpectatorErrorCode }
@@ -84,7 +84,7 @@ export function spectatorReducer(view: SpectatorView, event: SpectatorEvent): Sp
       if (!view.game || !sameRoom(view, p.roomCode)) return view
       return {
         ...view,
-        game: { ...view.game, phase: "REVEAL", currentRound: p.round, currentTrack: p.track ?? view.game.currentTrack, timing: p.timing, players: p.players },
+        game: { ...view.game, phase: "REVEAL", currentRound: p.round, currentTrack: p.track ?? view.game.currentTrack, timing: p.timing, players: p.players, pacing: p.pacing ?? null },
       }
     }
     case "game:over": {

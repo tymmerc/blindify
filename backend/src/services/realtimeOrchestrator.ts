@@ -7,6 +7,7 @@ import {
   getGameState,
   getSessionId,
   liveRoomCodes,
+  nextRevealStep,
   redactedGuessingTrack,
   replaceRoundPreview,
   revealRound,
@@ -16,41 +17,69 @@ import {
 } from "./realtimeGame";
 import { persistGameResults, persistRoundResponses } from "./gamePersistence";
 import { PREVIEW_LOOKAHEAD_ROUNDS, freshPreview, previewNeedsRefresh } from "./roundPreviews";
+import { ROUND_PACING } from "./roundPacing";
 
 const revealTimers = new Map<string, NodeJS.Timeout>();
-// Filet anti-blocage : la manche suivante part meme si un joueur AFK n'envoie
-// jamais son "ready" (tel verrouille, onglet en fond...). Sans ca, toute la
-// table reste coincee sur l'ecran de reveal.
-const advanceTimers = new Map<string, NodeJS.Timeout>();
-const READY_GRACE_MS = 10_000;
+// Rythme entre les manches (T38) : un minuteur par salle pour l'ecran en cours
+// du reveal (la reponse, puis le classement). La partie avance meme si personne
+// ne touche a rien (tel verrouille, onglet en fond) : plus de « pret » a attendre.
+const pacingTimers = new Map<string, NodeJS.Timeout>();
 // Grace de reconnexion (DISCONNECT_GRACE_MS, realtimeGame) : un minuteur par
 // salle, cale sur la fin de la derniere grace en cours de la manche.
 const graceTimers = new Map<string, NodeJS.Timeout>();
 
-export function clearAdvanceTimer(roomCode: string): void {
-  const t = advanceTimers.get(roomCode);
+export function clearPacingTimer(roomCode: string): void {
+  const t = pacingTimers.get(roomCode);
   if (t) {
     clearTimeout(t);
-    advanceTimers.delete(roomCode);
+    pacingTimers.delete(roomCode);
   }
 }
 
-export function scheduleForcedAdvance(io: IOServer, roomCode: string, revealedRound: number): void {
-  clearAdvanceTimer(roomCode);
+/**
+ * Pose le minuteur de l'ecran en cours du reveal, a son heure de fin. Sans
+ * effet hors reveal, en pause (la reprise le repose) ou apres la fin.
+ */
+export function schedulePacingStep(io: IOServer, roomCode: string): void {
+  clearPacingTimer(roomCode);
   if (isGameOver(roomCode)) return;
+  const state = getGameState(roomCode);
+  if (!state || state.phase !== "REVEAL" || state.paused) return;
+  // Sans ecran connu (ne devrait pas arriver), la manche suivante part tout de suite.
+  const step = state.pacing?.step ?? null;
+  const endsAt = state.pacing?.endsAt ?? Date.now();
+  const round = state.currentRound;
   const timer = setTimeout(() => {
-    advanceTimers.delete(roomCode);
+    pacingTimers.delete(roomCode);
     if (isGameOver(roomCode)) return;
-    const current = gameStateSnapshot(roomCode);
-    // N'avance que si on est TOUJOURS sur le reveal de la meme manche
-    // (sinon le chemin "tous prets" est deja passe par la).
-    if (!current || current.phase !== "REVEAL" || current.currentRound !== revealedRound) return;
-    // Jamais pendant une pause de l'hote (la reprise repose ce minuteur).
+    const current = getGameState(roomCode);
+    // Toujours le meme ecran de la meme manche : sinon l'hote est deja passe
+    // a la suite (« Suivant ») et un autre minuteur a pris le relais.
+    if (!current || current.phase !== "REVEAL" || current.currentRound !== round || (current.pacing?.step ?? null) !== step) return;
     if (current.paused) return;
-    logger.debug(`forced advance for ${roomCode} after ready grace (round ${revealedRound})`);
+    advanceRevealStep(io, roomCode);
+  }, Math.max(0, endsAt - Date.now()));
+  pacingTimers.set(roomCode, timer);
+}
+
+/**
+ * Ecran suivant du reveal, a la fin de son minuteur ou au « Suivant » de
+ * l'hote : le classement, puis la manche suivante avec son 3-2-1 (ou la fin de
+ * partie apres la derniere). Rend true si quelque chose a change.
+ */
+export function advanceRevealStep(io: IOServer, roomCode: string): boolean {
+  const next = nextRevealStep(roomCode);
+  if (next === "scores") {
+    emitState(io, roomCode);
+    schedulePacingStep(io, roomCode);
+    return true;
+  }
+  if (next === "next") {
+    logger.debug(`pacing: next round for ${roomCode}`);
     startRoundAndBroadcast(io, roomCode);
-  }, READY_GRACE_MS);
-  advanceTimers.set(roomCode, timer);
+    return true;
+  }
+  return false;
 }
 
 function emitState(io: IOServer, roomCode: string): GameState | undefined {
@@ -116,19 +145,18 @@ export function startRoundAndBroadcast(
   roomCode: string,
   opts?: { forceRound?: number; startAt?: number }
 ): GameState | undefined {
-  // Une nouvelle manche demarre : le filet anti-AFK et la grace de la precedente
-  // sont obsoletes.
-  clearAdvanceTimer(roomCode);
+  // Une nouvelle manche demarre : le rythme du reveal et la grace de la
+  // precedente sont obsoletes.
+  clearPacingTimer(roomCode);
   clearGraceTimer(roomCode);
-  // Pre-roll entre les manches : le bras de lecture se pose sur le vinyle AVANT
-  // que la musique parte (les clients sequencent l'animation sur startAt).
-  const state = startNextRound(roomCode, { ...opts, startAt: opts?.startAt ?? Date.now() + 1_600 });
+  // Le 3-2-1 (T38) : la manche part tout de suite cote serveur mais sa musique
+  // et son chrono a startAt. Les clients affichent le decompte jusque-la.
+  const state = startNextRound(roomCode, { ...opts, startAt: opts?.startAt ?? Date.now() + ROUND_PACING.countdownMs });
   logger.debug(`startRoundAndBroadcast ${roomCode}: round=${state?.currentRound}, phase=${state?.phase}, revealAt=${state?.timing?.revealAt}`);
   if (!state) return undefined;
   if (state.phase === "FINISHED") {
-    // Fin de partie par le filet anti-AFK (personne n'a clique "pret" apres la
-    // derniere manche) : meme chemin que game:ready, sinon les resultats
-    // n'etaient jamais ecrits en base (trouve le 05/10/2026).
+    // Fin de partie apres le classement de la derniere manche : les
+    // resultats sont ecrits en base (oubli trouve le 05/10/2026).
     emitState(io, roomCode);
     broadcastGameOver(io, roomCode);
     return state;
@@ -201,7 +229,7 @@ export function broadcastGameOver(io: IOServer, roomCode: string) {
   // Persist final scores/stats before the in-memory state is dropped.
   void persistGameResults(snapshot, getSessionId(roomCode));
   clearRevealTimer(roomCode);
-  clearAdvanceTimer(roomCode);
+  clearPacingTimer(roomCode);
   clearGraceTimer(roomCode);
   // L'etat FINISHED reste en memoire une minute : les clients recuperent
   // l'ecran de resultats via /state (playlist complete) pendant cette fenetre.
@@ -293,19 +321,20 @@ function finishReveal(io: IOServer, roomCode: string, revealed: GameState): void
     // La reponse complete n'arrive qu'avec le reveal (piste caviardee pendant
     // la manche).
     track: revealed.currentTrack,
+    pacing: revealed.pacing ?? null,
   });
   void persistRoundResponses(revealed, getSessionId(roomCode));
   if (revealed.phase === "FINISHED") {
     broadcastGameOver(io, roomCode);
   } else if (revealed.phase === "REVEAL" && !revealed.paused) {
-    // Filet anti-AFK : la manche suivante part seule si personne ne clique "pret".
-    // Pas pendant une pause : game:resume le pose a la reprise.
-    scheduleForcedAdvance(io, roomCode, revealed.currentRound);
+    // La suite (classement, manche suivante) part seule a l'heure. Pas pendant
+    // une pause : game:resume la repose a la reprise.
+    schedulePacingStep(io, roomCode);
   }
 }
 
 // Filet anti-blocage (T27). Une manche avance par deux minuteurs : le reveal
-// (fin du chrono) puis le filet anti-AFK (manche suivante). Si l'un manque,
+// (fin du chrono) puis celui des ecrans du reveal (T38, manche suivante). Si l'un manque,
 // la partie reste « en cours » sans bouger, comme la 777 du 06/11. Toutes les
 // STALL_CHECK_MS, on repose ce qui manque, sans jamais doubler un minuteur
 // present ni toucher une partie en pause ou finie.
@@ -325,9 +354,9 @@ export function unstickGames(io: IOServer, now = Date.now()): string[] {
       logger.warn("partie_debloquee", { roomCode, round: state.currentRound, phase: "GUESSING" });
       if (revealRoundNow(io, roomCode)) emitState(io, roomCode);
       nudged.push(roomCode);
-    } else if (state.phase === "REVEAL" && !advanceTimers.has(roomCode)) {
+    } else if (state.phase === "REVEAL" && !pacingTimers.has(roomCode)) {
       logger.warn("partie_debloquee", { roomCode, round: state.currentRound, phase: "REVEAL" });
-      scheduleForcedAdvance(io, roomCode, state.currentRound);
+      schedulePacingStep(io, roomCode);
       nudged.push(roomCode);
     }
   }

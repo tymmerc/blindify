@@ -3,6 +3,9 @@
 import { useEffect, useState } from "react"
 import { Label, Panel } from "@/app/multiplayer/lobbyKit"
 import { VinylDisc } from "@/components/game/VinylDisc"
+import { GamePodium } from "@/components/game/pacing/GamePodium"
+import { RevealPanel } from "@/components/game/pacing/RevealPanel"
+import { RoundCountdown } from "@/components/game/pacing/RoundCountdown"
 import { rankedPlayers, secondsLeft, type SpectatorMember } from "@/lib/spectatorState"
 import type { MultiplayerGameState, MultiplayerPlayerState } from "@/lib/types"
 
@@ -56,33 +59,6 @@ function Scoreboard({ players, phase }: { players: MultiplayerPlayerState[]; pha
   )
 }
 
-function Podium({ players }: { players: MultiplayerPlayerState[] }) {
-  const top = players.slice(0, 3)
-  const colors = [GOLD, "#a8b8c8", TERRA]
-  // 2e, 1er, 3e : le premier au centre. Seulement les marches occupees, pour
-  // qu'un podium a deux ne laisse pas une colonne vide.
-  const order = [1, 0, 2].filter(rank => top[rank])
-  return (
-    <div className="mx-auto grid w-full max-w-xl items-end gap-3" style={{ gridTemplateColumns: `repeat(${order.length}, minmax(0, 1fr))` }}>
-      {order.map(rank => {
-        const p = top[rank]
-        return (
-          <div key={p.userId} className="flex flex-col items-center gap-2 text-center">
-            <span className="max-w-full truncate font-display text-base font-semibold">{name(p)}</span>
-            <div
-              className="flex w-full items-start justify-center rounded-t-md border-2 border-b-0 border-line pt-2 font-display text-2xl font-bold"
-              style={{ height: rank === 0 ? 112 : rank === 1 ? 84 : 64, background: colors[rank] }}
-            >
-              {rank + 1}
-            </div>
-            <span className="text-xs font-bold tabular-nums text-ink-2">{p.score ?? 0} pts</span>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
 export interface SpectatorStageProps {
   game: MultiplayerGameState | null
   /** Membres du lobby, montres avant le lancement. */
@@ -120,9 +96,22 @@ export function SpectatorStage({ game, members, clockOffset, now }: SpectatorSta
     return (
       <div className="flex flex-col gap-5">
         <Panel label="Podium" dot={GOLD}>
-          <Podium players={ranked} />
+          <GamePodium ranked={ranked} />
         </Panel>
         <Panel label="Face B · Classement final" dot={TERRA}>
+          <Scoreboard players={ranked} phase={game.phase} />
+        </Panel>
+      </div>
+    )
+  }
+
+  const serverNow = now + clockOffset
+  // Entre deux manches (T38) : les memes ecrans que les joueurs, au meme rythme, sans « Suivant ».
+  if (game.phase === "REVEAL" && game.currentTrack) {
+    return (
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
+        <RevealPanel state={game} players={ranked} meId={null} now={serverNow} />
+        <Panel label="Face B · Classement" dot={TERRA}>
           <Scoreboard players={ranked} phase={game.phase} />
         </Panel>
       </div>
@@ -136,6 +125,7 @@ export function SpectatorStage({ game, members, clockOffset, now }: SpectatorSta
   const present = ranked.filter(p => !p.disconnected).length
   return (
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
+      <RoundCountdown round={game.currentRound} totalRounds={game.totalRounds} startAt={game.phase === "GUESSING" ? game.timing?.startAt : null} now={serverNow} />
       <section className="flex flex-col items-center gap-5 rounded-md border-2 border-line bg-paper-deep p-5 shadow-[4px_4px_0_rgb(var(--c-shadow)/.18)]">
         <div className="flex w-full items-center justify-between gap-3">
           <Label dot={revealed ? SAGE : TERRA}>Manche {game.currentRound} / {game.totalRounds}</Label>
