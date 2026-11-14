@@ -94,7 +94,7 @@ describe("TheaterGameView, credits des sources", () => {
   it("pendant la manche : logo Deezer et mention d'ecoute privee, aucun lien Spotify", () => {
     // Piste telle que le serveur l'envoie pendant la manche : caviardee.
     renderView({ currentTrack: { round: 1, trackId: "hidden", title: "", artist: "", previewUrl: revealed.previewUrl, albumCover: null } })
-    expect(screen.getByRole("img", { name: "Deezer" })).toBeInTheDocument()
+    expect(screen.getAllByRole("img", { name: "Deezer" })).toHaveLength(2)
     expect(screen.getByText(/écoute privée/i)).toBeInTheDocument()
     expect(screen.queryByRole("link", { name: /spotify/i })).toBeNull()
   })
@@ -103,7 +103,7 @@ describe("TheaterGameView, credits des sources", () => {
     renderView({ uiPhase: "reveal", isRevealed: true, isPlaying: false, currentTrack: revealed })
     const link = screen.getByRole("link", { name: /écouter sur spotify/i })
     expect(link.getAttribute("href")).toBe(`https://open.spotify.com/track/${SPOTIFY_ID}`)
-    expect(screen.getByRole("img", { name: "Deezer" })).toBeInTheDocument()
+    expect(screen.getAllByRole("img", { name: "Deezer" })).toHaveLength(2)
   })
 
   it("au reveal d'un morceau Deezer : pas de lien Spotify", () => {

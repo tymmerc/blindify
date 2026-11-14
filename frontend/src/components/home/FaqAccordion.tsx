@@ -24,18 +24,18 @@ export function FaqAccordion({
   defaultOpen?: number
 }) {
   return (
-    <div className="divide-y-2 divide-[rgba(46,32,20,.2)] border-y-2 border-[rgba(46,32,20,.2)]">
+    <div className="divide-y-2 divide-[rgb(var(--c-line)/.2)] border-y-2 border-[rgb(var(--c-line)/.2)]">
       {items.map((item, i) => (
         <details key={item.q} open={i === defaultOpen} className="group">
           <summary
-            className="flex cursor-pointer list-none items-start justify-between gap-5 py-5 font-display text-xl font-semibold text-[#cc4830] transition hover:text-[#2e2014] [&::-webkit-details-marker]:hidden"
+            className="flex cursor-pointer list-none items-start justify-between gap-5 py-5 font-display text-xl font-semibold text-vermillon-txt transition hover:text-ink [&::-webkit-details-marker]:hidden"
           >
             {item.q}
             {/* Le carre garde la meme taille ouvert ou ferme : la fleche pivote,
                 la ligne de question ne bouge pas. */}
             <span
               aria-hidden
-              className="mt-1 grid h-7 w-7 shrink-0 place-items-center rounded-md border-2 border-[#2e2014] text-[#2e2014] transition-transform duration-200 group-open:rotate-180"
+              className="mt-1 grid h-7 w-7 shrink-0 place-items-center rounded-md border-2 border-line text-ink transition-transform duration-200 group-open:rotate-180"
             >
               <svg width="12" height="8" viewBox="0 0 12 8" fill="none" aria-hidden>
                 <path d="M1 1.5 6 6.5 11 1.5" stroke="currentColor" strokeWidth="2.2" strokeLinecap="square" />
@@ -44,7 +44,7 @@ export function FaqAccordion({
           </summary>
           {/* pr- seulement a partir de sm : sur un telephone etroit, reserver la
               largeur du chevron couperait le texte trop tot. */}
-          <p className={`${item.more ? "pb-3" : "pb-6"} text-[1.05rem] leading-relaxed text-[#2e2014] sm:pr-12`}>{item.a}</p>
+          <p className={`${item.more ? "pb-3" : "pb-6"} text-[1.05rem] leading-relaxed text-ink sm:pr-12`}>{item.a}</p>
           {item.more ? <div className="pb-6 sm:pr-12">{item.more}</div> : null}
         </details>
       ))}

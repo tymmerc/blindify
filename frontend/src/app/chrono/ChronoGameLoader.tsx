@@ -66,7 +66,7 @@ export default function ChronoGameLoader() {
   if (loading) {
     return (
       <div className="grid min-h-screen place-items-center">
-        <div className="rounded-full border-[1.5px] border-[#2e2014] bg-[#ece1c8] px-6 py-3 text-[11px] font-bold uppercase tracking-[0.22em] text-[#6b573f]">
+        <div className="rounded-full border-[1.5px] border-line bg-paper-deep px-6 py-3 text-[11px] font-bold uppercase tracking-[0.22em] text-ink-2">
           Preparation du chrono...
         </div>
       </div>
@@ -76,10 +76,10 @@ export default function ChronoGameLoader() {
   if (error) {
     return (
       <div className="grid min-h-screen place-items-center px-6">
-        <div className="flex max-w-md flex-col items-center gap-4 rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-8 text-center shadow-[4px_4px_0_rgba(46,32,20,.18)]">
-          <AlertTriangle className="h-10 w-10 text-[#9c2f1d]" />
-          <p className="text-sm text-[#6b573f]">{error}</p>
-          <Button variant="outline" onClick={() => router.replace("/chrono")} className="gap-2 rounded-full border-[1.5px] border-[#2e2014] bg-[#f4ecdb] font-bold text-[#2e2014] hover:bg-[#2e2014] hover:text-[#f4ecdb]">
+        <div className="flex max-w-md flex-col items-center gap-4 rounded-md border-2 border-line bg-paper-deep p-8 text-center shadow-[4px_4px_0_rgb(var(--c-shadow)/.18)]">
+          <AlertTriangle className="h-10 w-10 text-rouge-txt" />
+          <p className="text-sm text-ink-2">{error}</p>
+          <Button variant="outline" onClick={() => router.replace("/chrono")} className="gap-2 rounded-full border-[1.5px] border-line bg-paper font-bold text-ink hover:bg-ink-block hover:text-on-ink">
             Reessayer
           </Button>
         </div>
@@ -90,9 +90,9 @@ export default function ChronoGameLoader() {
   if (tracks.length === 0) {
     return (
       <div className="grid min-h-screen place-items-center px-6">
-        <div className="flex max-w-md flex-col items-center gap-3 rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-8 text-center text-sm text-[#6b573f] shadow-[4px_4px_0_rgba(46,32,20,.18)]">
+        <div className="flex max-w-md flex-col items-center gap-3 rounded-md border-2 border-line bg-paper-deep p-8 text-center text-sm text-ink-2 shadow-[4px_4px_0_rgb(var(--c-shadow)/.18)]">
           <p>Aucun titre trouvable. Essaie une autre playlist.</p>
-          <Button variant="outline" onClick={() => router.replace("/chrono")} className="rounded-full border-[1.5px] border-[#2e2014] bg-[#f4ecdb] font-bold text-[#2e2014] hover:bg-[#2e2014] hover:text-[#f4ecdb]">
+          <Button variant="outline" onClick={() => router.replace("/chrono")} className="rounded-full border-[1.5px] border-line bg-paper font-bold text-ink hover:bg-ink-block hover:text-on-ink">
             Retour
           </Button>
         </div>
@@ -101,7 +101,7 @@ export default function ChronoGameLoader() {
   }
 
   return (
-    <main className="min-h-screen text-[#2e2014]">
+    <main className="min-h-screen text-ink">
       <ChronoGameClient
         tracks={tracks}
         durationSeconds={durationSeconds}

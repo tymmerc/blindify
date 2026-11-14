@@ -100,19 +100,20 @@ export function SpectatorClient() {
     : null
 
   return (
-    <main className="min-h-screen bg-[#f4ecdb] text-[#2e2014]" data-testid="spectator-view">
+    <main className="min-h-screen bg-paper text-ink" data-testid="spectator-view">
       <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-5 px-4 py-5 sm:gap-6 sm:px-6 sm:py-8">
-        <header className="flex flex-wrap items-center justify-between gap-3 border-b-2 border-[#2e2014] pb-3 sm:pb-4">
+        <header className="flex flex-wrap items-center justify-between gap-3 border-b-2 border-line pb-3 sm:pb-4">
           <div className="flex min-w-0 items-center gap-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={publicPath("/logo-mark.png")} alt="blindz.app" className="h-10 w-10 shrink-0 object-contain sm:h-11 sm:w-11" />
+            <img src={publicPath("/logo-mark.png")} alt="blindz.app" className="h-10 w-10 shrink-0 object-contain sm:h-11 sm:w-11 dark:hidden" />
+            <img src={publicPath("/logo-mark-nuit.png")} alt="blindz.app" className="h-10 w-10 shrink-0 object-contain sm:h-11 sm:w-11 hidden dark:block" />
             <div className="min-w-0">
               <Label dot={SAGE} className="text-[10px] sm:text-[11px]">
                 <Eye aria-hidden className="h-3.5 w-3.5" /> Mode spectateur
               </Label>
               <h1 className="m-0 mt-0.5 truncate font-display text-xl font-semibold sm:text-2xl">
                 {view.roomCode ? `Salle ${view.roomCode}` : "Blindz"}
-                {mode ? <span className="font-normal italic text-[#6b573f]"> · {mode}</span> : null}
+                {mode ? <span className="font-normal italic text-ink-2"> · {mode}</span> : null}
               </h1>
             </div>
           </div>
@@ -121,7 +122,7 @@ export function SpectatorClient() {
               <button
                 type="button"
                 onClick={() => setSound(s => !s)}
-                className="flex items-center gap-1.5 rounded-full border-[1.5px] border-[#2e2014] px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.14em] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+                className="flex items-center gap-1.5 rounded-full border-[1.5px] border-line px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.14em] transition hover:bg-ink-block hover:text-on-ink"
                 aria-pressed={sound}
               >
                 {sound ? <Volume2 className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5" />}
@@ -133,19 +134,19 @@ export function SpectatorClient() {
 
         {view.status === "connecting" ? (
           <div className="grid flex-1 place-items-center">
-            <Loader2 className="h-8 w-8 animate-spin text-[#c65133]" aria-label="Connexion" />
+            <Loader2 className="h-8 w-8 animate-spin text-terra-txt" aria-label="Connexion" />
           </div>
         ) : view.status === "error" && view.error ? (
           <div className="grid flex-1 place-items-center">
             <div className="max-w-sm space-y-2 text-center" role="alert">
               <p className="m-0 font-display text-xl font-semibold">{SPECTATOR_ERROR_TEXT[view.error].title}</p>
-              <p className="m-0 text-sm text-[#6b573f]">{SPECTATOR_ERROR_TEXT[view.error].body}</p>
+              <p className="m-0 text-sm text-ink-2">{SPECTATOR_ERROR_TEXT[view.error].body}</p>
             </div>
           </div>
         ) : (
           <>
             <SpectatorStage game={view.game} members={view.members} clockOffset={view.clockOffset} now={now} />
-            <p className="m-0 text-center text-xs text-[#8a7558]">
+            <p className="m-0 text-center text-xs text-sourd">
               Lecture seule : tu ne joues pas et rien n'est enregistré. Les joueurs voient « 👀 1 spectateur ».
               {until ? ` Lien valable jusqu'à ${until}.` : ""}
             </p>

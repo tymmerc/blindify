@@ -1,5 +1,6 @@
 "use client"
 
+import { accentTexte } from "@/lib/accentText"
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { useRouter } from "next/navigation"
 import type { SoloTrack } from "@/lib/types"
@@ -250,14 +251,14 @@ export function ChronoGameClient({ tracks, durationSeconds, onGameComplete }: Ch
     return (
       <div className="grid min-h-screen place-items-center">
         <div className="flex flex-col items-center gap-6">
-          <p className="text-[11px] font-bold uppercase tracking-[0.3em] text-[#8a7558]">Prépare-toi</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.3em] text-sourd">Prépare-toi</p>
           <div
             className="font-display text-8xl font-bold tabular-nums"
-            style={{ color: ACCENT }}
+            style={{ color: accentTexte(ACCENT) }}
           >
             {countdownValue}
           </div>
-          <p className="text-sm text-[#6b573f]">
+          <p className="text-sm text-ink-2">
             {formatTime(durationSeconds)} à jouer
           </p>
         </div>
@@ -271,12 +272,12 @@ export function ChronoGameClient({ tracks, durationSeconds, onGameComplete }: Ch
 
     return (
       <div className="grid min-h-screen place-items-center px-4">
-        <div className="w-full max-w-md space-y-6 rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-8 shadow-[4px_4px_0_rgba(46,32,20,.18)]">
+        <div className="w-full max-w-md space-y-6 rounded-md border-2 border-line bg-paper-deep p-8 shadow-[4px_4px_0_rgb(var(--c-shadow)/.18)]">
           <div className="text-center space-y-2">
-            <p className="text-[11px] font-bold uppercase tracking-[0.3em]" style={{ color: ACCENT }}>
+            <p className="text-[11px] font-bold uppercase tracking-[0.3em]" style={{ color: accentTexte(ACCENT) }}>
               Chrono terminé
             </p>
-            <h2 className="font-display text-3xl font-bold text-[#2e2014]">{points} pts</h2>
+            <h2 className="font-display text-3xl font-bold text-ink">{points} pts</h2>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -290,14 +291,14 @@ export function ChronoGameClient({ tracks, durationSeconds, onGameComplete }: Ch
             <button
               type="button"
               onClick={() => router.push("/chrono")}
-              className="w-full rounded-md border-2 border-[#2e2014] bg-[#c65133] py-3 text-sm font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#2e2014]"
+              className="w-full rounded-md border-2 border-line bg-terra py-3 text-sm font-bold text-on-ink shadow-[4px_4px_0_rgb(var(--c-shadow))] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgb(var(--c-shadow))]"
             >
               Rejouer
             </button>
             <button
               type="button"
               onClick={() => router.push("/modes")}
-              className="w-full rounded-md border-2 border-[#2e2014] bg-transparent py-3 text-sm font-bold text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+              className="w-full rounded-md border-2 border-line bg-transparent py-3 text-sm font-bold text-ink transition hover:bg-ink-block hover:text-on-ink"
             >
               Retour au menu
             </button>
@@ -312,31 +313,31 @@ export function ChronoGameClient({ tracks, durationSeconds, onGameComplete }: Ch
   // --- Playing screen ---
   const flashBorder =
     flash === "green"
-      ? "border-[#7d9471]"
+      ? "border-sage"
       : flash === "yellow"
-        ? "border-[#e0a32e]"
+        ? "border-gold"
         : flash === "red"
-          ? "border-[#9c2f1d]"
-          : "border-[#2e2014]"
+          ? "border-rouge-txt"
+          : "border-line"
 
   const flashBg =
     flash === "green"
-      ? "bg-[#7d9471]/15"
+      ? "bg-sage/15"
       : flash === "yellow"
-        ? "bg-[#e0a32e]/15"
+        ? "bg-gold/15"
         : flash === "red"
-          ? "bg-[#9c2f1d]/10"
-          : "bg-[#ece1c8]"
+          ? "bg-rouge/10"
+          : "bg-paper-deep"
 
   return (
     <div className="flex min-h-screen flex-col">
       {/* Top bar */}
-      <div className="flex items-center justify-between border-b-2 border-[#2e2014] px-4 py-3">
+      <div className="flex items-center justify-between border-b-2 border-line px-4 py-3">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-1.5">
             <Timer className="h-4 w-4" style={{ color: timeLeft <= 10 ? "#9c2f1d" : ACCENT }} />
             <span
-              className={`font-display text-xl font-bold tabular-nums ${timeLeft <= 10 ? "text-[#9c2f1d] animate-pulse" : "text-[#2e2014]"}`}
+              className={`font-display text-xl font-bold tabular-nums ${timeLeft <= 10 ? "text-rouge-txt animate-pulse" : "text-ink"}`}
             >
               {formatTime(timeLeft)}
             </span>
@@ -345,16 +346,16 @@ export function ChronoGameClient({ tracks, durationSeconds, onGameComplete }: Ch
 
         <div className="flex items-center gap-4 text-sm">
           <div className="flex items-center gap-1.5">
-            <Check className="h-4 w-4 text-[#7d9471]" />
-            <span className="text-[#2e2014] tabular-nums">{correct}</span>
+            <Check className="h-4 w-4 text-sage-txt" />
+            <span className="text-ink tabular-nums">{correct}</span>
           </div>
           {streak > 1 && (
             <div className="flex items-center gap-1">
-              <Flame className="h-4 w-4 text-[#c65133]" />
-              <span className="text-[#c65133] font-semibold tabular-nums">{streak}</span>
+              <Flame className="h-4 w-4 text-terra-txt" />
+              <span className="text-terra-txt font-semibold tabular-nums">{streak}</span>
             </div>
           )}
-          <span className="text-[#8a7558] text-xs">
+          <span className="text-sourd text-xs">
             {points} pts
           </span>
         </div>
@@ -371,7 +372,7 @@ export function ChronoGameClient({ tracks, durationSeconds, onGameComplete }: Ch
             coverUrl={currentTrack?.album_cover}
             blurred={true}
           />
-          <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 rounded-full border-[1.5px] border-[#2e2014] bg-[#f4ecdb] px-3 py-0.5 text-[11px] font-bold text-[#6b573f] tabular-nums">
+          <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 rounded-full border-[1.5px] border-line bg-paper px-3 py-0.5 text-[11px] font-bold text-ink-2 tabular-nums">
             {currentIndex + 1} / {tracks.length}
           </div>
         </div>
@@ -389,7 +390,7 @@ export function ChronoGameClient({ tracks, durationSeconds, onGameComplete }: Ch
               placeholder="Titre..."
               {...ANSWER_INPUT_PROPS}
               autoFocus
-              className="w-full rounded-md border-[1.5px] border-[rgba(46,32,20,.35)] bg-[#efe5d0] px-4 py-2.5 text-sm text-[#2e2014] outline-none transition placeholder:italic placeholder:text-[#b3a182] focus:border-[#c65133]"
+              className="w-full rounded-md border-[1.5px] border-[rgb(var(--c-line)/.35)] bg-well px-4 py-2.5 text-sm text-ink outline-none transition placeholder:italic placeholder:text-pale focus:border-terra"
             />
             <input
               type="text"
@@ -397,7 +398,7 @@ export function ChronoGameClient({ tracks, durationSeconds, onGameComplete }: Ch
               onChange={e => setGuessArtist(e.target.value)}
               placeholder="Artiste..."
               {...ANSWER_INPUT_PROPS}
-              className="w-full rounded-md border-[1.5px] border-[rgba(46,32,20,.35)] bg-[#efe5d0] px-4 py-2.5 text-sm text-[#2e2014] outline-none transition placeholder:italic placeholder:text-[#b3a182] focus:border-[#c65133]"
+              className="w-full rounded-md border-[1.5px] border-[rgb(var(--c-line)/.35)] bg-well px-4 py-2.5 text-sm text-ink outline-none transition placeholder:italic placeholder:text-pale focus:border-terra"
             />
             <div className="flex gap-2">
               <Button
@@ -405,7 +406,7 @@ export function ChronoGameClient({ tracks, durationSeconds, onGameComplete }: Ch
                 variant="outline"
                 disabled={!guessTitle.trim() && !guessArtist.trim()}
                 className="flex-1 justify-center rounded-xl border-2 py-2.5 text-sm font-semibold transition disabled:opacity-40"
-                style={{ borderColor: ACCENT, color: ACCENT }}
+                style={{ borderColor: ACCENT, color: accentTexte(ACCENT) }}
               >
                 Valider
               </Button>
@@ -413,7 +414,7 @@ export function ChronoGameClient({ tracks, durationSeconds, onGameComplete }: Ch
                 type="button"
                 variant="outline"
                 onClick={handleSkip}
-                className="rounded-md border-[1.5px] border-[rgba(46,32,20,.35)] px-4 py-2.5 text-sm font-semibold text-[#8a7558] hover:text-[#2e2014] transition"
+                className="rounded-md border-[1.5px] border-[rgb(var(--c-line)/.35)] px-4 py-2.5 text-sm font-semibold text-sourd hover:text-ink transition"
               >
                 <SkipForward className="h-4 w-4 mr-1" />
                 Passer
@@ -430,9 +431,9 @@ export function ChronoGameClient({ tracks, durationSeconds, onGameComplete }: Ch
 
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-md border-[1.5px] border-[rgba(46,32,20,.22)] bg-[#efe5d0] p-3 text-center">
-      <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#8a7558]">{label}</div>
-      <div className="mt-1 font-display text-lg font-bold text-[#2e2014]">{value}</div>
+    <div className="rounded-md border-[1.5px] border-[rgb(var(--c-line)/.22)] bg-well p-3 text-center">
+      <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-sourd">{label}</div>
+      <div className="mt-1 font-display text-lg font-bold text-ink">{value}</div>
     </div>
   )
 }

@@ -38,10 +38,10 @@ export function DiscordMusicStep({ mode, onContinue, entering = false, error = n
         : "Entrer sans musique"
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col px-4 pb-32 pt-6 text-[#2e2014] sm:px-6" data-testid="discord-musique">
+    <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col px-4 pb-32 pt-6 text-ink sm:px-6" data-testid="discord-musique">
       <Label dot={ACCENT} className="mb-3">Avant d&apos;entrer</Label>
       <h1 className="m-0 font-display text-[2.1rem] font-semibold leading-[1.04] sm:text-5xl">
-        Ta musique <em className="text-[#c65133]">pour ce soir</em>
+        Ta musique <em className="text-terra-txt">pour ce soir</em>
       </h1>
       <p className="mb-5 mt-3 text-[15px] leading-snug">
         La partie pioche dans la musique de chaque joueur du salon. Colle le lien d&apos;une playlist Spotify, Deezer ou YouTube, ou choisis
@@ -64,14 +64,14 @@ export function DiscordMusicStep({ mode, onContinue, entering = false, error = n
       </section>
 
       {/* Le bouton reste a portee du pouce, au-dessus du papier qui defile. */}
-      <div className="fixed inset-x-0 bottom-0 border-t-2 border-[#2e2014] bg-[#f4ecdb] px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
+      <div className="fixed inset-x-0 bottom-0 border-t-2 border-line bg-paper px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
         <div className="mx-auto w-full max-w-xl">
-          {error ? <p className="m-0 mb-2 text-sm font-semibold text-[#9c2f1d]" role="alert">{error}</p> : null}
+          {error ? <p className="m-0 mb-2 text-sm font-semibold text-rouge-txt" role="alert">{error}</p> : null}
           <button
             type="button"
             onClick={onContinue}
             disabled={entering}
-            className="flex w-full items-center justify-center gap-2 rounded-md border-2 border-[#2e2014] bg-[#c65133] px-5 py-3.5 text-[15px] font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#2e2014] disabled:opacity-70"
+            className="flex w-full items-center justify-center gap-2 rounded-md border-2 border-line bg-terra px-5 py-3.5 text-[15px] font-bold text-on-ink shadow-[4px_4px_0_rgb(var(--c-shadow))] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgb(var(--c-shadow))] disabled:opacity-70"
           >
             {entering ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
             {label}

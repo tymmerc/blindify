@@ -41,7 +41,7 @@ export function HintButton({ track, disabled, onHintUsed }: HintButtonProps) {
           type="button"
           onClick={handleTitleHint}
           disabled={disabled || titleRevealed}
-          className="rounded-full border-[1.5px] border-[#2e2014] bg-transparent px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[#2e2014] transition hover:bg-[#e0a32e] hover:text-[#2e2014] disabled:opacity-40 disabled:hover:bg-transparent"
+          className="rounded-full border-[1.5px] border-line bg-transparent px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-ink transition hover:bg-gold hover:text-on-accent disabled:opacity-40 disabled:hover:bg-transparent"
         >
           {titleRevealed ? `Commence par : ${titleFirstLetter}...` : "Indice · Titre"}
         </button>
@@ -49,7 +49,7 @@ export function HintButton({ track, disabled, onHintUsed }: HintButtonProps) {
           type="button"
           onClick={handleArtistHint}
           disabled={disabled || artistRevealed}
-          className="rounded-full border-[1.5px] border-[#2e2014] bg-transparent px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[#2e2014] transition hover:bg-[#e0a32e] hover:text-[#2e2014] disabled:opacity-40 disabled:hover:bg-transparent"
+          className="rounded-full border-[1.5px] border-line bg-transparent px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-ink transition hover:bg-gold hover:text-on-accent disabled:opacity-40 disabled:hover:bg-transparent"
         >
           {artistRevealed ? `Artiste commence par : ${artistFirstLetter}...` : "Indice · Artiste"}
         </button>
@@ -57,12 +57,12 @@ export function HintButton({ track, disabled, onHintUsed }: HintButtonProps) {
       {(titleRevealed || artistRevealed) && (
         <div className="flex gap-2">
           {titleRevealed && (
-            <span className="rounded-full border-[1.5px] border-[#e0a32e] bg-[#e0a32e]/15 px-3 py-1 text-[11px] font-bold text-[#a87714]">
+            <span className="rounded-full border-[1.5px] border-gold bg-gold/15 px-3 py-1 text-[11px] font-bold text-gold-deep-txt">
               Commence par : {titleFirstLetter}...
             </span>
           )}
           {artistRevealed && (
-            <span className="rounded-full border-[1.5px] border-[#e0a32e] bg-[#e0a32e]/15 px-3 py-1 text-[11px] font-bold text-[#a87714]">
+            <span className="rounded-full border-[1.5px] border-gold bg-gold/15 px-3 py-1 text-[11px] font-bold text-gold-deep-txt">
               Artiste commence par : {artistFirstLetter}...
             </span>
           )}

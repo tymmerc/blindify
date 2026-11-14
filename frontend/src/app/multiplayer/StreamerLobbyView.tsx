@@ -49,8 +49,8 @@ function CopyOverlay({ link }: { link: OverlayLink }) {
   // Le lobby passe souvent a l'ecran du live : le lien (qui donne l'extrait)
   // n'apparait en clair que si le streamer le demande.
   const [shown, setShown] = useState(false)
-  if (link.status === "loading") return <p className="m-0 text-sm text-[#6b573f]">Préparation du lien…</p>
-  if (link.status === "error") return <p role="alert" className="m-0 text-sm font-semibold text-[#9c2f1d]">{link.message}</p>
+  if (link.status === "loading") return <p className="m-0 text-sm text-ink-2">Préparation du lien…</p>
+  if (link.status === "error") return <p role="alert" className="m-0 text-sm font-semibold text-rouge-txt">{link.message}</p>
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(link.url)
@@ -65,21 +65,21 @@ function CopyOverlay({ link }: { link: OverlayLink }) {
         type="button"
         onClick={copy}
         data-testid="copy-overlay"
-        className={`flex w-full items-center justify-center gap-2 rounded-md border-2 border-[#2e2014] px-4 py-2.5 text-sm font-bold shadow-[3px_3px_0_#2e2014] transition active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#2e2014] ${copied === "ok" ? "bg-[#7d9471]" : "bg-[#f4ecdb]"}`}
+        className={`flex w-full items-center justify-center gap-2 rounded-md border-2 border-line px-4 py-2.5 text-sm font-bold shadow-[3px_3px_0_rgb(var(--c-shadow))] transition active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_rgb(var(--c-shadow))] ${copied === "ok" ? "bg-sage" : "bg-paper"}`}
       >
         {copied === "ok" ? <Check aria-hidden className="h-4 w-4" /> : <Copy aria-hidden className="h-4 w-4" />}
         {copied === "ok" ? "Lien copié" : "Copier le lien de l'overlay"}
       </button>
       {copied === "ko" && !shown ? (
-        <p className="m-0 text-xs text-[#9c2f1d]">
+        <p className="m-0 text-xs text-rouge-txt">
           La copie automatique est bloquée.{" "}
           <button type="button" onClick={() => setShown(true)} className="font-semibold underline">Afficher le lien</button> (hors de l&apos;écran du live)
         </p>
       ) : null}
       {shown ? (
-        <input readOnly value={link.url} aria-label="Lien de l'overlay" onFocus={e => e.currentTarget.select()} className="w-full rounded-md border-2 border-[#2e2014] bg-[#efe5d0] px-2 py-1.5 text-xs" />
+        <input readOnly value={link.url} aria-label="Lien de l'overlay" onFocus={e => e.currentTarget.select()} className="w-full rounded-md border-2 border-line bg-well px-2 py-1.5 text-xs" />
       ) : null}
-      <p className="m-0 text-xs text-[#8a7558]">Ce lien joue la musique : garde-le pour toi, ne le colle pas dans le chat.</p>
+      <p className="m-0 text-xs text-sourd">Ce lien joue la musique : garde-le pour toi, ne le colle pas dans le chat.</p>
     </div>
   )
 }
@@ -87,7 +87,7 @@ function CopyOverlay({ link }: { link: OverlayLink }) {
 function Step({ n, title, children }: { n: number; title: string; children: ReactNode }) {
   return (
     <li className="flex gap-3">
-      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 border-[#2e2014] bg-[#7d9471] font-display text-sm font-bold">{n}</span>
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 border-line bg-sage font-display text-sm font-bold">{n}</span>
       <div className="min-w-0 flex-1 space-y-2">
         <p className="m-0 font-semibold">{title}</p>
         {children}
@@ -99,20 +99,20 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
 function SetupSteps({ code, link }: { code: string; link: OverlayLink }) {
   return (
     <Panel label="Mise en place · 2 minutes" dot={ACCENT} testId="streamer-setup">
-      <ol className="m-0 flex list-none flex-col gap-5 p-0 text-sm text-[#2e2014]">
+      <ol className="m-0 flex list-none flex-col gap-5 p-0 text-sm text-ink">
         <Step n={1} title="Ajoute l'overlay dans OBS">
-          <p className="m-0 text-[#6b573f]">Sources, +, Navigateur. Colle le lien, largeur 1920, hauteur 1080. Le fond est transparent.</p>
+          <p className="m-0 text-ink-2">Sources, +, Navigateur. Colle le lien, largeur 1920, hauteur 1080. Le fond est transparent.</p>
           <CopyOverlay link={link} />
         </Step>
         <Step n={2} title="Garde la musique hors de ta VOD">
-          <p className="m-0 text-[#6b573f]">
+          <p className="m-0 text-ink-2">
             Dans la source, coche « Contrôler l&apos;audio via OBS », puis mets-la sur une piste que ta VOD n&apos;enregistre pas.{" "}
-            <Link href="/streamer/#obs" target="_blank" className="font-semibold text-[#2e2014] underline underline-offset-2">Le guide en une minute</Link>
+            <Link href="/streamer/#obs" target="_blank" className="font-semibold text-ink underline underline-offset-2">Le guide en une minute</Link>
           </p>
         </Step>
         <Step n={3} title="Donne le code à ton chat">
-          <p className="m-0 text-[#6b573f]">
-            Ils vont sur <b className="text-[#2e2014]">{liveLabel()}</b> et tapent <b className="text-[#2e2014]">{code}</b>. Le QR code est déjà sur l&apos;overlay.
+          <p className="m-0 text-ink-2">
+            Ils vont sur <b className="text-ink">{liveLabel()}</b> et tapent <b className="text-ink">{code}</b>. Le QR code est déjà sur l&apos;overlay.
           </p>
         </Step>
       </ol>
@@ -130,7 +130,7 @@ function FormatPicker({ value, onPick }: { value: StreamerSubMode; onPick: (v: S
           role="radio"
           aria-checked={value === opt.value}
           onClick={() => onPick(opt.value)}
-          className={`rounded-md border-2 px-3 py-2.5 text-left transition ${value === opt.value ? "border-[#2e2014] bg-[#7d9471] shadow-[3px_3px_0_#2e2014]" : "border-[rgba(46,32,20,.35)] bg-[#efe5d0] hover:border-[#2e2014]"}`}
+          className={`rounded-md border-2 px-3 py-2.5 text-left transition ${value === opt.value ? "border-line bg-sage shadow-[3px_3px_0_rgb(var(--c-shadow))]" : "border-[rgb(var(--c-line)/.35)] bg-well hover:border-line"}`}
         >
           <span className="block text-sm font-bold">{opt.title}</span>
           <span className="block text-xs opacity-80">{opt.desc}</span>
@@ -145,11 +145,11 @@ function StreamerMusic() {
   const [refresh, setRefresh] = useState(0)
   return (
     <Panel label="Ta musique" dot={ACCENT} testId="lobby-musique" className="min-w-0">
-      <p className="-mt-2 mb-3 text-sm text-[#6b573f]">Les morceaux de la partie viennent de tes playlists. Ton public n&apos;importe rien.</p>
+      <p className="-mt-2 mb-3 text-sm text-ink-2">Les morceaux de la partie viennent de tes playlists. Ton public n&apos;importe rien.</p>
       <div className="lg:max-h-[240px] lg:overflow-y-auto lg:pr-1">
         <MusicLibrary accent={ACCENT} refreshSignal={refresh} />
       </div>
-      <div className="mt-4 border-t-2 border-dotted border-[rgba(46,32,20,.35)] pt-4">
+      <div className="mt-4 border-t-2 border-dotted border-[rgb(var(--c-line)/.35)] pt-4">
         <ProfileImportBlock accent={ACCENT} hideHeader onImported={() => setRefresh(r => r + 1)} />
       </div>
     </Panel>
@@ -161,7 +161,7 @@ function TwitchField({ value, onChange }: { value: string; onChange: (v: string)
   const cleaned = cleanTwitchChannel(value)
   return (
     <div>
-      <label htmlFor="twitch-channel" className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.18em] text-[#6b573f]">
+      <label htmlFor="twitch-channel" className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.18em] text-ink-2">
         Ta chaîne Twitch (facultatif)
       </label>
       <input
@@ -170,17 +170,17 @@ function TwitchField({ value, onChange }: { value: string; onChange: (v: string)
         onChange={e => onChange(e.target.value.slice(0, 60))}
         placeholder="ta_chaine"
         autoComplete="off"
-        className="w-full rounded-md border-2 border-[#2e2014] bg-[#efe5d0] px-3 py-2.5 text-sm outline-none placeholder:text-[#b3a182] focus:border-[#7d9471]"
+        className="w-full rounded-md border-2 border-line bg-well px-3 py-2.5 text-sm outline-none placeholder:text-pale focus:border-sage"
       />
       {cleaned === null ? (
-        <p role="alert" className="m-0 mt-1 text-xs font-semibold text-[#9c2f1d]">Le nom d&apos;une chaîne fait 3 à 25 caractères : lettres, chiffres ou _.</p>
+        <p role="alert" className="m-0 mt-1 text-xs font-semibold text-rouge-txt">Le nom d&apos;une chaîne fait 3 à 25 caractères : lettres, chiffres ou _.</p>
       ) : cleaned ? (
-        <p className="m-0 mt-1 text-xs text-[#6b573f]">
-          Ton chat pourra aussi répondre avec <b className="text-[#2e2014]">!b titre - artiste</b>. Moitié moins de points que sur la page, et
+        <p className="m-0 mt-1 text-xs text-ink-2">
+          Ton chat pourra aussi répondre avec <b className="text-ink">!b titre - artiste</b>. Moitié moins de points que sur la page, et
           ça baisse vite après la première bonne réponse, visible par tous.
         </p>
       ) : (
-        <p className="m-0 mt-1 text-xs text-[#8a7558]">Sans chaîne, ton public répond seulement sur {liveLabel()}.</p>
+        <p className="m-0 mt-1 text-xs text-sourd">Sans chaîne, ton public répond seulement sur {liveLabel()}.</p>
       )}
     </div>
   )
@@ -193,12 +193,12 @@ function StreamerLobby(props: LobbyRendererProps) {
   return (
     <div className="mx-auto grid w-full max-w-6xl gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:items-start">
       <div className="space-y-5">
-        <section className={`${BLOCK} p-5 text-[#2e2014] sm:p-7`} style={{ background: ACCENT }} data-testid="lobby-salle">
+        <section className={`${BLOCK} p-5 text-ink sm:p-7`} style={{ background: ACCENT }} data-testid="lobby-salle">
           <Label dot="#f4ecdb">Code à afficher sur le live</Label>
           <div className="my-5">
             <RoomCode code={code} size="xl" />
           </div>
-          <p className="m-0 flex items-center gap-2 border-t-2 border-dashed border-[#2e2014]/40 pt-4 text-sm font-bold" data-testid="streamer-viewers">
+          <p className="m-0 flex items-center gap-2 border-t-2 border-dashed border-line/40 pt-4 text-sm font-bold" data-testid="streamer-viewers">
             <Radio aria-hidden className="h-4 w-4" />
             {viewers === 0 ? "Personne sur la page pour l'instant" : `${viewers} viewer${viewers > 1 ? "s" : ""} prêt${viewers > 1 ? "s" : ""}`}
           </p>
@@ -227,8 +227,8 @@ function StreamerLobby(props: LobbyRendererProps) {
         </div>
       ) : (
         <Panel label="Tu es viewer ?" dot={ACCENT}>
-          <p className="m-0 text-sm text-[#6b573f]">
-            Les viewers jouent sur <Link href={`/live/?code=${code}`} className="font-semibold text-[#2e2014] underline">{liveLabel()}</Link>, avec le code du stream.
+          <p className="m-0 text-sm text-ink-2">
+            Les viewers jouent sur <Link href={`/live/?code=${code}`} className="font-semibold text-ink underline">{liveLabel()}</Link>, avec le code du stream.
           </p>
         </Panel>
       )}
@@ -241,18 +241,18 @@ function StreamerEntry({ onHost }: { onHost: () => void }) {
     <div className="mx-auto grid w-full max-w-4xl gap-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
       <Panel label="Streamer" dot={ACCENT}>
         <h2 className="mb-2 font-display text-3xl font-semibold leading-tight">Ouvre ta salle de live</h2>
-        <p className="mb-5 text-sm text-[#6b573f]">Tu récupères un overlay pour OBS et un code pour ton chat. Ton public répond depuis son téléphone.</p>
+        <p className="mb-5 text-sm text-ink-2">Tu récupères un overlay pour OBS et un code pour ton chat. Ton public répond depuis son téléphone.</p>
         <button
           type="button"
           onClick={onHost}
-          className="w-full rounded-md border-2 border-[#2e2014] bg-[#c65133] px-5 py-3.5 text-sm font-bold text-[#f4ecdb] shadow-[4px_4px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#2e2014]"
+          className="w-full rounded-md border-2 border-line bg-terra px-5 py-3.5 text-sm font-bold text-on-ink shadow-[4px_4px_0_rgb(var(--c-shadow))] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgb(var(--c-shadow))]"
         >
           Ouvrir la salle streamer
         </button>
       </Panel>
       <Panel label="Tu regardes un live ?" dot={ACCENT}>
-        <p className="mb-3 text-sm text-[#6b573f]">Les viewers ne passent pas par ici : ils vont sur {liveLabel()} avec le code du stream.</p>
-        <Link href="/live/" className="block w-full rounded-md border-2 border-[#2e2014] bg-[#2e2014] px-4 py-3 text-center text-sm font-bold text-[#f4ecdb]">
+        <p className="mb-3 text-sm text-ink-2">Les viewers ne passent pas par ici : ils vont sur {liveLabel()} avec le code du stream.</p>
+        <Link href="/live/" className="block w-full rounded-md border-2 border-line bg-ink-block px-4 py-3 text-center text-sm font-bold text-on-ink">
           Jouer pendant un live
         </Link>
       </Panel>

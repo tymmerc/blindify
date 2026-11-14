@@ -63,7 +63,7 @@ export default function Page() {
     <GuideShell
       tag="Guide Spotify"
       tagColor={BLUE}
-      title={<>Un blind test avec <em className="font-medium italic text-[#cc4830]">vos</em> playlists Spotify</>}
+      title={<>Un blind test avec <em className="font-medium italic text-vermillon-txt">vos</em> playlists Spotify</>}
       intro="Le lien d'une playlist publique, un pseudo, et la partie se génère avec les morceaux de tout le monde, sans que personne ne se connecte à Spotify ni n'installe quoi que ce soit. Voilà comment faire, étape par étape."
       updated="8 septembre 2026"
       currentHref="/blind-test-spotify/"

@@ -80,16 +80,16 @@ export function LateJoinerView({ state, currentUserId, serverNow, chatMessages, 
   const banner = lateJoinBanner(state)
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 py-5 text-[#2e2014] sm:px-6 sm:py-8" data-testid="late-joiner-view">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 py-5 text-ink sm:px-6 sm:py-8" data-testid="late-joiner-view">
       <section
         role="status"
-        className="flex flex-col gap-3 rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-4 shadow-[4px_4px_0_rgba(46,32,20,.18)] sm:flex-row sm:items-center sm:justify-between sm:p-5"
+        className="flex flex-col gap-3 rounded-md border-2 border-line bg-paper-deep p-4 shadow-[4px_4px_0_rgb(var(--c-shadow)/.18)] sm:flex-row sm:items-center sm:justify-between sm:p-5"
       >
         <div className="flex min-w-0 items-start gap-3">
           <Hourglass aria-hidden className="mt-1 h-5 w-5 shrink-0" style={{ color: GOLD }} />
           <div className="min-w-0">
             <p className="m-0 font-display text-lg font-semibold leading-snug sm:text-xl" data-testid="late-joiner-title">{banner.title}</p>
-            <p className="m-0 mt-1 text-sm text-[#6b573f]">{banner.body}</p>
+            <p className="m-0 mt-1 text-sm text-ink-2">{banner.body}</p>
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -98,7 +98,7 @@ export function LateJoinerView({ state, currentUserId, serverNow, chatMessages, 
               type="button"
               onClick={() => setSound(s => !s)}
               aria-pressed={sound}
-              className="flex items-center gap-1.5 rounded-full border-[1.5px] border-[#2e2014] px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.14em] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+              className="flex items-center gap-1.5 rounded-full border-[1.5px] border-line px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.14em] transition hover:bg-ink-block hover:text-on-ink"
             >
               {sound ? <Volume2 className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5" />}
               {sound ? "Son activé" : "Écouter"}
@@ -107,7 +107,7 @@ export function LateJoinerView({ state, currentUserId, serverNow, chatMessages, 
           <button
             type="button"
             onClick={onExit}
-            className="flex items-center gap-1.5 rounded-full border-[1.5px] border-[#2e2014] px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.14em] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+            className="flex items-center gap-1.5 rounded-full border-[1.5px] border-line px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.14em] transition hover:bg-ink-block hover:text-on-ink"
           >
             <LogOut className="h-3.5 w-3.5" /> Quitter
           </button>

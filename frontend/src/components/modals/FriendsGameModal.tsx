@@ -50,9 +50,9 @@ export function FriendsGameModal({
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-40 grid place-items-center bg-[#2e2014]/25 px-6" onClick={onClose}>
+    <div className="fixed inset-0 z-40 grid place-items-center bg-scrim/25 px-6" onClick={onClose}>
       <div
-        className="w-full max-w-lg rounded-md border-2 border-[#2e2014] bg-[#f4ecdb] p-6 text-[#2e2014] shadow-[6px_6px_0_rgba(46,32,20,.25)]"
+        className="w-full max-w-lg rounded-md border-2 border-line bg-paper p-6 text-ink shadow-[6px_6px_0_rgb(var(--c-shadow)/.25)]"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
@@ -60,7 +60,7 @@ export function FriendsGameModal({
           <button
             type="button"
             onClick={onClose}
-            className="text-sm text-[#8a7558] transition hover:text-[#2e2014]"
+            className="text-sm text-sourd transition hover:text-ink"
             aria-label="Fermer"
           >
             ✕
@@ -68,48 +68,48 @@ export function FriendsGameModal({
         </div>
 
         <div className="mt-5 space-y-4">
-          <div className="space-y-3 rounded-md border-[1.5px] border-[rgba(46,32,20,.22)] bg-[#ece1c8] p-4">
+          <div className="space-y-3 rounded-md border-[1.5px] border-[rgb(var(--c-line)/.22)] bg-paper-deep p-4">
             <div className="space-y-1">
               <p className="font-display text-sm font-semibold">Créer une partie</p>
-              <p className="text-xs text-[#6b573f]">Invite et lance immédiatement une nouvelle partie.</p>
+              <p className="text-xs text-ink-2">Invite et lance immédiatement une nouvelle partie.</p>
             </div>
             <button
               ref={createRef}
               onClick={onCreate}
               disabled={creating}
-              className="w-full justify-center rounded-md border-2 border-[#2e2014] px-4 py-3 text-sm font-bold text-[#f4ecdb] shadow-[3px_3px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[1px_1px_0_#2e2014] disabled:opacity-60"
+              className="w-full justify-center rounded-md border-2 border-line px-4 py-3 text-sm font-bold text-on-ink shadow-[3px_3px_0_rgb(var(--c-shadow))] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[1px_1px_0_rgb(var(--c-shadow))] disabled:opacity-60"
               style={{ background: accentColor, opacity: creating ? 0.7 : 1 }}
             >
               {creating ? "Création..." : "Créer une salle"}
             </button>
           </div>
 
-          <div className="space-y-3 rounded-md border-[1.5px] border-[rgba(46,32,20,.22)] bg-[#ece1c8] p-4">
+          <div className="space-y-3 rounded-md border-[1.5px] border-[rgb(var(--c-line)/.22)] bg-paper-deep p-4">
             <div className="space-y-1">
               <p className="font-display text-sm font-semibold">Rejoindre une partie</p>
-              <p className="text-xs text-[#6b573f]">Entre le code reçu pour rejoindre un lobby existant.</p>
+              <p className="text-xs text-ink-2">Entre le code reçu pour rejoindre un lobby existant.</p>
             </div>
             <div className="space-y-2">
-              <label className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">Code de la partie</label>
+              <label className="text-[11px] font-bold uppercase tracking-[0.22em] text-sourd">Code de la partie</label>
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                 <input
                   value={joinCode}
                   onChange={e => setJoinCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8))}
                   placeholder="CODE"
-                  className="w-full rounded-md border-[1.5px] border-[rgba(46,32,20,.35)] bg-[#efe5d0] px-3 py-2 font-display text-sm uppercase tracking-[0.25em] text-[#2e2014] outline-none placeholder:text-[#b3a182] focus:border-[#2e2014]"
+                  className="w-full rounded-md border-[1.5px] border-[rgb(var(--c-line)/.35)] bg-well px-3 py-2 font-display text-sm uppercase tracking-[0.25em] text-ink outline-none placeholder:text-pale focus:border-line"
                   maxLength={12}
                 />
                 <button
                   type="button"
                   onClick={onJoin}
                   disabled={joining}
-                  className="rounded-md border-2 border-[#2e2014] px-3 py-2 text-sm font-bold text-[#f4ecdb] shadow-[3px_3px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[1px_1px_0_#2e2014] disabled:opacity-50"
+                  className="rounded-md border-2 border-line px-3 py-2 text-sm font-bold text-on-ink shadow-[3px_3px_0_rgb(var(--c-shadow))] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[1px_1px_0_rgb(var(--c-shadow))] disabled:opacity-50"
                   style={{ background: accentColor }}
                 >
                   {joining ? "Connexion..." : "Rejoindre"}
                 </button>
               </div>
-              {joinError ? <p className="text-xs font-bold text-[#9c2f1d]">{joinError}</p> : null}
+              {joinError ? <p className="text-xs font-bold text-rouge-txt">{joinError}</p> : null}
             </div>
           </div>
         </div>

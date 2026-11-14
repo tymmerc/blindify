@@ -18,5 +18,5 @@ export function InAppBrowserNote({ className = "" }: { className?: string }) {
   }, [])
 
   if (!note) return null
-  return <p className={`text-[12px] leading-snug text-[#8a7558] ${className}`}>{note}</p>
+  return <p className={`text-[12px] leading-snug text-sourd ${className}`}>{note}</p>
 }

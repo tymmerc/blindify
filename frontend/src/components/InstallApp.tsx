@@ -62,40 +62,40 @@ export function InstallApp() {
   return (
     <>
       {/* Carte integree (pas de position fixe) : a poser sur l'ecran de fin de partie. */}
-      <div className="flex items-center gap-3 rounded-md border-2 border-[#2e2014] bg-[#ece1c8] px-4 py-3 text-left shadow-[4px_4px_0_rgba(46,32,20,.18)]">
-        <Smartphone className="h-5 w-5 shrink-0 text-[#c65133]" />
-        <p className="m-0 min-w-0 flex-1 text-[13px] leading-tight text-[#2e2014]">
+      <div className="flex items-center gap-3 rounded-md border-2 border-line bg-paper-deep px-4 py-3 text-left shadow-[4px_4px_0_rgb(var(--c-shadow)/.18)]">
+        <Smartphone className="h-5 w-5 shrink-0 text-terra-txt" />
+        <p className="m-0 min-w-0 flex-1 text-[13px] leading-tight text-ink">
           <span className="font-bold">Installe Blindz</span> pour relancer une partie en un tap
         </p>
         <button
           type="button"
           onClick={handleInstall}
-          className="shrink-0 rounded-full border-2 border-[#2e2014] bg-[#c65133] px-3.5 py-1.5 text-xs font-bold text-[#f4ecdb] shadow-[2px_2px_0_#2e2014] transition active:translate-x-[1px] active:translate-y-[1px]"
+          className="shrink-0 rounded-full border-2 border-line bg-terra px-3.5 py-1.5 text-xs font-bold text-on-ink shadow-[2px_2px_0_rgb(var(--c-shadow))] transition active:translate-x-[1px] active:translate-y-[1px]"
         >
           Installer
         </button>
-        <button type="button" onClick={dismiss} aria-label="Fermer" className="shrink-0 text-[#8a7558] transition hover:text-[#2e2014]">
+        <button type="button" onClick={dismiss} aria-label="Fermer" className="shrink-0 text-sourd transition hover:text-ink">
           <X className="h-4 w-4" />
         </button>
       </div>
 
       {guideOpen && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-[#2e2014]/45 px-6" onClick={() => setGuideOpen(false)}>
-          <div className="w-full max-w-sm rounded-md border-2 border-[#2e2014] bg-[#f4ecdb] p-6 text-center shadow-[6px_6px_0_rgba(46,32,20,.25)]" onClick={e => e.stopPropagation()}>
-            <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a7558]">Installer Blindz</p>
-            <h3 className="mt-2 font-display text-2xl font-semibold text-[#2e2014]">2 gestes, c'est tout</h3>
-            <ol className="mt-5 space-y-3 text-left text-sm text-[#2e2014]">
+        <div className="fixed inset-0 z-50 grid place-items-center bg-scrim/45 px-6" onClick={() => setGuideOpen(false)}>
+          <div className="w-full max-w-sm rounded-md border-2 border-line bg-paper p-6 text-center shadow-[6px_6px_0_rgb(var(--c-shadow)/.25)]" onClick={e => e.stopPropagation()}>
+            <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-sourd">Installer Blindz</p>
+            <h3 className="mt-2 font-display text-2xl font-semibold text-ink">2 gestes, c'est tout</h3>
+            <ol className="mt-5 space-y-3 text-left text-sm text-ink">
               <li className="flex items-center gap-3">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-[#2e2014] bg-[#ece1c8] font-bold">1</span>
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-line bg-paper-deep font-bold">1</span>
                 <span className="flex items-center gap-1.5">Touche <Share className="inline h-4 w-4" /> <span className="font-semibold">Partager</span>{isIOS ? " (en bas)" : " du navigateur"}</span>
               </li>
               <li className="flex items-center gap-3">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-[#2e2014] bg-[#ece1c8] font-bold">2</span>
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-line bg-paper-deep font-bold">2</span>
                 <span className="flex items-center gap-1.5"><Plus className="inline h-4 w-4" /> <span className="font-semibold">Sur l'écran d'accueil</span></span>
               </li>
             </ol>
-            <p className="mt-4 text-xs text-[#8a7558]">{isIOS ? "Sur iPhone, ça doit être dans Safari." : ""}</p>
-            <button type="button" onClick={() => setGuideOpen(false)} className="mt-5 w-full rounded-md border-2 border-[#2e2014] bg-[#ece1c8] px-4 py-2.5 text-sm font-bold text-[#2e2014] transition hover:bg-[#e0d4ba]">
+            <p className="mt-4 text-xs text-sourd">{isIOS ? "Sur iPhone, ça doit être dans Safari." : ""}</p>
+            <button type="button" onClick={() => setGuideOpen(false)} className="mt-5 w-full rounded-md border-2 border-line bg-paper-deep px-4 py-2.5 text-sm font-bold text-ink transition hover:bg-paper-strong">
               J'ai compris
             </button>
           </div>

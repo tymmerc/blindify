@@ -54,7 +54,7 @@ export function KeepMyInfo({ pseudo, onKept }: { pseudo: string; onKept: (user: 
 
   return (
     <div>
-      <p className="text-sm text-[#6b573f]">
+      <p className="text-sm text-ink-2">
         Tu joues sans compte : ce navigateur se souvient de toi, mais ailleurs (Snapchat, un autre navigateur, un autre
         téléphone) tu repars de zéro. Choisis un mot de passe et tu retrouves tes parties et ta musique partout.
       </p>
@@ -73,7 +73,7 @@ export function KeepMyInfo({ pseudo, onKept }: { pseudo: string; onKept: (user: 
           maxLength={40}
           autoComplete="username"
           placeholder="Pseudo pour te connecter"
-          className="w-full rounded-md border-[1.5px] border-[#2e2014] bg-[#fbf6ea] px-3 py-2 text-base text-[#2e2014] outline-none focus:shadow-[2px_2px_0_#2e2014]"
+          className="w-full rounded-md border-[1.5px] border-line bg-paper-light px-3 py-2 text-base text-ink outline-none focus:shadow-[2px_2px_0_rgb(var(--c-shadow))]"
         />
         <label htmlFor="keep-password" className="sr-only">
           Mot de passe
@@ -88,10 +88,10 @@ export function KeepMyInfo({ pseudo, onKept }: { pseudo: string; onKept: (user: 
           }}
           autoComplete="new-password"
           placeholder={`Mot de passe (${PASSWORD_MIN} caractères ou plus)`}
-          className="w-full rounded-md border-[1.5px] border-[#2e2014] bg-[#fbf6ea] px-3 py-2 text-base text-[#2e2014] outline-none focus:shadow-[2px_2px_0_#2e2014]"
+          className="w-full rounded-md border-[1.5px] border-line bg-paper-light px-3 py-2 text-base text-ink outline-none focus:shadow-[2px_2px_0_rgb(var(--c-shadow))]"
         />
         {error && (
-          <p role="alert" className="text-[12px] font-bold text-[#9c2f1d]">
+          <p role="alert" className="text-[12px] font-bold text-rouge-txt">
             {error}
           </p>
         )}
@@ -99,13 +99,13 @@ export function KeepMyInfo({ pseudo, onKept }: { pseudo: string; onKept: (user: 
           <button
             type="submit"
             disabled={saving}
-            className="rounded-md border-[1.5px] border-[#2e2014] bg-[#2e2014] px-4 py-2 text-sm font-semibold text-[#fbf6ea] disabled:opacity-50"
+            className="rounded-md border-[1.5px] border-line bg-ink-block px-4 py-2 text-sm font-semibold text-[#fbf6ea] disabled:opacity-50"
           >
             {saving ? "Un instant…" : "Garder mes infos"}
           </button>
           <Link
             href="/auth/login/?returnTo=/profile/"
-            className="text-sm font-semibold text-[#2e2014] underline underline-offset-4"
+            className="text-sm font-semibold text-ink underline underline-offset-4"
           >
             J&apos;ai déjà un compte
           </Link>

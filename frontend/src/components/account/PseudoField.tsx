@@ -43,17 +43,17 @@ export function PseudoField({ initial }: { initial: string }) {
           maxLength={40}
           autoComplete="nickname"
           placeholder="Ton pseudo"
-          className="min-w-0 flex-1 rounded-md border-[1.5px] border-[#2e2014] bg-[#fbf6ea] px-3 py-2 text-base text-[#2e2014] outline-none focus:shadow-[2px_2px_0_#2e2014]"
+          className="min-w-0 flex-1 rounded-md border-[1.5px] border-line bg-paper-light px-3 py-2 text-base text-ink outline-none focus:shadow-[2px_2px_0_rgb(var(--c-shadow))]"
         />
         <button
           type="submit"
           disabled={unchanged}
-          className="shrink-0 rounded-md border-[1.5px] border-[#2e2014] bg-[#2e2014] px-4 py-2 text-sm font-bold text-[#f4ecdb] transition hover:bg-[#c65133] hover:border-[#c65133] disabled:cursor-default disabled:bg-transparent disabled:text-[#8a7558] disabled:border-[rgba(46,32,20,.3)]"
+          className="shrink-0 rounded-md border-[1.5px] border-line bg-ink-block px-4 py-2 text-sm font-bold text-on-ink transition hover:bg-terra hover:border-terra disabled:cursor-default disabled:bg-transparent disabled:text-sourd disabled:border-[rgb(var(--c-line)/.3)]"
         >
           {unchanged ? "Enregistré" : "Enregistrer"}
         </button>
       </div>
-      <p className={`mt-1.5 text-xs ${error ? "font-semibold text-[#9c2f1d]" : "text-[#8a7558]"}`} role={error ? "alert" : undefined}>
+      <p className={`mt-1.5 text-xs ${error ? "font-semibold text-rouge-txt" : "text-sourd"}`} role={error ? "alert" : undefined}>
         {error ?? "C'est le nom proposé quand tu crées ou rejoins une salle."}
       </p>
     </form>

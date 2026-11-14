@@ -153,7 +153,7 @@ function ChallengeContent() {
       <ChallengeShell>
         <div className="space-y-6 text-center">
           <h1 className="font-display text-3xl font-semibold">Rejoindre un défi</h1>
-          <p className="text-sm text-[#6b573f]">Un pote t&apos;a lancé un défi ? Tape le code qu&apos;il t&apos;a envoyé.</p>
+          <p className="text-sm text-ink-2">Un pote t&apos;a lancé un défi ? Tape le code qu&apos;il t&apos;a envoyé.</p>
           <div className="flex gap-3">
             <label htmlFor="challenge-code" className="sr-only">Code du défi</label>
             <input
@@ -163,7 +163,7 @@ function ChallengeContent() {
               // Pas de maxLength : le lien entier peut etre colle ici, on en garde le code.
               onChange={(e) => setCodeInput(extractChallengeCode(e.target.value).slice(0, 12))}
               placeholder="CODE DU DÉFI"
-              className="flex-1 rounded-md border-[1.5px] border-[rgba(46,32,20,.35)] bg-[#efe5d0] px-4 py-3 text-center font-display text-lg font-semibold tracking-[0.3em] text-[#2e2014] outline-none transition placeholder:font-sans placeholder:text-sm placeholder:italic placeholder:tracking-[0.15em] placeholder:text-[#b3a182] focus:border-[#c65133]"
+              className="flex-1 rounded-md border-[1.5px] border-[rgb(var(--c-line)/.35)] bg-well px-4 py-3 text-center font-display text-lg font-semibold tracking-[0.3em] text-ink outline-none transition placeholder:font-sans placeholder:text-sm placeholder:italic placeholder:tracking-[0.15em] placeholder:text-pale focus:border-terra"
               onKeyDown={(e) => e.key === "Enter" && handleCodeSubmit()}
             />
           </div>
@@ -175,9 +175,9 @@ function ChallengeContent() {
           >
             Rejoindre
           </button>
-          <p className="text-sm text-[#6b573f]">
+          <p className="text-sm text-ink-2">
             Tu veux lancer le tien ?{" "}
-            <a href={`${publicPath("/solo/")}?tab=challenge`} className="font-bold text-[#2e2014] underline decoration-[#c65133] decoration-2 underline-offset-2">
+            <a href={`${publicPath("/solo/")}?tab=challenge`} className="font-bold text-ink underline decoration-terra-txt decoration-2 underline-offset-2">
               Crée un défi
             </a>{" "}
             depuis le solo.
@@ -197,24 +197,24 @@ function ChallengeContent() {
         <div className="space-y-6">
           <div className="space-y-2 text-center">
             <h1 className="break-words font-display text-3xl font-semibold">
-              Défi de <em className="font-medium italic text-[#c65133]">{challenge.creatorName}</em>
+              Défi de <em className="font-medium italic text-terra-txt">{challenge.creatorName}</em>
             </h1>
-            <p className="break-words text-sm text-[#6b573f]">
+            <p className="break-words text-sm text-ink-2">
               Un blind test sur {challenge.trackCount} morceau{challenge.trackCount > 1 ? "x" : ""}, les mêmes que {challenge.creatorName} et dans le même ordre. Trouve le titre et l&apos;artiste, et bats son score.
             </p>
           </div>
 
-          <div className="space-y-4 rounded-md border-2 border-[#2e2014] bg-[#ece1c8] p-6 shadow-[4px_4px_0_rgba(46,32,20,.18)]">
+          <div className="space-y-4 rounded-md border-2 border-line bg-paper-deep p-6 shadow-[4px_4px_0_rgb(var(--c-shadow)/.18)]">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-[#6b573f]">Score à battre</span>
-              <span className="font-display text-2xl font-bold text-[#c65133]">{challenge.creatorScore} pts</span>
+              <span className="text-sm text-ink-2">Score à battre</span>
+              <span className="font-display text-2xl font-bold text-terra-txt">{challenge.creatorScore} pts</span>
             </div>
-            <div className="flex items-center justify-between text-sm text-[#6b573f]">
+            <div className="flex items-center justify-between text-sm text-ink-2">
               <span>{challenge.creatorCorrect}/{challenge.creatorTotal} correct</span>
               <span>Série max : {challenge.creatorBestStreak}</span>
             </div>
             {challenge.attempts.length > 0 && (
-              <div className="border-t-2 border-dotted border-[rgba(46,32,20,.45)] pt-3 text-xs text-[#6b573f]">
+              <div className="border-t-2 border-dotted border-[rgb(var(--c-line)/.45)] pt-3 text-xs text-ink-2">
                 {challenge.attempts.length > 1
                   ? `${challenge.attempts.length} joueurs ont déjà relevé le défi`
                   : "1 joueur a déjà relevé le défi"}
@@ -223,7 +223,7 @@ function ChallengeContent() {
           </div>
 
           <div className="space-y-3">
-            <label htmlFor="challenger-name" className="block text-[11px] font-bold uppercase tracking-[0.22em] text-[#6b573f]">
+            <label htmlFor="challenger-name" className="block text-[11px] font-bold uppercase tracking-[0.22em] text-ink-2">
               Ton nom au classement
             </label>
             <input
@@ -233,7 +233,7 @@ function ChallengeContent() {
               onChange={(e) => setPlayerName(e.target.value)}
               placeholder="Ton pseudo"
               maxLength={24}
-              className="w-full border-0 border-b-2 border-[#2e2014] bg-transparent px-1 py-2 font-display text-lg text-[#2e2014] outline-none transition placeholder:italic placeholder:text-[#b3a182] focus:border-[#c65133]"
+              className="w-full border-0 border-b-2 border-line bg-transparent px-1 py-2 font-display text-lg text-ink outline-none transition placeholder:italic placeholder:text-pale focus:border-terra"
             />
             <button
               type="button"

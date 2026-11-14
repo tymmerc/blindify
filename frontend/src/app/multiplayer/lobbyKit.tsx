@@ -18,21 +18,21 @@ import { api } from "@/lib/api"
 import { updateHostedRoom } from "@/lib/hostedRooms"
 import type { MultiplayerParticipant, MultiplayerRoom } from "@/lib/types"
 
-export const PAPER = "#f4ecdb"
-export const INK = "#2e2014"
+export const PAPER = "rgb(var(--c-paper))"
+export const INK = "rgb(var(--c-ink))"
 
 /** Cadre sans fond : pour les blocs de couleur, le fond passe par `style`.
  *  Deux classes bg-[...] sur le meme element, c'est l'ordre du CSS genere qui
  *  gagne, pas l'ordre des classes (le bloc de la salle sortait beige). */
-export const BLOCK = "rounded-md border-2 border-[#2e2014] shadow-[4px_4px_0_rgba(46,32,20,.18)]"
-export const CARD = `${BLOCK} bg-[#ece1c8]`
+export const BLOCK = "rounded-md border-2 border-line shadow-[4px_4px_0_rgb(var(--c-shadow)/.18)]"
+export const CARD = `${BLOCK} bg-paper-deep`
 
 /** Etiquette de section : texte encre + pastille de couleur. Jamais de petit
  *  texte colore sur papier (contraste insuffisant, regle du brief). */
 export function Label({ children, dot, className = "" }: { children: ReactNode; dot: string; className?: string }) {
   return (
     <p className={`m-0 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.22em] ${className}`}>
-      <span aria-hidden className="h-2.5 w-2.5 shrink-0 rounded-full border-[1.5px] border-[#2e2014]" style={{ background: dot }} />
+      <span aria-hidden className="h-2.5 w-2.5 shrink-0 rounded-full border-[1.5px] border-line" style={{ background: dot }} />
       {children}
     </p>
   )
@@ -58,7 +58,7 @@ export function Panel({
   fill?: boolean
 }) {
   return (
-    <section className={`${CARD} p-4 text-[#2e2014] sm:p-5 ${fill ? "flex h-full flex-col" : ""} ${className}`} data-testid={testId}>
+    <section className={`${CARD} p-4 text-ink sm:p-5 ${fill ? "flex h-full flex-col" : ""} ${className}`} data-testid={testId}>
       {label ? (
         <div className="mb-4 flex items-center justify-between gap-3">
           <Label dot={dot}>{label}</Label>
@@ -90,7 +90,7 @@ export function RoomCode({ code, size = "lg" }: { code: string; size?: "xl" | "l
         <span
           key={`${char}-${i}`}
           aria-hidden
-          className="flex aspect-[4/5] items-center justify-center rounded-md border-2 border-[#2e2014] bg-[#f4ecdb] font-display font-bold leading-none text-[#2e2014] shadow-[3px_3px_0_#2e2014]"
+          className="flex aspect-[4/5] items-center justify-center rounded-md border-2 border-line bg-paper font-display font-bold leading-none text-ink shadow-[3px_3px_0_rgb(var(--c-shadow))]"
           style={{ fontSize: font }}
         >
           {char}
@@ -156,7 +156,7 @@ export function ShareButtons({ code, link }: { code: string; link: string }) {
     }
   }
   const base =
-    "flex items-center justify-center gap-2 rounded-md border-2 border-[#2e2014] px-4 py-3 text-sm font-bold shadow-[3px_3px_0_#2e2014] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0_#2e2014]"
+    "flex items-center justify-center gap-2 rounded-md border-2 border-line px-4 py-3 text-sm font-bold shadow-[3px_3px_0_rgb(var(--c-shadow))] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0_rgb(var(--c-shadow))]"
   return (
     <div>
       <div className="grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] gap-2 sm:gap-3">
@@ -164,7 +164,7 @@ export function ShareButtons({ code, link }: { code: string; link: string }) {
           type="button"
           onClick={() => void invite()}
           data-testid="lobby-inviter"
-          className={`${base} py-3.5 text-base ${done === "link" ? "bg-[#7d9471] text-[#f4ecdb]" : "bg-[#c65133] text-[#f4ecdb]"}`}
+          className={`${base} py-3.5 text-base ${done === "link" ? "bg-sage text-on-ink" : "bg-terra text-on-ink"}`}
         >
           {done === "link" ? <Check size={16} /> : <Share2 size={16} />}
           {done === "link" ? "Lien copié" : "Inviter"}
@@ -172,14 +172,14 @@ export function ShareButtons({ code, link }: { code: string; link: string }) {
         <button
           type="button"
           onClick={() => void copyCode()}
-          className={`${base} ${done === "code" ? "bg-[#7d9471] text-[#f4ecdb]" : "bg-[#f4ecdb] text-[#2e2014]"}`}
+          className={`${base} ${done === "code" ? "bg-sage text-on-ink" : "bg-paper text-ink"}`}
         >
           {done === "code" ? <Check size={15} /> : <Copy size={15} />}
           {done === "code" ? "Code copié" : "Copier le code"}
         </button>
       </div>
       {failed ? (
-        <p className="mt-2 rounded bg-[#f4ecdb] px-2 py-1 text-xs font-bold text-[#9c2f1d]">
+        <p className="mt-2 rounded bg-paper px-2 py-1 text-xs font-bold text-rouge-txt">
           Copie impossible ici, recopie le code à la main.
         </p>
       ) : null}
@@ -225,11 +225,11 @@ export function Roster({
         return (
           <li
             key={p.user_id}
-            className={`flex max-w-full items-center gap-2 rounded-full border-2 border-[#2e2014] bg-[#f4ecdb] py-1 pl-1 pr-3 text-[#2e2014] shadow-[2px_2px_0_#2e2014] ${away ? "opacity-60" : ""}`}
+            className={`flex max-w-full items-center gap-2 rounded-full border-2 border-line bg-paper py-1 pl-1 pr-3 text-ink shadow-[2px_2px_0_rgb(var(--c-shadow))] ${away ? "opacity-60" : ""}`}
           >
             <span
               aria-hidden
-              className={`flex shrink-0 items-center justify-center rounded-full border-2 border-[#2e2014] font-display font-bold ${big ? "h-9 w-9 text-lg" : "h-7 w-7 text-sm"}`}
+              className={`flex shrink-0 items-center justify-center rounded-full border-2 border-line font-display font-bold ${big ? "h-9 w-9 text-lg" : "h-7 w-7 text-sm"}`}
               style={{ background: isHost ? accent : PAPER, color: INK }}
             >
               {name.charAt(0).toUpperCase()}
@@ -237,13 +237,13 @@ export function Roster({
             <span className="min-w-0 leading-tight">
               <span className={`block truncate font-display font-semibold ${big ? "text-lg" : "text-[15px]"}`}>
                 {name}
-                {isMe ? <span className="ml-1 font-sans text-xs font-bold text-[#6b573f]">(toi)</span> : null}
+                {isMe ? <span className="ml-1 font-sans text-xs font-bold text-ink-2">(toi)</span> : null}
               </span>
-              {music ? <span className="block text-[11px] text-[#6b573f]">{music}</span> : null}
+              {music ? <span className="block text-[11px] text-ink-2">{music}</span> : null}
             </span>
             {isHost ? <Crown aria-label="Hôte" size={15} className="shrink-0" /> : null}
             {away ? (
-              <span className="shrink-0 text-[10px] font-bold uppercase tracking-[0.12em] text-[#6b573f]">
+              <span className="shrink-0 text-[10px] font-bold uppercase tracking-[0.12em] text-ink-2">
                 {p.status === "away" ? "absent" : "hors ligne"}
               </span>
             ) : null}
@@ -278,8 +278,8 @@ function Segmented<T extends number>({
 }) {
   return (
     <div>
-      <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.18em] text-[#6b573f]">{label}</p>
-      <div className="grid grid-cols-4 overflow-hidden rounded-md border-2 border-[#2e2014] bg-[#f4ecdb]">
+      <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.18em] text-ink-2">{label}</p>
+      <div className="grid grid-cols-4 overflow-hidden rounded-md border-2 border-line bg-paper">
         {values.map((v, i) => {
           const on = v === value
           return (
@@ -290,7 +290,7 @@ function Segmented<T extends number>({
               onClick={() => onPick(v)}
               disabled={readOnly}
               // Pas de contour bleu du navigateur : un contour encre, au clavier seulement.
-              className={`py-2 text-sm font-bold transition focus:outline-none focus-visible:relative focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-5px] focus-visible:outline-[#2e2014] ${i > 0 ? "border-l-2 border-[#2e2014]" : ""} ${on ? "" : readOnly ? "text-[#8a7558]" : "text-[#6b573f] hover:bg-[#e0d4ba]"} ${readOnly ? "cursor-default" : ""}`}
+              className={`py-2 text-sm font-bold transition focus:outline-none focus-visible:relative focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-5px] focus-visible:outline-line ${i > 0 ? "border-l-2 border-line" : ""} ${on ? "" : readOnly ? "text-sourd" : "text-ink-2 hover:bg-paper-strong"} ${readOnly ? "cursor-default" : ""}`}
               style={on ? { background: accent, color: accentText } : undefined}
             >
               {format(v)}
@@ -348,7 +348,7 @@ export function RoundSettings({ room, accent, accentText, readOnly = false }: { 
  *  bouton "Lancer la partie". */
 export function LaunchDock({ children, flush = false }: { children: ReactNode; flush?: boolean }) {
   return (
-    <div className={`fixed inset-x-0 bottom-0 z-40 border-t-2 border-[#2e2014] bg-[#f4ecdb] px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-3 lg:static lg:z-auto lg:mt-auto lg:border-0 lg:bg-transparent lg:p-0 ${flush ? "" : "lg:pt-5"}`}>
+    <div className={`fixed inset-x-0 bottom-0 z-40 border-t-2 border-line bg-paper px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-3 lg:static lg:z-auto lg:mt-auto lg:border-0 lg:bg-transparent lg:p-0 ${flush ? "" : "lg:pt-5"}`}>
       <div className="mx-auto max-w-xl lg:max-w-none">{children}</div>
     </div>
   )
@@ -376,11 +376,11 @@ export function LaunchButton({
         type="button"
         onClick={onStart}
         disabled={starting || !canStart}
-        className="w-full rounded-md border-2 border-[#2e2014] bg-[#c65133] px-6 py-3.5 text-center font-display text-xl font-bold text-[#f4ecdb] shadow-[5px_5px_0_#2e2014] transition-all duration-150 hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[3px_3px_0_#2e2014] active:translate-x-[3px] active:translate-y-[3px] active:shadow-[2px_2px_0_#2e2014] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-x-0 disabled:hover:translate-y-0 disabled:hover:shadow-[5px_5px_0_#2e2014] lg:py-4"
+        className="w-full rounded-md border-2 border-line bg-terra px-6 py-3.5 text-center font-display text-xl font-bold text-on-ink shadow-[5px_5px_0_rgb(var(--c-shadow))] transition-all duration-150 hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[3px_3px_0_rgb(var(--c-shadow))] active:translate-x-[3px] active:translate-y-[3px] active:shadow-[2px_2px_0_rgb(var(--c-shadow))] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-x-0 disabled:hover:translate-y-0 disabled:hover:shadow-[5px_5px_0_rgb(var(--c-shadow))] lg:py-4"
       >
         {starting ? "Lancement…" : importing ? "Import en cours…" : "Lancer la partie"}
       </button>
-      {hint ? <p className="m-0 text-center text-xs text-[#6b573f]">{hint}</p> : null}
+      {hint ? <p className="m-0 text-center text-xs text-ink-2">{hint}</p> : null}
     </div>
   )
 }
@@ -389,12 +389,12 @@ export function LaunchButton({
  *  grise qui ressemblait a une panne ("En attente du host..." en rose pale). */
 export function WaitingForHost({ hostName, accent }: { hostName: string | null; accent: string }) {
   return (
-    <div className="flex items-center justify-center gap-3 rounded-md border-2 border-[#2e2014] bg-[#ece1c8] px-4 py-3 shadow-[3px_3px_0_rgba(46,32,20,.18)]">
+    <div className="flex items-center justify-center gap-3 rounded-md border-2 border-line bg-paper-deep px-4 py-3 shadow-[3px_3px_0_rgb(var(--c-shadow)/.18)]">
       <span aria-hidden className="relative flex h-3 w-3 shrink-0">
         <span className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-60" style={{ background: accent }} />
-        <span className="relative inline-flex h-3 w-3 rounded-full border border-[#2e2014]" style={{ background: accent }} />
+        <span className="relative inline-flex h-3 w-3 rounded-full border border-line" style={{ background: accent }} />
       </span>
-      <p className="m-0 text-sm text-[#2e2014]">
+      <p className="m-0 text-sm text-ink">
         {hostName ? (
           <>
             <b>{hostName}</b> lance la partie quand tout le monde est là

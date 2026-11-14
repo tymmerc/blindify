@@ -24,7 +24,7 @@ const MIN_ANSWERING = 2
 export function SoundTip({ hostPlays }: { hostPlays: boolean }) {
   return (
     <div
-      className="flex items-start gap-3 rounded-md border-2 border-[#2e2014] bg-[#f4ecdb] p-3 text-sm text-[#2e2014]"
+      className="flex items-start gap-3 rounded-md border-2 border-line bg-paper p-3 text-sm text-ink"
       data-testid="lobby-son"
     >
       <Volume2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
@@ -55,19 +55,19 @@ function Choice({
     <button
       type="button"
       onClick={onClick}
-      className={`${CARD} group flex h-full flex-col items-start gap-3 p-5 text-left transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#2e2014]`}
+      className={`${CARD} group flex h-full flex-col items-start gap-3 p-5 text-left transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgb(var(--c-shadow))]`}
     >
       <span className="flex w-full items-center justify-between">
-        <span className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#2e2014]" style={{ background: ACCENT }}>
+        <span className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-line" style={{ background: ACCENT }}>
           {icon}
         </span>
-        <span className="rounded-full border-[1.5px] border-[#2e2014] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#2e2014]">
+        <span className="rounded-full border-[1.5px] border-line px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-ink">
           {tag}
         </span>
       </span>
-      <span className="block font-display text-xl font-semibold text-[#2e2014]">{title}</span>
-      <span className="block flex-1 text-sm leading-relaxed text-[#6b573f]">{desc}</span>
-      <span className="flex items-center gap-1 text-xs font-bold uppercase tracking-[0.14em] text-[#2e2014]">
+      <span className="block font-display text-xl font-semibold text-ink">{title}</span>
+      <span className="block flex-1 text-sm leading-relaxed text-ink-2">{desc}</span>
+      <span className="flex items-center gap-1 text-xs font-bold uppercase tracking-[0.14em] text-ink">
         Choisir <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-1" />
       </span>
     </button>
@@ -89,31 +89,31 @@ function EventEntry({
     <div className="mx-auto w-full max-w-4xl space-y-6">
       <div className="space-y-2">
         <Label dot={ACCENT}>Organiser</Label>
-        <h2 className="font-display text-3xl font-semibold leading-tight text-[#2e2014] sm:text-4xl">
-          Vous avez combien de <em className="font-medium italic text-[#c65133]">téléphones</em> ?
+        <h2 className="font-display text-3xl font-semibold leading-tight text-ink sm:text-4xl">
+          Vous avez combien de <em className="font-medium italic text-terra-txt">téléphones</em> ?
         </h2>
-        <p className="text-sm text-[#6b573f]">Chacun le sien, ou un seul pour toute la table. À toi de choisir.</p>
+        <p className="text-sm text-ink-2">Chacun le sien, ou un seul pour toute la table. À toi de choisir.</p>
       </div>
       <div className="grid gap-4 sm:grid-cols-3">
         <Choice
           tag="Chacun son tel"
           title="Je joue aussi"
           desc="Tu réponds avec les autres et tu gères la partie. La musique sort de ton téléphone."
-          icon={<Smartphone className="h-5 w-5 text-[#2e2014]" />}
+          icon={<Smartphone className="h-5 w-5 text-ink" />}
           onClick={() => onHost(true)}
         />
         <Choice
           tag="Chacun son tel"
           title="Je présente seulement"
           desc="Ton tel ou ton ordi au centre, ou branché sur la télé : musique et résultats. Tu ne réponds pas."
-          icon={<MonitorSpeaker className="h-5 w-5 text-[#2e2014]" />}
+          icon={<MonitorSpeaker className="h-5 w-5 text-ink" />}
           onClick={() => onHost(false)}
         />
         <Choice
           tag="Un seul tel"
           title="Un seul tel, buzzer"
           desc="Tous les doigts sur l'écran, le premier qui lâche répond."
-          icon={<Fingerprint className="h-5 w-5 text-[#2e2014]" />}
+          icon={<Fingerprint className="h-5 w-5 text-ink" />}
           onClick={() => router.push("/buzzer")}
         />
       </div>
@@ -126,17 +126,17 @@ function EventEntry({
               onChange={e => setJoinCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8))}
               placeholder="CODE DE LA SALLE"
               aria-label="Code de la salle"
-              className="min-w-0 flex-1 rounded-md border-2 border-[#2e2014] bg-[#efe5d0] px-4 py-3 font-display text-sm font-bold uppercase tracking-[0.25em] text-[#2e2014] outline-none placeholder:text-[#b3a182] focus:border-[#c65133]"
+              className="min-w-0 flex-1 rounded-md border-2 border-line bg-well px-4 py-3 font-display text-sm font-bold uppercase tracking-[0.25em] text-ink outline-none placeholder:text-pale focus:border-terra"
             />
             <button
               type="submit"
               disabled={joining}
-              className="rounded-md border-2 border-[#2e2014] bg-[#2e2014] px-5 py-3 text-sm font-bold text-[#f4ecdb] disabled:opacity-50"
+              className="rounded-md border-2 border-line bg-ink-block px-5 py-3 text-sm font-bold text-on-ink disabled:opacity-50"
             >
               Rejoindre la partie
             </button>
           </form>
-          <p className="mb-0 mt-3 text-xs text-[#6b573f]">
+          <p className="mb-0 mt-3 text-xs text-ink-2">
             {"Tu répondras depuis ton téléphone, la musique passe sur l'écran de l'hôte."}
           </p>
         </Panel>
@@ -148,12 +148,12 @@ function EventEntry({
 function Music({ refresh, onImported, intro, fill = false }: { refresh: number; onImported: () => void; intro: string; fill?: boolean }) {
   return (
     <Panel fill={fill} label="Ta musique" dot={ACCENT} testId="lobby-musique" className="min-w-0">
-      <p className="-mt-2 mb-3 text-sm text-[#6b573f]">{intro}</p>
+      <p className="-mt-2 mb-3 text-sm text-ink-2">{intro}</p>
       {/* Une longue bibliotheque defile ici au lieu d'etirer la page. */}
       <div className="lg:max-h-[240px] lg:overflow-y-auto lg:pr-1">
         <MusicLibrary accent={ACCENT} refreshSignal={refresh} />
       </div>
-      <div className="mt-4 border-t-2 border-dotted border-[rgba(46,32,20,.35)] pt-4">
+      <div className="mt-4 border-t-2 border-dotted border-[rgb(var(--c-line)/.35)] pt-4">
         <ProfileImportBlock accent={ACCENT} hideHeader onImported={onImported} />
       </div>
     </Panel>
@@ -185,7 +185,7 @@ function EventPlayerLobby(props: LobbyRendererProps) {
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 pb-24 lg:pb-10">
       <section
-        className={`${BLOCK} grid gap-4 p-5 text-[#2e2014] sm:p-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:gap-8`}
+        className={`${BLOCK} grid gap-4 p-5 text-ink sm:p-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:gap-8`}
         style={{ background: ACCENT }}
         data-testid="lobby-salle"
       >
@@ -194,7 +194,7 @@ function EventPlayerLobby(props: LobbyRendererProps) {
           <h2 className="mb-1 mt-3 font-display text-3xl font-semibold">Tu es dans la partie</h2>
           <p className="m-0 text-sm">{"L'hôte lance depuis l'écran central. Garde cette page ouverte : c'est ici que tu répondras."}</p>
         </div>
-        <div className="min-w-0 border-t-2 border-dashed border-[#2e2014]/40 pt-4 md:border-l-2 md:border-t-0 md:pl-8 md:pt-0">
+        <div className="min-w-0 border-t-2 border-dashed border-line/40 pt-4 md:border-l-2 md:border-t-0 md:pl-8 md:pt-0">
           <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.18em]">À table · {n}</p>
           <Roster
             participants={props.participants}
@@ -244,14 +244,14 @@ function EventHostLobby(props: LobbyRendererProps) {
     // s'ouvre en bas a droite, au-dessus de la musique : jamais sur "Lancer".
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 pb-32 lg:gap-6 lg:pb-10">
       {/* 1. LA SALLE, en affiche */}
-      <section className={`${BLOCK} p-5 text-[#2e2014] sm:p-7`} style={{ background: ACCENT }} data-testid="lobby-salle">
+      <section className={`${BLOCK} p-5 text-ink sm:p-7`} style={{ background: ACCENT }} data-testid="lobby-salle">
         <Label dot="#f4ecdb">Rejoignez la partie</Label>
         <h2 className="mb-5 mt-3 font-display text-2xl font-semibold leading-tight sm:text-3xl">
           Scannez le QR, ou entrez le code sur vos téléphones.
         </h2>
         <div className="grid items-center gap-6 lg:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)] lg:gap-8">
           {code ? (
-            <div className="mx-auto w-full max-w-[150px] rounded-md border-2 border-[#2e2014] bg-white p-2.5 shadow-[4px_4px_0_#2e2014] sm:max-w-[190px] sm:p-3 lg:mx-0 lg:w-[190px]">
+            <div className="mx-auto w-full max-w-[150px] rounded-md border-2 border-line bg-white p-2.5 shadow-[4px_4px_0_rgb(var(--c-shadow))] sm:max-w-[190px] sm:p-3 lg:mx-0 lg:w-[190px]">
               <QRCodeSVG value={joinUrl} size={220} bgColor="#ffffff" fgColor="#2e2014" level="M" className="h-auto w-full" />
             </div>
           ) : null}
@@ -266,7 +266,7 @@ function EventHostLobby(props: LobbyRendererProps) {
               </div>
             ) : null}
           </div>
-          <div className="min-w-0 self-stretch border-t-2 border-dashed border-[#2e2014]/40 pt-4 lg:border-l-2 lg:border-t-0 lg:pl-8 lg:pt-0">
+          <div className="min-w-0 self-stretch border-t-2 border-dashed border-line/40 pt-4 lg:border-l-2 lg:border-t-0 lg:pl-8 lg:pt-0">
             <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.18em]">À table · {n}</p>
             <Roster
               participants={props.participants}
@@ -323,12 +323,12 @@ function EventHostLobby(props: LobbyRendererProps) {
 
 function EventWaitingForNextGame({ joinCode }: { joinCode: string }) {
   return (
-    <section className={`${BLOCK} mx-auto w-full max-w-xl p-6 text-center text-[#2e2014]`} style={{ background: ACCENT }}>
+    <section className={`${BLOCK} mx-auto w-full max-w-xl p-6 text-center text-ink`} style={{ background: ACCENT }}>
       <p className="m-0 text-[11px] font-bold uppercase tracking-[0.22em]">Salle {joinCode}</p>
       <h2 className="mb-2 mt-3 font-display text-3xl font-semibold leading-tight">La partie est en cours</h2>
       <p className="m-0 text-sm">Reste sur cette page : tu rejoindras automatiquement la table dès la fin de la partie.</p>
       <p className="mb-0 mt-4 inline-flex items-center gap-2 text-sm font-bold">
-        <span className="inline-block h-2.5 w-2.5 animate-pulse rounded-full border border-[#2e2014] bg-[#f4ecdb]" />
+        <span className="inline-block h-2.5 w-2.5 animate-pulse rounded-full border border-line bg-paper" />
         En attente de la prochaine partie…
       </p>
     </section>

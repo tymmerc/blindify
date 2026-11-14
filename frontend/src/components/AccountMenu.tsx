@@ -15,7 +15,7 @@ export function AccountMenu() {
         aria-label="Mon compte"
         title="Mon compte"
         // Discret (Tym, 05/11) : meme gabarit que le « ? » de la FAQ sur /jouer/.
-        className="grid h-9 w-9 place-items-center rounded-full border-[1.5px] border-[#2e2014] bg-[#ece1c8] text-[#2e2014] shadow-[2px_2px_0_#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+        className="grid h-9 w-9 place-items-center rounded-full border-[1.5px] border-line bg-paper-deep text-ink shadow-[2px_2px_0_rgb(var(--c-shadow))] transition hover:bg-ink-block hover:text-on-ink"
       >
         <User className="h-4 w-4" />
       </Link>

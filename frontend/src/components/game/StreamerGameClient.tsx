@@ -43,9 +43,9 @@ type Props = {
 }
 
 const BUTTON =
-  "inline-flex items-center justify-center gap-2 rounded-md border-2 border-[#2e2014] px-4 py-2.5 text-sm font-bold shadow-[3px_3px_0_#2e2014] transition active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#2e2014] disabled:opacity-40"
+  "inline-flex items-center justify-center gap-2 rounded-md border-2 border-line px-4 py-2.5 text-sm font-bold shadow-[3px_3px_0_rgb(var(--c-shadow))] transition active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_rgb(var(--c-shadow))] disabled:opacity-40"
 const INPUT =
-  "w-full rounded-md border-2 border-[#2e2014] bg-[#efe5d0] px-4 py-3 text-base outline-none placeholder:text-[#b3a182] focus:border-[#7d9471]"
+  "w-full rounded-md border-2 border-line bg-well px-4 py-3 text-base outline-none placeholder:text-pale focus:border-sage"
 
 const AUDIO_PHASES: ReadonlySet<StreamerState["phase"]> = new Set(["GUESSING_CHAT", "REVEAL_PARTIAL", "GUESSING_STREAMER", "REVEAL_FINAL", "ROUND_ENDED"])
 
@@ -83,7 +83,7 @@ function HostGuess({ round, onGuess }: { round: number; onGuess: Props["onHostGu
         <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Titre" aria-label="Titre" {...ANSWER_INPUT_PROPS} className={INPUT} autoFocus />
         <input value={artist} onChange={e => setArtist(e.target.value)} placeholder="Artiste" aria-label="Artiste" {...ANSWER_INPUT_PROPS} className={INPUT} />
       </div>
-      <button type="submit" disabled={!(title.trim() || artist.trim())} className={`${BUTTON} w-full bg-[#c65133] text-[#f4ecdb]`}>Valider</button>
+      <button type="submit" disabled={!(title.trim() || artist.trim())} className={`${BUTTON} w-full bg-terra text-on-ink`}>Valider</button>
     </form>
   )
 }
@@ -98,7 +98,7 @@ function Arrivals({ answers, state, onKick }: { answers: StreamerAnswers | undef
       {names.length ? (
         <ul className="m-0 flex list-none flex-wrap gap-1.5 p-0">
           {names.map((n, i) => (
-            <li key={`${n.id || n.pseudo}-${i}`} className="flex items-center gap-1.5 rounded-full border-[1.5px] border-[#2e2014] bg-[#efe5d0] py-0.5 pl-2.5 pr-1 text-xs font-semibold">
+            <li key={`${n.id || n.pseudo}-${i}`} className="flex items-center gap-1.5 rounded-full border-[1.5px] border-line bg-well py-0.5 pl-2.5 pr-1 text-xs font-semibold">
               {n.pseudo}
               {onKick && n.id ? <KickButton pseudo={n.pseudo} onConfirm={() => onKick(n.id)} /> : null}
             </li>
@@ -113,7 +113,7 @@ function PhasePanel({ state, now, answers, onHostGuess, onKick }: { state: Strea
   const timer = <TimerBar seconds={secondsLeft(state.timing, now)} ratio={elapsedRatio(state.timing, now)} />
   switch (state.phase) {
     case "LOBBY":
-      return <p className="m-0 text-base text-[#6b573f]">Tout est prêt. Lance la première manche quand ton chat est là.</p>
+      return <p className="m-0 text-base text-ink-2">Tout est prêt. Lance la première manche quand ton chat est là.</p>
     case "STARTING_ROUND":
       return <p className="m-0 font-display text-3xl font-semibold">Manche {state.currentRound}, ça commence…</p>
     case "GUESSING_CHAT":
@@ -122,7 +122,7 @@ function PhasePanel({ state, now, answers, onHostGuess, onKick }: { state: Strea
           <p className="m-0 font-display text-2xl font-semibold">Ton chat cherche</p>
           {timer}
           <Arrivals answers={answers} state={state} onKick={onKick} />
-          {state.subMode === "duo" ? <p className="m-0 text-sm text-[#6b573f]">Tu réponds juste après eux.</p> : null}
+          {state.subMode === "duo" ? <p className="m-0 text-sm text-ink-2">Tu réponds juste après eux.</p> : null}
         </div>
       )
     case "REVEAL_PARTIAL":
@@ -166,35 +166,35 @@ export function StreamerGameClient({ state, serverNow, viewerCount, answers, twi
   const viewers = viewerCount ?? state.viewerCount ?? 0
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-5 px-4 pb-10 pt-6 text-[#2e2014] sm:px-6" data-testid="streamer-host">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b-2 border-[#2e2014] pb-3">
+    <div className="mx-auto w-full max-w-6xl space-y-5 px-4 pb-10 pt-6 text-ink sm:px-6" data-testid="streamer-host">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b-2 border-line pb-3">
         <div>
           <Label dot={SAGE}>{over ? "Partie terminée" : `Manche ${Math.max(1, state.currentRound)} / ${state.totalRounds}`} · {format?.title}</Label>
-          <p className="m-0 mt-1 flex items-center gap-2 text-sm text-[#6b573f]"><Radio aria-hidden className="h-4 w-4" /> {viewers} viewer{viewers > 1 ? "s" : ""}</p>
+          <p className="m-0 mt-1 flex items-center gap-2 text-sm text-ink-2"><Radio aria-hidden className="h-4 w-4" /> {viewers} viewer{viewers > 1 ? "s" : ""}</p>
           {state.twitchChannel ? (
-            <p className="m-0 mt-0.5 flex items-center gap-2 text-sm text-[#6b573f]" data-testid="streamer-twitch">
+            <p className="m-0 mt-0.5 flex items-center gap-2 text-sm text-ink-2" data-testid="streamer-twitch">
               <MessageSquare aria-hidden className="h-4 w-4" /> Chat #{state.twitchChannel} : {TWITCH_STATUS_TEXT[twitch?.channel === state.twitchChannel ? twitch.status : "connexion"]}
             </p>
           ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => setListening(l => !l)} aria-pressed={listening} className={`${BUTTON} bg-[#ece1c8]`}>
+          <button type="button" onClick={() => setListening(l => !l)} aria-pressed={listening} className={`${BUTTON} bg-paper-deep`}>
             {listening ? <Volume2 aria-hidden className="h-4 w-4" /> : <VolumeX aria-hidden className="h-4 w-4" />}
             {listening ? "Son ici : oui" : "Écouter ici"}
           </button>
           {!over ? (
-            <button type="button" onClick={onHostEnd} className={`${BUTTON} bg-[#ece1c8]`} data-testid="streamer-end">
+            <button type="button" onClick={onHostEnd} className={`${BUTTON} bg-paper-deep`} data-testid="streamer-end">
               <Flag aria-hidden className="h-4 w-4" /> Finir la partie
             </button>
           ) : null}
           {onExit ? (
-            <button type="button" onClick={onExit} className={`${BUTTON} bg-[#ece1c8]`}>
+            <button type="button" onClick={onExit} className={`${BUTTON} bg-paper-deep`}>
               <LogOut aria-hidden className="h-4 w-4" /> Quitter
             </button>
           ) : null}
         </div>
       </header>
-      {shortNotice?.visible ? <p className="m-0 rounded-md border-2 border-[#2e2014] bg-[#efe5d0] px-3 py-2 text-sm" role="status">{shortNotice.text}</p> : null}
+      {shortNotice?.visible ? <p className="m-0 rounded-md border-2 border-line bg-well px-3 py-2 text-sm" role="status">{shortNotice.text}</p> : null}
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] lg:items-start">
         <Panel label={over ? "Le podium" : "La manche"} dot={SAGE}>
@@ -203,7 +203,7 @@ export function StreamerGameClient({ state, serverNow, viewerCount, answers, twi
               <StreamerPodium entries={state.leaderboard ?? []} />
               {state.subMode !== "viewers_only" ? <p className="m-0 text-center font-display text-xl font-semibold">Toi {state.streamerWins} · {state.chatWins} Chat</p> : null}
               {onReplay ? (
-                <button type="button" onClick={onReplay} className={`${BUTTON} w-full bg-[#c65133] text-[#f4ecdb]`}>
+                <button type="button" onClick={onReplay} className={`${BUTTON} w-full bg-terra text-on-ink`}>
                   <RotateCcw aria-hidden className="h-4 w-4" /> Rejouer avec le même overlay
                 </button>
               ) : null}
@@ -212,7 +212,7 @@ export function StreamerGameClient({ state, serverNow, viewerCount, answers, twi
             <div className="space-y-5">
               <PhasePanel state={state} now={serverNow} answers={answers} onHostGuess={onHostGuess} onKick={onKick} />
               {canNext ? (
-                <button type="button" onClick={onHostStart} className={`${BUTTON} w-full bg-[#c65133] py-3.5 text-base text-[#f4ecdb]`} data-testid="streamer-next">
+                <button type="button" onClick={onHostStart} className={`${BUTTON} w-full bg-terra py-3.5 text-base text-on-ink`} data-testid="streamer-next">
                   <Play aria-hidden className="h-4 w-4" /> {state.phase === "LOBBY" ? "Lancer la première manche" : "Manche suivante"}
                 </button>
               ) : null}
@@ -224,7 +224,7 @@ export function StreamerGameClient({ state, serverNow, viewerCount, answers, twi
         </Panel>
       </div>
       {!REVEALED_PHASES.has(state.phase) && !over ? (
-        <p className="m-0 text-center text-xs text-[#8a7558]">Ton écran peut passer sur le stream : aucun titre ne s&apos;affiche ici avant le reveal.</p>
+        <p className="m-0 text-center text-xs text-sourd">Ton écran peut passer sur le stream : aucun titre ne s&apos;affiche ici avant le reveal.</p>
       ) : null}
     </div>
   )

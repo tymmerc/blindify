@@ -48,7 +48,7 @@ const BLUE = "#486090"
 // couleur est portee par la pastille, pas par le texte).
 function Tag({ color, children, light }: { color: string; children: React.ReactNode; light?: boolean }) {
   return (
-    <p className={`flex items-center gap-2 font-mono text-[11px] font-bold uppercase tracking-[0.26em] ${light ? "text-[#f4ecdb]" : "text-[#2e2014]"}`}>
+    <p className={`flex items-center gap-2 font-mono text-[11px] font-bold uppercase tracking-[0.26em] ${light ? "text-on-ink" : "text-ink"}`}>
       <span aria-hidden className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: color }} />
       {children}
     </p>
@@ -127,11 +127,11 @@ const FAQ_TEASER = [
 // hover:text-* obligatoire : globals.css a un `a:hover { color: terracotta }`
 // global qui rendait le texte invisible sur le fond vermillon au survol.
 const CTA =
-  "inline-block rounded-md border-2 border-[#2e2014] px-7 py-4 font-display text-xl font-bold shadow-[4px_4px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#2e2014] hover:text-[#f4ecdb] hover:bg-[#b83f29]"
+  "inline-block rounded-md border-2 border-line px-7 py-4 font-display text-xl font-bold shadow-[4px_4px_0_rgb(var(--c-shadow))] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_rgb(var(--c-shadow))] hover:text-on-ink hover:bg-[#b83f29]"
 
 export default function HomePage() {
   return (
-    <div className="min-h-screen text-[#2e2014]">
+    <div className="min-h-screen text-ink">
       <script dangerouslySetInnerHTML={{ __html: JOIN_REDIRECT }} />
 
       <SiteHeader />
@@ -143,19 +143,19 @@ export default function HomePage() {
             Le blind test{" "}
             <RotatingEnd
               endings={[
-                <span key="playlists">avec <em className="font-medium italic text-[#cc4830]">vos</em> playlists.</span>,
-                <span key="soirees">de vos <em className="font-medium italic text-[#cc4830]">soirées</em>.</span>,
-                <span key="potes"><em className="font-medium italic text-[#cc4830]">entre potes</em>.</span>,
-                <span key="image">à <em className="font-medium italic text-[#cc4830]">votre image</em>.</span>,
-                <span key="dossiers">de vos <em className="font-medium italic text-[#cc4830]">dossiers</em>.</span>,
-                <span key="apero">de l'<em className="font-medium italic text-[#cc4830]">apéro</em>.</span>,
-                <span key="plusieurs"><em className="font-medium italic text-[#cc4830]">à plusieurs</em>.</span>,
-                <span key="balance">qui <em className="font-medium italic text-[#cc4830]">balance</em> tout.</span>,
-                <span key="pepites">de vos <em className="font-medium italic text-[#cc4830]">pépites</em>.</span>,
-                <span key="gout">à votre <em className="font-medium italic text-[#cc4830]">goût</em>.</span>,
-                <span key="tele">sur la <em className="font-medium italic text-[#cc4830]">TV</em>.</span>,
-                <span key="rien">sans <em className="font-medium italic text-[#cc4830]">préparation</em>.</span>,
-                <span key="gratuit"><em className="font-medium italic text-[#cc4830]">100 % gratuit</em>.</span>,
+                <span key="playlists">avec <em className="font-medium italic text-vermillon-txt">vos</em> playlists.</span>,
+                <span key="soirees">de vos <em className="font-medium italic text-vermillon-txt">soirées</em>.</span>,
+                <span key="potes"><em className="font-medium italic text-vermillon-txt">entre potes</em>.</span>,
+                <span key="image">à <em className="font-medium italic text-vermillon-txt">votre image</em>.</span>,
+                <span key="dossiers">de vos <em className="font-medium italic text-vermillon-txt">dossiers</em>.</span>,
+                <span key="apero">de l'<em className="font-medium italic text-vermillon-txt">apéro</em>.</span>,
+                <span key="plusieurs"><em className="font-medium italic text-vermillon-txt">à plusieurs</em>.</span>,
+                <span key="balance">qui <em className="font-medium italic text-vermillon-txt">balance</em> tout.</span>,
+                <span key="pepites">de vos <em className="font-medium italic text-vermillon-txt">pépites</em>.</span>,
+                <span key="gout">à votre <em className="font-medium italic text-vermillon-txt">goût</em>.</span>,
+                <span key="tele">sur la <em className="font-medium italic text-vermillon-txt">TV</em>.</span>,
+                <span key="rien">sans <em className="font-medium italic text-vermillon-txt">préparation</em>.</span>,
+                <span key="gratuit"><em className="font-medium italic text-vermillon-txt">100 % gratuit</em>.</span>,
               ]}
             />
           </h1>
@@ -165,20 +165,20 @@ export default function HomePage() {
             mis quoi.
           </p>
           <div className="mt-9 flex flex-wrap items-center gap-6">
-            <Link href="/jouer/" className={`${CTA} bg-[#cc4830] text-[#f4ecdb]`}>
+            <Link href="/jouer/" className={`${CTA} bg-vermillon text-on-ink`}>
               Jouer, c'est gratuit
             </Link>
             <a
               href="#comment-ca-marche"
-              className="border-b-2 border-[#2e2014] pb-0.5 text-[13px] font-bold uppercase tracking-[0.14em] transition hover:border-[#cc4830] hover:text-[#cc4830]"
+              className="border-b-2 border-line pb-0.5 text-[13px] font-bold uppercase tracking-[0.14em] transition hover:border-vermillon hover:text-vermillon-txt"
             >
               Comment ça marche
             </a>
           </div>
           <p className="mt-6 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[11px] font-bold uppercase tracking-[0.12em] sm:tracking-[0.16em]">
-            <span className="text-[#cc4830]">Sans compte</span>
-            <span className="text-[#d88418]">Sans installation</span>
-            <span className="text-[#486090]">iPhone, Android, PC</span>
+            <span className="text-vermillon-txt">Sans compte</span>
+            <span className="text-ambre-txt">Sans installation</span>
+            <span className="text-acier-txt">iPhone, Android, PC</span>
           </p>
         </div>
         <div className="relative">
@@ -187,18 +187,18 @@ export default function HomePage() {
       </section>
 
       {/* ── Pourquoi c'est pas un blind test comme les autres : bloc encre ── */}
-      <section className="border-t-2 border-[#2e2014] bg-[#2e2014] text-[#f4ecdb]">
+      <section className="border-t-2 border-line bg-ink-block text-on-ink">
         <div className="mx-auto grid max-w-6xl gap-12 px-5 py-[5.5rem] sm:px-8 lg:grid-cols-[0.9fr_1.1fr] lg:gap-20">
           <div>
             <Tag color={AMBER} light>Ce qui change</Tag>
             <h2 className="mt-5 font-display text-[2.2rem] font-semibold leading-[1.08] sm:text-[2.8rem] lg:text-[3.4rem]">
               Les autres te font choisir un pack « années 80 » ou préparer ton quiz à la main.{" "}
-              <em className="font-medium italic text-[#d88418]">Ici, non.</em>
+              <em className="font-medium italic text-ambre-txt">Ici, non.</em>
             </h2>
           </div>
-          <dl className="divide-y-2 divide-[rgba(244,236,219,.22)] lg:pt-10">
+          <dl className="divide-y-2 divide-[rgb(var(--c-on-ink)/.22)] lg:pt-10">
             <div className="py-6 first:pt-0">
-              <dt className="font-display text-xl font-semibold text-[#d88418]">Vos morceaux, pas les nôtres</dt>
+              <dt className="font-display text-xl font-semibold text-ambre-txt">Vos morceaux, pas les nôtres</dt>
               <dd className="mt-2 text-[1.05rem] leading-relaxed">
                 Dans les parties à plusieurs téléphones, la partie est construite uniquement avec les
                 musiques des joueurs présents. Si personne n'a ramené de rap, il n'y aura pas de rap. Si
@@ -206,14 +206,14 @@ export default function HomePage() {
               </dd>
             </div>
             <div className="py-6">
-              <dt className="font-display text-xl font-semibold text-[#d88418]">Zéro préparation</dt>
+              <dt className="font-display text-xl font-semibold text-ambre-txt">Zéro préparation</dt>
               <dd className="mt-2 text-[1.05rem] leading-relaxed">
                 Pas de morceaux à sélectionner, pas de questions à écrire. Un pseudo, un lien, et
                 c'est parti. Le temps de sortir les verres, la partie est prête.
               </dd>
             </div>
             <div className="py-6 last:pb-0">
-              <dt className="font-display text-xl font-semibold text-[#d88418]">Le vrai jeu, c'est de deviner qui a mis quoi</dt>
+              <dt className="font-display text-xl font-semibold text-ambre-txt">Le vrai jeu, c'est de deviner qui a mis quoi</dt>
               <dd className="mt-2 text-[1.05rem] leading-relaxed">
                 Trouver le titre et l'artiste rapporte des points, et deviner lequel de tes potes écoute
                 ça en boucle en rapporte un de plus. C'est là que la table se marre. La vitesse ne sert
@@ -225,7 +225,7 @@ export default function HomePage() {
       </section>
 
       {/* ── Trois facons de jouer : split-screen epingle, une couleur par mode ── */}
-      <section className="border-t-2 border-[#2e2014] bg-[#ece1c8]">
+      <section className="border-t-2 border-line bg-paper-deep">
         <div className="mx-auto max-w-6xl px-5 py-[5.5rem] sm:px-8">
           <Tag color={VERMILION}>Les modes de jeu</Tag>
           <h2 className="mb-14 mt-5 max-w-[30rem] font-display text-[2.2rem] font-semibold leading-[1.08] sm:text-[2.8rem] lg:text-[3.4rem]">
@@ -236,10 +236,10 @@ export default function HomePage() {
               <article
                 key={m.key}
                 data-mode={m.key}
-                className="border-t-2 border-[#2e2014] py-12 first:border-t-0 first:pt-0 lg:py-[6rem] lg:first:pt-0"
+                className="border-t-2 border-line py-12 first:border-t-0 first:pt-0 lg:py-[6rem] lg:first:pt-0"
               >
                 <p className="flex items-center gap-3 font-mono text-[11px] font-bold uppercase tracking-[0.2em]">
-                  <span className="rounded-sm px-2 py-1 text-[#f4ecdb]" style={{ background: m.color }}>{m.num}</span>
+                  <span className="rounded-sm px-2 py-1 text-on-ink" style={{ background: m.color }}>{m.num}</span>
                   <span>{m.max}</span>
                 </p>
                 <h3 className="mt-4 font-display text-[1.9rem] font-semibold leading-tight sm:text-[2.4rem]">
@@ -251,7 +251,7 @@ export default function HomePage() {
               </article>
             ))}
           </ModesStage>
-          <p className="mt-12 max-w-[40rem] border-t-2 border-[#2e2014] pt-6 text-[1.05rem] leading-relaxed">
+          <p className="mt-12 max-w-[40rem] border-t-2 border-line pt-6 text-[1.05rem] leading-relaxed">
             Et tout seul ? Il y a aussi un <strong>mode solo</strong> : tu devines les morceaux de ta propre
             bibliothèque (ou du fonds commun si tu n'as rien importé), pour t'entraîner ou tuer dix minutes
             dans le train. Il est dans le menu des modes une fois que tu as mis ton pseudo.
@@ -260,7 +260,7 @@ export default function HomePage() {
       </section>
 
       {/* ── Comment ca marche : bloc bleu ── */}
-      <section id="comment-ca-marche" className="border-t-2 border-[#2e2014] bg-[#486090] text-[#f4ecdb]">
+      <section id="comment-ca-marche" className="border-t-2 border-line bg-acier text-on-ink">
         <div className="mx-auto max-w-6xl px-5 py-[5.5rem] sm:px-8">
           <Tag color={CREAM} light>En trois étapes</Tag>
           <h2 className="mt-5 font-display text-[2.2rem] font-semibold leading-[1.08] sm:text-[2.8rem] lg:text-[3.4rem]">
@@ -284,7 +284,7 @@ export default function HomePage() {
                 b: "À plusieurs téléphones, la partie est générée à partir des playlists de tout le monde : extraits courts, réponse au clavier, un point pour le titre, un pour l'artiste, un pour le bon coupable, et la vitesse départage en cas d'égalité.",
               },
             ].map(step => (
-              <li key={step.n} className="border-t-2 border-[rgba(244,236,219,.45)] pt-5">
+              <li key={step.n} className="border-t-2 border-[rgb(var(--c-on-ink)/.45)] pt-5">
                 <span className="font-display text-5xl font-medium italic">{step.n}</span>
                 <h3 className="mt-3 font-display text-2xl font-semibold">{step.t}</h3>
                 <p className="mt-2 text-[1.05rem] leading-relaxed">{step.b}</p>
@@ -294,11 +294,11 @@ export default function HomePage() {
           <p className="mt-10 max-w-[40rem] text-[1.05rem] leading-relaxed">
             Où trouver le lien, que faire d'une playlist privée, comment ça se passe sur téléphone : tout est dans le
             guide du{" "}
-            <Link href="/blind-test-spotify/" className="border-b-2 border-[#f4ecdb] font-semibold hover:border-[#2e2014]">
+            <Link href="/blind-test-spotify/" className="border-b-2 border-on-ink font-semibold hover:border-line">
               blind test Spotify
             </Link>{" "}
             et dans celui pour{" "}
-            <Link href="/blind-test-deezer/" className="border-b-2 border-[#f4ecdb] font-semibold hover:border-[#2e2014]">
+            <Link href="/blind-test-deezer/" className="border-b-2 border-on-ink font-semibold hover:border-line">
               Deezer
             </Link>
             .
@@ -307,7 +307,7 @@ export default function HomePage() {
       </section>
 
       {/* ── Les petits trucs qui comptent : bloc ambre ── */}
-      <section className="border-t-2 border-[#2e2014] bg-[#d88418] text-[#2e2014]">
+      <section className="reste-clair border-t-2 border-line bg-ambre text-ink">
         <div className="mx-auto grid max-w-6xl gap-10 px-5 py-[4.5rem] sm:px-8 lg:grid-cols-[0.9fr_1.1fr] lg:gap-20">
           <div>
             <Tag color={INK}>Bon à savoir</Tag>
@@ -323,7 +323,7 @@ export default function HomePage() {
               "C'est gratuit. Pas de version pro, pas de pub.",
             ].map(line => (
               <li key={line} className="flex gap-4 text-[1.05rem] leading-relaxed">
-                <span aria-hidden className="mt-[0.6rem] h-2.5 w-2.5 shrink-0 rounded-sm bg-[#2e2014]" />
+                <span aria-hidden className="mt-[0.6rem] h-2.5 w-2.5 shrink-0 rounded-sm bg-ink-block" />
                 <span>{line}</span>
               </li>
             ))}
@@ -334,7 +334,7 @@ export default function HomePage() {
       {/* ── FAQ : les questions qu'on pose vraiment avant de lancer ──
           Reponses courtes ici, versions completes sur /faq/ (qui garde le
           JSON-LD FAQPage : une seule source pour les moteurs). */}
-      <section className="border-t-2 border-[#2e2014] bg-[#ece1c8]">
+      <section className="border-t-2 border-line bg-paper-deep">
         {/* Ordre du DOM : titre, questions, bouton. Sur mobile on lit donc les
             questions AVANT le bouton ; sur desktop la grille explicite remet le
             bouton sous le titre, dans la colonne de gauche. */}
@@ -350,7 +350,7 @@ export default function HomePage() {
           </div>
           <Link
             href="/faq/"
-            className="justify-self-start rounded-md border-2 border-[#2e2014] px-6 py-3 font-display text-lg font-bold shadow-[4px_4px_0_#2e2014] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:bg-[#2e2014] hover:text-[#f4ecdb] hover:shadow-[2px_2px_0_#2e2014] lg:col-start-1 lg:row-start-2 lg:mt-8 lg:self-start"
+            className="justify-self-start rounded-md border-2 border-line px-6 py-3 font-display text-lg font-bold shadow-[4px_4px_0_rgb(var(--c-shadow))] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:bg-ink-block hover:text-on-ink hover:shadow-[2px_2px_0_rgb(var(--c-shadow))] lg:col-start-1 lg:row-start-2 lg:mt-8 lg:self-start"
           >
             Toutes les questions
           </Link>
@@ -358,19 +358,19 @@ export default function HomePage() {
       </section>
 
       {/* ── Fin de face : on lance ? ── */}
-      <section className="border-t-2 border-[#2e2014]">
+      <section className="border-t-2 border-line">
         <div className="mx-auto max-w-6xl px-5 py-[6rem] sm:px-8">
           <Tag color={VERMILION}>Prêt ?</Tag>
           <h2 className="mt-5 font-display text-[3rem] font-semibold leading-[1] sm:text-[4.2rem] lg:text-[5.4rem]">
             On lance ?
           </h2>
           <div className="mt-9 flex flex-wrap items-center gap-6">
-            <Link href="/jouer/" className={`${CTA} bg-[#cc4830] text-[#f4ecdb]`}>
+            <Link href="/jouer/" className={`${CTA} bg-vermillon text-on-ink`}>
               Jouer maintenant
             </Link>
             <Link
               href="/faq/"
-              className="border-b-2 border-[#2e2014] pb-0.5 text-[13px] font-bold uppercase tracking-[0.14em] transition hover:border-[#cc4830] hover:text-[#cc4830]"
+              className="border-b-2 border-line pb-0.5 text-[13px] font-bold uppercase tracking-[0.14em] transition hover:border-vermillon hover:text-vermillon-txt"
             >
               Une question ? La FAQ
             </Link>

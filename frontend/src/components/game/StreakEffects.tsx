@@ -26,7 +26,7 @@ export function StreakEffects({ streak }: { streak: number }) {
       <span className="inline-flex items-center gap-1">
         <span
           className={`rounded-full border-[1.5px] px-2 py-0.5 text-xs font-bold ${
-            isIntense ? "border-[#c65133] text-[#c65133]" : "border-[#e0a32e] text-[#a87714]"
+            isIntense ? "border-terra text-terra-txt" : "border-gold text-gold-deep-txt"
           }`}
           style={{
             animation: isIntense

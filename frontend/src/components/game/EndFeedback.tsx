@@ -75,7 +75,7 @@ export function EndFeedback({ context, className = "" }: EndFeedbackProps) {
       aria-labelledby={showNote ? undefined : titleId}
       aria-label={showNote ? "Un mot pour l'étudiant derrière Blindz" : undefined}
       data-testid="end-feedback"
-      className={`mx-auto w-full max-w-sm border-t-2 border-dotted border-[rgba(46,32,20,.35)] pt-4 text-left text-[#2e2014] ${className}`}
+      className={`mx-auto w-full max-w-sm border-t-2 border-dotted border-[rgb(var(--c-line)/.35)] pt-4 text-left text-ink ${className}`}
     >
       {showNote ? (
         <StudentNote context={context} />
@@ -153,9 +153,9 @@ function QuickAnswer({ context, titleId }: { context: FeedbackContext; titleId: 
           ))}
         </div>
       </div>
-      <p aria-live="polite" className="mt-1 min-h-[1.25rem] text-xs text-[#6b573f]">
+      <p aria-live="polite" className="mt-1 min-h-[1.25rem] text-xs text-ink-2">
         {status === "sent" ? THANKS : null}
-        {isFailure(status) ? <span className="font-semibold text-[#9c2f1d]">{FAILURE_TEXT[status]}</span> : null}
+        {isFailure(status) ? <span className="font-semibold text-rouge-txt">{FAILURE_TEXT[status]}</span> : null}
       </p>
       {showForm && chosen ? <FollowUpForm answer={chosen} pending={pending} /> : null}
     </div>
@@ -203,8 +203,8 @@ function FollowUpForm({ answer, pending }: { answer: FeedbackAnswer; pending: { 
 
   if (status === "sent") {
     return (
-      <p ref={doneRef} tabIndex={-1} className="mt-1 flex items-center gap-1.5 text-sm font-semibold text-[#2e2014] outline-none">
-        <Check aria-hidden className="h-4 w-4 text-[#7d9471] animate-in zoom-in-50 spin-in-12 duration-300" />
+      <p ref={doneRef} tabIndex={-1} className="mt-1 flex items-center gap-1.5 text-sm font-semibold text-ink outline-none">
+        <Check aria-hidden className="h-4 w-4 text-sage-txt animate-in zoom-in-50 spin-in-12 duration-300" />
         {FOLLOW_UP_DONE}
       </p>
     )
@@ -231,18 +231,18 @@ function FollowUpForm({ answer, pending }: { answer: FeedbackAnswer; pending: { 
         rows={2}
         aria-describedby={hintId}
         placeholder={placeholder}
-        className="w-full resize-none rounded-md border-[1.5px] border-[rgba(46,32,20,.35)] bg-[#efe5d0] px-3 py-2 text-base text-[#2e2014] outline-none placeholder:italic placeholder:text-[#8a7558] focus:border-[#c65133] sm:text-sm"
+        className="w-full resize-none rounded-md border-[1.5px] border-[rgb(var(--c-line)/.35)] bg-well px-3 py-2 text-base text-ink outline-none placeholder:italic placeholder:text-sourd focus:border-terra sm:text-sm"
       />
-      <p id={hintId} className="flex justify-between gap-3 text-[11px] text-[#6b573f]">
+      <p id={hintId} className="flex justify-between gap-3 text-[11px] text-ink-2">
         <span>Facultatif. Ton avis est déjà compté, ce mot s&apos;y ajoute, sans ton pseudo.</span>
         <span className="shrink-0 tabular-nums">{text.length}/{FEEDBACK_MESSAGE_MAX}</span>
       </p>
-      {isFailure(status) ? <p role="alert" className="text-xs font-semibold text-[#9c2f1d]">{FAILURE_TEXT[status]}</p> : null}
+      {isFailure(status) ? <p role="alert" className="text-xs font-semibold text-rouge-txt">{FAILURE_TEXT[status]}</p> : null}
       <div className="flex justify-end">
         <button
           type="submit"
           disabled={status === "sending" || !message}
-          className="inline-flex min-h-[40px] items-center gap-1.5 rounded-md border-[1.5px] border-[#2e2014] bg-[#c65133] px-4 text-sm font-bold text-[#f4ecdb] shadow-[2px_2px_0_#2e2014] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_#2e2014] disabled:opacity-50"
+          className="inline-flex min-h-[40px] items-center gap-1.5 rounded-md border-[1.5px] border-line bg-terra px-4 text-sm font-bold text-on-ink shadow-[2px_2px_0_rgb(var(--c-shadow))] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_rgb(var(--c-shadow))] disabled:opacity-50"
         >
           {status === "sending" ? <Loader2 aria-hidden className="h-3.5 w-3.5 animate-spin" /> : null}
           Envoyer
@@ -266,8 +266,8 @@ function AnswerButton({ label, pressed, sending, disabled, onClick }: AnswerButt
   // Fond sauge clair et texte encre : le creme sur sauge plein ne se lit pas
   // assez (contraste sous 3:1).
   const tone = pressed
-    ? "translate-x-[2px] translate-y-[2px] border-[#7d9471] bg-[#7d9471]/30 text-[#2e2014] shadow-none"
-    : "border-[#2e2014] bg-transparent text-[#2e2014] shadow-[2px_2px_0_#2e2014] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_#2e2014]"
+    ? "translate-x-[2px] translate-y-[2px] border-sage bg-sage/30 text-ink shadow-none"
+    : "border-line bg-transparent text-ink shadow-[2px_2px_0_rgb(var(--c-shadow))] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_rgb(var(--c-shadow))]"
   return (
     <button
       type="button"
@@ -321,8 +321,8 @@ function BugReport({ context }: { context: FeedbackContext }) {
 
   if (status === "sent") {
     return (
-      <p ref={doneRef} tabIndex={-1} className="mt-1 flex items-center gap-1.5 text-sm font-semibold text-[#2e2014] outline-none">
-        <Check aria-hidden className="h-4 w-4 text-[#7d9471] animate-in zoom-in-50 spin-in-12 duration-300" />
+      <p ref={doneRef} tabIndex={-1} className="mt-1 flex items-center gap-1.5 text-sm font-semibold text-ink outline-none">
+        <Check aria-hidden className="h-4 w-4 text-sage-txt animate-in zoom-in-50 spin-in-12 duration-300" />
         Merci, on regarde ça.
       </p>
     )
@@ -338,7 +338,7 @@ function BugReport({ context }: { context: FeedbackContext }) {
         aria-expanded={open}
         aria-controls={formId}
         onClick={() => (open ? close() : setOpen(true))}
-        className="mt-1 text-xs font-semibold text-[#6b573f] underline decoration-dotted underline-offset-4 hover:text-[#c65133]"
+        className="mt-1 text-xs font-semibold text-ink-2 underline decoration-dotted underline-offset-4 hover:text-terra-txt"
       >
         Signaler un bug
       </button>
@@ -388,25 +388,25 @@ function BugForm({ id, text, onText, status, onSubmit, onCancel }: BugFormProps)
         rows={3}
         aria-describedby={hintId}
         placeholder="Par exemple : le son s'est coupé à la 3e manche"
-        className="w-full resize-none rounded-md border-[1.5px] border-[rgba(46,32,20,.35)] bg-[#efe5d0] px-3 py-2 text-sm text-[#2e2014] outline-none placeholder:italic placeholder:text-[#8a7558] focus:border-[#c65133]"
+        className="w-full resize-none rounded-md border-[1.5px] border-[rgb(var(--c-line)/.35)] bg-well px-3 py-2 text-sm text-ink outline-none placeholder:italic placeholder:text-sourd focus:border-terra"
       />
-      <p id={hintId} className="flex justify-between gap-3 text-[11px] text-[#6b573f]">
+      <p id={hintId} className="flex justify-between gap-3 text-[11px] text-ink-2">
         <span>Facultatif. On l&apos;enregistre avec le mode de jeu et ton type de navigateur, sans ton pseudo.</span>
         <span className="shrink-0 tabular-nums">{text.length}/{FEEDBACK_MESSAGE_MAX}</span>
       </p>
-      {isFailure(status) ? <p role="alert" className="text-xs font-semibold text-[#9c2f1d]">{FAILURE_TEXT[status]}</p> : null}
+      {isFailure(status) ? <p role="alert" className="text-xs font-semibold text-rouge-txt">{FAILURE_TEXT[status]}</p> : null}
       <div className="flex justify-end gap-2">
         <button
           type="button"
           onClick={onCancel}
-          className="min-h-[40px] rounded-md border-[1.5px] border-[#2e2014] px-3.5 text-sm font-bold text-[#2e2014] transition hover:bg-[#2e2014] hover:text-[#f4ecdb]"
+          className="min-h-[40px] rounded-md border-[1.5px] border-line px-3.5 text-sm font-bold text-ink transition hover:bg-ink-block hover:text-on-ink"
         >
           Annuler
         </button>
         <button
           type="submit"
           disabled={status === "sending"}
-          className="inline-flex min-h-[40px] items-center gap-1.5 rounded-md border-[1.5px] border-[#2e2014] bg-[#c65133] px-4 text-sm font-bold text-[#f4ecdb] shadow-[2px_2px_0_#2e2014] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_#2e2014] disabled:opacity-50"
+          className="inline-flex min-h-[40px] items-center gap-1.5 rounded-md border-[1.5px] border-line bg-terra px-4 text-sm font-bold text-on-ink shadow-[2px_2px_0_rgb(var(--c-shadow))] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_rgb(var(--c-shadow))] disabled:opacity-50"
         >
           {status === "sending" ? <Loader2 aria-hidden className="h-3.5 w-3.5 animate-spin" /> : null}
           Envoyer
