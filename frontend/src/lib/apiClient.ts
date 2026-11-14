@@ -14,6 +14,13 @@ import type {
   LinkDetails,
 } from "./types"
 
+
+/** Bilan manche par manche d'une partie (ecran de fin). `responses` et `ownerUserId` : T40. */
+export interface RoomRoundsSummary {
+  rounds: Array<{ round: number; title: string | null; artist: string | null; answers: number; correct: number; ownerUserId?: number | null }>
+  players: Array<{ userId: number; answered: number; avgMs: number | null }>
+  responses?: Array<{ round: number; userId: number; guessTitle: string; guessArtist: string; gained: number }>
+}
 export class ApiError extends Error {
   constructor(readonly status: number, message: string, readonly code?: string) {
     super(message)
@@ -322,14 +329,12 @@ export const clientApi = {
       body: JSON.stringify(payload),
     })
   },
-  async roomRounds(code: string): Promise<{
-    rounds: Array<{ round: number; title: string | null; artist: string | null; answers: number; correct: number }>
-    players: Array<{ userId: number; answered: number; avgMs: number | null }>
-  }> {
-    return request<{
-      rounds: Array<{ round: number; title: string | null; artist: string | null; answers: number; correct: number }>
-      players: Array<{ userId: number; answered: number; avgMs: number | null }>
-    }>(`/api/rooms/${code}/rounds`, { method: "GET", cache: "no-store" })
+  async roomRounds(code: string): Promise<RoomRoundsSummary> {
+    return request<RoomRoundsSummary>(`/api/rooms/${code}/rounds`, { method: "GET", cache: "no-store" })
+  },
+  /** « Revenir à la salle » (T40) : l'hote ramene tout le monde dans la salle d'attente. */
+  async backToLobby(code: string): Promise<{ roomCode: string; status: "waiting" }> {
+    return request(`/api/rooms/${encodeURIComponent(code)}/lobby`, { method: "POST" })
   },
   async updateRoomConfig(
     code: string,

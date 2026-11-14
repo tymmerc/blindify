@@ -141,6 +141,9 @@ export const api = {
   async roomRounds(code: string) {
     return clientApi.roomRounds(code)
   },
+  async backToLobby(code: string) {
+    return clientApi.backToLobby(code)
+  },
   async streamerStatus() {
     return clientApi.streamerStatus()
   },

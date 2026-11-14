@@ -64,6 +64,7 @@ if (withBrowser) {
 const SCRIPTS = [
   { label: "Correctifs PC (import par l'interface, code colle, platine, depart, buzzer sans musique)", args: ["pcfixes-e2e.mjs", "--pile"] },
   { label: "Meme musique importee par deux joueurs (deux telephones, deux amis)", args: [path.join(HERE, "importeur-e2e.mjs"), `${RUN}/reports/current/importeur`] },
+  { label: "Fin de partie, retour a la salle d'attente, relance (T40)", args: [path.join(HERE, "retour-salle-e2e.mjs"), `${RUN}/reports/current/retour-salle`] },
 ]
 if (withBrowser) {
   say("\n== scripts E2E sur la pile ==")

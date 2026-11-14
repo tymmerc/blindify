@@ -31,6 +31,7 @@ import { LOOKUPS_PER_ROUND, LookupGuard } from "../services/lookupGuard";
 
 // Code de salle : utils/roomCode.ts (partage avec la salle d'un salon Discord).
 import { generateRoomCode } from "../utils/roomCode";
+import { validRoomCode } from "../utils/socketValidation";
 import { announceGameStart } from "../services/gameStartAnnounce";
 export { generateRoomCode };
 
@@ -128,6 +129,36 @@ async function abortStartedGame(room: { id: number; room_code: string }, session
   } catch (err) {
     logger.error("start_abort_failed", { roomCode: room.room_code, sessionId, error: err });
   }
+}
+
+/**
+ * Remet en attente une salle dont la partie est finie (ou ne tourne plus en
+ * memoire) : meme code, memes joueurs, memes reglages. Sert a la relance (T27)
+ * et au retour a la salle d'attente (T40). Rend false si la salle a change
+ * entre la lecture et l'ecriture (deux clics, deux onglets). « finished » passe
+ * aussi : l'ecriture de fin de la partie d'avant peut arriver entre les deux
+ * (relance dans la seconde du game over).
+ * completed_at = maintenant : le menage des salles en attente (index.ts) les
+ * garde 30 min a partir de ce retour, pas de la derniere arrivee d'un joueur.
+ */
+async function resetRoomToWaiting(room: { id: number; room_code: string; status: string; session_id: number | null }): Promise<boolean> {
+  clearGame(room.room_code);
+  const { rowCount } = await pool.query(
+    `UPDATE multiplayer_rooms SET status='waiting', session_id=NULL, started_at=NULL, completed_at=NOW()
+     WHERE id=$1 AND (status=$2 OR status='finished')`,
+    [room.id, room.status]
+  );
+  if (!rowCount) return false;
+  // La partie d'avant ne tourne plus en memoire : si elle est encore
+  // « in_progress » en base (lancement casse, serveur redemarre), elle
+  // est close ici. Une partie finie dont l'ecriture est en route passe
+  // ensuite « finished » (persistGameResults), comme prevu.
+  if (room.session_id) {
+    await abandonSession(room.session_id).catch(err =>
+      logger.error("previous_session_abandon_failed", { roomCode: room.room_code, sessionId: room.session_id, error: err })
+    );
+  }
+  return true;
 }
 
 // Verrou du lancement, par salle : un double clic, deux onglets ou deux
@@ -575,12 +606,14 @@ export const roomsController = {
       round_index: number;
       correct_title: string | null;
       correct_artist: string | null;
+      owner_user_id: number | null;
       answers: string;
       correct: string;
     }>(
       `SELECT gr.round_index,
               gr.correct_title,
               gr.correct_artist,
+              gr.owner_user_id,
               COUNT(rr.id) FILTER (
                 WHERE COALESCE(rr.guess_title, '') <> '' OR COALESCE(rr.guess_artist, '') <> ''
               )                                                   AS answers,
@@ -588,7 +621,7 @@ export const roomsController = {
        FROM game_rounds gr
        LEFT JOIN round_responses rr ON rr.round_id = gr.id
        WHERE gr.session_id = $1
-       GROUP BY gr.round_index, gr.correct_title, gr.correct_artist
+       GROUP BY gr.round_index, gr.correct_title, gr.correct_artist, gr.owner_user_id
        ORDER BY gr.round_index`,
       [sessionId]
     );
@@ -614,7 +647,33 @@ export const roomsController = {
       [sessionId]
     );
 
+    // Ce que chacun a tape (T40, moments de la partie sur l'ecran de fin).
+    // Seulement les manches deja revelees : ces reponses ont deja ete montrees
+    // a toute la salle au reveal, rien de plus ne sort avant.
+    const { rows: responseRows } = await pool.query<{
+      round_index: number;
+      user_id: number;
+      guess_title: string | null;
+      guess_artist: string | null;
+      score_delta: number | null;
+    }>(
+      `SELECT gr.round_index, rr.user_id, rr.guess_title, rr.guess_artist, rr.score_delta
+       FROM round_responses rr
+       JOIN game_rounds gr ON gr.id = rr.round_id
+       WHERE gr.session_id = $1 AND gr.round_index <= $2
+       ORDER BY gr.round_index, rr.user_id`,
+      // Plafond ramene dans un int4 : « tout revele » vaut MAX_SAFE_INTEGER.
+      [sessionId, Math.min(revealedUpTo, 2_147_483_647)]
+    );
+
     ok(res, {
+      responses: responseRows.map(r => ({
+        round: r.round_index,
+        userId: r.user_id,
+        guessTitle: r.guess_title ?? "",
+        guessArtist: r.guess_artist ?? "",
+        gained: Number(r.score_delta ?? 0),
+      })),
       players: playerRows.map(p => ({
         userId: p.user_id,
         answered: Number(p.answered),
@@ -628,6 +687,7 @@ export const roomsController = {
           artist: revealed ? r.correct_artist : null,
           answers: Number(r.answers),
           correct: Number(r.correct),
+          ownerUserId: revealed ? r.owner_user_id : null,
         };
       }),
     });
@@ -689,6 +749,55 @@ export const roomsController = {
     if (!ran) fail(res, "room_locked", "La partie est en train de se lancer.", 409);
   },
 
+  /**
+   * « Revenir à la salle » (T40) : apres une partie, l'hote ramene TOUT le
+   * monde dans la salle d'attente, sans relancer et sans repasser par le choix
+   * des modes. Meme code, memes joueurs, reglages gardes. Les clients
+   * l'apprennent par room:lobby et changent d'ecran sans recharger (Discord).
+   */
+  async backToLobby(req: Request, res: Response): Promise<void> {
+    const code = validRoomCode(req.params?.code)?.toUpperCase() ?? "";
+    if (!code) {
+      fail(res, "room_code_missing", "Code de salle requis", 400);
+      return;
+    }
+    const context = await getSessionContext(req, res);
+    if (!context) return;
+    const ran = await withStartLock(code, async () => {
+      const { rows } = await pool.query<{ id: number; room_code: string; host_user_id: number | null; status: string; session_id: number | null; mode: string }>(
+        `SELECT id, room_code, host_user_id, status, session_id, mode FROM multiplayer_rooms WHERE room_code=$1 LIMIT 1`,
+        [code]
+      );
+      const room = rows[0];
+      if (!room) {
+        fail(res, "room_not_found", "Salle introuvable", 404);
+        return;
+      }
+      if (room.host_user_id !== context.user.id) {
+        fail(res, "room_forbidden", "Seul l'hôte peut ramener tout le monde dans la salle.", 403);
+        return;
+      }
+      if (room.mode === GameMode.STREAMER) {
+        fail(res, "mode_unsupported", "Pas de salle d'attente à retrouver dans ce mode.", 400);
+        return;
+      }
+      if (room.status !== "waiting") {
+        const state = getGameState(room.room_code);
+        if (state && state.phase !== "FINISHED") {
+          fail(res, "game_running", "La partie est encore en cours.", 409);
+          return;
+        }
+        if (!(await resetRoomToWaiting(room))) {
+          fail(res, "room_conflict", "La salle a été modifiée par un autre joueur. Réessaie.", 409);
+          return;
+        }
+      }
+      io.to(room.room_code).emit("room:lobby", { roomCode: room.room_code });
+      ok(res, { roomCode: room.room_code, status: "waiting" });
+    });
+    if (!ran) fail(res, "room_locked", "La partie est en train de se lancer.", 409);
+  },
+
   /** Le lancement lui-meme, sous le verrou de la salle (voir withStartLock). */
   async startGameLocked(req: Request, res: Response): Promise<void> {
     const code = typeof req.params?.code === "string" ? req.params.code.toUpperCase() : "";
@@ -737,27 +846,9 @@ export const roomsController = {
       // Allow restart if the game is finished
       const existingState = getGameState(room.room_code);
       if (!existingState || existingState.phase === "FINISHED") {
-        // Atomic reset: only succeeds if status hasn't changed since our read
-        clearGame(room.room_code);
-        // « finished » aussi : l'ecriture de fin de la partie d'avant peut passer
-        // entre notre lecture et ici (relance dans la seconde du game over).
-        const { rowCount } = await pool.query(
-          `UPDATE multiplayer_rooms SET status='waiting', session_id=NULL, started_at=NULL
-           WHERE id=$1 AND (status=$2 OR status='finished')`,
-          [room.id, room.status]
-        );
-        if (!rowCount) {
+        if (!(await resetRoomToWaiting(room))) {
           fail(res, "room_conflict", "La salle a été modifiée par un autre joueur. Réessaie.", 409);
           return;
-        }
-        // La partie d'avant ne tourne plus en memoire : si elle est encore
-        // « in_progress » en base (lancement casse, serveur redemarre), elle
-        // est close ici. Une partie finie dont l'ecriture est en route passe
-        // ensuite « finished » (persistGameResults), comme prevu.
-        if (room.session_id) {
-          await abandonSession(room.session_id).catch(err =>
-            logger.error("previous_session_abandon_failed", { roomCode: room.room_code, sessionId: room.session_id, error: err })
-          );
         }
         room.status = "waiting";
         room.session_id = null;
