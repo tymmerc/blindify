@@ -48,6 +48,8 @@ import { getSessionContext } from "../../src/utils/session";
 import { ensureLinksSchema } from "../../src/controllers/linksController";
 import { ensureUserTracksSchema, linkTrackToUser } from "../../src/services/userTracks";
 import { roomsController } from "../../src/controllers/roomsController";
+import { gamesController } from "../../src/controllers/gamesController";
+import { heardTonight } from "../../src/services/roundOrder";
 import { clearGame, getGameState } from "../../src/services/realtimeGame";
 import * as orchestrator from "../../src/services/realtimeOrchestrator";
 
@@ -233,7 +235,7 @@ describe("relancer dans la meme salle (T27)", () => {
 });
 
 describe("revenir a la salle apres une partie (T40)", () => {
-  const backToLobby = (code: string, userId: number) => call(roomsController.backToLobby, userId, { params: { code } });
+  const backToLobby = (code: string, userId: number, body?: unknown) => call(roomsController.backToLobby, userId, { params: { code }, body });
 
   it("fin, retour salle, relance : meme code, memes joueurs, reglages gardes", async () => {
     const code = await newRoom([hote, invite]);
@@ -277,5 +279,92 @@ describe("revenir a la salle apres une partie (T40)", () => {
     playToTheEnd(io, code);
     expect((await backToLobby(code, invite)).status).toBe(403);
     expect(getGameState(code)?.phase).toBe("FINISHED");
+  });
+});
+
+describe("arreter la partie en cours (T42)", () => {
+  const stop = (code: string, userId: number) => call(roomsController.backToLobby, userId, { params: { code }, body: { stop: true } });
+
+  async function totalGames(userId: number): Promise<number> {
+    const { rows } = await pool.query<{ total_games: number }>(`SELECT total_games FROM user_stats WHERE user_id = $1`, [userId]);
+    return rows[0]?.total_games ?? 0;
+  }
+
+  async function sessionRow(id: number): Promise<{ state: string; current_round: number }> {
+    const { rows } = await pool.query(`SELECT state, current_round FROM game_sessions WHERE id = $1`, [id]);
+    return rows[0];
+  }
+
+  it("30 s pour repondre quand l'hote n'a rien regle", async () => {
+    const code = await newRoom([hote, invite]);
+    expect((await start(code, hote)).status).toBe(200);
+    expect(getGameState(code)?.config.roundDurationMs).toBe(30_000);
+  });
+
+  it("arret par l'hote, retour salle, relance : meme salle, reglages gardes, partie interrompue", async () => {
+    // Joueurs neufs : le « deja entendu ce soir » ne voit que cette partie.
+    const hote = await newGuest("arret_hote");
+    const invite = await newGuest("arret_invite");
+    await giveLibrary(hote, 9);
+    const code = await newRoom([hote, invite]);
+    expect((await call(roomsController.updateConfig, hote, { params: { code }, body: { roundSeconds: 15 } })).status).toBe(200);
+    expect((await start(code, hote)).status).toBe(200);
+    const first = (await room(code)).session_id!;
+    // Manche 1 revelee, manche 2 en jeu : c'est la qu'on arrete.
+    orchestrator.revealRoundNow(io, code);
+    orchestrator.startRoundAndBroadcast(io, code);
+    expect(getGameState(code)?.currentRound).toBe(2);
+    expect(getGameState(code)?.phase).toBe("GUESSING");
+    const gamesBefore = await totalGames(invite);
+
+    const emit = jest.fn();
+    jest.spyOn(io, "to").mockReturnValue({ emit } as unknown as ReturnType<Server["to"]>);
+    const stopped = await stop(code, hote);
+    expect(stopped.status).toBe(200);
+    expect(emit).toHaveBeenCalledWith("room:lobby", { roomCode: code });
+    // Rien de la manche en cours ne part : seul le retour a la salle est diffuse.
+    expect(emit.mock.calls.map(c => c[0])).toEqual(["room:lobby"]);
+    jest.restoreAllMocks();
+
+    expect(getGameState(code)).toBeUndefined();
+    expect(await room(code)).toEqual({ status: "waiting", session_id: null });
+    // Interrompue : pas de podium ni de stats de fin, seule la manche revelee compte.
+    expect(await sessionRow(first)).toEqual({ state: "abandoned", current_round: 1 });
+    await sleep(200);
+    expect(await totalGames(invite)).toBe(gamesBefore);
+
+    // Historique : la manche 2 (jamais revelee) ne sort pas, et elle n'est pas
+    // « deja entendue » : elle peut revenir a la relance.
+    const history = await call(gamesController.history, invite);
+    const entry = (history.body.data?.games as Array<{ id: number; state: string; tracks: unknown[] }>).find(g => g.id === first);
+    expect(entry?.state).toBe("abandoned");
+    expect(entry?.tracks).toHaveLength(1);
+    const { rows: rounds } = await pool.query<{ round_index: number; key: string }>(
+      `SELECT gr.round_index, COALESCE(s.external_id, s.id::text) AS key
+       FROM game_rounds gr JOIN audio_sources s ON s.id = gr.audio_source_id WHERE gr.session_id = $1`,
+      [first],
+    );
+    const heard = new Set(await heardTonight([invite]));
+    expect(heard.has(rounds.find(r => r.round_index === 1)!.key)).toBe(true);
+    expect(heard.has(rounds.find(r => r.round_index === 2)!.key)).toBe(false);
+
+    const relaunch = await start(code, hote);
+    expect(relaunch.status).toBe(200);
+    const fresh = getGameState(code);
+    expect(fresh?.phase).toBe("GUESSING");
+    expect(fresh?.currentRound).toBe(1);
+    expect(fresh?.config.roundDurationMs).toBe(15_000);
+    const after = await room(code);
+    expect(after.status).toBe("in_progress");
+    expect(after.session_id).not.toBe(first);
+  });
+
+  it("refuse pour un joueur qui n'est pas l'hote, la partie continue", async () => {
+    const code = await newRoom([hote, invite]);
+    expect((await start(code, hote)).status).toBe(200);
+    const refused = await stop(code, invite);
+    expect(refused.status).toBe(403);
+    expect(getGameState(code)?.phase).toBe("GUESSING");
+    expect((await room(code)).status).toBe("in_progress");
   });
 });

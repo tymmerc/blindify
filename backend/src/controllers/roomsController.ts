@@ -6,8 +6,8 @@ import { ok, fail } from "../utils/response";
 import { logger } from "../utils/logger";
 import type { MusicProvider } from "../types/user";
 import type { AudioSourceRow } from "../types/audio";
-import { bootstrapGameState, getGameState, gameStateSnapshot, revealedRoundCeiling, clearGame } from "../services/realtimeGame";
-import { startRoundAndBroadcast } from "../services/realtimeOrchestrator";
+import { bootstrapGameState, getGameState, gameStateSnapshot, revealedRoundCeiling, clearGame, DEFAULT_LISTENING_MS } from "../services/realtimeGame";
+import { startRoundAndBroadcast, stopGameTimers } from "../services/realtimeOrchestrator";
 import { ROUND_PACING } from "../services/roundPacing";
 import { GameMode, type RoundTrack } from "../types/game";
 import { initStreamerGame } from "../services/streamerOrchestrator";
@@ -49,7 +49,6 @@ async function ensureRoomFlags(): Promise<void> {
   await pool.query(`ALTER TABLE multiplayer_rooms ADD COLUMN IF NOT EXISTS round_duration_ms INTEGER`);
 }
 
-const EVENT_ROUND_DURATION_MS = 20_000;
 // Decompte 3-2-1 avant la toute premiere manche (audio + chrono demarrent
 // apres), le meme qu'entre les manches (T38).
 const FIRST_ROUND_PREROLL_MS = ROUND_PACING.countdownMs;
@@ -100,12 +99,17 @@ class StartConflictError extends Error {}
 /** Texte montre a l'hote quand la partie n'a pas pu partir (a valider par Tym). */
 const START_FAILED_MESSAGE = "La partie n'a pas pu démarrer. Relance-la, la salle reste ouverte.";
 
-/** Clot en base une partie qui ne tourne plus, sans toucher une partie finie. */
-async function abandonSession(sessionId: number): Promise<void> {
+/**
+ * Clot en base une partie qui ne tourne plus, sans toucher une partie finie.
+ * `revealedRounds` : manches deja revelees quand l'hote arrete la partie (T42).
+ * L'historique et le « deja entendu ce soir » s'arretent la ; sans valeur, 0.
+ */
+async function abandonSession(sessionId: number, revealedRounds?: number): Promise<void> {
   await pool.query(
-    `UPDATE game_sessions SET state='abandoned', ended_at=COALESCE(ended_at, NOW())
+    `UPDATE game_sessions SET state='abandoned', ended_at=COALESCE(ended_at, NOW()),
+            current_round=COALESCE($2, current_round)
      WHERE id=$1 AND state='in_progress'`,
-    [sessionId]
+    [sessionId, revealedRounds ?? null]
   );
 }
 
@@ -141,7 +145,10 @@ async function abortStartedGame(room: { id: number; room_code: string }, session
  * completed_at = maintenant : le menage des salles en attente (index.ts) les
  * garde 30 min a partir de ce retour, pas de la derniere arrivee d'un joueur.
  */
-async function resetRoomToWaiting(room: { id: number; room_code: string; status: string; session_id: number | null }): Promise<boolean> {
+async function resetRoomToWaiting(
+  room: { id: number; room_code: string; status: string; session_id: number | null },
+  revealedRounds?: number
+): Promise<boolean> {
   clearGame(room.room_code);
   const { rowCount } = await pool.query(
     `UPDATE multiplayer_rooms SET status='waiting', session_id=NULL, started_at=NULL, completed_at=NOW()
@@ -154,7 +161,7 @@ async function resetRoomToWaiting(room: { id: number; room_code: string; status:
   // est close ici. Une partie finie dont l'ecriture est en route passe
   // ensuite « finished » (persistGameResults), comme prevu.
   if (room.session_id) {
-    await abandonSession(room.session_id).catch(err =>
+    await abandonSession(room.session_id, revealedRounds).catch(err =>
       logger.error("previous_session_abandon_failed", { roomCode: room.room_code, sessionId: room.session_id, error: err })
     );
   }
@@ -754,6 +761,9 @@ export const roomsController = {
    * monde dans la salle d'attente, sans relancer et sans repasser par le choix
    * des modes. Meme code, memes joueurs, reglages gardes. Les clients
    * l'apprennent par room:lobby et changent d'ecran sans recharger (Discord).
+   * « Arrêter la partie » (T42, body.stop) : meme retour, en pleine partie.
+   * Sans stop, une partie en cours reste refusee : un vieux clic sur l'ecran
+   * de fin ne coupe jamais une revanche deja lancee.
    */
   async backToLobby(req: Request, res: Response): Promise<void> {
     const code = validRoomCode(req.params?.code)?.toUpperCase() ?? "";
@@ -783,11 +793,20 @@ export const roomsController = {
       }
       if (room.status !== "waiting") {
         const state = getGameState(room.room_code);
+        let revealedRounds: number | undefined;
         if (state && state.phase !== "FINISHED") {
-          fail(res, "game_running", "La partie est encore en cours.", 409);
-          return;
+          if (req.body?.stop !== true) {
+            fail(res, "game_running", "La partie est encore en cours.", 409);
+            return;
+          }
+          // La partie s'arrete ici : plus aucun minuteur, plus de manche, plus
+          // de reponse attendue. Elle est close « abandoned » par
+          // resetRoomToWaiting (pas de podium, pas de stats de fin).
+          revealedRounds = revealedRoundCeiling(room.room_code, room.status);
+          stopGameTimers(room.room_code);
+          logger.info("game_stopped_by_host", { roomCode: room.room_code, sessionId: room.session_id, revealedRounds });
         }
-        if (!(await resetRoomToWaiting(room))) {
+        if (!(await resetRoomToWaiting(room, revealedRounds))) {
           fail(res, "room_conflict", "La salle a été modifiée par un autre joueur. Réessaie.", 409);
           return;
         }
@@ -1315,12 +1334,12 @@ export const roomsController = {
       client.release();
     }
 
-    // Duree configuree par l'hote dans le lobby, sinon defaut du mode.
+    // Duree configuree par l'hote dans le lobby, sinon 30 s (T42, tous les modes).
     const configuredMs = Number(room.round_duration_ms);
     const roundDurationMs =
       Number.isFinite(configuredMs) && configuredMs >= 5_000 && configuredMs <= 60_000
         ? configuredMs
-        : room.mode === GameMode.EVENT ? EVENT_ROUND_DURATION_MS : 20_000;
+        : DEFAULT_LISTENING_MS;
 
     const roundTracks: RoundTrack[] = normalizedTracks.map(t => ({
       round: t.round,

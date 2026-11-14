@@ -32,6 +32,7 @@ import {
   clearRevealTimer,
   revealRoundNow,
   startRoundAndBroadcast,
+  stopGameTimers,
   unstickGames,
 } from "../../src/services/realtimeOrchestrator";
 import { ROUND_PACING } from "../../src/services/roundPacing";
@@ -265,5 +266,49 @@ describe("rythme du reveal (T38)", () => {
     expect(unstickGames(io)).toContain(room);
     jest.advanceTimersByTime(ROUND_PACING.scoresMs);
     expect(getGameState(room)?.currentRound).toBe(2);
+  });
+});
+
+describe("arreter la partie (T42)", () => {
+  // Ce que fait backToLobby avec stop : minuteurs coupes, puis etat efface.
+  const stop = () => {
+    stopGameTimers(room);
+    clearGame(room);
+  };
+
+  it.each(["GUESSING", "REVEAL"] as const)("en %s : plus rien ne part ensuite", phase => {
+    const { io, emitted } = fakeIo();
+    launch(io, 3, 950);
+    if (phase === "REVEAL") {
+      jest.advanceTimersByTime(PREROLL_MS + ROUND_MS + 50);
+      expect(getGameState(room)?.phase).toBe("REVEAL");
+    }
+    stop();
+    const before = emitted.length;
+    // Bien au-dela de la partie entiere : ni reveal, ni manche, ni game over.
+    jest.advanceTimersByTime(10 * (PREROLL_MS + ROUND_MS + REVEAL_MS));
+    expect(unstickGames(io, Date.now() + 60_000)).not.toContain(room);
+    expect(emitted.length).toBe(before);
+    expect(getGameState(room)).toBeUndefined();
+  });
+
+  it("la partie relancee dans la meme salle suit son propre rythme", () => {
+    const { io, emitted } = fakeIo();
+    launch(io, 3, 951);
+    jest.advanceTimersByTime(PREROLL_MS + ROUND_MS + 50);
+    expect(getGameState(room)?.phase).toBe("REVEAL");
+    stop();
+
+    launch(io, 2, 952);
+    // Fin de l'ecran « reponse » de l'ancienne partie : la nouvelle manche 1 reste en jeu.
+    jest.advanceTimersByTime(ROUND_PACING.answerMs + 50);
+    expect(getGameState(room)?.currentRound).toBe(1);
+    expect(getGameState(room)?.phase).toBe("GUESSING");
+    expect(count(emitted, "game:round:reveal")).toBe(1);
+
+    jest.advanceTimersByTime(PREROLL_MS + ROUND_MS - ROUND_PACING.answerMs);
+    expect(getGameState(room)?.phase).toBe("REVEAL");
+    expect(count(emitted, "game:round:reveal")).toBe(2);
+    expect(count(emitted, "game:over")).toBe(0);
   });
 });

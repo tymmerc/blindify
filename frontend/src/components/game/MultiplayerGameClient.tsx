@@ -5,7 +5,7 @@ import { accentTexte } from "@/lib/accentText"
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import type { MultiplayerGameState, RevealStep, UserSummary } from "@/lib/types"
 import { Button } from "@/components/ui/button"
-import { Check, Clock, Lock, Play, Users, Volume2, VolumeX, X } from "lucide-react"
+import { Check, Clock, Lock, Play, Square, Users, Volume2, VolumeX, X } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { audioManager } from "@/lib/audioManager"
 import { GAME_MODES, type GameModeConfig, type GameMode } from "@/lib/gameModes"
@@ -17,6 +17,7 @@ import { useServerClock } from "@/hooks/useServerClock"
 import { TheaterGameView } from "./TheaterGameView"
 import { showOwnerQuestion } from "@/lib/ownerQuestion"
 import { SpectatorBadge } from "./SpectatorBadge"
+import { StopGameButton } from "./StopGameButton"
 import { DeezerCredit, SpotifyTrackLink } from "./SourceCredits"
 import { ANSWER_INPUT_PROPS } from "@/lib/answerInput"
 import { LobbyDock } from "@/app/multiplayer/LobbyDock"
@@ -100,6 +101,8 @@ type Props = {
   answerRejectSignal?: number
   /** Pause / reprise (hote uniquement) : emis vers le serveur par le parent. */
   onPauseToggle?: () => void
+  /** « Arrêter la partie » (T42, hote uniquement) : tout le monde revient dans la salle. */
+  onStop?: () => Promise<unknown> | void
   /** Spectateurs de la salle (T18) : « 👀 1 spectateur » dans l'en-tete. */
   spectators?: number
   /** L'extrait de la manche ne joue pas (lien expire) : redemander un lien neuf au serveur (T35). */
@@ -117,6 +120,7 @@ export function MultiplayerGameClient({
   onExit,
   disabled,
   onPauseToggle,
+  onStop,
   onPreviewBroken,
   modeConfig,
   accentColor,
@@ -631,6 +635,7 @@ export function MultiplayerGameClient({
 
   // Theater UI is the new visual for friends/streamer modes.
   // Overlay de pause : plein ecran chez tout le monde, bouton reprendre chez l'hote.
+  const stopHandler = isHost ? onStop : undefined
   const pauseOverlay = isPaused ? (
     <div className="fixed inset-0 z-[80] flex flex-col items-center justify-center gap-4 px-8 text-center" style={{ background: "rgb(var(--c-ink-block) / .92)" }}>
       <p className="font-display text-6xl font-bold text-on-ink">PAUSE</p>
@@ -645,6 +650,11 @@ export function MultiplayerGameClient({
         >
           Reprendre
         </button>
+      )}
+      {stopHandler && (
+        <StopGameButton onStop={stopHandler} className="text-sm font-bold text-on-ink underline underline-offset-4">
+          Arrêter la partie
+        </StopGameButton>
       )}
     </div>
   ) : null
@@ -683,6 +693,7 @@ export function MultiplayerGameClient({
         isPlaying={isPlaying}
         isHost={isHost}
         onPauseToggle={onPauseToggle}
+        onStop={stopHandler}
         needleStage={needleStage}
         isLocked={isLocked}
         isRevealed={isRevealed}
@@ -843,6 +854,15 @@ export function MultiplayerGameClient({
                   <span className="sm:hidden">II</span>
                   <span className="hidden sm:inline">Pause</span>
                 </button>
+              )}
+              {stopHandler && (
+                <StopGameButton
+                  onStop={stopHandler}
+                  className="flex shrink-0 items-center rounded-full border-[1.5px] border-line bg-[var(--surface)] px-2 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--ink)] transition hover:bg-ink-block hover:text-on-ink sm:px-3"
+                >
+                  <Square className="h-4 w-4 sm:hidden" aria-hidden />
+                  <span className="hidden sm:inline">Arrêter</span>
+                </StopGameButton>
               )}
               {onExit && (
                 <button

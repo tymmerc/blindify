@@ -33,6 +33,7 @@ import { StreamerLobbyView } from "./StreamerLobbyView"
 import { ResultsView } from "./LobbyViews"
 import { multiplayerFeedbackContext } from "@/lib/feedback"
 import { ENTRY_ROUTE, HEADER_COPY } from "./lobbyCopy"
+import { roomSeconds } from "./lobbyKit"
 import type { LobbyRendererProps, LobbySurface, LobbyViewState } from "./lobbyTypes"
 import { initialLobbyContext, lobbyReducer } from "./lobbyMachine"
 import { RequestTimeoutError, withTimeoutRetry } from "@/lib/withTimeoutRetry"
@@ -919,6 +920,9 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       const backToLobbyHandler = (payload: { roomCode: string }) => {
         if (payload?.roomCode !== roomCode) return
         const host = roomRef.current?.host_user_id != null && roomRef.current.host_user_id === userRef.current?.user?.id
+        // Partie arretee en pleine manche (T42) : une reponse en attente ne
+        // doit jamais repartir sur la manche 1 de la partie suivante.
+        pendingAnswerRef.current = null
         setGameState(null)
         setError(null)
         setErrorAction(null)
@@ -1055,7 +1059,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
           mode,
           hostPlays: created.host_plays === true,
           questionCount: created.question_count ?? questionCount,
-          roundSeconds: Math.round((created.round_duration_ms ?? 20000) / 1000),
+          roundSeconds: roomSeconds(created),
         })
         setExpiredCode(null)
         setErrorCode(null)
@@ -1698,6 +1702,27 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       </div>
     ) : null
 
+  // « Revenir à la salle » (T40, ecran de fin) et « Arrêter la partie » (T42,
+  // en pleine partie) : le meme retour, pour tout le monde, sans recharger.
+  const returnToLobby = (stop: boolean) => runExclusive(restartingRef, async () => {
+    if (!room) return
+    try {
+      setError(null)
+      await api.backToLobby(room.room_code, { stop })
+      // Les autres changent d'ecran a la reception de room:lobby ; l'hote
+      // tout de suite, meme si son socket vient de couper.
+      pendingAnswerRef.current = null
+      setGameState(null)
+      setView("hosting")
+      dispatchLobby({ type: "hosting" })
+    } catch (err) {
+      console.error(stop ? "stop_game_failed" : "back_to_lobby_failed", err)
+      setError(err instanceof ApiError && err.message
+        ? err.message
+        : stop ? "Impossible d'arrêter la partie. Réessaie." : "Impossible de revenir à la salle. Réessaie.")
+    }
+  })
+
   const content =
     // Streamer : l'ecran de fin (podium du chat) reste celui de la partie.
     (view === "playing" || (view === "results" && mode === "streamer")) && gameState && room ? (
@@ -1782,6 +1807,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
             }
             socket.emit("game:next", { roomCode: room.room_code, round, step })
           }}
+          onStop={isHost ? () => returnToLobby(true) : undefined}
           onPauseToggle={() => {
             const socket = socketRef.current
             if (!socket || !room) return
@@ -1819,21 +1845,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         // jusqu'au Rejouer de l'hote, le bouton grise le dit deja.
         onReturn={onLeave ? undefined : () => router.replace("/modes")}
         onEditMusic={openMusic}
-        onBackToLobby={isHost ? () => runExclusive(restartingRef, async () => {
-          if (!room) return
-          try {
-            setError(null)
-            await api.backToLobby(room.room_code)
-            // Les autres changent d'ecran a la reception de room:lobby ; l'hote
-            // tout de suite, meme si son socket vient de couper.
-            setGameState(null)
-            setView("hosting")
-            dispatchLobby({ type: "hosting" })
-          } catch (err) {
-            console.error("back_to_lobby_failed", err)
-            setError(err instanceof ApiError && err.message ? err.message : "Impossible de revenir à la salle. Réessaie.")
-          }
-        }) : undefined}
+        onBackToLobby={isHost ? () => returnToLobby(false) : undefined}
         onReplay={() => runExclusive(restartingRef, async () => {
           if (!room || !isHost) return
           // Les resultats d'avant, pour y revenir si la revanche ne part pas.

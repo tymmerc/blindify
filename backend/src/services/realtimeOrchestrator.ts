@@ -238,6 +238,17 @@ export function broadcastGameOver(io: IOServer, roomCode: string) {
   setTimeout(() => clearGameIfFinished(roomCode, live), 60_000).unref?.();
 }
 
+/**
+ * L'hote arrete la partie (T42) : tous ses minuteurs tombent, avant que son
+ * etat soit efface. Rien de l'ancienne partie ne tire ensuite, meme sur une
+ * nouvelle partie relancee dans la meme salle.
+ */
+export function stopGameTimers(roomCode: string): void {
+  clearRevealTimer(roomCode);
+  clearPacingTimer(roomCode);
+  clearGraceTimer(roomCode);
+}
+
 export function clearRevealTimer(roomCode: string) {
   const existing = revealTimers.get(roomCode);
   if (existing) {

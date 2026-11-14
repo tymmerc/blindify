@@ -4,7 +4,7 @@ import { FaqList, GuideShell, Li, Section, Steps, VERMILION, faqJsonLd, webPageJ
 
 // Guide "blind test en soiree" (couvre aussi l'apero entre potes : une page a
 // part aurait dit la meme chose). Chiffres verifies dans le code : manches de
-// 10/15/20/30 s (20 par defaut), parties de 5/10/15/20 manches, 12 places par
+// 10/15/20/30 s (30 par defaut), parties de 5/10/15/20 manches, 12 places par
 // salle hote compris, 5 sur un seul telephone (multi-touch iPhone), ecran de
 // l'hote maintenu allume (wake lock), retardataires qui entrent en pleine partie et jouent a la manche suivante.
 
@@ -32,7 +32,7 @@ const TABLE_STEPS = [
   },
   {
     t: "On règle et on lance",
-    b: "Nombre de manches (5, 10, 15 ou 20) et durée d'un extrait (10, 15, 20 ou 30 secondes, 20 par défaut), directement depuis le salon. Puis Lancer la partie.",
+    b: "Nombre de manches (5, 10, 15 ou 20) et durée d'un extrait (10, 15, 20 ou 30 secondes, 30 par défaut), directement depuis le salon. Puis Lancer la partie.",
   },
   {
     t: "Chacun répond sur son tel",

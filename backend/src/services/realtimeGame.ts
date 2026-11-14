@@ -119,7 +119,12 @@ type GameContext = {
   launchPlayerIds: ReadonlySet<number>;
 };
 
-const DEFAULT_LISTENING_MS = 20_000;
+/**
+ * Temps pour repondre quand l'hote n'a rien regle (T42) : 30 s. A 20 s, la
+ * soiree du 14/11 a 11 joueurs n'avait que 2 reponses sur 10 a la manche 1 ;
+ * a 30 s, 5 a 8 joueurs sur 10 repondaient a chaque manche.
+ */
+export const DEFAULT_LISTENING_MS = 30_000;
 
 /**
  * Grace de reconnexion, decidee par Tym le 02/10/2026 : un joueur coupe du
