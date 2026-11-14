@@ -38,6 +38,24 @@ describe("clientApi", () => {
     mockFetch.mockReset()
   })
 
+  describe("backToLobby (T40, T42)", () => {
+    it("envoie stop en JSON, lisible par le serveur", async () => {
+      mockFetch.mockResolvedValueOnce(okResponse({ roomCode: "AB12CD", status: "waiting" }))
+      await clientApi.backToLobby("AB12CD", { stop: true })
+      const [url, init] = mockFetch.mock.calls[0]
+      expect(url).toContain("/api/rooms/AB12CD/lobby")
+      expect(init.method).toBe("POST")
+      expect(init.headers["Content-Type"]).toBe("application/json")
+      expect(JSON.parse(init.body)).toEqual({ stop: true })
+    })
+
+    it("sans option, ne demande pas d'arreter la partie", async () => {
+      mockFetch.mockResolvedValueOnce(okResponse({ roomCode: "AB12CD", status: "waiting" }))
+      await clientApi.backToLobby("AB12CD")
+      expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({ stop: false })
+    })
+  })
+
   describe("register", () => {
     it("should POST to /api/auth/register with username and password", async () => {
       const responseData = { user: { id: 1, username: "alice" }, sessionToken: "tok123" }

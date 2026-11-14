@@ -337,6 +337,7 @@ export const clientApi = {
   async backToLobby(code: string, opts?: { stop?: boolean }): Promise<{ roomCode: string; status: "waiting" }> {
     return request(`/api/rooms/${encodeURIComponent(code)}/lobby`, {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ stop: opts?.stop === true }),
     })
   },
