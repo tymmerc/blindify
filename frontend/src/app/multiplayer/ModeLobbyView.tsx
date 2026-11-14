@@ -449,6 +449,23 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     return () => clearTimeout(t)
   }, [gameState, room, showNotice])
 
+  // Filet du retour a la salle (T40) : un joueur dont le socket a rate
+  // room:lobby (coupure, iframe Discord en arriere-plan) resterait sur l'ecran
+  // de fin. Toutes les 5 s sur cet ecran, on regarde si la salle est repassee
+  // en attente sans partie : alors meme bascule que room:lobby.
+  useEffect(() => {
+    if (view !== "results" || mode === "streamer" || !room?.room_code) return
+    const code = room.room_code
+    const id = setInterval(() => {
+      api.roomState(code)
+        .then(latest => {
+          if (latest.room?.status === "waiting" && !latest.gameState) handlersRef.current.backToLobby?.({ roomCode: code })
+        })
+        .catch(() => { /* reseau : on reessaie au tour suivant */ })
+    }, 5000)
+    return () => clearInterval(id)
+  }, [view, mode, room?.room_code])
+
   // Filet anti-gel GUESSING : si le temps de la manche est ecoule depuis longtemps
   // et qu'on est toujours en train de "deviner", c'est qu'on a rate le reveal
   // (socket coupe pendant la manche). On resynchronise au lieu de rester fige.

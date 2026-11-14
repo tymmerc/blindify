@@ -81,6 +81,8 @@ export function endMoments(
     const guess = joined(guessTitle, guessArtist)
     if (!guess) continue
     const score = distanceRatio(guess, joined(round.title, round.artist ?? ""))
+    // Presque la bonne reponse (sans points : ecrite trop tard, ou bareme) : pas « a cote ».
+    if (score < 0.3) continue
     const length = guess.length
     if (!wildest || score > wildest.score || (score === wildest.score && length > wildest.length)) {
       wildest = { userId: r.userId, guessTitle, guessArtist, round: r.round, title: round.title, artist: round.artist ?? "", score, length }

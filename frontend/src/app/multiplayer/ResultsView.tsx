@@ -10,6 +10,7 @@ import { GamePodium } from "@/components/game/pacing/GamePodium"
 import { PlayerAvatar } from "@/components/ui/PlayerAvatar"
 import { api } from "@/lib/api"
 import { endMoments, type EndMoments } from "@/lib/endMoments"
+import type { RoomRoundsSummary } from "@/lib/apiClient"
 import type { FeedbackContext } from "@/lib/feedback"
 import { placeLabel, playerTone } from "@/lib/roundPacing"
 import type { SoloTrack } from "@/lib/types"
@@ -58,28 +59,43 @@ const nameOf = (p: ResultsEntry | null | undefined) => p?.username?.trim() || "U
 const BUTTON = "inline-flex items-center justify-center gap-2 rounded-md border-2 border-line px-4 py-2.5 text-sm font-bold transition active:translate-x-[2px] active:translate-y-[2px] active:shadow-none disabled:cursor-not-allowed disabled:opacity-60"
 const SECONDARY = "inline-flex items-center gap-2 rounded-full border-[1.5px] border-line bg-transparent px-4 py-2 text-sm font-bold text-ink transition hover:bg-ink-block hover:text-on-ink"
 
-/** Bilan serveur : moments de la partie et temps de reponse moyens. */
+/**
+ * Bilan serveur (un appel, plus un second 3 s apres si les reponses de la
+ * derniere manche ne sont pas encore ecrites). Les moments sont recalcules si
+ * le classement change, pas refetches.
+ */
 function useRoundSummary(roomCode: string | null | undefined, leaderboard: ResultsEntry[]) {
-  const [moments, setMoments] = useState<EndMoments>({ wildest: null, missed: null, picker: null })
-  const [times, setTimes] = useState<Map<number, number>>(new Map())
+  const [summary, setSummary] = useState<RoomRoundsSummary | null>(null)
   useEffect(() => {
     if (!roomCode) return
     let alive = true
-    api.roomRounds(roomCode)
-      .then(res => {
-        if (!alive) return
-        setMoments(endMoments(res.rounds ?? [], res.responses ?? [], leaderboard))
-        const next = new Map<number, number>()
-        ;(res.players ?? []).forEach(p => {
-          if (typeof p.avgMs === "number" && p.answered > 0) next.set(p.userId, p.avgMs)
+    let retry: ReturnType<typeof setTimeout> | null = null
+    const load = (again: boolean) => {
+      api.roomRounds(roomCode)
+        .then(res => {
+          if (!alive) return
+          setSummary(res)
+          if (again && (res.responses ?? []).length === 0 && (res.rounds ?? []).length > 0) retry = setTimeout(() => load(false), 3000)
         })
-        setTimes(next)
-      })
-      .catch(err => console.warn("bilan_de_fin_indisponible", err))
-    return () => { alive = false }
-    // Le classement ne change plus une fois la partie finie : on ne refait pas l'appel.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        .catch(err => console.warn("bilan_de_fin_indisponible", err))
+    }
+    load(true)
+    return () => {
+      alive = false
+      if (retry) clearTimeout(retry)
+    }
   }, [roomCode])
+  const moments = useMemo(
+    () => (summary ? endMoments(summary.rounds ?? [], summary.responses ?? [], leaderboard) : { wildest: null, missed: null, picker: null }),
+    [summary, leaderboard],
+  )
+  const times = useMemo(() => {
+    const next = new Map<number, number>()
+    ;(summary?.players ?? []).forEach(p => {
+      if (typeof p.avgMs === "number" && p.answered > 0) next.set(p.userId, p.avgMs)
+    })
+    return next
+  }, [summary])
   return { moments, times }
 }
 
@@ -143,7 +159,7 @@ function MomentRow({ moment }: { moment: Moment }) {
         <span aria-hidden className="grid h-10 w-10 place-items-center rounded-full border-2 border-line bg-well text-lg">?</span>
       )}
       <div className="min-w-0">
-        <p className="m-0 text-[10px] font-bold uppercase tracking-[0.2em] text-terra-txt">{moment.label}</p>
+        <p className="m-0 text-[11px] font-bold uppercase tracking-[0.18em] text-terra-txt">{moment.label}</p>
         <p className="m-0 mt-0.5 break-words font-display text-lg font-semibold italic leading-snug text-ink">{moment.main}</p>
         <p className="m-0 mt-0.5 text-xs text-ink-2">{moment.detail}</p>
       </div>

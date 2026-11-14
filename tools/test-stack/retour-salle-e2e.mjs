@@ -122,11 +122,17 @@ try {
   else bad("aucun moment de la partie sur l'ecran de fin")
 
   // ---- retour a la salle ----
+  // Zoe est hors ligne au moment du clic : elle rate room:lobby et doit
+  // revenir quand meme a la salle une fois le reseau retrouve.
+  await zoe.ctx.setOffline(true)
   await page.getByTestId("revenir-salle").click()
   await until(async () => await page.getByRole("button", { name: /lancer la partie/i }).isVisible().catch(() => false), 15000, "l'hote n'est pas revenu dans la salle d'attente")
   ok("l'hote est dans la salle d'attente, bouton lancer present")
-  await until(async () => await zp.getByText("Tu es dans la partie").isVisible().catch(() => false), 15000, "Zoe n'est pas revenue dans la salle d'attente")
-  ok("Zoe est revenue dans la salle d'attente toute seule")
+  await sleep(3000)
+  await zoe.ctx.setOffline(false)
+  await until(async () => await zp.getByText("Tu es dans la partie").isVisible().catch(() => false), 25000, "Zoe (hors ligne pendant le clic) n'est pas revenue dans la salle d'attente")
+  if (await zp.getByTestId("ecran-fin").count()) bad("Zoe voit encore l'ecran de fin dans la salle d'attente")
+  ok("Zoe, hors ligne pendant le clic, est revenue dans la salle d'attente toute seule")
   await sleep(1500)
   await shot(page, "salle-apres-retour-ordi-clair")
   await shot(zp, "salle-apres-retour-telephone-sombre")

@@ -43,7 +43,15 @@ describe("endMoments", () => {
 
   it("ignore les joueurs partis de la salle et les reponses vides", () => {
     const m = endMoments(rounds, responses, players.filter(p => p.userId !== 3))
-    expect(m.wildest).toMatchObject({ userId: 1, guessTitle: "formidabl" })
+    // Reste « formidabl » d'Ines : presque juste, donc pas « a cote ».
+    expect(m.wildest).toBeNull()
+    // Les bonnes reponses de Noe sur les morceaux d'Ines comptent toujours : il les a trouves.
+    expect(m.picker).toEqual({ userId: 1, found: 3, rounds: 2 })
+  })
+
+  it("une reponse presque juste sans points n'est jamais « la plus a cote »", () => {
+    const m = endMoments(rounds, [res(2, 1, "formidable", "stromae", 0)], players)
+    expect(m.wildest).toBeNull()
   })
 
   it("rien a raconter : tout a null", () => {
