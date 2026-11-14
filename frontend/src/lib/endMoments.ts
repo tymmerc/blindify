@@ -1,6 +1,32 @@
 // T40 : les moments de la partie, pour l'ecran de fin. Tire du bilan manche par
 // manche (GET /api/rooms/:code/rounds), calcule ici pour rester testable.
-import { levenshteinDistance, normalize } from "@/lib/matching"
+
+// Le juge commun (lib/guessMatching.ts, copie de shared/) n'exporte pas ses outils :
+// ici on mesure seulement une distance d'affichage, pas un verdict.
+function normalize(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+function levenshteinDistance(a: string, b: string): number {
+  if (a === b) return 0
+  if (!a.length) return b.length
+  if (!b.length) return a.length
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j)
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i]
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1))
+    }
+    prev = cur
+  }
+  return prev[b.length]
+}
 
 export interface SummaryRound {
   round: number

@@ -1,5 +1,6 @@
 "use client"
 
+import { avatarSrc } from "@/lib/photo"
 import { accentTexte } from "@/lib/accentText"
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import type { MultiplayerGameState, RevealStep, UserSummary } from "@/lib/types"
@@ -911,8 +912,8 @@ export function MultiplayerGameClient({
                                 borderColor: p.hasAnswered ? "var(--success)" : "rgb(var(--c-line))",
                                 background: p.hasAnswered ? "rgba(125,148,113,0.18)" : "var(--surface-strong)",
                               }}>
-                              {p.avatar ? (
-                                <img src={p.avatar} alt={p.username ?? "Joueur"} className="h-5 w-5 rounded-full border border-line object-cover" />
+                              {avatarSrc(p.avatar) ? (
+                                <img src={avatarSrc(p.avatar) ?? ""} alt={p.username ?? "Joueur"} className="h-5 w-5 rounded-full border border-line object-cover" />
                               ) : (
                                 <span className="flex h-5 w-5 items-center justify-center rounded-full border border-line bg-paper text-[9px] font-bold">
                                   {(p.username || "?")[0].toUpperCase()}
@@ -1143,9 +1144,9 @@ export function MultiplayerGameClient({
                                     boxShadow: sourceGuess === p.userId ? "4px 4px 0 rgb(var(--c-shadow))" : "none",
                                   }}
                                 >
-                                  {p.avatar ? (
+                                  {avatarSrc(p.avatar) ? (
                                     <img
-                                      src={p.avatar}
+                                      src={avatarSrc(p.avatar) ?? ""}
                                       alt={p.username ?? "Joueur"}
                                       className="h-5 w-5 rounded-full border border-line object-cover"
                                     />
