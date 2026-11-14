@@ -181,6 +181,7 @@ try {
   tom.rounds.clear()
   tom.reveals.clear()
   tom.timeline = {}
+  tom.intents.clear()
   tom.current = null
   tom.over = false
   await page.getByRole("button", { name: /lancer la partie/i }).click()
