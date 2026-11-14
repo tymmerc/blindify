@@ -120,6 +120,8 @@ try {
   if (await stopButtons(zp).count()) bad("Zoe (pas hote) a le bouton « Arrêter la partie »")
   else ok("Zoe (pas hote) n'a pas le bouton")
   // Le haut de l'ecran de jeu de l'hote tient sur un telephone avec le bouton en plus.
+  // Apres le 3-2-1 : c'est l'ecran de jeu, avec son en-tete, qu'on mesure.
+  await until(async () => await answerInput(page).isVisible().catch(() => false), 15000, "l'hote n'a pas l'ecran de jeu")
   for (const width of [360, 390]) {
     await page.setViewportSize({ width, height: 760 })
     await sleep(400)
