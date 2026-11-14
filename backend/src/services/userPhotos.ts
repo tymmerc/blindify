@@ -41,6 +41,8 @@ export class PhotoError extends Error {
 
 /** Le vrai format, lu dans les octets magiques. null si ce n'en est aucun des trois. */
 export function detectImageType(data: Buffer): PhotoInputType | null {
+  // Le corps vient de la requete : jamais un tableau ni une chaine ici.
+  if (Array.isArray(data) || !Buffer.isBuffer(data)) return null;
   if (data.length >= 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff) return "jpeg";
   if (
     data.length >= 8 &&
@@ -74,6 +76,7 @@ export function processPhoto(data: Buffer): Promise<Buffer> {
 }
 
 async function decodePhoto(data: Buffer): Promise<Buffer> {
+  if (Array.isArray(data) || !Buffer.isBuffer(data)) throw new PhotoError("not_an_image");
   if (data.length > PHOTO_UPLOAD_MAX_BYTES) throw new PhotoError("image_too_large");
   const type = detectImageType(data);
   if (!type) throw new PhotoError("not_an_image");
