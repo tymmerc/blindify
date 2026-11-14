@@ -130,6 +130,9 @@ try {
   }
   await page.setViewportSize({ width: 1440, height: 900 })
   await sleep(400)
+  // Tom repond avant l'arret : un bot qui repondrait apres recevrait un refus
+  // normal (« Partie introuvable »), que le vrai jeu ne provoque pas.
+  await until(() => Boolean(tom.intents.get(1)?.ack), 20000, "Tom n'a pas repondu a la manche 1")
   // Zoe tape une reponse : elle ne doit jamais repartir sur la partie suivante.
   await answerInput(zp).fill("une reponse de la partie 1", { timeout: 3000 }).catch(() => {})
   await zp.getByRole("button", { name: /valider/i }).first().click({ timeout: 3000 }).catch(() => {})
@@ -213,7 +216,7 @@ try {
   if (await stillSamePage(zp)) ok("toujours sans rechargement chez Zoe")
   else bad("la page de Zoe s'est rechargee")
   if (tom.leaks.length) bad(`Tom a vu une reponse avant la revelation (${tom.leaks.length})`)
-  if (tom.errors.length) bad(`Tom : ${tom.errors.slice(0, 3).join(" ; ")}`)
+  if (tom.errors.length) bad(`Tom : ${tom.errors.slice(0, 3).join(" ; ")} (intentions : ${JSON.stringify([...tom.intents])})`)
 } catch (e) {
   bad(`arret : ${e.message.split("\n")[0]}`)
   if (host) await shot(host.page, "erreur-hote").catch(() => {})
