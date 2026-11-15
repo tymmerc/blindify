@@ -37,7 +37,7 @@ jest.mock("../../src/config/db", () => ({
 }));
 
 import { isExpiredPreview, previewExpiresAt } from "../../src/utils/previewExpiry";
-import { bootstrapGameState, clearGame, getGameState, pauseGame, resumeGame, type RoundTrack } from "../../src/services/realtimeGame";
+import { bootstrapGameState, clearGame, getGameState, pauseGame, recordAnswer, resumeGame, type RoundTrack } from "../../src/services/realtimeGame";
 import {
   clearPacingTimer,
   clearGraceTimer,
@@ -127,7 +127,10 @@ describe("T35 : un lien valable au debut de chaque manche", () => {
     const { io, emitted } = fakeIo();
     launch(io, launchTracks(20));
     // La partie avance seule : chrono de manche, puis filet anti-AFK (10 s).
+    // Un joueur repond a chaque manche (sans avancer le chrono) : sans aucune
+    // reponse, la partie se mettrait en veille a la 3e manche (T22).
     for (let i = 0; i < 20 * 60 && getGameState(room)?.phase !== "FINISHED"; i++) {
+      if (getGameState(room)?.phase === "GUESSING") recordAnswer(room, 1, "une reponse");
       await jest.advanceTimersByTimeAsync(1_000);
     }
     expect(getGameState(room)?.phase).toBe("FINISHED");

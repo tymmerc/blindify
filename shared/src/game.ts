@@ -51,6 +51,10 @@ export interface PlayerState {
   correct?: number
   streak?: number
   bestStreak?: number
+  /** Absent (T22) : aucune reponse depuis 3 manches. Reste au classement, marque. */
+  absent?: boolean
+  /** Manches ou il a vraiment repondu (« Je sais pas » compris). */
+  answeredRounds?: number
 }
 
 export interface GameTiming {
@@ -70,6 +74,16 @@ export interface GameConfig {
 export interface WaitingPlayer {
   userId: number
   username: string | null
+}
+
+/**
+ * Partie en veille (T22) : plus aucun joueur connecte (« empty »), ou personne
+ * n'a repondu depuis 3 manches (« silent »). En pause, elle s'arrete d'elle-meme
+ * a `stopAt` (heure serveur, ms) si personne ne revient.
+ */
+export interface IdlePause {
+  reason: "empty" | "silent"
+  stopAt: number
 }
 
 /**
@@ -101,6 +115,10 @@ export interface GameState {
   waiting?: WaitingPlayer[]
   /** Partie mise en pause par l'hote (timers geles cote serveur). */
   paused?: boolean
+  /** Pause de veille posee par le serveur (T22) ; null sinon. */
+  idle?: IdlePause | null
+  /** Absents de la partie d'avant, pas repris dans celle-ci (T22). */
+  absentees?: WaitingPlayer[]
   /** Ecran en cours du reveal (T38) ; null hors REVEAL. */
   pacing?: RoundPacing | null
   timing: GameTiming

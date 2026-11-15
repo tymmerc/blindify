@@ -121,8 +121,9 @@ export function SpectatorStage({ game, members, clockOffset, now }: SpectatorSta
   const left = secondsLeft(game, now, clockOffset)
   const revealed = game.phase === "REVEAL"
   const track = game.currentTrack
-  const answered = ranked.filter(p => p.hasAnswered && !p.disconnected).length
-  const present = ranked.filter(p => !p.disconnected).length
+  // Partis et absents (T22) sortent des compteurs, comme chez les joueurs.
+  const answered = ranked.filter(p => p.hasAnswered && !p.disconnected && !p.absent).length
+  const present = ranked.filter(p => !p.disconnected && !p.absent).length
   return (
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
       <RoundCountdown round={game.currentRound} totalRounds={game.totalRounds} startAt={game.phase === "GUESSING" ? game.timing?.startAt : null} now={serverNow} />

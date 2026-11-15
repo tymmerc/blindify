@@ -50,6 +50,8 @@ import {
 import { expireOldInvitations, getAcceptedFriendIds, type ExpiredInvitation } from "./services/social";
 import { registerSocketHandlers, broadcastFriendPresence } from "./socketHandlers";
 import { startStallWatchdog } from "./services/realtimeOrchestrator";
+import { startIdleWatch } from "./services/idleGames";
+import { stopIdleGame } from "./controllers/roomsController";
 import { reportGameStartNotifStatus } from "./services/gameStartAnnounce";
 import { logger } from "./utils/logger";
 import { buildAllowedOrigins, matchesAllowedOrigin } from "./utils/origins";
@@ -169,6 +171,8 @@ const io = initSocket(server, allowedOrigins);
 registerSocketHandlers(io, lastKnownUsername);
 // Aucune partie « en cours » qui ne bouge plus (T27).
 startStallWatchdog(io);
+// Aucune partie qui tourne pour personne (T22).
+startIdleWatch(io, stopIdleGame);
 
 app.use(
   helmet({

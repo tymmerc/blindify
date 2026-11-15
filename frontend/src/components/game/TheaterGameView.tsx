@@ -12,6 +12,7 @@ import { SpectatorBadge } from "./SpectatorBadge"
 import { StopGameButton } from "./StopGameButton"
 import { ANSWER_INPUT_PROPS } from "@/lib/answerInput"
 import { VERDICT_LABEL } from "@/lib/roundPacing"
+import { ABSENT_LABEL } from "@/lib/absence"
 
 type ChatMessage = {
   userId: number
@@ -35,6 +36,8 @@ type PlayerRow = {
   bestStreak?: number
   totalReactionMs?: number
   disconnected?: boolean
+  /** Absent (T22) : aucune reponse depuis 3 manches. */
+  absent?: boolean
 }
 
 type UiPhase = "guessing" | "locked" | "reveal"
@@ -262,10 +265,12 @@ export function TheaterGameView(props: Props) {
                 const isLead = idx === 0
                 const statusText = p.disconnected
                   ? "Parti"
+                  : p.absent
+                    ? ABSENT_LABEL
                   : isRevealed || isFinished
                     ? VERDICT_LABEL[p.lastVerdict === "correct" || p.lastVerdict === "close" ? p.lastVerdict : "wrong"]
                     : (p.hasAnswered ? "A répondu" : (isMe && (guessTitle || guessArtist) ? "Écrit..." : "Attend"))
-                const statusCls = p.disconnected ? "gone"
+                const statusCls = p.disconnected || p.absent ? "gone"
                   : (isRevealed || isFinished) && p.lastVerdict === "correct" ? "locked"
                   : !isRevealed && p.hasAnswered ? "locked"
                   : isMe && !p.hasAnswered && (guessTitle || guessArtist) ? "typing"

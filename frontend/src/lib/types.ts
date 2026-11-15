@@ -114,6 +114,10 @@ export type MultiplayerPlayerState = {
   bestStreak?: number
   /** Le serveur a perdu la socket de ce joueur (onglet ferme, reseau coupe). */
   disconnected?: boolean
+  /** Absent (T22) : aucune reponse depuis 3 manches. Reste au classement, marque. */
+  absent?: boolean
+  /** Manches ou il a vraiment repondu (« Je sais pas » compris). */
+  answeredRounds?: number
 }
 
 /**
@@ -123,6 +127,16 @@ export type MultiplayerPlayerState = {
 export interface WaitingPlayer {
   userId: number
   username: string | null
+}
+
+/**
+ * Partie en veille (T22) : plus aucun joueur connecte (« empty »), ou personne
+ * n'a repondu depuis 3 manches (« silent »). En pause, elle s'arrete d'elle-meme
+ * a `stopAt` (heure serveur, ms) si personne ne revient.
+ */
+export interface IdlePause {
+  reason: "empty" | "silent"
+  stopAt: number
 }
 
 export type MultiplayerGameState = {
@@ -159,6 +173,10 @@ export type MultiplayerGameState = {
   waiting?: WaitingPlayer[]
   /** Partie mise en pause par l'hote. */
   paused?: boolean
+  /** Pause de veille posee par le serveur (T22) ; null sinon. */
+  idle?: IdlePause | null
+  /** Absents de la partie d'avant, pas repris dans celle-ci (T22). */
+  absentees?: WaitingPlayer[]
   /** Ecran en cours du reveal (T38) : la reponse puis le classement ; null hors REVEAL. */
   pacing?: RoundPacing | null
   /** L'hote (source audio en mode event) est-il toujours connecte ? */

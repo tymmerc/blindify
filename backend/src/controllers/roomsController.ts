@@ -6,7 +6,17 @@ import { ok, fail } from "../utils/response";
 import { logger } from "../utils/logger";
 import type { MusicProvider } from "../types/user";
 import type { AudioSourceRow } from "../types/audio";
-import { bootstrapGameState, getGameState, gameStateSnapshot, revealedRoundCeiling, clearGame, DEFAULT_LISTENING_MS } from "../services/realtimeGame";
+import {
+  bootstrapGameState,
+  getGameState,
+  gameStateSnapshot,
+  revealedRoundCeiling,
+  clearGame,
+  DEFAULT_LISTENING_MS,
+  forgetRoomAbsence,
+  roomAbsentUserIds,
+  type GameState,
+} from "../services/realtimeGame";
 import { startRoundAndBroadcast, stopGameTimers } from "../services/realtimeOrchestrator";
 import { ROUND_PACING } from "../services/roundPacing";
 import { GameMode, type RoundTrack } from "../types/game";
@@ -168,6 +178,22 @@ async function resetRoomToWaiting(
   return true;
 }
 
+type RunningRoom = { id: number; room_code: string; status: string; session_id: number | null };
+
+/**
+ * Arrete la partie en cours (T42) : plus aucun minuteur, plus de manche, plus
+ * de reponse attendue. La salle repasse en attente et la partie est close
+ * « abandoned » avec ses manches revelees (pas de podium, pas de stats de fin).
+ * Sert a l'hote (« Arrêter la partie ») et a la veille des parties fantomes (T22).
+ * Rend false si la salle a change entre-temps.
+ */
+async function stopRunningGame(room: RunningRoom, cause: "host" | "idle"): Promise<boolean> {
+  const revealedRounds = revealedRoundCeiling(room.room_code, room.status);
+  stopGameTimers(room.room_code);
+  logger.info(cause === "host" ? "game_stopped_by_host" : "game_stopped_idle", { roomCode: room.room_code, sessionId: room.session_id, revealedRounds });
+  return resetRoomToWaiting(room, revealedRounds);
+}
+
 // Verrou du lancement, par salle : un double clic, deux onglets ou deux
 // requetes en meme temps ne tirent pas deux parties. Verrou consultatif de
 // session Postgres sur une connexion dediee : il tombe tout seul si le
@@ -199,6 +225,29 @@ async function withStartLock(roomCode: string, run: () => Promise<void>): Promis
   } finally {
     client.release(broken);
   }
+}
+
+/**
+ * Partie fantome (T22) : en veille depuis IDLE_STOP_MS (plus aucun joueur,
+ * ou personne ne repond), elle s'arrete comme si l'hote avait touche
+ * « Arrêter la partie ». Seulement si la salle porte toujours CETTE partie :
+ * une revanche lancee entre-temps continue. Les clients encore la
+ * reviennent dans la salle d'attente (room:lobby, sans rechargement).
+ */
+export async function stopIdleGame(roomCode: string, state: GameState): Promise<boolean> {
+  let stopped = false;
+  await withStartLock(roomCode, async () => {
+    const { rows } = await pool.query<RunningRoom>(
+      `SELECT id, room_code, status, session_id FROM multiplayer_rooms WHERE room_code=$1 LIMIT 1`,
+      [roomCode]
+    );
+    const room = rows[0];
+    const live = getGameState(roomCode);
+    if (!room || room.status === "waiting" || live !== state || live.phase === "FINISHED") return;
+    stopped = await stopRunningGame(room, "idle");
+  });
+  if (stopped) io.to(roomCode).emit("room:lobby", { roomCode, reason: "idle" });
+  return stopped;
 }
 
 export const roomsController = {
@@ -793,20 +842,12 @@ export const roomsController = {
       }
       if (room.status !== "waiting") {
         const state = getGameState(room.room_code);
-        let revealedRounds: number | undefined;
-        if (state && state.phase !== "FINISHED") {
-          if (req.body?.stop !== true) {
-            fail(res, "game_running", "La partie est encore en cours.", 409);
-            return;
-          }
-          // La partie s'arrete ici : plus aucun minuteur, plus de manche, plus
-          // de reponse attendue. Elle est close « abandoned » par
-          // resetRoomToWaiting (pas de podium, pas de stats de fin).
-          revealedRounds = revealedRoundCeiling(room.room_code, room.status);
-          stopGameTimers(room.room_code);
-          logger.info("game_stopped_by_host", { roomCode: room.room_code, sessionId: room.session_id, revealedRounds });
+        const running = Boolean(state && state.phase !== "FINISHED");
+        if (running && req.body?.stop !== true) {
+          fail(res, "game_running", "La partie est encore en cours.", 409);
+          return;
         }
-        if (!(await resetRoomToWaiting(room, revealedRounds))) {
+        if (!(await (running ? stopRunningGame(room, "host") : resetRoomToWaiting(room)))) {
           fail(res, "room_conflict", "La salle a été modifiée par un autre joueur. Réessaie.", 409);
           return;
         }
@@ -956,15 +997,24 @@ export const roomsController = {
       [room.id]
     );
     // Joueurs qui REPONDENT : le presentateur (event sans host_plays) et l'hote streamer sont exclus.
-    const participantIds = participantRows
+    const allPlayerIds = participantRows
       .map(p => p.user_id)
       .filter(id => !((((room.mode === GameMode.EVENT && !room.host_plays) || room.mode === GameMode.STREAMER)) && id === room.host_user_id));
+    // Absents de la partie d'avant (T22) : pas repris, ni comme joueurs ni pour
+    // leur musique. Ils reviennent d'un clic (« Je reviens »). Sauf s'il ne
+    // restait pas assez de joueurs sans eux : l'hote relance avec eux.
+    const absentIds = new Set(roomAbsentUserIds(room.room_code));
+    const presentIds = allPlayerIds.filter(id => !absentIds.has(id));
+    const keepAbsentees = presentIds.length < 2;
+    if (keepAbsentees) forgetRoomAbsence(room.room_code, allPlayerIds);
+    const participantIds = keepAbsentees ? allPlayerIds : presentIds;
+    const sittingOut = keepAbsentees ? new Set<number>() : absentIds;
 
     // Contributeurs MUSIQUE : qui peut ramener la playlist. Autour d'une table, l'hote
     // presentateur est le DJ : sa musique DOIT alimenter le pool meme s'il ne joue pas.
     // Tout le monde present dans la room peut contribuer.
     let musicContributorIds = room.mode === GameMode.EVENT
-      ? Array.from(new Set(participantRows.map(p => p.user_id)))
+      ? Array.from(new Set(participantRows.map(p => p.user_id))).filter(id => !sittingOut.has(id))
       : participantIds;
 
     // Mode streamer (T5) : le public joue depuis /live, sans etre inscrit dans

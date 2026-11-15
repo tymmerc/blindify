@@ -55,7 +55,22 @@ export type PlayerState = {
   lastGained?: number;
   /** Cumul des temps de réponse (ms) — sert UNIQUEMENT au départage d'égalité. */
   totalReactionMs?: number;
+  /**
+   * Absent (T22) : aucune reponse depuis ABSENT_AFTER_MISSED_ROUNDS manches,
+   * connecte ou non. Il reste au classement, marque, sans retenir la manche.
+   * Il revient des qu'il repond ou touche « Je suis là ».
+   */
+  absent?: boolean;
+  /** Manches ou il a vraiment repondu (« Je sais pas » compris). */
+  answeredRounds?: number;
 };
+
+/**
+ * Partie en veille (T22) : plus aucun joueur connecte, ou personne n'a repondu
+ * depuis SILENT_ROUNDS_BEFORE_PAUSE manches. Elle est en pause et s'arrete
+ * d'elle-meme a `stopAt` (heure serveur, ms) si personne ne revient.
+ */
+export type IdlePause = { reason: "empty" | "silent"; stopAt: number };
 
 export type GameState = {
   roomCode: string;
@@ -92,6 +107,13 @@ export type GameState = {
   waiting?: PublicWaitingPlayer[];
   /** Partie mise en pause par l'hote (timers geles cote serveur). */
   paused?: boolean;
+  /** Pause de veille (T22), posee par le serveur ; null sinon. */
+  idle?: IdlePause | null;
+  /**
+   * Absents de la partie d'avant (T22), pas repris dans celle-ci. Ils
+   * regardent et reviennent en touchant « Je reviens ».
+   */
+  absentees?: PublicWaitingPlayer[];
   /**
    * Ecran en cours pendant la phase REVEAL (T38) : la reponse puis le
    * classement, chacun jusqu'a `endsAt`. null hors REVEAL.
@@ -117,6 +139,14 @@ type GameContext = {
    * retardataire n'a mis aucun morceau dans cette partie.
    */
   launchPlayerIds: ReadonlySet<number>;
+  /** Manches de suite sans reponse, par joueur (T22). */
+  missed: Record<number, number>;
+  /** Manches de suite ou aucun joueur n'a repondu (T22). */
+  silentRounds: number;
+  /** Depuis quand (ms) plus aucun joueur n'est connecte ; null sinon (T22). */
+  emptySince: number | null;
+  /** La pause en cours vient-elle de la veille (T22) plutot que de l'hote ? */
+  pausedByIdle: boolean;
 };
 
 /**
@@ -135,6 +165,74 @@ export const DEFAULT_LISTENING_MS = 30_000;
  * (son minuteur) ne l'attend jamais.
  */
 export const DISCONNECT_GRACE_MS = 5_000;
+
+/**
+ * Seuils des parties fantomes (T22), justifies dans la PR :
+ * - 3 manches sans reponse (pas meme « Je sais pas ») : le joueur est absent.
+ *   Une erreur ne coute rien, il revient a sa premiere reponse.
+ * - 3 manches ou personne ne repond : la partie se met en veille.
+ * - plus aucun joueur connecte depuis 15 s (au-dela des 5 s de grace et d'un
+ *   rechargement de page) : en veille aussi, sans bruler de manche.
+ * - 2 min de veille sans retour : la partie s'arrete (chemin de T42).
+ */
+export const ABSENT_AFTER_MISSED_ROUNDS = 3;
+export const SILENT_ROUNDS_BEFORE_PAUSE = 3;
+export const EMPTY_PAUSE_MS = 15_000;
+export const IDLE_STOP_MS = 120_000;
+
+/**
+ * Absents par salle (T22), au-dela d'une partie : Rejouer ne les reprend pas.
+ * En memoire seulement, comme les parties : un redemarrage les oublie.
+ */
+const roomAbsent = new Map<string, Map<number, { username: string | null; avatar: string | null; since: number }>>();
+/** Oubli des absences d'une salle restee sans nouvelles (salle fermee, soiree finie). */
+const ROOM_ABSENT_TTL_MS = 6 * 60 * 60_000;
+
+function setRoomAbsent(roomCode: string, player: { userId: number; username: string | null; avatar?: string | null }, now = Date.now()): void {
+  let users = roomAbsent.get(roomCode);
+  if (!users) {
+    users = new Map();
+    roomAbsent.set(roomCode, users);
+  }
+  users.set(player.userId, { username: player.username, avatar: player.avatar ?? null, since: now });
+}
+
+function clearRoomAbsent(roomCode: string, userId: number): void {
+  const users = roomAbsent.get(roomCode);
+  if (!users) return;
+  users.delete(userId);
+  if (users.size === 0) roomAbsent.delete(roomCode);
+}
+
+/** Joueurs notes absents dans cette salle (Rejouer les laisse de cote). */
+export function roomAbsentUserIds(roomCode: string): number[] {
+  return Array.from(roomAbsent.get(roomCode)?.keys() ?? []);
+}
+
+/** Rejouer reprend quand meme ces absents (pas assez de joueurs sans eux). */
+export function forgetRoomAbsence(roomCode: string, userIds: readonly number[]): void {
+  for (const id of userIds) clearRoomAbsent(roomCode, id);
+}
+
+/** Menage des absences trop vieilles (appele par le filet de veille). */
+export function pruneRoomAbsences(now = Date.now()): void {
+  for (const [roomCode, users] of roomAbsent) {
+    for (const [id, entry] of users) if (now - entry.since > ROOM_ABSENT_TTL_MS) users.delete(id);
+    if (users.size === 0) roomAbsent.delete(roomCode);
+  }
+}
+
+function isRoomAbsent(roomCode: string, userId: number): boolean {
+  return roomAbsent.get(roomCode)?.has(userId) ?? false;
+}
+
+/** Les absents qui ne jouent pas cette partie : ni joueurs, ni en attente. */
+function syncAbsentees(ctx: GameContext): void {
+  const users = roomAbsent.get(ctx.state.roomCode);
+  ctx.state.absentees = Array.from(users?.entries() ?? [])
+    .filter(([id]) => !ctx.state.players[id] && !ctx.waiting.some(w => w.userId === id))
+    .map(([userId, entry]) => ({ userId, username: entry.username }));
+}
 
 function graceMsOrDefault(value: number | undefined): number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : DISCONNECT_GRACE_MS;
@@ -214,7 +312,12 @@ export function bootstrapGameState(params: {
     graceUntil: {},
     waiting: [],
     launchPlayerIds: new Set(Object.keys(initialPlayers).map(Number)),
+    missed: {},
+    silentRounds: 0,
+    emptySince: null,
+    pausedByIdle: false,
   });
+  syncAbsentees(games.get(params.roomCode)!);
   return state;
 }
 
@@ -276,7 +379,87 @@ export function resumeGame(roomCode: string, now = Date.now()): GameState | unde
   ctx.graceUntil = gracesAfterPause(ctx.graceUntil, delta, now + ctx.reconnectGraceMs);
   ctx.pausedAt = null;
   ctx.state.paused = false;
+  // Reprise (hote, joueur revenu) : la veille repart de zero.
+  ctx.state.idle = null;
+  ctx.pausedByIdle = false;
+  ctx.silentRounds = 0;
+  ctx.emptySince = null;
   return ctx.state;
+}
+
+/**
+ * Met la partie en veille (T22). Une pause de l'hote deja posee reste la
+ * sienne : la veille n'y ajoute que l'heure d'arret.
+ */
+function idlePause(ctx: GameContext & { pausedAt?: number | null }, reason: IdlePause["reason"], now: number): void {
+  if (!ctx.state.paused) {
+    ctx.pausedAt = now;
+    ctx.state.paused = true;
+    ctx.pausedByIdle = true;
+  }
+  ctx.state.idle = { reason, stopAt: now + IDLE_STOP_MS };
+}
+
+export type IdleDecision = "none" | "pause" | "resume" | "stop";
+
+/**
+ * Le filet des parties fantomes (T22), pour une salle. `isConnected` dit si un
+ * joueur a encore un socket dans la salle. L'hote qui presente seulement n'est
+ * pas un joueur : il ne garde pas a lui seul une partie en vie, et il ne la
+ * fait jamais croire vide tant qu'un joueur est la.
+ * - "pause" : plus aucun joueur depuis EMPTY_PAUSE_MS, la partie vient de se figer ;
+ * - "resume" : un joueur est revenu dans une partie figee faute de joueurs ;
+ * - "stop" : la veille a dure IDLE_STOP_MS, l'appelant arrete la partie.
+ */
+export function idleCheck(roomCode: string, isConnected: (userId: number) => boolean, now = Date.now()): IdleDecision {
+  const ctx = games.get(roomCode);
+  if (!ctx || (ctx.state.phase !== "GUESSING" && ctx.state.phase !== "REVEAL")) return "none";
+  const someone = playingPlayers(ctx).some(p => !p.disconnected && isConnected(p.userId));
+  if (someone) {
+    ctx.emptySince = null;
+    if (ctx.state.idle?.reason === "empty") {
+      if (ctx.pausedByIdle) {
+        resumeGame(roomCode, now);
+        return "resume";
+      }
+      // Pause de l'hote : elle reste, seule l'heure d'arret tombe.
+      ctx.state.idle = null;
+    }
+  } else {
+    ctx.emptySince ??= now;
+    if (!ctx.state.idle && now - ctx.emptySince >= EMPTY_PAUSE_MS) {
+      idlePause(ctx, "empty", now);
+      return "pause";
+    }
+  }
+  if (ctx.state.idle && now >= ctx.state.idle.stopAt) return "stop";
+  return "none";
+}
+
+/**
+ * « Je suis là » (T22) : le joueur n'est plus absent, ni pour cette partie ni
+ * pour la suivante. Une partie en veille repart. Rend :
+ * - "player" : joueur de la partie (absence levee, veille levee) ;
+ * - "back" : absent de la partie d'avant, il peut entrer (admitToGame) ;
+ * - "none" : pas de partie ou rien a faire.
+ */
+export function markPresent(roomCode: string, userId: number, now = Date.now()): "player" | "back" | "none" {
+  const wasRoomAbsent = isRoomAbsent(roomCode, userId);
+  clearRoomAbsent(roomCode, userId);
+  const ctx = games.get(roomCode);
+  if (!ctx) return "none";
+  const player = ctx.state.players[userId];
+  if (!player) {
+    syncAbsentees(ctx);
+    return wasRoomAbsent ? "back" : "none";
+  }
+  player.absent = false;
+  ctx.missed = { ...ctx.missed, [userId]: 0 };
+  if (ctx.state.idle && playingPlayers(ctx).some(p => p.userId === userId)) {
+    if (ctx.pausedByIdle) resumeGame(roomCode, now);
+    else ctx.state.idle = null;
+  }
+  return "player";
 }
 
 /**
@@ -386,7 +569,9 @@ export type EarlyRevealDecision =
 export function earlyRevealDecision(roomCode: string, now = Date.now()): EarlyRevealDecision {
   const ctx = games.get(roomCode);
   if (!ctx || ctx.state.phase !== "GUESSING" || ctx.state.paused) return { kind: "none" };
-  const players = playingPlayers(ctx);
+  // Un absent (T22) ne retient pas la manche, connecte ou non : la table
+  // n'attend plus quelqu'un qui ne joue plus.
+  const players = playingPlayers(ctx).filter(p => !p.absent);
   const connected = players.filter(p => !p.disconnected);
   if (connected.length === 0 || !connected.every(p => p.hasAnswered)) return { kind: "none" };
   const pending = players
@@ -505,6 +690,12 @@ export function recordAnswer(
   player.lastGuessArtist = guessArtist ?? null;
   player.lastSourceGuess = sourceUserId ?? null;
   player.answerAt = Date.now();
+  // Il repond : il n'est plus absent (T22), ni ici ni a la partie suivante.
+  if (player.absent || isRoomAbsent(roomCode, userId)) {
+    player.absent = false;
+    clearRoomAbsent(roomCode, userId);
+  }
+  ctx.missed = { ...ctx.missed, [userId]: 0 };
   return ctx.state;
 }
 
@@ -547,9 +738,10 @@ function promoteWaitingPlayers(ctx: GameContext, missedRounds: number): void {
   const { promoted, stillWaiting } = promoteWaiting(ctx.waiting, missedRounds, ctx.roundDurationMs);
   for (const player of promoted) ctx.state.players[player.userId] = player;
   setWaiting(ctx, stillWaiting);
+  syncAbsentees(ctx);
 }
 
-export type Admission = "none" | "player" | "waiting" | "arrived";
+export type Admission = "none" | "player" | "waiting" | "arrived" | "absent";
 
 /**
  * Entree d'un membre de la salle dans la partie en memoire (room:join).
@@ -565,6 +757,12 @@ export function admitToGame(
   const ctx = games.get(roomCode);
   if (!ctx) return "none";
   const inRound = ctx.state.phase === "GUESSING" || ctx.state.phase === "REVEAL";
+  // Absent de la partie d'avant (T22) : une reconnexion ne le remet pas en
+  // jeu, seul son « Je reviens » le fait (markPresent).
+  if (!ctx.state.players[payload.userId] && isRoomAbsent(roomCode, payload.userId)) {
+    syncAbsentees(ctx);
+    return "absent";
+  }
   if (ctx.state.players[payload.userId] || !inRound) {
     upsertPlayer(roomCode, payload);
     // Resté en attente jusqu'a la fin puis revenu sur les resultats : il n'est
@@ -640,6 +838,7 @@ export function revealRound(roomCode: string): GameState | undefined {
   if (!track) return ctx.state;
 
   const startAt = ctx.state.timing.startAt;
+  trackAbsences(ctx);
 
   Object.values(ctx.state.players).forEach(player => {
     const detail = evaluateGuessDetail(
@@ -670,7 +869,37 @@ export function revealRound(roomCode: string): GameState | undefined {
     startAt,
     revealAt: ctx.state.timing.revealAt,
   };
+  // Personne n'a repondu depuis plusieurs manches : la partie se met en veille
+  // sur cette revelation (T22). Pas a la derniere : le podium arrive de toute facon.
+  if (ctx.silentRounds >= SILENT_ROUNDS_BEFORE_PAUSE && ctx.state.currentRound < ctx.state.totalRounds) {
+    idlePause(ctx, "silent", Date.now());
+  }
   return ctx.state;
+}
+
+/**
+ * A chaque revelation (T22) : qui a repondu cette manche ? Un joueur qui n'a
+ * rien envoye ABSENT_AFTER_MISSED_ROUNDS fois de suite passe absent, connecte
+ * ou non (une longue coupure aussi). Le presentateur n'est pas un joueur.
+ */
+function trackAbsences(ctx: GameContext): void {
+  let someoneAnswered = false;
+  const missed = { ...ctx.missed };
+  for (const player of playingPlayers(ctx)) {
+    if (player.answerAt != null) {
+      someoneAnswered = true;
+      missed[player.userId] = 0;
+      player.answeredRounds = (player.answeredRounds ?? 0) + 1;
+      continue;
+    }
+    missed[player.userId] = (missed[player.userId] ?? 0) + 1;
+    if (!player.absent && missed[player.userId] >= ABSENT_AFTER_MISSED_ROUNDS) {
+      player.absent = true;
+      setRoomAbsent(ctx.state.roomCode, player);
+    }
+  }
+  ctx.missed = missed;
+  ctx.silentRounds = someoneAnswered ? 0 : ctx.silentRounds + 1;
 }
 
 /**

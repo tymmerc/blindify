@@ -47,10 +47,10 @@ import { initSocket } from "../../src/socket";
 import { getSessionContext } from "../../src/utils/session";
 import { ensureLinksSchema } from "../../src/controllers/linksController";
 import { ensureUserTracksSchema, linkTrackToUser } from "../../src/services/userTracks";
-import { roomsController } from "../../src/controllers/roomsController";
+import { roomsController, stopIdleGame } from "../../src/controllers/roomsController";
 import { gamesController } from "../../src/controllers/gamesController";
 import { heardTonight } from "../../src/services/roundOrder";
-import { clearGame, getGameState } from "../../src/services/realtimeGame";
+import { clearGame, forgetRoomAbsence, getGameState, markPresent, recordAnswer } from "../../src/services/realtimeGame";
 import * as orchestrator from "../../src/services/realtimeOrchestrator";
 
 resolveTestDatabaseUrl(process.env.TEST_DATABASE_URL);
@@ -366,5 +366,120 @@ describe("arreter la partie en cours (T42)", () => {
     expect(refused.status).toBe(403);
     expect(getGameState(code)?.phase).toBe("GUESSING");
     expect((await room(code)).status).toBe("in_progress");
+  });
+});
+
+describe("parties fantomes et joueurs absents (T22)", () => {
+  async function sessionRow(id: number): Promise<{ state: string; current_round: number }> {
+    const { rows } = await pool.query(`SELECT state, current_round FROM game_sessions WHERE id = $1`, [id]);
+    return rows[0];
+  }
+
+  async function totalGames(userId: number): Promise<number> {
+    const { rows } = await pool.query<{ total_games: number }>(`SELECT total_games FROM user_stats WHERE user_id = $1`, [userId]);
+    return rows[0]?.total_games ?? 0;
+  }
+
+  async function participants(sessionId: number): Promise<number[]> {
+    const { rows } = await pool.query<{ user_id: number }>(
+      `SELECT user_id FROM game_participants WHERE session_id = $1 ORDER BY user_id`,
+      [sessionId],
+    );
+    return rows.map(r => r.user_id);
+  }
+
+  /** Une manche ou seuls `answering` repondent, puis la suivante (comme les minuteurs). */
+  function playRound(code: string, answering: number[]): void {
+    for (const id of answering) recordAnswer(code, id, "une reponse");
+    orchestrator.revealRoundNow(io, code);
+    orchestrator.startRoundAndBroadcast(io, code);
+  }
+
+  it("tout le monde part : la partie s'arrete toute seule, comme « Arrêter la partie »", async () => {
+    const code = await newRoom([hote, invite]);
+    expect((await start(code, hote)).status).toBe(200);
+    const first = (await room(code)).session_id!;
+    playRound(code, [hote, invite]);
+    expect(getGameState(code)?.currentRound).toBe(2);
+    const gamesBefore = await totalGames(invite);
+
+    const emit = jest.fn();
+    jest.spyOn(io, "to").mockReturnValue({ emit } as unknown as ReturnType<Server["to"]>);
+    expect(await stopIdleGame(code, getGameState(code)!)).toBe(true);
+    expect(emit.mock.calls).toEqual([["room:lobby", { roomCode: code, reason: "idle" }]]);
+    jest.restoreAllMocks();
+
+    expect(getGameState(code)).toBeUndefined();
+    expect(await room(code)).toEqual({ status: "waiting", session_id: null });
+    // Meme fin que l'arret par l'hote (T42) : interrompue, seule la manche revelee compte.
+    expect(await sessionRow(first)).toEqual({ state: "abandoned", current_round: 1 });
+    await sleep(200);
+    expect(await totalGames(invite)).toBe(gamesBefore);
+    // L'hote relance dans la meme salle.
+    expect((await start(code, hote)).status).toBe(200);
+    expect(getGameState(code)?.currentRound).toBe(1);
+  });
+
+  it("n'arrete jamais une revanche lancee entre-temps", async () => {
+    const code = await newRoom([hote, invite]);
+    expect((await start(code, hote)).status).toBe(200);
+    const old = getGameState(code)!;
+    playToTheEnd(io, code);
+    expect((await start(code, hote)).status).toBe(200);
+    expect(await stopIdleGame(code, old)).toBe(false);
+    expect(getGameState(code)?.phase).toBe("GUESSING");
+    expect((await room(code)).status).toBe("in_progress");
+  });
+
+  it("un joueur qui n'a rien repondu : pas de ligne a 0 point ni de partie dans ses stats, et Rejouer le laisse de cote", async () => {
+    const hote = await newGuest("absent_hote");
+    const invite = await newGuest("absent_invite");
+    const parti = await newGuest("absent_parti");
+    await giveLibrary(hote, 12);
+    const code = await newRoom([hote, invite, parti]);
+    try {
+      expect((await start(code, hote)).status).toBe(200);
+      const first = (await room(code)).session_id!;
+      expect(await participants(first)).toEqual([hote, invite, parti].sort((a, b) => a - b));
+      for (let r = 0; r < 3; r++) playRound(code, [hote, invite]);
+      const finished = getGameState(code)!;
+      expect(finished.phase).toBe("FINISHED");
+      // Au classement de fin, marque absent.
+      expect(finished.players[parti].absent).toBe(true);
+      expect(finished.players[parti].score).toBe(0);
+
+      for (let i = 0; i < 20 && (await sessionState(first)) !== "finished"; i++) await sleep(100);
+      expect(await sessionState(first)).toBe("finished");
+      expect(await participants(first)).toEqual([hote, invite].sort((a, b) => a - b));
+      expect(await totalGames(parti)).toBe(0);
+      expect(await totalGames(invite)).toBe(1);
+
+      // Rejouer : la nouvelle partie part sans lui.
+      expect((await start(code, hote)).status).toBe(200);
+      const second = (await room(code)).session_id!;
+      const replay = getGameState(code)!;
+      expect(Object.keys(replay.players).map(Number).sort((a, b) => a - b)).toEqual([hote, invite].sort((a, b) => a - b));
+      expect(replay.absentees?.map(a => a.userId)).toEqual([parti]);
+      expect(await participants(second)).toEqual([hote, invite].sort((a, b) => a - b));
+
+      // Il touche « Je reviens » : il joue des la manche suivante.
+      expect(markPresent(code, parti)).toBe("back");
+      expect(getGameState(code)!.absentees).toEqual([]);
+    } finally {
+      forgetRoomAbsence(code, [parti]);
+    }
+  });
+
+  it("a deux, Rejouer reprend l'absent : sans lui, il n'y aurait plus de partie", async () => {
+    const code = await newRoom([hote, invite]);
+    expect((await start(code, hote)).status).toBe(200);
+    for (let r = 0; r < 3; r++) playRound(code, [hote]);
+    expect(getGameState(code)!.players[invite].absent).toBe(true);
+    const replay = await start(code, hote);
+    expect(replay.status).toBe(200);
+    const state = getGameState(code)!;
+    expect(state.players[invite]).toBeDefined();
+    expect(state.players[invite].absent).toBeFalsy();
+    expect(state.absentees).toEqual([]);
   });
 });

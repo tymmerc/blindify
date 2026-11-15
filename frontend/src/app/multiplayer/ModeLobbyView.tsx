@@ -39,6 +39,7 @@ import { initialLobbyContext, lobbyReducer } from "./lobbyMachine"
 import { RequestTimeoutError, withTimeoutRetry } from "@/lib/withTimeoutRetry"
 import { LateJoinerView } from "@/components/game/LateJoinerView"
 import { arrivalNotice, isLateJoiner } from "@/lib/lateJoin"
+import { IDLE_STOP_NOTICE } from "@/lib/absence"
 import { useLateArrivals } from "./hooks/useLateArrivals"
 import { useStreamerFeed } from "./hooks/useStreamerFeed"
 import { ExpiredRoomView } from "./ExpiredRoomView"
@@ -920,8 +921,10 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       // « Revenir à la salle » (T40) : l'hote a ramene tout le monde dans la salle
       // d'attente. Meme salle, memes joueurs : on change d'ecran sans recharger
       // (activite Discord), l'hote retrouve sa vue avec le bouton lancer.
-      const backToLobbyHandler = (payload: { roomCode: string }) => {
+      const backToLobbyHandler = (payload: { roomCode: string; reason?: string }) => {
         if (payload?.roomCode !== roomCode) return
+        // Partie arretee toute seule (T22) : plus personne ne jouait.
+        if (payload.reason === "idle") showNotice(IDLE_STOP_NOTICE, false, "info")
         const host = roomRef.current?.host_user_id != null && roomRef.current.host_user_id === userRef.current?.user?.id
         // Partie arretee en pleine manche (T42) : une reponse en attente ne
         // doit jamais repartir sur la manche 1 de la partie suivante.
@@ -1479,6 +1482,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         bestStreak: p.bestStreak ?? 0,
         totalReactionMs: p.totalReactionMs ?? 0,
         correct: p.correct ?? 0,
+        absent: p.absent === true,
       }))
       .sort((a, b) => {
         if (b.score !== a.score) return b.score - a.score
@@ -1758,6 +1762,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
           onSendChat={sendChat}
           onExit={handleLeaveRoom}
           onRejoin={() => socketRef.current?.emit("room:join", { roomCode: room.room_code })}
+          onComeBack={() => socketRef.current?.emit("game:present", { roomCode: room.room_code })}
           accentColor={accentColor}
         />
       ) : (
@@ -1816,6 +1821,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
             socket.emit("game:next", { roomCode: room.room_code, round, step })
           }}
           onStop={isHost ? () => returnToLobby(true) : undefined}
+          onPresent={() => socketRef.current?.emit("game:present", { roomCode: room.room_code })}
           onPauseToggle={() => {
             const socket = socketRef.current
             if (!socket || !room) return
