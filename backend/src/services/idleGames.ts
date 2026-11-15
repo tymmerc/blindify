@@ -52,6 +52,9 @@ export function checkIdleGame(io: IOServer, roomCode: string, now = Date.now()):
     stopGameTimers(roomCode);
     logger.info("game_idle_paused", { roomCode, round: state?.currentRound, reason: "empty" });
     broadcastState(io, roomCode);
+  } else if (decision === "clear") {
+    // L'ecran de pause ne doit plus annoncer d'arret.
+    broadcastState(io, roomCode);
   } else if (decision === "resume") {
     rescheduleAfterResume(io, roomCode);
     logger.info("game_idle_resumed", { roomCode, round: state?.currentRound });

@@ -19,6 +19,7 @@ import {
   forgetRoomAbsence,
   getGameState,
   idleCheck,
+  isPausedByIdle,
   markDisconnected,
   markPresent,
   pauseGame,
@@ -278,6 +279,7 @@ describe("partie sans joueur connecte", () => {
     const revealAt = getGameState(ROOM)!.timing.revealAt!;
     idleCheck(ROOM, nobody, 0);
     expect(idleCheck(ROOM, nobody, EMPTY_PAUSE_MS)).toBe("pause");
+    expect(isPausedByIdle(ROOM)).toBe(true);
     expect(idleCheck(ROOM, everyone, EMPTY_PAUSE_MS + 60_000)).toBe("resume");
     const state = getGameState(ROOM)!;
     expect(state.paused).toBe(false);
@@ -301,13 +303,15 @@ describe("partie sans joueur connecte", () => {
     expect(getGameState(ROOM)!.paused).toBeFalsy();
   });
 
-  it("une pause de l'hote reste la sienne : un retour ne la leve pas, l'arret si", () => {
+  it("une pause de l'hote reste la sienne : un retour ne la leve pas, l'heure d'arret tombe", () => {
     setup();
     pauseGame(ROOM, 0);
     idleCheck(ROOM, nobody, 0);
     expect(idleCheck(ROOM, nobody, EMPTY_PAUSE_MS)).toBe("pause");
     expect(getGameState(ROOM)!.idle?.reason).toBe("empty");
-    expect(idleCheck(ROOM, everyone, EMPTY_PAUSE_MS + 1)).toBe("none");
+    // Si l'hote part maintenant, sa pause doit encore pouvoir etre levee pour lui.
+    expect(isPausedByIdle(ROOM)).toBe(false);
+    expect(idleCheck(ROOM, everyone, EMPTY_PAUSE_MS + 1)).toBe("clear");
     expect(getGameState(ROOM)!.paused).toBe(true);
     expect(getGameState(ROOM)!.idle).toBeNull();
   });

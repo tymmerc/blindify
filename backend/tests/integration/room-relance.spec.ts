@@ -50,7 +50,7 @@ import { ensureUserTracksSchema, linkTrackToUser } from "../../src/services/user
 import { roomsController, stopIdleGame } from "../../src/controllers/roomsController";
 import { gamesController } from "../../src/controllers/gamesController";
 import { heardTonight } from "../../src/services/roundOrder";
-import { clearGame, forgetRoomAbsence, getGameState, markPresent, recordAnswer } from "../../src/services/realtimeGame";
+import { EMPTY_PAUSE_MS, IDLE_STOP_MS, clearGame, forgetRoomAbsence, getGameState, idleCheck, markPresent, recordAnswer } from "../../src/services/realtimeGame";
 import * as orchestrator from "../../src/services/realtimeOrchestrator";
 
 resolveTestDatabaseUrl(process.env.TEST_DATABASE_URL);
@@ -395,6 +395,13 @@ describe("parties fantomes et joueurs absents (T22)", () => {
     orchestrator.startRoundAndBroadcast(io, code);
   }
 
+  /** Plus personne depuis assez longtemps : veille posee, heure d'arret deja passee. */
+  function idleLongEnough(code: string): void {
+    const t0 = Date.now() - EMPTY_PAUSE_MS - IDLE_STOP_MS - 1_000;
+    idleCheck(code, () => false, t0);
+    expect(idleCheck(code, () => false, t0 + EMPTY_PAUSE_MS)).toBe("pause");
+  }
+
   it("tout le monde part : la partie s'arrete toute seule, comme « Arrêter la partie »", async () => {
     const code = await newRoom([hote, invite]);
     expect((await start(code, hote)).status).toBe(200);
@@ -402,6 +409,7 @@ describe("parties fantomes et joueurs absents (T22)", () => {
     playRound(code, [hote, invite]);
     expect(getGameState(code)?.currentRound).toBe(2);
     const gamesBefore = await totalGames(invite);
+    idleLongEnough(code);
 
     const emit = jest.fn();
     jest.spyOn(io, "to").mockReturnValue({ emit } as unknown as ReturnType<Server["to"]>);
@@ -418,6 +426,18 @@ describe("parties fantomes et joueurs absents (T22)", () => {
     // L'hote relance dans la meme salle.
     expect((await start(code, hote)).status).toBe(200);
     expect(getGameState(code)?.currentRound).toBe(1);
+  });
+
+  it("un joueur revenu juste avant l'arret : la partie continue", async () => {
+    const code = await newRoom([hote, invite]);
+    expect((await start(code, hote)).status).toBe(200);
+    idleLongEnough(code);
+    const state = getGameState(code)!;
+    // Il revient entre la decision du filet et le verrou de la salle.
+    expect(idleCheck(code, () => true)).toBe("resume");
+    expect(await stopIdleGame(code, state)).toBe(false);
+    expect(getGameState(code)?.phase).toBe("GUESSING");
+    expect((await room(code)).status).toBe("in_progress");
   });
 
   it("n'arrete jamais une revanche lancee entre-temps", async () => {

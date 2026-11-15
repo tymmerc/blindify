@@ -159,13 +159,16 @@ async function resetRoomToWaiting(
   room: { id: number; room_code: string; status: string; session_id: number | null },
   revealedRounds?: number
 ): Promise<boolean> {
-  clearGame(room.room_code);
   const { rowCount } = await pool.query(
     `UPDATE multiplayer_rooms SET status='waiting', session_id=NULL, started_at=NULL, completed_at=NOW()
      WHERE id=$1 AND (status=$2 OR status='finished')`,
     [room.id, room.status]
   );
+  // Salle modifiee entre-temps : la partie reste en memoire (le filet T27
+  // repose ses minuteurs si elle tournait) ; on ne l'efface qu'une fois la
+  // salle remise en attente.
   if (!rowCount) return false;
+  clearGame(room.room_code);
   // La partie d'avant ne tourne plus en memoire : si elle est encore
   // « in_progress » en base (lancement casse, serveur redemarre), elle
   // est close ici. Une partie finie dont l'ecriture est en route passe
@@ -244,6 +247,9 @@ export async function stopIdleGame(roomCode: string, state: GameState): Promise<
     const room = rows[0];
     const live = getGameState(roomCode);
     if (!room || room.status === "waiting" || live !== state || live.phase === "FINISHED") return;
+    // Un joueur a pu revenir (ou l'hote reprendre) pendant qu'on attendait le
+    // verrou : la veille est levee, la partie continue.
+    if (!live.idle || Date.now() < live.idle.stopAt) return;
     stopped = await stopRunningGame(room, "idle");
   });
   if (stopped) io.to(roomCode).emit("room:lobby", { roomCode, reason: "idle" });

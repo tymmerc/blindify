@@ -19,6 +19,7 @@ import {
   dropWaiting,
   isWaitingPlayer,
   markPresent,
+  isPausedByIdle,
 } from "./services/realtimeGame";
 import { checkIdleGame } from "./services/idleGames";
 import * as lobbyRps from "./services/lobbyRps";
@@ -1049,8 +1050,9 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
           setHostConnected(roomCode, false);
           // Seul l'hote peut reprendre une pause : s'il disparait pendant une
           // pause, la table resterait gelee pour toujours. On reprend pour lui.
-          // Une veille (T22) n'est pas sa pause : elle a son propre arret.
-          if (state.paused && !state.idle) {
+          // Une veille posee par le serveur (T22) n'est pas sa pause : elle a
+          // son propre arret. Sa pause a lui, meme doublee d'une veille, est levee.
+          if (state.paused && !isPausedByIdle(roomCode)) {
             const resumed = resumeGame(roomCode);
             if (resumed && !resumed.paused) rescheduleAfterResume(io, roomCode);
           }

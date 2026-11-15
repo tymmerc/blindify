@@ -400,7 +400,12 @@ function idlePause(ctx: GameContext & { pausedAt?: number | null }, reason: Idle
   ctx.state.idle = { reason, stopAt: now + IDLE_STOP_MS };
 }
 
-export type IdleDecision = "none" | "pause" | "resume" | "stop";
+export type IdleDecision = "none" | "pause" | "resume" | "clear" | "stop";
+
+/** La pause en cours a-t-elle ete posee par la veille (T22), pas par l'hote ? */
+export function isPausedByIdle(roomCode: string): boolean {
+  return games.get(roomCode)?.pausedByIdle === true;
+}
 
 /**
  * Le filet des parties fantomes (T22), pour une salle. `isConnected` dit si un
@@ -409,6 +414,7 @@ export type IdleDecision = "none" | "pause" | "resume" | "stop";
  * fait jamais croire vide tant qu'un joueur est la.
  * - "pause" : plus aucun joueur depuis EMPTY_PAUSE_MS, la partie vient de se figer ;
  * - "resume" : un joueur est revenu dans une partie figee faute de joueurs ;
+ * - "clear" : un joueur est revenu pendant une pause de l'hote, seule l'heure d'arret tombe ;
  * - "stop" : la veille a dure IDLE_STOP_MS, l'appelant arrete la partie.
  */
 export function idleCheck(roomCode: string, isConnected: (userId: number) => boolean, now = Date.now()): IdleDecision {
@@ -424,6 +430,7 @@ export function idleCheck(roomCode: string, isConnected: (userId: number) => boo
       }
       // Pause de l'hote : elle reste, seule l'heure d'arret tombe.
       ctx.state.idle = null;
+      return "clear";
     }
   } else {
     ctx.emptySince ??= now;
