@@ -143,7 +143,8 @@ export class Bot {
     // elle passait en premier et comparait a la manche deja revelee.
     s.on("game:round:start", p => { void this.onRound(p); this.inspect("game:round:start", p) })
     s.on("game:round:reveal", p => this.onReveal(p))
-    s.on("game:over", () => { this.over = true })
+    // Le classement de fin, pour juger les absents (T22).
+    s.on("game:over", p => { this.over = true; this.overPlayers = p?.players ?? null })
     s.on("room:error", e => this.errors.push(`room:error ${JSON.stringify(e).slice(0, 120)}`))
   }
 

@@ -14,7 +14,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { spawnSync } from "node:child_process"
 import { fileURLToPath } from "node:url"
-import { runRoom } from "./room.mjs"
+import { runGhostRoom, runRoom } from "./room.mjs"
 import { retries } from "./bot.mjs"
 import { botScenarios } from "./scenarios.mjs"
 import { writeReport } from "./report.mjs"
@@ -41,7 +41,7 @@ say(`campagne graine ${seed}`)
 const scenarios = botScenarios(seed)
 say(`\n== ${scenarios.length} salles de bots en parallele ==`)
 const rooms = await Promise.all(scenarios.map(async s => {
-  const r = await runRoom(s)
+  const r = await (s.kind === "fantome" ? runGhostRoom(s) : runRoom(s))
   say(`  ${r.ok ? "[ok]" : "[KO]"} ${r.label} (${r.code ?? "?"}, ${r.stats.duree_s ?? "?"} s)`)
   for (const p of r.problems) say(`       - ${p}`)
   return r

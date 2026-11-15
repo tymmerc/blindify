@@ -43,6 +43,28 @@ export function botScenarios(seed) {
       players: ["Nina", "Oscar", "Paul", "Quentin", "Rose", "Sami"].map(name => ({ name, plan: toujours("juste") })),
     },
     {
+      // T22 : deux joueurs s'en vont en pleine partie. Elle continue pour les
+      // autres, sans les attendre ; ils restent au classement, marques absents.
+      label: "À distance · deux joueurs s'en vont",
+      mode: "friends", rounds: 6, seconds: 10, seed: seed + 6,
+      expectAbsent: ["Zoe", "Yanis"],
+      players: [
+        { name: "Hote2", plan: toujours("juste") },
+        { name: "Alix", plan: toujours("faux") },
+        { name: "Basile", plan: toujours("proche") },
+        { name: "Zoe", plan: avec(toujours("juste"), { 2: { quitte: true } }) },
+        { name: "Yanis", plan: avec(toujours("faux"), { 2: { quitte: true } }) },
+      ],
+    },
+    {
+      // T22 : tout le monde part (partie 829 du 14/11). La partie se fige,
+      // puis s'arrete toute seule au bout de la veille.
+      kind: "fantome",
+      label: "À distance · tout le monde part",
+      rounds: 10, seconds: 10, seed: seed + 7, leaveAt: 2,
+      players: ["Hote3", "Clara", "Dimitri"],
+    },
+    {
       // Personne ne repond : chaque manche va au bout de la minuterie, et
       // l'enchainement ne tient qu'aux "pret" et au filet anti-AFK.
       label: "À distance · minuterie et silences",
