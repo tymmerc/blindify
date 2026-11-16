@@ -1,0 +1,117 @@
+// Captures des points facon Kahoot (T43) sur la pile de test : une partie
+// « À distance » au telephone (375x667), clair et sombre. Max repond juste et
+// vite, avec le bon « qui a ajoute » quand il le sait, pour montrer le detail
+// des points, la serie et l'ecart avec le joueur devant.
+//
+//   campagne-ref.sh <branche> --script /chemin/captures-t43.mjs /dossier/des/captures
+import { chromium } from "@playwright/test"
+import fs from "node:fs"
+import path from "node:path"
+import { Bot, rng } from "./bot.mjs"
+import { oracle, seedUser } from "./testdb.mjs"
+import { APP, newPage, sleep } from "./probe.mjs"
+
+const OUT = process.argv[2] || "/tmp/captures-t43"
+fs.mkdirSync(OUT, { recursive: true })
+const problems = []
+const say = m => console.log(m)
+const PHONE = { viewport: { width: 375, height: 667 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true }
+const ROUNDS = 5
+const SECONDS = 15
+
+async function until(test, ms, what) {
+  const end = Date.now() + ms
+  while (Date.now() < end) {
+    if (await test()) return true
+    await sleep(200)
+  }
+  throw new Error(what)
+}
+
+const setTheme = (page, theme) => page.evaluate(t => document.documentElement.setAttribute("data-theme", t), theme).catch(() => {})
+
+async function snap(page, name) {
+  for (const theme of ["light", "dark"]) {
+    await setTheme(page, theme)
+    await sleep(150)
+    await page.screenshot({ path: path.join(OUT, `${name}-${theme === "light" ? "clair" : "sombre"}.png`) }).catch(e => problems.push(`${name} : ${e.message}`))
+  }
+  await setTheme(page, "light")
+  say(`  capture ${name}`)
+}
+
+const browser = await chromium.launch({ args: ["--autoplay-policy=no-user-gesture-required"] })
+const contexts = []
+const bots = []
+try {
+  const max = await newPage(browser, PHONE, "Max", problems)
+  contexts.push(max.ctx)
+  const sp = max.page
+  await sp.goto(`${APP}/jouer/`, { waitUntil: "networkidle", timeout: 60000 })
+  await sp.locator("input:not([type=file])").first().fill("Max")
+  await sp.getByRole("button", { name: /continuer/i }).click()
+  for (let i = 0; i < 40 && !sp.__uid; i++) await sleep(250)
+  if (!sp.__uid) throw new Error("Max : aucune identite")
+  seedUser(sp.__uid, Array.from({ length: 24 }, (_, i) => 100 + i))
+  await sp.getByRole("button", { name: /^continuer$/i }).click({ timeout: 20000 })
+  await sp.getByText("Créer une partie").click()
+  await sp.waitForURL(/\/modes/, { timeout: 30000 })
+  await sp.getByText("À distance").first().click()
+  await sp.getByTestId("lobby-inviter").waitFor({ timeout: 30000 })
+  const code = await sp.locator("[data-code]").first().getAttribute("data-code")
+  await sp.getByRole("button", { name: String(ROUNDS), exact: true }).click()
+  await sp.getByRole("button", { name: `${SECONDS}s`, exact: true }).click()
+
+  // Tom trouve tout, Ines a moitie : le classement bouge et Max a quelqu'un devant ou derriere.
+  const plans = [() => ({ action: "juste" }), r => ({ action: r % 2 ? "proche" : "juste" })]
+  for (const [i, name] of ["Tom", "Ines"].entries()) {
+    const b = new Bot({ name, plan: plans[i], random: rng(900 + i) })
+    await b.enter()
+    seedUser(b.id, Array.from({ length: 24 }, (_, k) => 200 + i * 50 + k))
+    const j = await b.join(code)
+    if (!j.ok) throw new Error(`${name} ne peut pas entrer`)
+    b.others = [sp.__uid]
+    bots.push(b)
+  }
+  await sleep(2500)
+  await sp.getByRole("button", { name: /lancer la partie/i }).click()
+
+  const lead = bots[0]
+  for (let r = 1; r <= ROUNDS; r++) {
+    await until(() => lead.rounds.has(r), 60000, `manche ${r} absente`)
+    const truth = oracle(code, r)
+    // Memes champs que browser.mjs (remoteCheck), qui sait repondre au telephone.
+    // L'ecran de la manche au telephone : champ « Titre du morceau » (libelle ou texte d'aide selon la vue).
+    const titleField = () => sp.getByLabel("Titre du morceau").or(sp.getByPlaceholder("Titre du morceau")).first()
+    await titleField().waitFor({ timeout: 15000 }).catch(() => problems.push(`manche ${r} : pas de champ titre`))
+    await sleep(1200 + r * 400)
+    await titleField().fill(truth?.title ?? "jsp", { timeout: 3000 }).catch(e => problems.push(`manche ${r} : titre ${e.message.split("\n")[0]}`))
+    // Manche 3 : le titre seul, la moitie des points.
+    if (truth && r !== 3) await sp.getByLabel("Artiste").or(sp.getByPlaceholder("Tape ici...")).first().fill(truth.artist, { timeout: 3000 }).catch(() => {})
+    const owner = truth ? bots.find(b => b.id === truth.ownerId) : null
+    if (owner) await sp.getByRole("button", { name: new RegExp(owner.name) }).first().click({ timeout: 2000 }).catch(() => {})
+    await sp.locator('button[type="submit"]').first().click({ timeout: 3000 }).catch(e => problems.push(`manche ${r} : valider ${e.message.split("\n")[0]}`))
+    await until(() => lead.reveals.has(r), (SECONDS + 10) * 1000, `manche ${r} jamais revelee`)
+    await until(() => sp.getByTestId("reponse-joueur").count().then(n => n >= 3), 10000, `manche ${r} : pas de reponses affichees`)
+    await sleep(1800) // les lignes arrivent une par une
+    if (!(await sp.getByTestId("mes-points").count())) problems.push(`manche ${r} : pas de « Tes points »`)
+    await snap(sp, `distance-reponse-m${r}`)
+    if (r === ROUNDS) break
+    await until(() => sp.locator('[data-step="scores"]').count().then(n => n > 0), 12000, `pas de classement apres la manche ${r}`)
+    await sleep(1800)
+    await snap(sp, `distance-classement-m${r}`)
+  }
+  await until(() => sp.getByTestId("podium").first().isVisible().catch(() => false), 20000, "pas de podium")
+  await sleep(7200)
+  await snap(sp, "distance-podium")
+  if (!(await sp.getByTestId("ecran-fin").count())) problems.push("pas d'ecran de fin")
+} catch (e) {
+  problems.push(`arret : ${e.message.split("\n").slice(0, 3).join(" | ")}`)
+  for (const [i, c] of contexts.entries()) for (const pg of c.pages()) await pg.screenshot({ path: path.join(OUT, `erreur-${i}.png`) }).catch(() => {})
+} finally {
+  for (const b of bots) b.close()
+  for (const c of contexts) await c.close().catch(() => {})
+  await browser.close()
+}
+say(problems.length ? `ECHEC :\n - ${problems.join("\n - ")}` : `OK : captures dans ${OUT}`)
+process.exit(problems.length ? 1 : 0)

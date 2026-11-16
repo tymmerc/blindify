@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { PlayerAvatar } from "@/components/ui/PlayerAvatar"
-import { placeLabel, playerTone, rankNote, rankRows, TOP_SIZE, type RankRow } from "@/lib/roundPacing"
+import { formatPoints, myGap, placeLabel, playerTone, rankNote, rankRows, TOP_SIZE, type RankRow } from "@/lib/roundPacing"
 import type { MultiplayerPlayerState } from "@/lib/types"
 
 export interface RoundScoreboardProps {
@@ -37,7 +37,7 @@ function Count({ from, to, run }: { from: number; to: number; run: boolean }) {
       if (raf.current !== null) cancelAnimationFrame(raf.current)
     }
   }, [from, to, run])
-  return <>{value}</>
+  return <>{formatPoints(value)}</>
 }
 
 function Move({ move }: { move: number }) {
@@ -64,6 +64,7 @@ export function RoundScoreboard({ players, round, meId, large = false }: RoundSc
   const shown = [...rows].sort((a, b) => order(a) - order(b)).filter(r => order(r) < TOP_SIZE)
   const me = meId != null ? rows.find(r => r.userId === meId) : undefined
   const note = rankNote(rows)
+  const gap = myGap(rows, meId)
 
   return (
     <div className="flex w-full flex-col gap-4">
@@ -106,8 +107,8 @@ export function RoundScoreboard({ players, round, meId, large = false }: RoundSc
                   </span>
                   {moved ? <Move move={r.move} /> : null}
                   <span className="flex flex-col items-end leading-none">
-                    <span className={`font-mono text-xs font-bold ${r.gained > 0 ? "text-sage-deep-txt" : "text-sourd"}`}>+{r.gained}</span>
-                    <span className={`font-mono font-bold tabular-nums text-ink ${large ? "text-3xl" : "text-2xl"}`}>
+                    <span className={`whitespace-nowrap font-mono text-xs font-bold ${r.gained > 0 ? "text-sage-deep-txt" : "text-sourd"}`}>+{formatPoints(r.gained)}</span>
+                    <span className={`whitespace-nowrap font-mono font-bold tabular-nums text-ink ${large ? "text-3xl" : "text-2xl"}`}>
                       <Count from={r.score - r.gained} to={r.score} run={moved && !reduce} />
                     </span>
                   </span>
@@ -125,10 +126,11 @@ export function RoundScoreboard({ players, round, meId, large = false }: RoundSc
             <PlayerAvatar name={me.username} avatarUrl={me.avatar} className="h-10 w-10 border-2 border-line text-sm" style={playerTone(me.userId)} />
             <span className="min-w-0 flex-1 truncate font-display text-xl font-semibold text-ink">Toi</span>
             <Move move={me.move} />
-            <span className="font-mono text-2xl font-bold tabular-nums text-ink">{me.score}</span>
+            <span className="whitespace-nowrap font-mono text-2xl font-bold tabular-nums text-ink">{formatPoints(me.score)}</span>
           </div>
         </>
       ) : null}
+      {gap ? <p className="m-0 text-center text-sm font-semibold text-ink-2" data-testid="mon-ecart">{gap}</p> : null}
       {note ? <p className="m-0 text-center font-display text-lg italic text-ink">{note}</p> : null}
     </div>
   )

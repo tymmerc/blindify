@@ -188,31 +188,36 @@ describe("revealRound - scoring", () => {
     previewUrl: null,
   }];
 
+  // Horloge serveur figee : une reponse immediate vaut le plein (T43).
   beforeEach(() => {
+    jest.spyOn(Date, "now").mockReturnValue(1_000_000);
     setupGame({ tracks });
     startNextRound(ROOM);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   it("awards full points for correct title + artist", () => {
     recordAnswer(ROOM, 2, "", null, "Bohemian Rhapsody", "Queen");
     const state = revealRound(ROOM);
     expect(state?.players[2].lastVerdict).toBe("correct");
-    // title(40) + artist(30) + speed(<=30) + source(0) - penalty(0)
-    expect(state?.players[2].score).toBe(2); // 1 titre + 1 artiste
+    expect(state?.players[2].score).toBe(1000);
   });
 
   it("awards partial for title only", () => {
     recordAnswer(ROOM, 2, "", null, "Bohemian Rhapsody", "Wrong Artist");
     const state = revealRound(ROOM);
     expect(state?.players[2].lastVerdict).toBe("close");
-    expect(state?.players[2].score).toBe(1); // titre seul
+    expect(state?.players[2].score).toBe(500); // titre seul : la moitie
   });
 
   it("awards partial for artist only", () => {
     recordAnswer(ROOM, 2, "", null, "Wrong Title", "Queen");
     const state = revealRound(ROOM);
     expect(state?.players[2].lastVerdict).toBe("close");
-    expect(state?.players[2].score).toBe(1); // artiste seul
+    expect(state?.players[2].score).toBe(500); // artiste seul : la moitie
   });
 
   it("awards zero for completely wrong answer", () => {
@@ -278,8 +283,8 @@ describe("revealRound - scoring", () => {
     startNextRound(ROOM);
     recordAnswer(ROOM, 2, "", 3, "Song 1", "Artist 1");
     const state = revealRound(ROOM);
-    // title(40) + artist(30) + speed + source(10)
-    expect(state?.players[2].score).toBe(3); // titre + artiste + bonne source
+    expect(state?.players[2].score).toBe(1200); // titre + artiste + bonne source
+    expect(state?.players[2].lastPoints).toEqual({ answer: 1000, streak: 0, owner: 200, ms: 0 });
   });
 
   // Morceau partage : le joueur 3 l'a apporte ce soir, le joueur 2 l'avait
@@ -295,8 +300,8 @@ describe("revealRound - scoring", () => {
     recordAnswer(ROOM, 2, "", 2, "", "");
     recordAnswer(ROOM, 3, "", 1, "", "");
     const state = revealRound(ROOM);
-    expect(state?.players[1].lastGained).toBe(1);
-    expect(state?.players[2].lastGained).toBe(1);
+    expect(state?.players[1].lastGained).toBe(200);
+    expect(state?.players[2].lastGained).toBe(200);
     expect(state?.players[3].lastGained).toBe(0);
   });
 });
@@ -367,7 +372,7 @@ describe("startNextRound - « qui a ajoute ? » seulement a 3 joueurs ou plus", 
     setupGame({ tracks: owned });
     expect(startNextRound(ROOM)?.currentTrack?.ownerQuestion).toBe(true);
     recordAnswer(ROOM, 2, "", 1, "", "");
-    expect(revealRound(ROOM)?.players[2].lastGained).toBe(1);
+    expect(revealRound(ROOM)?.players[2].lastGained).toBe(200);
   });
 
   it("une seule personne a ramene la musique : pas de question non plus", () => {
@@ -587,7 +592,8 @@ describe("full game flow", () => {
 
     state = revealRound(ROOM)!;
     expect(state.players[1].streak).toBe(2);
-    expect(state.players[2].streak).toBe(1);
+    // T43 : le titre seul a la manche 1 compte dans la serie.
+    expect(state.players[2].streak).toBe(2);
     expect(state.players[3].streak).toBe(1);
 
     expect(nextRevealStep(ROOM)).toBe("next");

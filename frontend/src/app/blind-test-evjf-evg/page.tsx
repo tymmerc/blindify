@@ -39,7 +39,7 @@ const FAQ = [
   },
   {
     q: "Le jeu peut donner des gages ?",
-    a: "Non, il compte les points et c'est tout : un point pour le titre, un pour l'artiste, un pour avoir deviné qui a mis le morceau. Les gages, c'est à la bande de les inventer, par exemple pour le dernier du classement à chaque partie.",
+    a: "Non, il compte les points et c'est tout : le titre et l'artiste (plus on répond vite, plus ça rapporte), et un bonus pour qui devine qui a mis le morceau. Les gages, c'est à la bande de les inventer, par exemple pour le dernier du classement à chaque partie.",
   },
 ]
 

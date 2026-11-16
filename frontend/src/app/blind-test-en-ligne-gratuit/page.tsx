@@ -126,7 +126,7 @@ export default function Page() {
       <Section tag="Bon à savoir" title="Avant de lancer la première partie" tone="amber">
         <ul>
           <Li color="var(--line)"><span>À plusieurs téléphones (autour d'une table ou à distance), les manches durent 10, 15, 20 ou 30 secondes (30 par défaut), et une partie fait 5, 10, 15 ou 20 manches. Dix manches, c'est cinq à dix minutes. Quand vous êtes nombreux, prenez 15 ou 20 manches, sinon tout le monde n'aura pas un de ses morceaux qui passe.</span></Li>
-          <Li color="var(--line)"><span>Un point pour le titre, un pour l'artiste, un pour le bon « qui a mis quoi » (cette dernière question disparaît si une seule personne a importé de la musique). La vitesse ne rapporte rien, elle départage seulement les ex æquo. Sur un seul téléphone, c'est plus simple : 3 points pour titre et artiste, 1 point pour l'un des deux, parties de 5, 10 ou 15 manches.</span></Li>
+          <Li color="var(--line)"><span>Titre et artiste : 1 000 points si tu réponds tout de suite, 500 au dernier moment, la moitié pour l'un des deux. Le bon « qui a mis quoi » en rapporte 200 (cette question disparaît si une seule personne a importé de la musique), et enchaîner les bonnes réponses donne jusqu'à 500 points de bonus. Sur un seul téléphone, c'est plus simple : 3 points pour titre et artiste, 1 point pour l'un des deux, parties de 5, 10 ou 15 manches.</span></Li>
           <Li color="var(--line)"><span>La correction est tolérante : fautes de frappe, accents, le « feat. » oublié, le titre et l'artiste inversés, ça passe.</span></Li>
           <Li color="var(--line)"><span>Spotify et Deezer se mélangent dans la même partie. Un joueur peut venir de l'un, un autre de l'autre.</span></Li>
         </ul>

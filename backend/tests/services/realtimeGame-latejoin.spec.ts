@@ -106,7 +106,10 @@ describe("arrivee pendant la manche 2 sur 3", () => {
     // Manche 3 : il joue comme les autres.
     recordAnswer(ROOM, LATE.userId, "Song 3 Artist 3");
     revealRound(ROOM);
-    expect(getGameState(ROOM)!.players[LATE.userId]).toEqual(expect.objectContaining({ score: 2, rounds: 1, lastVerdict: "correct" }));
+    expect(getGameState(ROOM)!.players[LATE.userId]).toEqual(expect.objectContaining({ rounds: 1, lastVerdict: "correct" }));
+    // Bareme T43 : titre et artiste justes, de 500 a 1000 selon la rapidite.
+    expect(getGameState(ROOM)!.players[LATE.userId].score).toBeGreaterThanOrEqual(500);
+    expect(getGameState(ROOM)!.players[LATE.userId].score).toBeLessThanOrEqual(1000);
   });
 
   it("ne retient pas la revelation anticipee quand tous les joueurs ont repondu", () => {
@@ -233,7 +236,7 @@ describe("qui a mis ce morceau ?", () => {
     // Et sa devinette compte : le proprietaire de la manche 2 est le joueur 2.
     recordAnswer(ROOM, LATE.userId, "", 2);
     revealRound(ROOM);
-    expect(getGameState(ROOM)!.players[LATE.userId].score).toBe(1);
+    expect(getGameState(ROOM)!.players[LATE.userId].score).toBe(200);
   });
 });
 

@@ -160,7 +160,10 @@ describe("arrivee en cours de partie", () => {
 
       answerAll([...clients, lateClient], roomCode, 3);
       await waitFor(() => getGameState(roomCode)?.phase === "REVEAL", 4000, "reveal manche 3");
-      expect(getGameState(roomCode)!.players[late.id].score).toBe(2);
+      // Titre et artiste justes : 500 a 1000 selon la vitesse (bareme roundScoring), pas de serie a sa 1re manche.
+      const lateScore = getGameState(roomCode)!.players[late.id].score;
+      expect(lateScore).toBeGreaterThanOrEqual(500);
+      expect(lateScore).toBeLessThanOrEqual(1000);
       await readyAll([...clients, lateClient], roomCode);
       await waitFor(() => lateClient!.gameOver !== null, 4000, "fin de partie");
 
@@ -174,7 +177,7 @@ describe("arrivee en cours de partie", () => {
         row = rows[0];
         if (!row) await new Promise(r => setTimeout(r, 30));
       }
-      expect(row?.score).toBe(2);
+      expect(row?.score).toBe(lateScore);
 
       // Jamais la reponse avant son reveal, sur tout ce qu'il a recu.
       expect(leakedAnswers(lateFrames)).toEqual([]);

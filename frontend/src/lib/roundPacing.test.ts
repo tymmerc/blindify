@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { answerRows, pacingScreen, rankNote, rankRows, secondsUntil, trackOwner, trackOwnerIds } from "./roundPacing"
+import { answerRows, formatPoints, myGap, pacingScreen, pointsLabel, pointsParts, rankNote, rankRows, secondsUntil, streakLabel, trackOwner, trackOwnerIds } from "./roundPacing"
 import type { MultiplayerPlayerState } from "./types"
 
 const player = (userId: number, extra: Partial<MultiplayerPlayerState> = {}): MultiplayerPlayerState => ({
@@ -141,7 +141,74 @@ describe("classement de la manche", () => {
       player(1, { score: 9 }), player(2, { score: 8 }), player(3, { username: "Bas", score: 7, lastGained: 3 }), player(4, { score: 6 }), player(5, { score: 5 }),
     ])
     expect(rankNote(climb)).toBe("Bas remonte de 2 places.")
-    expect(rankNote(rankRows([player(1, { username: "A", score: 3 }), player(2, { username: "B", score: 2 })]))).toBe("B n'est qu'à 1 point de A.")
+    expect(rankNote(rankRows([player(1, { username: "A", score: 3000 }), player(2, { username: "B", score: 2920 })]))).toBe("B n'est qu'à 80 points de A.")
+    expect(rankNote(rankRows([player(1, { username: "A", score: 3000 }), player(2, { username: "B", score: 2850 })]))).toBeNull()
     expect(rankNote(rankRows([player(1)]))).toBeNull()
+  })
+})
+
+// T43 : points en centaines, detail des points et ecart avec le joueur devant.
+const NNBSP = "\u202f"
+
+describe("points en centaines", () => {
+  it("formatPoints groupe les milliers sans jamais couper", () => {
+    expect(formatPoints(850)).toBe("850")
+    expect(formatPoints(12450)).toBe(`12${NNBSP}450`)
+    expect(formatPoints(0)).toBe("0")
+  })
+
+  it("pointsLabel accorde point au pluriel", () => {
+    expect(pointsLabel(1)).toBe("1 point")
+    expect(pointsLabel(0)).toBe("0 point")
+    expect(pointsLabel(1200)).toBe(`1${NNBSP}200 points`)
+  })
+
+  it("pointsParts : reponse selon la rapidite, serie, qui a ajoute", () => {
+    expect(pointsParts({ points: { answer: 870, streak: 200, owner: 200, ms: 4_230 }, titleOk: true, artistOk: true })).toEqual([
+      { label: "titre et artiste en 4,2 s", points: 870 },
+      { label: "série", points: 200 },
+      { label: "qui a ajouté", points: 200 },
+    ])
+    expect(pointsParts({ points: { answer: 400, streak: 0, owner: 0, ms: 12_000 }, titleOk: false, artistOk: true })).toEqual([
+      { label: "artiste en 12,0 s", points: 400 },
+    ])
+    expect(pointsParts({ points: { answer: 0, streak: 0, owner: 200, ms: 3_000 }, titleOk: false, artistOk: false })).toEqual([
+      { label: "qui a ajouté", points: 200 },
+    ])
+    expect(pointsParts({ points: null, titleOk: true, artistOk: true })).toEqual([])
+  })
+
+  it("streakLabel a partir de 2 manches d'affilee", () => {
+    expect(streakLabel(0)).toBeNull()
+    expect(streakLabel(1)).toBeNull()
+    expect(streakLabel(3)).toBe("Série de 3")
+  })
+
+  it("answerRows passe le detail et la serie", () => {
+    const rows = answerRows(null, [player(1, { lastGained: 1070, lastPoints: { answer: 870, streak: 200, owner: 0, ms: 4_000 }, streak: 3 })])
+    expect(rows[0].points?.answer).toBe(870)
+    expect(rows[0].streak).toBe(3)
+  })
+
+  it("myGap : l'ecart avec le joueur juste devant, ou l'avance du premier", () => {
+    const rows = rankRows([
+      player(1, { username: "Lou", score: 3400 }),
+      player(2, { username: "Max", score: 3280 }),
+      player(3, { username: "Zoé", score: 1500 }),
+    ])
+    expect(myGap(rows, 2)).toBe("À 120 points de Lou.")
+    expect(myGap(rows, 3)).toBe(`À 1${NNBSP}780 points de Max.`)
+    expect(myGap(rows, 1)).toBe("120 points d'avance sur Max.")
+    expect(myGap(rows, null)).toBeNull()
+    expect(myGap(rankRows([player(1)]), 1)).toBeNull()
+  })
+
+  it("myGap : egalite de points, departagee au temps", () => {
+    const rows = rankRows([
+      player(1, { username: "Lou", score: 1000, totalReactionMs: 3_000 }),
+      player(2, { username: "Max", score: 1000, totalReactionMs: 5_000 }),
+    ])
+    expect(myGap(rows, 2)).toBe("À égalité avec Lou, derrière au temps de réponse.")
+    expect(myGap(rows, 1)).toBe("À égalité avec Max, devant au temps de réponse.")
   })
 })

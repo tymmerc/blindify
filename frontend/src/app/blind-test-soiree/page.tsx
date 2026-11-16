@@ -121,7 +121,7 @@ export default function Page() {
           <Li><span><strong>Les playlists privées.</strong> Le piège numéro un. « Mon lien ne marche pas » veut presque toujours dire « ma playlist est privée ». Trente secondes dans Spotify ou Deezer pour la passer en publique.</span></Li>
           <Li><span><strong>Le volume du téléphone-scène.</strong> Le haut-parleur d'un téléphone ne suffit pas à dix personnes qui parlent. Une enceinte Bluetooth change la soirée.</span></Li>
           <Li><span><strong>Les manches trop longues.</strong> 30 secondes, c'est bien pour des morceaux obscurs ; pour une table qui connaît ses classiques, 15 secondes rendent le jeu nerveux et drôle. Tu peux changer entre deux parties.</span></Li>
-          <Li><span><strong>Les mauvais perdants.</strong> La vitesse ne donne pas de point, elle départage seulement les ex æquo. Un point titre, un point artiste, un point « qui a mis quoi ». Dis-le avant de lancer, ça évite le débat.</span></Li>
+          <Li><span><strong>Les mauvais perdants.</strong> Répondre vite rapporte plus : 1 000 points pour le titre et l'artiste trouvés tout de suite, 500 au dernier moment, la moitié pour l'un des deux, 200 pour le bon « qui a mis quoi » et un bonus quand on enchaîne. Dis-le avant de lancer, ça évite le débat.</span></Li>
         </ul>
       </Section>
 

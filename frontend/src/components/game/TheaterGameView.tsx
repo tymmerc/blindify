@@ -11,7 +11,7 @@ import { DeezerCredit } from "./SourceCredits"
 import { SpectatorBadge } from "./SpectatorBadge"
 import { StopGameButton } from "./StopGameButton"
 import { ANSWER_INPUT_PROPS } from "@/lib/answerInput"
-import { VERDICT_LABEL } from "@/lib/roundPacing"
+import { formatPoints, VERDICT_LABEL } from "@/lib/roundPacing"
 import { ABSENT_LABEL } from "@/lib/absence"
 
 type ChatMessage = {
@@ -297,7 +297,7 @@ export function TheaterGameView(props: Props) {
                     </div>
                     <span className="pdots" aria-hidden />
                     <div className="pright">
-                      <span className="pscore">{p.score}</span>
+                      <span className="pscore">{formatPoints(p.score)}</span>
                       <span className="pscore-label">pts</span>
                     </div>
                   </motion.div>
@@ -388,7 +388,7 @@ export function TheaterGameView(props: Props) {
             <div className="theater-field">
               <label className="theater-flabel">
                 Qui a ajouté ?
-                <span className="tag">+1 pt</span>
+                <span className="tag">+200 pts</span>
               </label>
               <div className="theater-picker">
                 {pickerPlayers.map((p, idx) => {
@@ -818,6 +818,7 @@ const theaterStyles = `
   .theater-pchip .pscore{
     font-family:var(--font-display, 'Fraunces'), serif;
     font-size:16px; font-weight:700; color:rgb(var(--c-ink)); line-height:1;
+    white-space:nowrap;
   }
   .theater-pchip.lead .pscore{color:rgb(var(--c-terra-txt))}
   .theater-pchip .pscore-label{
