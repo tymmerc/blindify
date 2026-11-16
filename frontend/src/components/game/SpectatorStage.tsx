@@ -52,7 +52,7 @@ function Scoreboard({ players, phase }: { players: MultiplayerPlayerState[]; pha
                 {p.lastGained ? ` +${formatPoints(p.lastGained)}` : ""}
               </span>
             ) : null}
-            <span className="min-w-14 shrink-0 whitespace-nowrap text-right font-mono font-semibold tabular-nums text-ink">{formatPoints(p.score ?? 0)}</span>
+            <span className="min-w-14 shrink-0 whitespace-nowrap text-right font-display font-semibold tabular-nums text-ink">{formatPoints(p.score ?? 0)}</span>
           </li>
         )
       })}
