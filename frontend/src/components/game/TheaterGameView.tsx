@@ -388,7 +388,7 @@ export function TheaterGameView(props: Props) {
             <div className="theater-field">
               <label className="theater-flabel">
                 Qui a ajouté ?
-                <span className="tag">+1 pt</span>
+                <span className="tag">+200 pts</span>
               </label>
               <div className="theater-picker">
                 {pickerPlayers.map((p, idx) => {
