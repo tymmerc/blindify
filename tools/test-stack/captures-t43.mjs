@@ -16,7 +16,7 @@ fs.mkdirSync(OUT, { recursive: true })
 const problems = []
 const say = m => console.log(m)
 const PHONE = { viewport: { width: 375, height: 667 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true }
-const ROUNDS = 4
+const ROUNDS = 5
 const SECONDS = 15
 
 async function until(test, ms, what) {
