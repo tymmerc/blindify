@@ -34,7 +34,7 @@ async function snap(page, name) {
   for (const theme of ["light", "dark"]) {
     await setTheme(page, theme)
     await sleep(150)
-    await page.screenshot({ path: path.join(OUT, `${name}-${theme === "light" ? "clair" : "sombre"}.png`), fullPage: true }).catch(e => problems.push(`${name} : ${e.message}`))
+    await page.screenshot({ path: path.join(OUT, `${name}-${theme === "light" ? "clair" : "sombre"}.png`) }).catch(e => problems.push(`${name} : ${e.message}`))
   }
   await setTheme(page, "light")
   say(`  capture ${name}`)
@@ -80,25 +80,24 @@ try {
   for (let r = 1; r <= ROUNDS; r++) {
     await until(() => lead.rounds.has(r), 60000, `manche ${r} absente`)
     const truth = oracle(code, r)
-    const title = sp.getByPlaceholder(/morceau qui tourne/i)
-    await title.waitFor({ timeout: 10000 }).catch(() => {})
+    // Memes champs que browser.mjs (remoteCheck), qui sait repondre au telephone.
+    const title = sp.getByLabel("Titre du morceau")
+    await title.waitFor({ timeout: 15000 }).catch(() => problems.push(`manche ${r} : pas de champ titre`))
     await sleep(1200 + r * 400)
-    if (truth && r !== 3) {
-      await title.fill(truth.title, { timeout: 3000 }).catch(() => {})
-      await sp.getByPlaceholder(/qui chante/i).fill(truth.artist, { timeout: 3000 }).catch(() => {})
-      const owner = bots.find(b => b.id === truth.ownerId)
-      if (owner) await sp.getByRole("button", { name: owner.name, exact: true }).first().click({ timeout: 2000 }).catch(() => {})
-    } else {
-      // Manche 3 : le titre seul, la moitie des points.
-      await title.fill(truth?.title ?? "jsp", { timeout: 3000 }).catch(() => {})
-    }
-    await sp.getByRole("button", { name: /valider/i }).first().click({ timeout: 3000 }).catch(() => {})
+    await title.fill(truth?.title ?? "jsp", { timeout: 3000 }).catch(e => problems.push(`manche ${r} : titre ${e.message.split("\n")[0]}`))
+    // Manche 3 : le titre seul, la moitie des points.
+    if (truth && r !== 3) await sp.getByLabel("Artiste").fill(truth.artist, { timeout: 3000 }).catch(() => {})
+    const owner = truth ? bots.find(b => b.id === truth.ownerId) : null
+    if (owner) await sp.getByRole("button", { name: new RegExp(owner.name) }).first().click({ timeout: 2000 }).catch(() => {})
+    await sp.locator('button[type="submit"]').first().click({ timeout: 3000 }).catch(e => problems.push(`manche ${r} : valider ${e.message.split("\n")[0]}`))
     await until(() => lead.reveals.has(r), (SECONDS + 10) * 1000, `manche ${r} jamais revelee`)
-    await sleep(3600) // les reponses arrivent une par une
+    await until(() => sp.getByTestId("reponse-joueur").count().then(n => n >= 3), 10000, `manche ${r} : pas de reponses affichees`)
+    await sleep(1800) // les lignes arrivent une par une
+    await sp.getByTestId("reponse-joueur").filter({ hasText: "toi" }).first().scrollIntoViewIfNeeded().catch(() => {})
     await snap(sp, `distance-reponse-m${r}`)
     if (r === ROUNDS) break
     await until(() => sp.locator('[data-step="scores"]').count().then(n => n > 0), 12000, `pas de classement apres la manche ${r}`)
-    await sleep(1600)
+    await sleep(1800)
     await snap(sp, `distance-classement-m${r}`)
   }
   await until(() => sp.getByTestId("podium").first().isVisible().catch(() => false), 20000, "pas de podium")
