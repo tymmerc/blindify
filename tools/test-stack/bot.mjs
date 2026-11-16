@@ -128,6 +128,10 @@ export class Bot {
       this.onReveal({ round: cur.round })
       return
     }
+    // Les points de la manche (T43) ne sortent qu'a la revelation, meme les siens.
+    const players = Object.values(payload?.players ?? payload?.state?.players ?? {})
+    const guessing = (payload?.phase ?? payload?.state?.phase) === "GUESSING"
+    if (guessing && players.some(p => p?.lastGained != null || p?.lastPoints != null)) this.leaks.push({ round: cur.round, evt, quoi: "points" })
     const mine = this.intents.get(cur.round)
     if (mine?.sentTitle === cur.truth.title) return
     const blob = JSON.stringify(payload ?? "")

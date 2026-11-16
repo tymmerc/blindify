@@ -26,6 +26,18 @@ export interface RoundTrack {
   provider?: string | null
 }
 
+/**
+ * Detail des points d'une manche (T43), au reveal seulement : titre et/ou
+ * artiste selon la rapidite, bonus de serie, bonus « qui a ajoute », et le
+ * temps de reponse mesure par le serveur (ms, null sans reponse).
+ */
+export interface RoundPoints {
+  answer: number
+  streak: number
+  owner: number
+  ms: number | null
+}
+
 export interface PlayerState {
   userId: number
   username: string | null
@@ -45,6 +57,8 @@ export interface PlayerState {
   lastOwnerOk?: boolean
   answerAt?: number | null
   lastGained?: number
+  /** Detail des points de la manche (T43), au reveal seulement. */
+  lastPoints?: RoundPoints
   totalReactionMs?: number
   accuracy?: number
   rounds?: number

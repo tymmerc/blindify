@@ -10,6 +10,7 @@ import {
   type WaitingPlayer,
 } from "./lateJoiners";
 import { answerStep, stepAfter, type RoundPacing } from "./roundPacing";
+import { roundPoints, type RoundPoints } from "./roundScoring";
 
 export type Verdict = "correct" | "close" | "wrong";
 
@@ -53,6 +54,8 @@ export type PlayerState = {
   lastOwnerOk?: boolean;
   answerAt?: number | null;
   lastGained?: number;
+  /** Detail des points de la manche (T43), au reveal seulement. */
+  lastPoints?: RoundPoints;
   /** Cumul des temps de réponse (ms) — sert UNIQUEMENT au départage d'égalité. */
   totalReactionMs?: number;
   /**
@@ -375,6 +378,13 @@ export function resumeGame(roomCode: string, now = Date.now()): GameState | unde
   const delta = now - (ctx.pausedAt ?? now);
   if (ctx.state.timing.startAt) ctx.state.timing.startAt += delta;
   if (ctx.state.timing.revealAt) ctx.state.timing.revealAt += delta;
+  // Les reponses deja recues glissent avec : sans ca, une reponse donnee
+  // avant la pause tombait avant le nouveau startAt et valait 1000 (T43).
+  if (ctx.state.phase === "GUESSING") {
+    for (const player of Object.values(ctx.state.players)) {
+      if (player.answerAt != null) player.answerAt += delta;
+    }
+  }
   if (ctx.state.pacing) ctx.state.pacing = { ...ctx.state.pacing, endsAt: ctx.state.pacing.endsAt + delta };
   ctx.graceUntil = gracesAfterPause(ctx.graceUntil, delta, now + ctx.reconnectGraceMs);
   ctx.pausedAt = null;
@@ -646,6 +656,7 @@ export function startNextRound(roomCode: string, opts?: { forceRound?: number; s
     player.lastTitleOk = undefined;
     player.lastArtistOk = undefined;
     player.lastOwnerOk = undefined;
+    player.lastPoints = undefined;
     player.answerAt = null;
   });
 
@@ -846,6 +857,7 @@ export function revealRound(roomCode: string): GameState | undefined {
 
   const startAt = ctx.state.timing.startAt;
   trackAbsences(ctx);
+  const playing = new Set(playingPlayers(ctx).map(p => p.userId));
 
   Object.values(ctx.state.players).forEach(player => {
     const detail = evaluateGuessDetail(
@@ -862,6 +874,7 @@ export function revealRound(roomCode: string): GameState | undefined {
       maxDuration: ctx.state.timing.revealAt && startAt ? ctx.state.timing.revealAt - startAt : ctx.roundDurationMs,
       // Question pas posee (moins de 3 joueurs) : un vieux client qui l'envoie quand meme ne marque rien.
       ownerGuessed: track.ownerQuestion !== false && isOwnerGuess(track.metadata, player.lastSourceGuess),
+      presenter: !playing.has(player.userId),
     });
     ctx.state.players[player.userId] = {
       ...next,
@@ -960,6 +973,7 @@ export function gameStateSnapshot(roomCode: string): GameState | undefined {
         lastSourceGuess: null,
         lastVerdict: undefined,
         lastGained: undefined,
+        lastPoints: undefined,
         lastTitleOk: undefined,
         lastArtistOk: undefined,
         lastOwnerOk: undefined,
@@ -1011,40 +1025,47 @@ function computeScore(params: {
   maxDuration?: number | null;
   // « Qui a mis quoi » juste : l'un des joueurs a qui revient le morceau (roundOwners.ts).
   ownerGuessed?: boolean;
+  /** L'hote qui presente seulement : il ne marque rien (roundScoring.ts). */
+  presenter?: boolean;
 }): { next: PlayerState; gained: number; verdict: Verdict } {
-  const { previous, detail, answerAt, startAt, maxDuration, ownerGuessed } = params;
+  const { previous, detail, answerAt, startAt, maxDuration, ownerGuessed, presenter } = params;
   const verdict = detail.verdict;
+  // Temps mesure par le serveur : startAt et answerAt sont deux heures serveur.
   const reactionMs = startAt && answerAt ? Math.max(0, answerAt - startAt) : null;
+  const duration = maxDuration ?? DEFAULT_LISTENING_MS;
   const correctTitle = detail.matchedTitle;
   const correctArtist = detail.matchedArtist;
   const correctBoth = correctTitle && correctArtist;
 
-  // Scoring lisible : 1 point par bonne réponse (titre, artiste, "qui a ajouté").
-  // Pas de bonus vitesse ni de multiplicateur streak — le score se lit direct.
-  // La vitesse (totalReactionMs cumulé) sert uniquement de départage d'égalité.
-  const titlePoints = correctTitle ? 1 : 0;
-  const artistPoints = correctArtist ? 1 : 0;
-  const sourceBonus = ownerGuessed ? 1 : 0;
-
-  const gainedPoints = titlePoints + artistPoints + sourceBonus;
+  // Bareme Kahoot (T43) : rapidite, serie, « qui a ajoute ». Le cumul des
+  // temps (totalReactionMs) reste le departage d'egalite.
+  const { points, gained, streak } = roundPoints({
+    titleOk: correctTitle,
+    artistOk: correctArtist,
+    ownerOk: ownerGuessed === true,
+    reactionMs,
+    durationMs: duration,
+    previousStreak: previous.streak,
+    presenter,
+  });
 
   const rounds = previous.rounds + 1;
   const correctCount = previous.correct + (correctBoth ? 1 : 0);
-  const streak = correctBoth ? previous.streak + 1 : 0;
   const next: PlayerState = {
     ...previous,
     rounds,
     correct: correctCount,
     streak,
     bestStreak: Math.max(previous.bestStreak, streak),
-    score: previous.score + gainedPoints,
+    score: previous.score + gained,
     accuracy: rounds > 0 ? Math.round((correctCount / rounds) * 100) : 0,
     lastVerdict: verdict,
     lastTitleOk: correctTitle,
     lastArtistOk: correctArtist,
     lastOwnerOk: ownerGuessed === true,
+    lastPoints: points,
     // Pas de réponse = temps plein du round (ne pas avantager l'inactif au départage)
-    totalReactionMs: (previous.totalReactionMs ?? 0) + (reactionMs ?? maxDuration ?? DEFAULT_LISTENING_MS),
+    totalReactionMs: (previous.totalReactionMs ?? 0) + (reactionMs ?? duration),
   };
-  return { next, gained: gainedPoints, verdict };
+  return { next, gained, verdict };
 }

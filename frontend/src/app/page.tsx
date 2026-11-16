@@ -215,9 +215,9 @@ export default function HomePage() {
             <div className="py-6 last:pb-0">
               <dt className="font-display text-xl font-semibold text-ambre-txt">Le vrai jeu, c'est de deviner qui a mis quoi</dt>
               <dd className="mt-2 text-[1.05rem] leading-relaxed">
-                Trouver le titre et l'artiste rapporte des points, et deviner lequel de tes potes écoute
-                ça en boucle en rapporte un de plus. C'est là que la table se marre. La vitesse ne sert
-                qu'à départager les ex æquo.
+                Trouver le titre et l'artiste rapporte des points, d'autant plus que tu réponds vite, et
+                deviner lequel de tes potes écoute ça en boucle en rapporte 200 de plus. C'est là que la
+                table se marre.
               </dd>
             </div>
           </dl>
@@ -281,7 +281,7 @@ export default function HomePage() {
               {
                 n: "3",
                 t: "On joue",
-                b: "À plusieurs téléphones, la partie est générée à partir des playlists de tout le monde : extraits courts, réponse au clavier, un point pour le titre, un pour l'artiste, un pour le bon coupable, et la vitesse départage en cas d'égalité.",
+                b: "À plusieurs téléphones, la partie est générée à partir des playlists de tout le monde : extraits courts, réponse au clavier, jusqu'à 1 000 points pour le titre et l'artiste selon la vitesse, 200 pour le bon coupable, et un bonus quand on enchaîne les bonnes réponses.",
               },
             ].map(step => (
               <li key={step.n} className="border-t-2 border-[rgb(var(--c-on-ink)/.45)] pt-5">

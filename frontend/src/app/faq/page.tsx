@@ -105,7 +105,7 @@ const FAQ: Array<{ q: string; a: string; more?: ReactNode }> = [
   },
   {
     q: "Comment le jeu reconnaît-il mes réponses ?",
-    a: "Tu tapes le titre (et l'artiste en bonus) : la correction est tolérante aux fautes de frappe, aux accents, aux \"feat.\" et aux inversions titre/artiste. Trouver le titre ET l'artiste rapporte plus de points, et la vitesse départage les égalités.",
+    a: "Tu tapes le titre (et l'artiste en bonus) : la correction est tolérante aux fautes de frappe, aux accents, aux \"feat.\" et aux inversions titre/artiste. Trouver le titre ET l'artiste rapporte plus de points. À plusieurs téléphones, répondre vite en rapporte aussi.",
   },
   {
     q: "blindz.app, c'est le retour de l'ancien site Blindz qui a fermé en 2021 ?",

@@ -2,7 +2,7 @@
 
 import { motion, useReducedMotion } from "framer-motion"
 import { PlayerAvatar } from "@/components/ui/PlayerAvatar"
-import { answerRows, playerTone, trackOwner, VERDICT_LABEL, type AnswerRow } from "@/lib/roundPacing"
+import { answerRows, formatPoints, playerTone, pointsParts, streakLabel, trackOwner, VERDICT_LABEL, type AnswerRow } from "@/lib/roundPacing"
 import type { MultiplayerGameState, MultiplayerPlayerState } from "@/lib/types"
 import { DeezerCredit, SpotifyTrackLink } from "../SourceCredits"
 
@@ -29,6 +29,28 @@ function GuessPart({ text, ok }: { text: string; ok: boolean | null }) {
     <span className={ok === false ? "underline decoration-wavy decoration-rouge-txt decoration-[1.5px] underline-offset-[5px]" : undefined}>
       {text}
     </span>
+  )
+}
+
+/** Le detail de ses points (T43), en petit, sur son propre ecran seulement. */
+function PointsDetail({ row }: { row: AnswerRow }) {
+  const parts = pointsParts(row)
+  const streak = streakLabel(row.streak)
+  if (parts.length === 0 && !streak) return null
+  return (
+    <p className="m-0 mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs text-ink-2" data-testid="detail-points">
+      {parts.map((part, i) => (
+        <span key={part.label} className="whitespace-nowrap">
+          {i > 0 ? <span aria-hidden className="mr-2 text-sourd">·</span> : null}
+          {part.label} <b className="font-mono text-ink">+{formatPoints(part.points)}</b>
+        </span>
+      ))}
+      {streak ? (
+        <span className="whitespace-nowrap rounded border-[1.5px] border-line/60 px-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-terra-txt" data-testid="ma-serie">
+          {streak}
+        </span>
+      ) : null}
+    </p>
   )
 }
 
@@ -71,9 +93,10 @@ function Row({ row, me, index, reduce }: { row: AnswerRow; me: boolean; index: n
             </>
           )}
         </p>
+        {me ? <PointsDetail row={row} /> : null}
       </div>
       <div className="flex flex-col items-end gap-1">
-        <span className={`font-mono text-lg font-bold tabular-nums ${row.gained > 0 ? "text-ink" : "text-sourd"}`}>+{row.gained}</span>
+        <span className={`whitespace-nowrap font-mono text-lg font-bold tabular-nums ${row.gained > 0 ? "text-ink" : "text-sourd"}`}>+{formatPoints(row.gained)}</span>
         <span className={`whitespace-nowrap rounded-full border-[1.5px] border-line px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] ${VERDICT_PILL[row.verdict]}`}>
           {VERDICT_LABEL[row.verdict]}
         </span>

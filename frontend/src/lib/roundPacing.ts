@@ -1,7 +1,7 @@
 // T38 : le rythme entre deux manches, facon Kahoot. Le serveur decide quand on
 // passe d'un ecran a l'autre (state.pacing, timing.startAt) ; ce fichier dit
 // seulement quel ecran montrer et prepare ce qu'il affiche.
-import type { MultiplayerGameState, MultiplayerPlayerState } from "@/lib/types"
+import type { MultiplayerGameState, MultiplayerPlayerState, RoundPoints } from "@/lib/types"
 
 export type PacingScreen = "lobby" | "countdown" | "play" | "answer" | "scores" | "finished"
 
@@ -29,6 +29,18 @@ export function secondsUntil(ts: number | null | undefined, now: number): number
 }
 
 export type Verdict = "correct" | "close" | "wrong"
+
+const POINTS_FORMAT = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 })
+
+/** Points en centaines a la francaise : « 1 350 » (espace insecable fine, jamais coupe). */
+export function formatPoints(n: number): string {
+  return POINTS_FORMAT.format(Math.round(n))
+}
+
+/** « 1 point », « 120 points ». */
+export function pointsLabel(n: number): string {
+  return `${formatPoints(n)} point${Math.abs(n) > 1 ? "s" : ""}`
+}
 
 /** Libelles du jeu (les memes qu'avant T38). */
 export const VERDICT_LABEL: Record<Verdict, string> = {
@@ -58,7 +70,7 @@ export function trackOwnerIds(metadata: Record<string, unknown> | null | undefin
 
 type Player = Pick<
   MultiplayerPlayerState,
-  "userId" | "username" | "avatar" | "score" | "hasAnswered" | "lastGuess" | "lastGuessTitle" | "lastGuessArtist" | "lastSourceGuess" | "lastVerdict" | "lastGained" | "lastTitleOk" | "lastArtistOk" | "lastOwnerOk" | "totalReactionMs" | "disconnected"
+  "userId" | "username" | "avatar" | "score" | "hasAnswered" | "lastGuess" | "lastGuessTitle" | "lastGuessArtist" | "lastSourceGuess" | "lastVerdict" | "lastGained" | "lastPoints" | "streak" | "lastTitleOk" | "lastArtistOk" | "lastOwnerOk" | "totalReactionMs" | "disconnected"
 >
 
 export interface TrackOwner {
@@ -105,6 +117,10 @@ export interface AnswerRow {
   artistOk: boolean | null
   verdict: Verdict
   gained: number
+  /** Detail des points (T43) ; null avec un serveur d'avant. */
+  points: RoundPoints | null
+  /** Serie en cours apres cette manche. */
+  streak: number
   /** Rien tape du tout : « a passé » s'il a repondu, sinon « pas de réponse ». */
   empty: boolean
   answered: boolean
@@ -152,6 +168,8 @@ export function answerRows(
         artistOk,
         verdict,
         gained: p.lastGained ?? 0,
+        points: p.lastPoints ?? null,
+        streak: p.streak ?? 0,
         empty: !title && !artist,
         answered: p.hasAnswered,
         isOwner,
@@ -159,6 +177,39 @@ export function answerRows(
       }
     })
     .sort((a, b) => VERDICT_ORDER[a.verdict] - VERDICT_ORDER[b.verdict] || b.gained - a.gained)
+}
+
+/** Une ligne du detail des points : « titre et artiste en 4,2 s », « +870 ». */
+export interface PointsPart {
+  label: string
+  points: number
+}
+
+/** « 4,2 s » */
+function seconds(ms: number): string {
+  return `${(ms / 1000).toFixed(1).replace(".", ",")} s`
+}
+
+/**
+ * Le detail des points d'une manche (T43), en petit sous la reponse du joueur :
+ * la reponse selon sa rapidite, la serie, « qui a ajoute ». Vide sans points.
+ */
+export function pointsParts(row: Pick<AnswerRow, "points" | "titleOk" | "artistOk">): PointsPart[] {
+  const p = row.points
+  if (!p) return []
+  const parts: PointsPart[] = []
+  if (p.answer > 0) {
+    const what = row.titleOk && row.artistOk ? "titre et artiste" : row.titleOk ? "titre" : row.artistOk ? "artiste" : "réponse"
+    parts.push({ label: p.ms != null ? `${what} en ${seconds(p.ms)}` : what, points: p.answer })
+  }
+  if (p.streak > 0) parts.push({ label: "série", points: p.streak })
+  if (p.owner > 0) parts.push({ label: "qui a ajouté", points: p.owner })
+  return parts
+}
+
+/** « Série de 3 » a partir de deux manches d'affilee, null sinon. */
+export function streakLabel(streak: number): string | null {
+  return streak >= 2 ? `Série de ${streak}` : null
 }
 
 export interface RankRow {
@@ -199,6 +250,27 @@ export function rankRows(players: readonly Player[]): RankRow[] {
 
 export const TOP_SIZE = 5
 
+/** Ecart sous lequel deux joueurs sont « au coude a coude » (une reponse rapporte 250 a 1000). */
+export const CLOSE_GAP = 100
+
+/**
+ * L'ecart du joueur avec celui juste devant lui, ou d'avance quand il mene
+ * (T43). null s'il n'est pas classe ou s'il joue seul.
+ */
+export function myGap(rows: readonly RankRow[], meId: number | null): string | null {
+  if (meId == null) return null
+  const me = rows.find(r => r.userId === meId)
+  if (!me || rows.length < 2) return null
+  if (me.rank === 0) {
+    const second = rows[1]
+    const lead = me.score - second.score
+    return lead > 0 ? `${pointsLabel(lead)} d'avance sur ${second.username}.` : `À égalité avec ${second.username}, devant au temps de réponse.`
+  }
+  const ahead = rows[me.rank - 1]
+  const gap = ahead.score - me.score
+  return gap > 0 ? `À ${pointsLabel(gap)} de ${ahead.username}.` : `À égalité avec ${ahead.username}, derrière au temps de réponse.`
+}
+
 /** Une phrase sur ce qui vient de bouger au classement (null si rien de notable). */
 export function rankNote(rows: readonly RankRow[]): string | null {
   if (rows.length < 2) return null
@@ -209,7 +281,7 @@ export function rankNote(rows: readonly RankRow[]): string | null {
   const climber = [...rows].sort((a, b) => b.move - a.move)[0]
   if (climber && climber.move >= 2) return `${climber.username} remonte de ${climber.move} places.`
   const gap = leader.score - rows[1].score
-  if (gap === 1) return `${rows[1].username} n'est qu'à 1 point de ${leader.username}.`
+  if (gap > 0 && gap <= CLOSE_GAP) return `${rows[1].username} n'est qu'à ${pointsLabel(gap)} de ${leader.username}.`
   if (gap === 0 && leader.score > 0) return `${leader.username} et ${rows[1].username} sont à égalité.`
   return null
 }

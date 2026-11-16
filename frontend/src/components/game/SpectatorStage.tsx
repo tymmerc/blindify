@@ -6,6 +6,7 @@ import { VinylDisc } from "@/components/game/VinylDisc"
 import { GamePodium } from "@/components/game/pacing/GamePodium"
 import { RevealPanel } from "@/components/game/pacing/RevealPanel"
 import { RoundCountdown } from "@/components/game/pacing/RoundCountdown"
+import { formatPoints } from "@/lib/roundPacing"
 import { rankedPlayers, secondsLeft, type SpectatorMember } from "@/lib/spectatorState"
 import type { MultiplayerGameState, MultiplayerPlayerState } from "@/lib/types"
 
@@ -48,10 +49,10 @@ function Scoreboard({ players, phase }: { players: MultiplayerPlayerState[]; pha
             ) : verdict ? (
               <span className="text-[11px] font-bold uppercase tracking-[0.12em]" style={{ color: verdict.color }}>
                 {verdict.text}
-                {p.lastGained ? ` +${p.lastGained}` : ""}
+                {p.lastGained ? ` +${formatPoints(p.lastGained)}` : ""}
               </span>
             ) : null}
-            <span className="w-14 shrink-0 text-right font-display font-semibold tabular-nums text-ink">{p.score ?? 0}</span>
+            <span className="min-w-14 shrink-0 whitespace-nowrap text-right font-mono font-semibold tabular-nums text-ink">{formatPoints(p.score ?? 0)}</span>
           </li>
         )
       })}

@@ -2,6 +2,7 @@
 
 import type { GameModeConfig } from "@/lib/gameModes"
 import type { MultiplayerParticipant } from "@/lib/types"
+import { formatPoints } from "@/lib/roundPacing"
 
 export function ParticipantPanel({
   participants,
@@ -34,7 +35,7 @@ export function ParticipantPanel({
             <span aria-hidden className="flex-1 border-b-2 border-dotted border-[rgb(var(--c-line)/.45)]" />
             {showScores ? (
               <span className="text-xs font-bold uppercase tracking-[0.14em] text-ink-2">
-                {scores[participant.user_id]?.score ?? 0} pts · {scores[participant.user_id]?.accuracy ?? 0}%
+                {formatPoints(scores[participant.user_id]?.score ?? 0)} pts · {scores[participant.user_id]?.accuracy ?? 0}%
               </span>
             ) : (
               <span className="text-xs font-bold uppercase tracking-[0.14em] text-sage-txt">

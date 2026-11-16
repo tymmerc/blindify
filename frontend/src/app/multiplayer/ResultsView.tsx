@@ -12,7 +12,7 @@ import { api } from "@/lib/api"
 import { endMoments, type EndMoments } from "@/lib/endMoments"
 import type { RoomRoundsSummary } from "@/lib/apiClient"
 import type { FeedbackContext } from "@/lib/feedback"
-import { placeLabel, playerTone } from "@/lib/roundPacing"
+import { formatPoints, placeLabel, playerTone } from "@/lib/roundPacing"
 import { ABSENT_LABEL } from "@/lib/absence"
 import type { SoloTrack } from "@/lib/types"
 
@@ -148,7 +148,7 @@ function buildMoments(leaderboard: ResultsEntry[], moments: EndMoments, times: M
   }
   const streaky = [...leaderboard].sort((a, b) => (b.bestStreak ?? 0) - (a.bestStreak ?? 0))[0]
   if (streaky && (streaky.bestStreak ?? 0) >= 2) {
-    out.push({ key: "streak", label: "La plus belle série", who: streaky, main: nameOf(streaky), detail: `${streaky.bestStreak} manches trouvées d'affilée` })
+    out.push({ key: "streak", label: "La plus belle série", who: streaky, main: nameOf(streaky), detail: `${streaky.bestStreak} manches d'affilée avec le titre ou l'artiste` })
   }
   return out
 }
@@ -188,7 +188,7 @@ function FullRanking({ leaderboard, currentUserId }: { leaderboard: ResultsEntry
               {entry.absent ? <span className="ml-1.5 text-xs font-bold uppercase tracking-[0.1em] text-ink-2">{ABSENT_LABEL}</span> : null}
             </span>
             <span className="text-right">
-              <b className="font-mono text-base text-ink">{entry.score}</b>
+              <b className="whitespace-nowrap font-mono text-base text-ink">{formatPoints(entry.score)}</b>
               <span className="ml-1 text-xs text-ink-2">pts</span>
             </span>
           </li>
@@ -274,7 +274,7 @@ export function ResultsView({
   const handleShare = async () => {
     const winner = leaderboard[0]
     const text = winner
-      ? `${nameOf(winner)} gagne le blind test sur Blindz !${me ? ` Moi : ${placeLabel(myRank)} avec ${me.score} pts.` : ""}`
+      ? `${nameOf(winner)} gagne le blind test sur Blindz !${me ? ` Moi : ${placeLabel(myRank)} avec ${formatPoints(me.score)} pts.` : ""}`
       : "On vient de faire un blind test sur Blindz !"
     const url = "https://blindz.app"
     try {

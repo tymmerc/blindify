@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { motion, useReducedMotion } from "framer-motion"
 import { PlayerAvatar } from "@/components/ui/PlayerAvatar"
-import { placeLabel, playerTone } from "@/lib/roundPacing"
+import { formatPoints, placeLabel, playerTone } from "@/lib/roundPacing"
 import { ConfettiBurst } from "../ConfettiBurst"
 
 export interface PodiumPlayer {
@@ -107,7 +107,7 @@ export function GamePodium({ ranked, meId = null, large = false }: GamePodiumPro
                   {name(player)}
                   {isMe ? <span className="ml-1 font-sans text-xs font-bold">(toi)</span> : null}
                 </span>
-                <span className="font-mono text-base font-bold text-ink">{player.score} pts</span>
+                <span className="whitespace-nowrap font-mono text-sm font-bold text-ink sm:text-base">{formatPoints(player.score)} pts</span>
               </motion.div>
               <div
                 className={`flex w-full items-start justify-center rounded-t-md border-2 border-b-0 border-line pt-2 font-display text-4xl font-bold shadow-[4px_0_0_rgb(var(--c-shadow)/.18)] ${BLOCK[place].height} ${BLOCK[place].tone}`}
@@ -130,7 +130,7 @@ export function GamePodium({ ranked, meId = null, large = false }: GamePodiumPro
             <span key={p.userId} className="whitespace-nowrap">
               {i > 0 ? <span aria-hidden> · </span> : null}
               {placeLabel(i + 3)} {name(p)}
-              {p.userId === meId ? " (toi)" : ""} <b className="font-mono text-ink">{p.score}</b>
+              {p.userId === meId ? " (toi)" : ""} <b className="font-mono text-ink">{formatPoints(p.score)}</b>
             </span>
           ))}
         </motion.p>

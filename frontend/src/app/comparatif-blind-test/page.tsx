@@ -120,7 +120,7 @@ const FAQ = [
   },
   {
     q: "Quelle alternative à Blinest pour jouer entre amis avec ses propres playlists ?",
-    a: "Blinest permet aussi de jouer sur sa musique : avec un compte, on monte une playlist Blinest en important une playlist Deezer ou en ajoutant les titres un par un, on la rattache à une room, puis on y fait venir ses amis (un mot de passe garde la room privée). Sur blindz.app, il n'y a rien à monter avant : à plusieurs téléphones, chacun colle le lien de son profil ou d'une playlist publique Spotify ou Deezer au moment de jouer, sans compte, la partie mélange la musique de toute la bande, et un point de plus va à qui devine lequel de ses potes a ramené le morceau. On y joue autour d'une table (la télé diffuse, chacun répond sur son téléphone), à distance avec un code ou sur un seul téléphone, et il n'y a pas de pub. Ce qui est dit de Blinest vient de ses pages et de son code, lus le 5 octobre 2026.",
+    a: "Blinest permet aussi de jouer sur sa musique : avec un compte, on monte une playlist Blinest en important une playlist Deezer ou en ajoutant les titres un par un, on la rattache à une room, puis on y fait venir ses amis (un mot de passe garde la room privée). Sur blindz.app, il n'y a rien à monter avant : à plusieurs téléphones, chacun colle le lien de son profil ou d'une playlist publique Spotify ou Deezer au moment de jouer, sans compte, la partie mélange la musique de toute la bande, et des points en plus vont à qui devine lequel de ses potes a ramené le morceau. On y joue autour d'une table (la télé diffuse, chacun répond sur son téléphone), à distance avec un code ou sur un seul téléphone, et il n'y a pas de pub. Ce qui est dit de Blinest vient de ses pages et de son code, lus le 5 octobre 2026.",
   },
   {
     q: "blindz.app et blindz.fr, c'est le même site ?",
@@ -258,8 +258,8 @@ export default function Page() {
         <h3>blindz.app</h3>
         <p>
           Chaque joueur colle le lien de son profil ou d'une playlist publique Spotify ou Deezer, sans se connecter, et
-          la partie est générée avec les morceaux de tout le monde. Un point pour le titre, un pour l'artiste, un pour
-          « qui a mis quoi ». Trois façons de jouer à plusieurs : autour d'une table (écran central + QR codes), un seul téléphone à
+          la partie est générée avec les morceaux de tout le monde. Des points pour le titre et l'artiste, plus si on répond
+          vite, et pour « qui a mis quoi ». Trois façons de jouer à plusieurs : autour d'une table (écran central + QR codes), un seul téléphone à
           doigt posé, à distance avec un code ; plus un mode solo et un mode pour jouer avec sa communauté en stream. Gratuit, sans pub, sans compte, jusqu'à 12 joueurs par salle.{" "}
           <Link href="/faq/">Notre FAQ</Link>, et le pas-à-pas du <Link href="/blind-test-spotify/">blind test Spotify</Link>.
         </p>
@@ -268,7 +268,7 @@ export default function Page() {
       <Section tag="Quand choisir blindz.app" title="Ce qu'on fait que les autres ne font pas" tone="amber">
         <ul>
           <Li color="var(--line)"><span><strong>Les playlists de tous les joueurs, mélangées</strong> : chacun colle son lien Spotify ou Deezer, sans se connecter, et la partie se joue sur la musique de toute la bande.</span></Li>
-          <Li color="var(--line)"><span><strong>Deviner qui a mis quoi</strong> : un point de plus pour qui trouve lequel de ses potes a ramené le morceau. C'est ce qui fait rire la table.</span></Li>
+          <Li color="var(--line)"><span><strong>Deviner qui a mis quoi</strong> : des points en plus pour qui trouve lequel de ses potes a ramené le morceau. C'est ce qui fait rire la table.</span></Li>
           <Li color="var(--line)"><span><strong>Autour d'une table</strong> : la télé ou un PC diffuse la musique, chacun répond sur son téléphone en scannant un QR code, jusqu'à 12 joueurs.</span></Li>
           <Li color="var(--line)"><span><strong>Rien à préparer</strong> : pas de pack à choisir, pas de quiz à écrire. Un pseudo, un lien, et la partie est prête.</span></Li>
           <Li color="var(--line)"><span><strong>Vraiment gratuit</strong> : sans pub, sans abonnement, sans compte, sur iPhone, Android et PC.</span></Li>

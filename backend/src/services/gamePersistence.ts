@@ -122,7 +122,7 @@ function snapshotResponses(state: GameState): { round: number; rows: ResponseRow
         verdict: player.lastVerdict ?? null,
         sourceGuess,
         sourceOwner,
-        // Meme regle que computeScore : un point si la devinette vise l'un des proprietaires.
+        // Meme regle que computeScore : juste si la devinette vise l'un des proprietaires.
         sourceCorrect: sourceOwner != null && sourceGuess != null ? owners.includes(sourceGuess) : null,
       };
     });
@@ -225,8 +225,9 @@ export async function persistGameResults(state: GameState, sessionId: number | u
          SET score = EXCLUDED.score, accuracy = EXCLUDED.accuracy, best_streak = EXCLUDED.best_streak`,
         [sessionId, player.userId, player.score, player.accuracy, player.bestStreak],
       );
-      // XP gratifiant : avec le scoring 1pt, le score brut (0-N) ferait stagner
-      // les niveaux. On recompense les bonnes reponses + la meilleure serie.
+      // XP : les bonnes reponses + la meilleure serie, jamais les points de la
+      // partie (bareme Kahoot depuis T43, 1 point par element avant) : l'XP
+      // garde la meme echelle d'une partie a l'autre.
       const xpGain = player.correct * 10 + player.bestStreak * 5;
       // Aggregate lifetime stats (mirrors the solo persistSoloResult pattern).
       // total_reaction_ms alimente la carte "Temps de reaction" (sinon = 0 a vie).
