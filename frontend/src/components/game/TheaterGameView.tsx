@@ -816,9 +816,9 @@ const theaterStyles = `
   }
   .theater-pchip .pright{display:flex; flex-direction:column; align-items:flex-end; gap:2px}
   .theater-pchip .pscore{
-    font-family:var(--font-mono, 'JetBrains Mono'), monospace;
-    font-size:15px; font-weight:700; color:rgb(var(--c-ink)); line-height:1;
-    white-space:nowrap; font-variant-numeric:tabular-nums;
+    font-family:var(--font-display, 'Fraunces'), serif;
+    font-size:16px; font-weight:700; color:rgb(var(--c-ink)); line-height:1;
+    white-space:nowrap;
   }
   .theater-pchip.lead .pscore{color:rgb(var(--c-terra-txt))}
   .theater-pchip .pscore-label{
