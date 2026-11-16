@@ -48,7 +48,7 @@ try {
   contexts.push(max.ctx)
   const sp = max.page
   await sp.goto(`${APP}/jouer/`, { waitUntil: "networkidle", timeout: 60000 })
-  await sp.locator("input").first().fill("Max")
+  await sp.locator("input:not([type=file])").first().fill("Max")
   await sp.getByRole("button", { name: /continuer/i }).click()
   for (let i = 0; i < 40 && !sp.__uid; i++) await sleep(250)
   if (!sp.__uid) throw new Error("Max : aucune identite")
