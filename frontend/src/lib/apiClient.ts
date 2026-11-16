@@ -333,8 +333,13 @@ export const clientApi = {
     return request<RoomRoundsSummary>(`/api/rooms/${code}/rounds`, { method: "GET", cache: "no-store" })
   },
   /** « Revenir à la salle » (T40) : l'hote ramene tout le monde dans la salle d'attente. */
-  async backToLobby(code: string): Promise<{ roomCode: string; status: "waiting" }> {
-    return request(`/api/rooms/${encodeURIComponent(code)}/lobby`, { method: "POST" })
+  /** `stop` (T42) : arrete aussi une partie en cours (hote seulement, verifie par le serveur). */
+  async backToLobby(code: string, opts?: { stop?: boolean }): Promise<{ roomCode: string; status: "waiting" }> {
+    return request(`/api/rooms/${encodeURIComponent(code)}/lobby`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stop: opts?.stop === true }),
+    })
   },
   async updateRoomConfig(
     code: string,

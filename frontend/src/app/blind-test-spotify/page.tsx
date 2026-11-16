@@ -54,7 +54,7 @@ const FAQ = [
   },
   {
     q: "La musique est jouée en entier ?",
-    a: "Non, ce sont des extraits courts, de 10 à 30 secondes selon le réglage de la partie (20 secondes par défaut). C'est un blind test, pas une écoute.",
+    a: "Non, ce sont des extraits courts, de 10 à 30 secondes selon le réglage de la partie (30 secondes par défaut). C'est un blind test, pas une écoute.",
   },
 ]
 

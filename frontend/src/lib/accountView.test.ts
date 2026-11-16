@@ -23,6 +23,9 @@ describe("gameResultLine", () => {
   it("dit « En cours » pour une partie pas finie", () => {
     expect(gameResultLine({ mode: "friends", state: "in_progress", totalRounds: 12, correct: 3 })).toBe("En cours")
   })
+  it("dit « Interrompue » pour une partie arrêtée avant la fin (T42)", () => {
+    expect(gameResultLine({ mode: "friends", state: "abandoned", totalRounds: 10, correct: 2 })).toBe("Interrompue")
+  })
 })
 
 describe("statsLine", () => {

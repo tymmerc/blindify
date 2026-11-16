@@ -238,6 +238,36 @@ export function broadcastGameOver(io: IOServer, roomCode: string) {
   setTimeout(() => clearGameIfFinished(roomCode, live), 60_000).unref?.();
 }
 
+/**
+ * L'hote arrete la partie (T42) : tous ses minuteurs tombent, avant que son
+ * etat soit efface. Rien de l'ancienne partie ne tire ensuite, meme sur une
+ * nouvelle partie relancee dans la meme salle.
+ */
+export function stopGameTimers(roomCode: string): void {
+  clearRevealTimer(roomCode);
+  clearPacingTimer(roomCode);
+  clearGraceTimer(roomCode);
+}
+
+/**
+ * Apres une reprise (hote, joueur revenu d'une veille T22) : le minuteur de
+ * la phase en cours repart, la revelation anticipee aussi si personne n'est a
+ * attendre, et les liens d'extraits sont rafraichis (une longue pause a pu les
+ * faire expirer, T35). Sans effet si la partie est encore en pause.
+ */
+export function rescheduleAfterResume(io: IOServer, roomCode: string): void {
+  const state = getGameState(roomCode);
+  if (!state || state.paused) return;
+  if (state.phase === "GUESSING" && state.timing.revealAt) {
+    scheduleReveal(io, roomCode, state.timing.revealAt, state.currentRound);
+    // Les graces de reconnexion ont ete gelees avec le chrono (resumeGame).
+    tryEarlyReveal(io, roomCode);
+  } else if (state.phase === "REVEAL") {
+    schedulePacingStep(io, roomCode);
+  }
+  void refreshRoundPreviews(io, roomCode);
+}
+
 export function clearRevealTimer(roomCode: string) {
   const existing = revealTimers.get(roomCode);
   if (existing) {
@@ -324,6 +354,7 @@ function finishReveal(io: IOServer, roomCode: string, revealed: GameState): void
     pacing: revealed.pacing ?? null,
   });
   void persistRoundResponses(revealed, getSessionId(roomCode));
+  if (revealed.idle) logger.info("game_idle_paused", { roomCode, round: revealed.currentRound, reason: revealed.idle.reason });
   if (revealed.phase === "FINISHED") {
     broadcastGameOver(io, roomCode);
   } else if (revealed.phase === "REVEAL" && !revealed.paused) {

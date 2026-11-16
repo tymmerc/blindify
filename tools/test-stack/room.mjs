@@ -7,7 +7,7 @@
 // Rend { label, code, ok, problems, stats } ; ne jette jamais : une salle qui
 // plante est un verdict, pas une exception qui arreterait la campagne.
 import { Bot, api, rng } from "./bot.mjs"
-import { seedUser, sessionFacts, oracle } from "./testdb.mjs"
+import { seedUser, sessionFacts, oracle, psql } from "./testdb.mjs"
 
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 const EXPECTED = { juste: "correct", proche: "close", faux: "wrong" }
@@ -24,7 +24,7 @@ function startLeaks(code, res) {
   return out
 }
 
-export async function runRoom({ label, mode, hostPlays = false, players, rounds = 5, seconds = 10, seed = 1, late = null, tracksEach = 8 }) {
+export async function runRoom({ label, mode, hostPlays = false, players, rounds = 5, seconds = 10, seed = 1, late = null, tracksEach = 8, expectAbsent = null }) {
   const problems = []
   const bad = m => problems.push(m)
   const random = rng(seed)
@@ -147,6 +147,7 @@ export async function runRoom({ label, mode, hostPlays = false, players, rounds 
     }
     const partis = bots.filter(b => b.left)
     for (const b of partis) if (!facts.participants.some(p => p.userId === b.id)) bad(`${b.name} (parti en cours) a disparu des participants`)
+    if (expectAbsent) judgeAbsents(bots, expectAbsent, bad, stats)
     stats.reponses_verifiees = verifiees
     // Joueurs revenus d'une coupure apres la revelation de leur manche : ils
     // n'ont pas repondu (comme le client web), on les compte pour les voir.
@@ -192,6 +193,99 @@ function judgeLateBot(b, facts, bad, stats) {
   }
   if (b.leaks.length) bad(`${b.name} a vu la reponse avant la revelation (${b.leaks.map(l => `m${l.round} ${l.quoi} dans ${l.evt}`).join(", ")})`)
   for (const e of b.errors) bad(`${b.name} : ${e}`)
+}
+
+/**
+ * Joueurs absents (T22) : au classement de fin recu par un joueur reste
+ * jusqu'au bout, les partis sont toujours la, marques absents, et les autres non.
+ */
+function judgeAbsents(bots, expectAbsent, bad, stats) {
+  const final = bots.find(b => !b.left && !b.isPresenter && b.overPlayers)?.overPlayers
+  if (!final) { bad("aucun classement de fin recu pour juger les absents"); return }
+  stats.absents = []
+  for (const b of bots) {
+    if (b.isPresenter) continue
+    const p = final[b.id]
+    const want = expectAbsent.includes(b.name)
+    if (!p) { bad(`${b.name} a disparu du classement de fin`); continue }
+    if (p.absent) stats.absents.push(b.name)
+    if (Boolean(p.absent) !== want) bad(`${b.name} : ${want ? "pas marque absent" : "marque absent a tort"} au classement de fin`)
+  }
+}
+
+/**
+ * Tout le monde s'en va en pleine partie (T22, partie 829 du 14/11 : 12
+ * manches revelees pour personne). La partie doit se figer sans bruler de
+ * manche, puis s'arreter toute seule : partie « abandoned », salle en attente.
+ * Delai attendu : 15 s sans joueur, 2 min de veille, plus un passage du filet.
+ */
+export async function runGhostRoom({ label, players, rounds = 10, seconds = 10, seed = 1, leaveAt = 2, tracksEach = 8 }) {
+  const problems = []
+  const bad = m => problems.push(m)
+  const bots = players.map((name, i) => new Bot({
+    name, random: rng(seed * 31 + i),
+    plan: round => (round >= leaveAt ? { action: "muet", quitte: true } : { action: "juste" }),
+  }))
+  const [host] = bots
+  const stats = { mode: "friends", joueurs: bots.length, manches: rounds, secondes: seconds, seed, depart_a_la_manche: leaveAt }
+  let code = null
+  const t0 = Date.now()
+  try {
+    await Promise.all(bots.map(b => b.enter()))
+    bots.forEach((b, i) => seedUser(b.id, Array.from({ length: tracksEach }, (_, t) => 200 + i * tracksEach + t)))
+    const created = await api("/api/rooms/create", { method: "POST", token: host.token, body: { mode: "friends", questionCount: rounds, nickname: host.name } })
+    code = created.data?.room?.room_code
+    if (!code) throw new Error(`creation refusee (${created.status} ${JSON.stringify(created.error)})`)
+    const cfg = await api(`/api/rooms/${code}/config`, { method: "POST", token: host.token, body: { questionCount: rounds, roundSeconds: seconds } })
+    if (cfg.status >= 400) bad(`reglages refuses (${cfg.status})`)
+    host.code = code
+    await host.connect()
+    host.socket.emit("room:join", { roomCode: code })
+    for (const b of bots.slice(1)) {
+      const j = await b.join(code)
+      if (!j.ok) bad(`${b.name} ne peut pas entrer (${j.status} ${j.code})`)
+    }
+    const ids = bots.map(b => b.id)
+    for (const b of bots) b.others = ids.filter(id => id !== b.id)
+    await sleep(800)
+    const start = await api(`/api/rooms/${code}/start`, { method: "POST", token: host.token, body: { source: "library" } })
+    if (start.status >= 400) throw new Error(`lancement refuse (${start.status} ${JSON.stringify(start.error)})`)
+
+    for (const until = Date.now() + (leaveAt * (seconds + 15) + 20) * 1000; Date.now() < until && !bots.every(b => b.left); ) await sleep(500)
+    if (!bots.every(b => b.left)) throw new Error(`les joueurs ne sont pas partis a la manche ${leaveAt}`)
+    const leftAt = Date.now()
+
+    // Code genere par le serveur ([A-Z0-9]) : rien a echapper.
+    const look = () => {
+      const [state = "", current = "0", room = ""] = (psql(`SELECT g.state, coalesce(g.current_round, 0), m.status
+        FROM game_sessions g JOIN multiplayer_rooms m ON m.room_code = g.room_code
+        WHERE g.room_code = '${code}' ORDER BY g.id DESC LIMIT 1`).split("\n")[0] || "").split("|")
+      return { state, current: Number(current), room }
+    }
+    let seen = look()
+    for (const until = leftAt + 200_000; Date.now() < until && seen.state === "in_progress"; ) {
+      await sleep(2000)
+      seen = look()
+    }
+    stats.arret_apres_s = Math.round((Date.now() - leftAt) / 1000)
+    stats.etat = seen
+    const lastRevealed = Number(psql(`SELECT coalesce(max(gr.round_index), 0) FROM round_responses r
+      JOIN game_rounds gr ON gr.id = r.round_id JOIN game_sessions g ON g.id = gr.session_id
+      WHERE g.room_code = '${code}'`) || 0)
+    stats.manches_revelees = lastRevealed
+    if (seen.state !== "abandoned") bad(`partie en etat "${seen.state}" ${stats.arret_apres_s} s apres le depart de tous, attendu : arretee (abandoned)`)
+    if (seen.room !== "waiting") bad(`salle en etat "${seen.room}", attendu : de retour en attente`)
+    // La manche en cours au depart peut encore se reveler (15 s avant la veille), pas plus.
+    if (lastRevealed > leaveAt) bad(`${lastRevealed} manches revelees alors que tout le monde est parti a la manche ${leaveAt}`)
+    if (seen.current > leaveAt) bad(`la partie compte ${seen.current} manches jouees, attendu au plus ${leaveAt}`)
+    if (stats.arret_apres_s < 120) bad(`arretee ${stats.arret_apres_s} s apres le depart : trop tot, la veille dure 2 min`)
+    stats.duree_s = Math.round((Date.now() - t0) / 1000)
+  } catch (e) {
+    bad(`arret : ${e.message}`)
+  } finally {
+    for (const b of bots) b.close()
+  }
+  return { label, code, ok: problems.length === 0, problems, stats }
 }
 
 /** Plans tout faits. */

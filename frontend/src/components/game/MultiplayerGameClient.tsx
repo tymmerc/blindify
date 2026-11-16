@@ -5,7 +5,7 @@ import { accentTexte } from "@/lib/accentText"
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import type { MultiplayerGameState, RevealStep, UserSummary } from "@/lib/types"
 import { Button } from "@/components/ui/button"
-import { Check, Clock, Lock, Play, Users, Volume2, VolumeX, X } from "lucide-react"
+import { Check, Clock, Lock, Play, Square, Users, Volume2, VolumeX, X } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { audioManager } from "@/lib/audioManager"
 import { GAME_MODES, type GameModeConfig, type GameMode } from "@/lib/gameModes"
@@ -17,9 +17,11 @@ import { useServerClock } from "@/hooks/useServerClock"
 import { TheaterGameView } from "./TheaterGameView"
 import { showOwnerQuestion } from "@/lib/ownerQuestion"
 import { SpectatorBadge } from "./SpectatorBadge"
+import { StopGameButton } from "./StopGameButton"
 import { DeezerCredit, SpotifyTrackLink } from "./SourceCredits"
 import { ANSWER_INPUT_PROPS } from "@/lib/answerInput"
 import { LobbyDock } from "@/app/multiplayer/LobbyDock"
+import { ABSENT_LABEL, ABSENT_NOTICE, IDLE_PRESENT_ACTION, idlePauseText } from "@/lib/absence"
 
 const VINYL_GROOVES = "repeating-radial-gradient(circle at 50% 50%, #241a10 0 2.5px, #3a2a1a 2.5px 5px)"
 
@@ -100,10 +102,14 @@ type Props = {
   answerRejectSignal?: number
   /** Pause / reprise (hote uniquement) : emis vers le serveur par le parent. */
   onPauseToggle?: () => void
+  /** « Arrêter la partie » (T42, hote uniquement) : tout le monde revient dans la salle. */
+  onStop?: () => Promise<unknown> | void
   /** Spectateurs de la salle (T18) : « 👀 1 spectateur » dans l'en-tete. */
   spectators?: number
   /** L'extrait de la manche ne joue pas (lien expire) : redemander un lien neuf au serveur (T35). */
   onPreviewBroken?: (round: number) => void
+  /** « Je suis là » (T22) : le joueur note absent, ou la partie en veille, repart. */
+  onPresent?: () => void
 }
 
 type Phase = "guessing" | "locked" | "reveal"
@@ -117,7 +123,9 @@ export function MultiplayerGameClient({
   onExit,
   disabled,
   onPauseToggle,
+  onStop,
   onPreviewBroken,
+  onPresent,
   modeConfig,
   accentColor,
   mode,
@@ -506,6 +514,7 @@ export function MultiplayerGameClient({
         bestStreak: p.bestStreak ?? 0,
         totalReactionMs: p.totalReactionMs,
         disconnected: p.disconnected === true,
+        absent: p.absent === true,
       }))
       .sort((a, b) => {
         if (b.score !== a.score) return b.score - a.score
@@ -518,7 +527,8 @@ export function MultiplayerGameClient({
   // fantome : "0/3 prets" alors que le 3e a ferme son onglet il y a 30 secondes.
   // Ils restent visibles au classement (une coupure de tunnel ne doit pas effacer
   // quelqu'un), ils sortent juste des denominateurs.
-  const activePlayers = useMemo(() => sortedPlayersFixed.filter(p => !p.disconnected), [sortedPlayersFixed])
+  // Un absent (T22) ne compte pas non plus : la table ne l'attend plus.
+  const activePlayers = useMemo(() => sortedPlayersFixed.filter(p => !p.disconnected && !p.absent), [sortedPlayersFixed])
   const answeredCount = useMemo(() => activePlayers.filter(p => p.hasAnswered).length, [activePlayers])
   const displayAnsweredCount = Math.max(answeredCount, localHasAnswered ? 1 : 0)
   const playerCount = activePlayers.length
@@ -631,12 +641,26 @@ export function MultiplayerGameClient({
 
   // Theater UI is the new visual for friends/streamer modes.
   // Overlay de pause : plein ecran chez tout le monde, bouton reprendre chez l'hote.
+  const stopHandler = isHost ? onStop : undefined
+  // Veille posee par le serveur (T22) : on dit pourquoi, et un joueur la relance d'un clic.
+  const idleText = idlePauseText(state?.idle, serverNow)
+  const canSayPresent = Boolean(onPresent) && !isEventPresenter && Boolean(player)
   const pauseOverlay = isPaused ? (
     <div className="fixed inset-0 z-[80] flex flex-col items-center justify-center gap-4 px-8 text-center" style={{ background: "rgb(var(--c-ink-block) / .92)" }}>
       <p className="font-display text-6xl font-bold text-on-ink">PAUSE</p>
-      <p className="text-sm font-semibold text-[#d8cdb4]">
-        {isHost ? "La partie est gelée pour tout le monde." : "L'hôte a mis la partie en pause."}
+      <p className="max-w-md text-sm font-semibold text-[#d8cdb4]" data-testid="pause-reason">
+        {idleText ?? (isHost ? "La partie est gelée pour tout le monde." : "L'hôte a mis la partie en pause.")}
       </p>
+      {idleText && canSayPresent && (
+        <button
+          type="button"
+          onClick={onPresent}
+          data-testid="idle-present"
+          className="rounded-md border-2 border-on-ink bg-paper px-6 py-3 font-display text-lg font-bold text-ink shadow-[4px_4px_0_rgba(244,236,219,.3)]"
+        >
+          {IDLE_PRESENT_ACTION}
+        </button>
+      )}
       {isHost && onPauseToggle && (
         <button
           type="button"
@@ -646,6 +670,29 @@ export function MultiplayerGameClient({
           Reprendre
         </button>
       )}
+      {stopHandler && (
+        <StopGameButton onStop={stopHandler} className="text-sm font-bold text-on-ink underline underline-offset-4">
+          Arrêter la partie
+        </StopGameButton>
+      )}
+    </div>
+  ) : null
+
+  // Note absent (T22) : un bandeau discret, la partie continue autour de lui.
+  const absentNotice = player?.absent && !isPaused && onPresent ? (
+    <div
+      role="status"
+      data-testid="absent-notice"
+      className="fixed inset-x-3 bottom-3 z-[70] mx-auto flex max-w-xl flex-wrap items-center justify-between gap-3 rounded-md border-2 border-line bg-paper-deep px-4 py-3 text-sm font-semibold text-ink shadow-[4px_4px_0_rgb(var(--c-shadow)/.2)]"
+    >
+      <span className="min-w-0 flex-1">{ABSENT_NOTICE.text}</span>
+      <button
+        type="button"
+        onClick={onPresent}
+        className="shrink-0 rounded-md border-2 border-line bg-ink-block px-4 py-2 text-sm font-bold text-on-ink"
+      >
+        {ABSENT_NOTICE.action}
+      </button>
     </div>
   ) : null
 
@@ -675,6 +722,7 @@ export function MultiplayerGameClient({
     return (
       <>
       {pauseOverlay}
+      {absentNotice}
       {countdown}
       <TheaterGameView
         user={user}
@@ -683,6 +731,7 @@ export function MultiplayerGameClient({
         isPlaying={isPlaying}
         isHost={isHost}
         onPauseToggle={onPauseToggle}
+        onStop={stopHandler}
         needleStage={needleStage}
         isLocked={isLocked}
         isRevealed={isRevealed}
@@ -739,6 +788,7 @@ export function MultiplayerGameClient({
     >
       {countdown}
       {pauseOverlay}
+      {absentNotice}
       {audioBrokenNotice && (
         <div
           className="sticky top-0 z-[59] border-b-2 border-line px-3 py-2 text-center text-xs font-semibold sm:text-sm"
@@ -844,6 +894,15 @@ export function MultiplayerGameClient({
                   <span className="hidden sm:inline">Pause</span>
                 </button>
               )}
+              {stopHandler && (
+                <StopGameButton
+                  onStop={stopHandler}
+                  className="flex shrink-0 items-center rounded-full border-[1.5px] border-line bg-[var(--surface)] px-2 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--ink)] transition hover:bg-ink-block hover:text-on-ink sm:px-3"
+                >
+                  <Square className="h-4 w-4 sm:hidden" aria-hidden />
+                  <span className="hidden sm:inline">Arrêter</span>
+                </StopGameButton>
+              )}
               {onExit && (
                 <button
                   className="flex shrink-0 items-center rounded-full border-[1.5px] border-line bg-[var(--surface)] px-2 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--ink)] transition hover:bg-ink-block hover:text-on-ink sm:px-3"
@@ -931,6 +990,9 @@ export function MultiplayerGameClient({
                               <span className={p.hasAnswered ? "font-bold text-sage-deep-txt" : "text-[var(--muted)]"}>
                                 {p.username || `J${p.userId}`}
                               </span>
+                              {p.absent && (
+                                <span className="text-xs font-bold uppercase tracking-[0.1em] text-[var(--muted)]">{ABSENT_LABEL}</span>
+                              )}
                               {p.hasAnswered && <Check className="h-3.5 w-3.5 text-sage-deep-txt" />}
                             </div>
                           ))}

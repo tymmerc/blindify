@@ -78,7 +78,7 @@ describe("bootstrapGameState", () => {
     expect(state.config.roundDurationMs).toBe(15000);
   });
 
-  it("defaults to friends mode with 20s rounds", () => {
+  it("defaults to friends mode with 30s rounds (T42)", () => {
     clearGame(ROOM);
     const state = bootstrapGameState({
       roomCode: ROOM,
@@ -87,7 +87,7 @@ describe("bootstrapGameState", () => {
       participants: [{ userId: 1, username: "Host" }],
     });
     expect(state.mode).toBe("friends");
-    expect(state.config.roundDurationMs).toBe(20000);
+    expect(state.config.roundDurationMs).toBe(30000);
   });
 });
 

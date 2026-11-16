@@ -14,7 +14,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { spawnSync } from "node:child_process"
 import { fileURLToPath } from "node:url"
-import { runRoom } from "./room.mjs"
+import { runGhostRoom, runRoom } from "./room.mjs"
 import { retries } from "./bot.mjs"
 import { botScenarios } from "./scenarios.mjs"
 import { writeReport } from "./report.mjs"
@@ -41,7 +41,7 @@ say(`campagne graine ${seed}`)
 const scenarios = botScenarios(seed)
 say(`\n== ${scenarios.length} salles de bots en parallele ==`)
 const rooms = await Promise.all(scenarios.map(async s => {
-  const r = await runRoom(s)
+  const r = await (s.kind === "fantome" ? runGhostRoom(s) : runRoom(s))
   say(`  ${r.ok ? "[ok]" : "[KO]"} ${r.label} (${r.code ?? "?"}, ${r.stats.duree_s ?? "?"} s)`)
   for (const p of r.problems) say(`       - ${p}`)
   return r
@@ -65,6 +65,7 @@ const SCRIPTS = [
   { label: "Correctifs PC (import par l'interface, code colle, platine, depart, buzzer sans musique)", args: ["pcfixes-e2e.mjs", "--pile"] },
   { label: "Meme musique importee par deux joueurs (deux telephones, deux amis)", args: [path.join(HERE, "importeur-e2e.mjs"), `${RUN}/reports/current/importeur`] },
   { label: "Fin de partie, retour a la salle d'attente, relance (T40)", args: [path.join(HERE, "retour-salle-e2e.mjs"), `${RUN}/reports/current/retour-salle`] },
+  { label: "30 s par defaut, arreter la partie, retour a la salle, relance (T42)", args: [path.join(HERE, "arret-partie-e2e.mjs"), `${RUN}/reports/current/arret-partie`] },
 ]
 if (withBrowser) {
   say("\n== scripts E2E sur la pile ==")

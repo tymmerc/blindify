@@ -6,8 +6,18 @@ import { ok, fail } from "../utils/response";
 import { logger } from "../utils/logger";
 import type { MusicProvider } from "../types/user";
 import type { AudioSourceRow } from "../types/audio";
-import { bootstrapGameState, getGameState, gameStateSnapshot, revealedRoundCeiling, clearGame } from "../services/realtimeGame";
-import { startRoundAndBroadcast } from "../services/realtimeOrchestrator";
+import {
+  bootstrapGameState,
+  getGameState,
+  gameStateSnapshot,
+  revealedRoundCeiling,
+  clearGame,
+  DEFAULT_LISTENING_MS,
+  forgetRoomAbsence,
+  roomAbsentUserIds,
+  type GameState,
+} from "../services/realtimeGame";
+import { startRoundAndBroadcast, stopGameTimers } from "../services/realtimeOrchestrator";
 import { ROUND_PACING } from "../services/roundPacing";
 import { GameMode, type RoundTrack } from "../types/game";
 import { initStreamerGame } from "../services/streamerOrchestrator";
@@ -49,7 +59,6 @@ async function ensureRoomFlags(): Promise<void> {
   await pool.query(`ALTER TABLE multiplayer_rooms ADD COLUMN IF NOT EXISTS round_duration_ms INTEGER`);
 }
 
-const EVENT_ROUND_DURATION_MS = 20_000;
 // Decompte 3-2-1 avant la toute premiere manche (audio + chrono demarrent
 // apres), le meme qu'entre les manches (T38).
 const FIRST_ROUND_PREROLL_MS = ROUND_PACING.countdownMs;
@@ -100,12 +109,17 @@ class StartConflictError extends Error {}
 /** Texte montre a l'hote quand la partie n'a pas pu partir (a valider par Tym). */
 const START_FAILED_MESSAGE = "La partie n'a pas pu démarrer. Relance-la, la salle reste ouverte.";
 
-/** Clot en base une partie qui ne tourne plus, sans toucher une partie finie. */
-async function abandonSession(sessionId: number): Promise<void> {
+/**
+ * Clot en base une partie qui ne tourne plus, sans toucher une partie finie.
+ * `revealedRounds` : manches deja revelees quand l'hote arrete la partie (T42).
+ * L'historique et le « deja entendu ce soir » s'arretent la ; sans valeur, 0.
+ */
+async function abandonSession(sessionId: number, revealedRounds?: number): Promise<void> {
   await pool.query(
-    `UPDATE game_sessions SET state='abandoned', ended_at=COALESCE(ended_at, NOW())
+    `UPDATE game_sessions SET state='abandoned', ended_at=COALESCE(ended_at, NOW()),
+            current_round=COALESCE($2, current_round)
      WHERE id=$1 AND state='in_progress'`,
-    [sessionId]
+    [sessionId, revealedRounds ?? null]
   );
 }
 
@@ -141,24 +155,46 @@ async function abortStartedGame(room: { id: number; room_code: string }, session
  * completed_at = maintenant : le menage des salles en attente (index.ts) les
  * garde 30 min a partir de ce retour, pas de la derniere arrivee d'un joueur.
  */
-async function resetRoomToWaiting(room: { id: number; room_code: string; status: string; session_id: number | null }): Promise<boolean> {
-  clearGame(room.room_code);
+async function resetRoomToWaiting(
+  room: { id: number; room_code: string; status: string; session_id: number | null },
+  revealedRounds?: number
+): Promise<boolean> {
   const { rowCount } = await pool.query(
     `UPDATE multiplayer_rooms SET status='waiting', session_id=NULL, started_at=NULL, completed_at=NOW()
      WHERE id=$1 AND (status=$2 OR status='finished')`,
     [room.id, room.status]
   );
+  // Salle modifiee entre-temps : la partie reste en memoire (le filet T27
+  // repose ses minuteurs si elle tournait) ; on ne l'efface qu'une fois la
+  // salle remise en attente.
   if (!rowCount) return false;
+  clearGame(room.room_code);
   // La partie d'avant ne tourne plus en memoire : si elle est encore
   // « in_progress » en base (lancement casse, serveur redemarre), elle
   // est close ici. Une partie finie dont l'ecriture est en route passe
   // ensuite « finished » (persistGameResults), comme prevu.
   if (room.session_id) {
-    await abandonSession(room.session_id).catch(err =>
+    await abandonSession(room.session_id, revealedRounds).catch(err =>
       logger.error("previous_session_abandon_failed", { roomCode: room.room_code, sessionId: room.session_id, error: err })
     );
   }
   return true;
+}
+
+type RunningRoom = { id: number; room_code: string; status: string; session_id: number | null };
+
+/**
+ * Arrete la partie en cours (T42) : plus aucun minuteur, plus de manche, plus
+ * de reponse attendue. La salle repasse en attente et la partie est close
+ * « abandoned » avec ses manches revelees (pas de podium, pas de stats de fin).
+ * Sert a l'hote (« Arrêter la partie ») et a la veille des parties fantomes (T22).
+ * Rend false si la salle a change entre-temps.
+ */
+async function stopRunningGame(room: RunningRoom, cause: "host" | "idle"): Promise<boolean> {
+  const revealedRounds = revealedRoundCeiling(room.room_code, room.status);
+  stopGameTimers(room.room_code);
+  logger.info(cause === "host" ? "game_stopped_by_host" : "game_stopped_idle", { roomCode: room.room_code, sessionId: room.session_id, revealedRounds });
+  return resetRoomToWaiting(room, revealedRounds);
 }
 
 // Verrou du lancement, par salle : un double clic, deux onglets ou deux
@@ -192,6 +228,32 @@ async function withStartLock(roomCode: string, run: () => Promise<void>): Promis
   } finally {
     client.release(broken);
   }
+}
+
+/**
+ * Partie fantome (T22) : en veille depuis IDLE_STOP_MS (plus aucun joueur,
+ * ou personne ne repond), elle s'arrete comme si l'hote avait touche
+ * « Arrêter la partie ». Seulement si la salle porte toujours CETTE partie :
+ * une revanche lancee entre-temps continue. Les clients encore la
+ * reviennent dans la salle d'attente (room:lobby, sans rechargement).
+ */
+export async function stopIdleGame(roomCode: string, state: GameState): Promise<boolean> {
+  let stopped = false;
+  await withStartLock(roomCode, async () => {
+    const { rows } = await pool.query<RunningRoom>(
+      `SELECT id, room_code, status, session_id FROM multiplayer_rooms WHERE room_code=$1 LIMIT 1`,
+      [roomCode]
+    );
+    const room = rows[0];
+    const live = getGameState(roomCode);
+    if (!room || room.status === "waiting" || live !== state || live.phase === "FINISHED") return;
+    // Un joueur a pu revenir (ou l'hote reprendre) pendant qu'on attendait le
+    // verrou : la veille est levee, la partie continue.
+    if (!live.idle || Date.now() < live.idle.stopAt) return;
+    stopped = await stopRunningGame(room, "idle");
+  });
+  if (stopped) io.to(roomCode).emit("room:lobby", { roomCode, reason: "idle" });
+  return stopped;
 }
 
 export const roomsController = {
@@ -754,6 +816,9 @@ export const roomsController = {
    * monde dans la salle d'attente, sans relancer et sans repasser par le choix
    * des modes. Meme code, memes joueurs, reglages gardes. Les clients
    * l'apprennent par room:lobby et changent d'ecran sans recharger (Discord).
+   * « Arrêter la partie » (T42, body.stop) : meme retour, en pleine partie.
+   * Sans stop, une partie en cours reste refusee : un vieux clic sur l'ecran
+   * de fin ne coupe jamais une revanche deja lancee.
    */
   async backToLobby(req: Request, res: Response): Promise<void> {
     const code = validRoomCode(req.params?.code)?.toUpperCase() ?? "";
@@ -783,11 +848,12 @@ export const roomsController = {
       }
       if (room.status !== "waiting") {
         const state = getGameState(room.room_code);
-        if (state && state.phase !== "FINISHED") {
+        const running = Boolean(state && state.phase !== "FINISHED");
+        if (running && req.body?.stop !== true) {
           fail(res, "game_running", "La partie est encore en cours.", 409);
           return;
         }
-        if (!(await resetRoomToWaiting(room))) {
+        if (!(await (running ? stopRunningGame(room, "host") : resetRoomToWaiting(room)))) {
           fail(res, "room_conflict", "La salle a été modifiée par un autre joueur. Réessaie.", 409);
           return;
         }
@@ -937,15 +1003,24 @@ export const roomsController = {
       [room.id]
     );
     // Joueurs qui REPONDENT : le presentateur (event sans host_plays) et l'hote streamer sont exclus.
-    const participantIds = participantRows
+    const allPlayerIds = participantRows
       .map(p => p.user_id)
       .filter(id => !((((room.mode === GameMode.EVENT && !room.host_plays) || room.mode === GameMode.STREAMER)) && id === room.host_user_id));
+    // Absents de la partie d'avant (T22) : pas repris, ni comme joueurs ni pour
+    // leur musique. Ils reviennent d'un clic (« Je reviens »). Sauf s'il ne
+    // restait pas assez de joueurs sans eux : l'hote relance avec eux.
+    const absentIds = new Set(roomAbsentUserIds(room.room_code));
+    const presentIds = allPlayerIds.filter(id => !absentIds.has(id));
+    const keepAbsentees = presentIds.length < 2;
+    if (keepAbsentees) forgetRoomAbsence(room.room_code, allPlayerIds);
+    const participantIds = keepAbsentees ? allPlayerIds : presentIds;
+    const sittingOut = keepAbsentees ? new Set<number>() : absentIds;
 
     // Contributeurs MUSIQUE : qui peut ramener la playlist. Autour d'une table, l'hote
     // presentateur est le DJ : sa musique DOIT alimenter le pool meme s'il ne joue pas.
     // Tout le monde present dans la room peut contribuer.
     let musicContributorIds = room.mode === GameMode.EVENT
-      ? Array.from(new Set(participantRows.map(p => p.user_id)))
+      ? Array.from(new Set(participantRows.map(p => p.user_id))).filter(id => !sittingOut.has(id))
       : participantIds;
 
     // Mode streamer (T5) : le public joue depuis /live, sans etre inscrit dans
@@ -1315,12 +1390,12 @@ export const roomsController = {
       client.release();
     }
 
-    // Duree configuree par l'hote dans le lobby, sinon defaut du mode.
+    // Duree configuree par l'hote dans le lobby, sinon 30 s (T42, tous les modes).
     const configuredMs = Number(room.round_duration_ms);
     const roundDurationMs =
       Number.isFinite(configuredMs) && configuredMs >= 5_000 && configuredMs <= 60_000
         ? configuredMs
-        : room.mode === GameMode.EVENT ? EVENT_ROUND_DURATION_MS : 20_000;
+        : DEFAULT_LISTENING_MS;
 
     const roundTracks: RoundTrack[] = normalizedTracks.map(t => ({
       round: t.round,

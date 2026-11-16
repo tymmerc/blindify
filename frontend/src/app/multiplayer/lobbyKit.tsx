@@ -256,6 +256,8 @@ export function Roster({
 
 const ROUND_CHOICES = [5, 10, 15, 20]
 const SECOND_CHOICES = [10, 15, 20, 30]
+/** Temps pour repondre quand l'hote n'a rien regle : 30 s, comme le serveur (T42). */
+export const DEFAULT_ROUND_SECONDS = 30
 
 function Segmented<T extends number>({
   label,
@@ -302,14 +304,19 @@ function Segmented<T extends number>({
   )
 }
 
+/** Temps pour repondre de la salle, en secondes (rien de regle : le defaut). */
+export function roomSeconds(room: Pick<MultiplayerRoom, "round_duration_ms"> | null | undefined): number {
+  return room?.round_duration_ms ? Math.round(room.round_duration_ms / 1000) : DEFAULT_ROUND_SECONDS
+}
+
 /** Reglages de l'hote, sauves au clic et appliques au lancement. Etait
  *  duplique a l'identique dans les lobbys a distance et autour d'une table. */
 export function RoundSettings({ room, accent, accentText, readOnly = false }: { room: MultiplayerRoom | null; accent: string; accentText: string; readOnly?: boolean }) {
   const [ownRounds, setRounds] = useState<number>(room?.question_count ?? 10)
-  const [ownSeconds, setSeconds] = useState<number>(Math.round((room?.round_duration_ms ?? 20000) / 1000))
+  const [ownSeconds, setSeconds] = useState<number>(roomSeconds(room))
   // Invite : on affiche ce que l'hote a choisi (le salon est relu toutes les 4 s).
   const rounds = readOnly ? room?.question_count ?? 10 : ownRounds
-  const seconds = readOnly ? Math.round((room?.round_duration_ms ?? 20000) / 1000) : ownSeconds
+  const seconds = readOnly ? roomSeconds(room) : ownSeconds
   const save = (payload: { questionCount?: number; roundSeconds?: number }) => {
     if (!room) return
     // Garde les reglages pour rouvrir la meme salle si elle expire (T7).

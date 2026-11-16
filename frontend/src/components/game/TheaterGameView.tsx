@@ -4,13 +4,15 @@ import { useMemo, type CSSProperties, type ReactNode, type RefObject } from "rea
 import { avatarSrc } from "@/lib/photo"
 import { showOwnerQuestion } from "@/lib/ownerQuestion"
 import { motion, AnimatePresence } from "framer-motion"
-import { Pause, Volume2, VolumeX, X } from "lucide-react"
+import { Pause, Square, Volume2, VolumeX, X } from "lucide-react"
 import type { MultiplayerGameState, UserSummary } from "@/lib/types"
 import { shortGameNotice } from "@/lib/roundCount"
 import { DeezerCredit } from "./SourceCredits"
 import { SpectatorBadge } from "./SpectatorBadge"
+import { StopGameButton } from "./StopGameButton"
 import { ANSWER_INPUT_PROPS } from "@/lib/answerInput"
 import { VERDICT_LABEL } from "@/lib/roundPacing"
+import { ABSENT_LABEL } from "@/lib/absence"
 
 type ChatMessage = {
   userId: number
@@ -34,6 +36,8 @@ type PlayerRow = {
   bestStreak?: number
   totalReactionMs?: number
   disconnected?: boolean
+  /** Absent (T22) : aucune reponse depuis 3 manches. */
+  absent?: boolean
 }
 
 type UiPhase = "guessing" | "locked" | "reveal"
@@ -47,6 +51,8 @@ type Props = {
   needleStage?: "raised" | "dropping" | "down"
   isHost?: boolean
   onPauseToggle?: () => void
+  /** « Arrêter la partie » (T42) : fourni chez l'hote seulement. */
+  onStop?: () => Promise<unknown> | void
   isLocked: boolean
   isRevealed: boolean
   remaining: number
@@ -100,7 +106,7 @@ const initial = (name: string | null | undefined) =>
 
 export function TheaterGameView(props: Props) {
   const {
-    user, state, uiPhase, isPlaying, needleStage = "down", isHost, onPauseToggle, isLocked, isRevealed,
+    user, state, uiPhase, isPlaying, needleStage = "down", isHost, onPauseToggle, onStop, isLocked, isRevealed,
     remaining, totalSeconds, sortedPlayers, displayAnsweredCount, playerCount,
     guessTitle, setGuessTitle, guessArtist, setGuessArtist, sourceGuess, setSourceGuess,
     localHasAnswered, onSubmit, onPass, disabled,
@@ -179,7 +185,7 @@ export function TheaterGameView(props: Props) {
             )}
           </div>
 
-          {/* Sur telephone, Pause et Quitter passent en icones carrees comme le
+          {/* Sur telephone, Pause, Arreter et Quitter passent en icones carrees comme le
               bouton du son ; leur nom accessible ne change pas (aria-label). */}
           <div className="theater-controls flex items-center justify-end gap-2">
             <SpectatorBadge count={spectators} />
@@ -200,6 +206,12 @@ export function TheaterGameView(props: Props) {
                 <Pause className="theater-quit-icon" aria-hidden />
                 <span className="theater-quit-text">Pause</span>
               </button>
+            )}
+            {onStop && (
+              <StopGameButton onStop={onStop} className="theater-quit">
+                <Square className="theater-quit-icon" aria-hidden />
+                <span className="theater-quit-text">Arrêter</span>
+              </StopGameButton>
             )}
             {onExit && (
               <button className="theater-quit" onClick={onExit} aria-label="Quitter">
@@ -253,10 +265,12 @@ export function TheaterGameView(props: Props) {
                 const isLead = idx === 0
                 const statusText = p.disconnected
                   ? "Parti"
+                  : p.absent
+                    ? ABSENT_LABEL
                   : isRevealed || isFinished
                     ? VERDICT_LABEL[p.lastVerdict === "correct" || p.lastVerdict === "close" ? p.lastVerdict : "wrong"]
                     : (p.hasAnswered ? "A répondu" : (isMe && (guessTitle || guessArtist) ? "Écrit..." : "Attend"))
-                const statusCls = p.disconnected ? "gone"
+                const statusCls = p.disconnected || p.absent ? "gone"
                   : (isRevealed || isFinished) && p.lastVerdict === "correct" ? "locked"
                   : !isRevealed && p.hasAnswered ? "locked"
                   : isMe && !p.hasAnswered && (guessTitle || guessArtist) ? "typing"

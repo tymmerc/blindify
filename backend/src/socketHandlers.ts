@@ -18,7 +18,10 @@ import {
   admitToGame,
   dropWaiting,
   isWaitingPlayer,
+  markPresent,
+  isPausedByIdle,
 } from "./services/realtimeGame";
+import { checkIdleGame } from "./services/idleGames";
 import * as lobbyRps from "./services/lobbyRps";
 import { validRoomCode, clampText, toIntOrNull, MAX_GUESS_LEN, MAX_CHAT_LEN } from "./utils/socketValidation";
 import {
@@ -28,9 +31,8 @@ import {
   clearGraceTimer,
   clearRevealTimer,
   refreshRoundPreviews,
+  rescheduleAfterResume,
   revealRoundNow,
-  schedulePacingStep,
-  scheduleReveal,
   tryEarlyReveal,
 } from "./services/realtimeOrchestrator";
 import { getSessionContextFromToken, type SessionContext } from "./utils/session";
@@ -475,6 +477,9 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
         members: roomPresence.getMembers(roomCode),
         serverTimestamp: Date.now(),
       });
+      // Un joueur revient dans une partie mise en veille faute de joueurs (T22) :
+      // elle reprend tout de suite, sans attendre le prochain passage du filet.
+      checkIdleGame(io, roomCode);
       sendStateToSocket(roomCode);
       if (access.room.mode === GameMode.STREAMER && access.isHost) joinStreamerMedia(roomCode);
       // « 👀 1 spectateur » : le joueur qui arrive (ou revient) sait tout de suite.
@@ -919,18 +924,43 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
       if (!access?.isHost) return;
       const state = resumeGame(roomCode);
       if (!state || state.paused) return;
-      if (state.phase === "GUESSING" && state.timing.revealAt) {
-        scheduleReveal(io, roomCode, state.timing.revealAt, state.currentRound);
-        // Les graces de reconnexion ont ete gelees avec le chrono (resumeGame) :
-        // la revelation anticipee part maintenant si personne n'est a attendre,
-        // sinon a la fin de la grace qui la retient.
-        tryEarlyReveal(io, roomCode);
-      } else if (state.phase === "REVEAL") {
-        schedulePacingStep(io, roomCode);
-      }
+      // Minuteur de la phase, revelation anticipee si personne n'est a attendre
+      // (graces gelees avec le chrono), liens d'extraits rafraichis (T35).
+      rescheduleAfterResume(io, roomCode);
       broadcastState(io, roomCode);
-      // Une longue pause a pu faire expirer les liens (T35).
-      void refreshRoundPreviews(io, roomCode);
+    });
+
+    // « Je suis là » (T22) : un joueur note absent revient. Dans la partie, il
+    // n'est plus absent et une partie en veille repart ; absent de la partie
+    // d'avant, il entre et joue des la manche suivante (comme un retardataire).
+    socket.on("game:present", async (payload: { roomCode?: unknown }) => {
+      const roomCode = validRoomCode(payload?.roomCode);
+      if (!roomCode || !allowEvent(socket.id, "present", 4, 5_000)) return;
+      const access = await requireRoomAccess(roomCode, currentUser.id);
+      if (!access) {
+        emitRoomError(socket, roomCode, "Accès refusé à cette salle.");
+        return;
+      }
+      if (!socket.rooms.has(roomCode)) socket.join(roomCode);
+      markReconnected(roomCode, currentUser.id);
+      const wasPaused = getRealtimeState(roomCode)?.paused === true;
+      if (markPresent(roomCode, currentUser.id) === "back") {
+        const admission = admitToGame(roomCode, {
+          userId: currentUser.id,
+          username: currentUser.username ?? null,
+          avatar: (currentUser as { avatar?: string | null }).avatar ?? null,
+        });
+        if (admission === "arrived") {
+          io.to(roomCode).emit("game:waiting", {
+            roomCode,
+            userId: currentUser.id,
+            username: currentUser.username ?? null,
+            serverTimestamp: Date.now(),
+          });
+        }
+      }
+      if (wasPaused && getRealtimeState(roomCode)?.paused === false) rescheduleAfterResume(io, roomCode);
+      broadcastState(io, roomCode);
     });
 
     socket.on("game:leave", async ({ roomCode }: { roomCode: string }) => {
@@ -1020,16 +1050,11 @@ export function registerSocketHandlers(io: Server, lastKnownUsername: Map<number
           setHostConnected(roomCode, false);
           // Seul l'hote peut reprendre une pause : s'il disparait pendant une
           // pause, la table resterait gelee pour toujours. On reprend pour lui.
-          if (state.paused) {
+          // Une veille posee par le serveur (T22) n'est pas sa pause : elle a
+          // son propre arret. Sa pause a lui, meme doublee d'une veille, est levee.
+          if (state.paused && !isPausedByIdle(roomCode)) {
             const resumed = resumeGame(roomCode);
-            if (resumed && !resumed.paused) {
-              if (resumed.phase === "GUESSING" && resumed.timing.revealAt) {
-                scheduleReveal(io, roomCode, resumed.timing.revealAt, resumed.currentRound);
-              } else if (resumed.phase === "REVEAL") {
-                schedulePacingStep(io, roomCode);
-              }
-              void refreshRoundPreviews(io, roomCode);
-            }
+            if (resumed && !resumed.paused) rescheduleAfterResume(io, roomCode);
           }
         }
         if (state && state.phase === "GUESSING") {

@@ -205,9 +205,17 @@ export async function persistGameResults(state: GameState, sessionId: number | u
     correct: p.correct,
     rounds: p.rounds,
     totalReactionMs: p.totalReactionMs,
+    // Rien repondu de toute la partie (T22) : pas une partie jouee pour lui.
+    answered: (p.answeredRounds ?? 0) > 0,
   }));
   try {
     for (const player of players) {
+      if (!player.answered) {
+        // Ni ligne a 0 point (posee au lancement), ni partie de plus dans ses
+        // stats : il etait absent, ou n'a jamais touche a la partie.
+        await pool.query(`DELETE FROM game_participants WHERE session_id = $1 AND user_id = $2`, [sessionId, player.userId]);
+        continue;
+      }
       // Upsert : un joueur arrive en cours de partie (T19) n'a pas de ligne
       // posee au lancement. Avec un simple UPDATE, son score etait perdu sans bruit.
       await pool.query(
@@ -256,7 +264,7 @@ export async function persistGameResults(state: GameState, sessionId: number | u
          AND (session_id IS NULL OR session_id = $2)`,
       [roomCode, sessionId],
     );
-    logger.info("multiplayer_game_persisted", { roomCode, sessionId, players: players.length });
+    logger.info("multiplayer_game_persisted", { roomCode, sessionId, players: players.filter(p => p.answered).length, silent: players.filter(p => !p.answered).length });
   } catch (err) {
     logger.error("persist_game_results_failed", { roomCode, sessionId, error: err });
   }

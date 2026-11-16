@@ -507,8 +507,12 @@ export const gamesController = {
                a.artist,
                a.album_cover
              FROM game_rounds gr
+             JOIN game_sessions gs ON gs.id = gr.session_id
              LEFT JOIN audio_sources a ON a.id = gr.audio_source_id
              WHERE gr.session_id = ANY($1::int[])
+               -- Partie arretee par l'hote (T42) : seulement les manches
+               -- revelees. Les autres peuvent revenir a la relance.
+               AND (gs.state <> 'abandoned' OR gr.round_index <= COALESCE(gs.current_round, 0))
              ORDER BY gr.session_id, gr.round_index`,
             [finishedSessionIds]
           )

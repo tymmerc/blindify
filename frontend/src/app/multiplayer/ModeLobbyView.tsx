@@ -33,11 +33,13 @@ import { StreamerLobbyView } from "./StreamerLobbyView"
 import { ResultsView } from "./LobbyViews"
 import { multiplayerFeedbackContext } from "@/lib/feedback"
 import { ENTRY_ROUTE, HEADER_COPY } from "./lobbyCopy"
+import { roomSeconds } from "./lobbyKit"
 import type { LobbyRendererProps, LobbySurface, LobbyViewState } from "./lobbyTypes"
 import { initialLobbyContext, lobbyReducer } from "./lobbyMachine"
 import { RequestTimeoutError, withTimeoutRetry } from "@/lib/withTimeoutRetry"
 import { LateJoinerView } from "@/components/game/LateJoinerView"
 import { arrivalNotice, isLateJoiner } from "@/lib/lateJoin"
+import { IDLE_STOP_NOTICE } from "@/lib/absence"
 import { useLateArrivals } from "./hooks/useLateArrivals"
 import { useStreamerFeed } from "./hooks/useStreamerFeed"
 import { ExpiredRoomView } from "./ExpiredRoomView"
@@ -276,6 +278,9 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
     round: number
     payload: { roomCode: string; guessTitle: string; guessArtist: string; sourceUserId?: number | null; round: number }
   } | null>(null)
+  // Numero de la partie cote client : change a chaque retour a la salle (T42).
+  // Un accuse de reponse qui arrive apres l'arret ne remet rien en attente.
+  const gameGenRef = useRef(0)
   const userRef = useRef<CurrentUserPayload | null>(null)
   const currentUserId = userPayload?.user.id ?? 0
 
@@ -916,9 +921,15 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       // « Revenir à la salle » (T40) : l'hote a ramene tout le monde dans la salle
       // d'attente. Meme salle, memes joueurs : on change d'ecran sans recharger
       // (activite Discord), l'hote retrouve sa vue avec le bouton lancer.
-      const backToLobbyHandler = (payload: { roomCode: string }) => {
+      const backToLobbyHandler = (payload: { roomCode: string; reason?: string }) => {
         if (payload?.roomCode !== roomCode) return
+        // Partie arretee toute seule (T22) : plus personne ne jouait.
+        if (payload.reason === "idle") showNotice(IDLE_STOP_NOTICE, false, "info")
         const host = roomRef.current?.host_user_id != null && roomRef.current.host_user_id === userRef.current?.user?.id
+        // Partie arretee en pleine manche (T42) : une reponse en attente ne
+        // doit jamais repartir sur la manche 1 de la partie suivante.
+        pendingAnswerRef.current = null
+        gameGenRef.current += 1
         setGameState(null)
         setError(null)
         setErrorAction(null)
@@ -1055,7 +1066,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
           mode,
           hostPlays: created.host_plays === true,
           questionCount: created.question_count ?? questionCount,
-          roundSeconds: Math.round((created.round_duration_ms ?? 20000) / 1000),
+          roundSeconds: roomSeconds(created),
         })
         setExpiredCode(null)
         setErrorCode(null)
@@ -1471,6 +1482,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         bestStreak: p.bestStreak ?? 0,
         totalReactionMs: p.totalReactionMs ?? 0,
         correct: p.correct ?? 0,
+        absent: p.absent === true,
       }))
       .sort((a, b) => {
         if (b.score !== a.score) return b.score - a.score
@@ -1698,6 +1710,28 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       </div>
     ) : null
 
+  // « Revenir à la salle » (T40, ecran de fin) et « Arrêter la partie » (T42,
+  // en pleine partie) : le meme retour, pour tout le monde, sans recharger.
+  const returnToLobby = (stop: boolean) => runExclusive(restartingRef, async () => {
+    if (!room) return
+    try {
+      setError(null)
+      await api.backToLobby(room.room_code, { stop })
+      // Les autres changent d'ecran a la reception de room:lobby ; l'hote
+      // tout de suite, meme si son socket vient de couper.
+      pendingAnswerRef.current = null
+      gameGenRef.current += 1
+      setGameState(null)
+      setView("hosting")
+      dispatchLobby({ type: "hosting" })
+    } catch (err) {
+      console.error(stop ? "stop_game_failed" : "back_to_lobby_failed", err)
+      setError(err instanceof ApiError && err.message
+        ? err.message
+        : stop ? "Impossible d'arrêter la partie. Réessaie." : "Impossible de revenir à la salle. Réessaie.")
+    }
+  })
+
   const content =
     // Streamer : l'ecran de fin (podium du chat) reste celui de la partie.
     (view === "playing" || (view === "results" && mode === "streamer")) && gameState && room ? (
@@ -1728,6 +1762,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
           onSendChat={sendChat}
           onExit={handleLeaveRoom}
           onRejoin={() => socketRef.current?.emit("room:join", { roomCode: room.room_code })}
+          onComeBack={() => socketRef.current?.emit("game:present", { roomCode: room.room_code })}
           accentColor={accentColor}
         />
       ) : (
@@ -1752,8 +1787,11 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
             // On attend la CONFIRMATION du serveur. Sans ca, une coupure reseau
             // silencieuse (socket.io met ~20s a la detecter) laisse la reponse
             // partir dans le vide et le joueur bloque a 0.
+            const answerGen = gameGenRef.current
             socket.timeout(4000).emit("game:answer", payload, (err: unknown, res?: { ok?: boolean; reason?: string }) => {
               if (!err && res?.ok) return
+              // Partie arretee entre-temps (T42) : rien a renvoyer.
+              if (gameGenRef.current !== answerGen) return
               // Manche deja terminee : reessayer ne servirait qu'a faire compter
               // la reponse sur la chanson suivante. On le dit franchement.
               if (!err && (res?.reason === "round_over" || res?.reason === "stale_round")) {
@@ -1782,6 +1820,8 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
             }
             socket.emit("game:next", { roomCode: room.room_code, round, step })
           }}
+          onStop={isHost ? () => returnToLobby(true) : undefined}
+          onPresent={() => socketRef.current?.emit("game:present", { roomCode: room.room_code })}
           onPauseToggle={() => {
             const socket = socketRef.current
             if (!socket || !room) return
@@ -1819,21 +1859,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
         // jusqu'au Rejouer de l'hote, le bouton grise le dit deja.
         onReturn={onLeave ? undefined : () => router.replace("/modes")}
         onEditMusic={openMusic}
-        onBackToLobby={isHost ? () => runExclusive(restartingRef, async () => {
-          if (!room) return
-          try {
-            setError(null)
-            await api.backToLobby(room.room_code)
-            // Les autres changent d'ecran a la reception de room:lobby ; l'hote
-            // tout de suite, meme si son socket vient de couper.
-            setGameState(null)
-            setView("hosting")
-            dispatchLobby({ type: "hosting" })
-          } catch (err) {
-            console.error("back_to_lobby_failed", err)
-            setError(err instanceof ApiError && err.message ? err.message : "Impossible de revenir à la salle. Réessaie.")
-          }
-        }) : undefined}
+        onBackToLobby={isHost ? () => returnToLobby(false) : undefined}
         onReplay={() => runExclusive(restartingRef, async () => {
           if (!room || !isHost) return
           // Les resultats d'avant, pour y revenir si la revanche ne part pas.

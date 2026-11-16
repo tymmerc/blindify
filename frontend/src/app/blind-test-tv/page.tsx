@@ -90,7 +90,7 @@ export default function Page() {
         <ul>
           <Li color="#d88418"><span><strong>Si l'écran central décroche</strong> (wifi qui saute, ordinateur qui redémarre), le son bascule tout seul sur les téléphones des joueurs au bout de quelques secondes, et la partie continue.</span></Li>
           <Li color="#d88418"><span><strong>Besoin d'une pause ?</strong> L'organisateur a un bouton Pause sur l'écran central : la partie est gelée pour tout le monde.</span></Li>
-          <Li color="#d88418"><span><strong>Extraits de 10, 15, 20 ou 30 secondes</strong>, à régler dans le salon avant de lancer. 20 par défaut, 15 si la table connaît ses classiques.</span></Li>
+          <Li color="#d88418"><span><strong>Extraits de 10, 15, 20 ou 30 secondes</strong>, à régler dans le salon avant de lancer. 30 par défaut, 15 si la table connaît ses classiques.</span></Li>
         </ul>
       </Section>
 

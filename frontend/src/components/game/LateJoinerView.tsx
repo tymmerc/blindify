@@ -1,13 +1,14 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { Hourglass, LogOut, Volume2, VolumeX } from "lucide-react"
+import { Hand, Hourglass, LogOut, Volume2, VolumeX } from "lucide-react"
 import { Label, Panel } from "@/app/multiplayer/lobbyKit"
 import { LobbyChat } from "@/app/multiplayer/LobbyChat"
 import { SpectatorStage } from "@/components/game/SpectatorStage"
 import { useServerClock } from "@/hooks/useServerClock"
 import { audioManager } from "@/lib/audioManager"
 import { lateJoinBanner } from "@/lib/lateJoin"
+import { ABSENTEE_BANNER, isAbsentee } from "@/lib/absence"
 import type { MultiplayerGameState } from "@/lib/types"
 import type { ChatMessage } from "./MultiplayerGameClient"
 
@@ -25,6 +26,8 @@ export interface LateJoinerViewProps {
   onExit: () => void
   /** Renvoie room:join : le serveur ne m'a pas (encore) mis en attente. */
   onRejoin: () => void
+  /** « Je reviens » (T22) : absent a la partie d'avant, je rentre dans celle-ci. */
+  onComeBack?: () => void
   accentColor?: string
 }
 
@@ -36,7 +39,8 @@ const REJOIN_AFTER_MS = 3_000
  * serais jamais promu. On redemande l'entree, une fois par manche.
  */
 function useRejoinIfUnknown(state: MultiplayerGameState, userId: number, onRejoin: () => void): void {
-  const known = (state.waiting ?? []).some(w => w.userId === userId)
+  // Absent de la partie d'avant (T22) : connu du serveur, il attend son clic.
+  const known = (state.waiting ?? []).some(w => w.userId === userId) || isAbsentee(state, userId)
   const round = state.currentRound
   const callback = useRef(onRejoin)
   callback.current = onRejoin
@@ -73,14 +77,15 @@ function useWaitingPreview(state: MultiplayerGameState, enabled: boolean, server
  * passage a l'ecran de jeu se fait tout seul, quand le serveur le range dans
  * les joueurs au debut de la manche suivante.
  */
-export function LateJoinerView({ state, currentUserId, serverNow, chatMessages, onSendChat, onExit, onRejoin, accentColor }: LateJoinerViewProps) {
+export function LateJoinerView({ state, currentUserId, serverNow, chatMessages, onSendChat, onExit, onRejoin, onComeBack, accentColor }: LateJoinerViewProps) {
   const [sound, setSound] = useState(false)
   useRejoinIfUnknown(state, currentUserId, onRejoin)
   const withSound = state.mode !== "event"
   useWaitingPreview(state, withSound && sound, serverNow)
   // Heure serveur fine pour le 3-2-1 et la barre des ecrans entre deux manches (T38).
   const clock = useServerClock(serverNow)
-  const banner = lateJoinBanner(state)
+  const absentee = isAbsentee(state, currentUserId)
+  const banner = absentee ? ABSENTEE_BANNER : lateJoinBanner(state)
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 py-5 text-ink sm:px-6 sm:py-8" data-testid="late-joiner-view">
@@ -96,6 +101,16 @@ export function LateJoinerView({ state, currentUserId, serverNow, chatMessages, 
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {absentee && onComeBack ? (
+            <button
+              type="button"
+              onClick={onComeBack}
+              data-testid="absent-come-back"
+              className="flex items-center gap-1.5 rounded-md border-2 border-line bg-ink-block px-4 py-2 text-sm font-bold text-on-ink shadow-[3px_3px_0_rgb(var(--c-shadow)/.25)] transition active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
+            >
+              <Hand className="h-4 w-4" aria-hidden /> {ABSENTEE_BANNER.action}
+            </button>
+          ) : null}
           {withSound ? (
             <button
               type="button"

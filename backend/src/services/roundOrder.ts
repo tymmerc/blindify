@@ -23,6 +23,8 @@ export async function heardTonight(userIds: number[]): Promise<string[]> {
      JOIN audio_sources s ON s.id = gr.audio_source_id
      WHERE gs.started_at >= NOW() - make_interval(hours => $2)
        AND gs.mode <> 'solo'
+       -- Partie arretee (T42) : les manches jamais revelees n'ont pas ete entendues.
+       AND (gs.state <> 'abandoned' OR gr.round_index <= COALESCE(gs.current_round, 0))
        AND (gs.host_user_id = ANY($1::int[])
             OR EXISTS (SELECT 1 FROM game_participants gp WHERE gp.session_id = gs.id AND gp.user_id = ANY($1::int[])))`,
     [userIds, EVENING_HOURS]

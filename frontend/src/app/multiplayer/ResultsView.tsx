@@ -13,6 +13,7 @@ import { endMoments, type EndMoments } from "@/lib/endMoments"
 import type { RoomRoundsSummary } from "@/lib/apiClient"
 import type { FeedbackContext } from "@/lib/feedback"
 import { placeLabel, playerTone } from "@/lib/roundPacing"
+import { ABSENT_LABEL } from "@/lib/absence"
 import type { SoloTrack } from "@/lib/types"
 
 export interface ResultsEntry {
@@ -24,6 +25,8 @@ export interface ResultsEntry {
   bestStreak?: number
   totalReactionMs?: number
   correct?: number
+  /** Absent en fin de partie (T22) : aucune reponse depuis 3 manches. */
+  absent?: boolean
 }
 
 export interface ResultsViewProps {
@@ -182,6 +185,7 @@ function FullRanking({ leaderboard, currentUserId }: { leaderboard: ResultsEntry
             <span className="truncate font-semibold text-ink">
               {nameOf(entry)}
               {me ? <span className="ml-1.5 text-xs font-bold text-ink-2">(toi)</span> : null}
+              {entry.absent ? <span className="ml-1.5 text-xs font-bold uppercase tracking-[0.1em] text-ink-2">{ABSENT_LABEL}</span> : null}
             </span>
             <span className="text-right">
               <b className="font-mono text-base text-ink">{entry.score}</b>

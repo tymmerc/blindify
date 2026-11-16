@@ -37,6 +37,8 @@ function plural(n: number, one: string, many: string): string {
  */
 export function gameResultLine(game: Pick<GameHistoryEntry, "mode" | "state" | "totalRounds" | "correct">): string {
   if (game.state === "in_progress") return "En cours"
+  // Arretee par l'hote (T42) ou lancement rate : pas de score de fin a montrer.
+  if (game.state === "abandoned") return "Interrompue"
   const morceaux = plural(game.totalRounds, "morceau", "morceaux")
   if (game.mode === "solo") return morceaux
   return `${game.correct} sur ${morceaux}`
