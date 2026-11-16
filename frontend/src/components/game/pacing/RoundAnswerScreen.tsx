@@ -32,25 +32,37 @@ function GuessPart({ text, ok }: { text: string; ok: boolean | null }) {
   )
 }
 
-/** Le detail de ses points (T43), en petit, sur son propre ecran seulement. */
-function PointsDetail({ row }: { row: AnswerRow }) {
+/**
+ * Ses points de la manche (T43), sur son propre ecran seulement, au-dessus de
+ * la liste : sa ligne y est souvent en bas, sous le pied, sur un telephone.
+ */
+function MyPoints({ row }: { row: AnswerRow }) {
   const parts = pointsParts(row)
   const streak = streakLabel(row.streak)
-  if (parts.length === 0 && !streak) return null
   return (
-    <p className="m-0 mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs text-ink-2" data-testid="detail-points">
-      {parts.map((part, i) => (
-        <span key={part.label} className="whitespace-nowrap">
-          {i > 0 ? <span aria-hidden className="mr-2 text-sourd">·</span> : null}
-          {part.label} <b className="font-mono text-ink">+{formatPoints(part.points)}</b>
+    <div className="border-y-2 border-line py-2" data-testid="mes-points">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-[11px] font-bold uppercase tracking-[0.22em] text-ink-2">Tes points</span>
+        <span className={`whitespace-nowrap font-mono text-2xl font-bold tabular-nums ${row.gained > 0 ? "text-ink" : "text-sourd"}`}>
+          +{formatPoints(row.gained)}
         </span>
-      ))}
-      {streak ? (
-        <span className="whitespace-nowrap rounded border-[1.5px] border-line/60 px-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-terra-txt" data-testid="ma-serie">
-          {streak}
-        </span>
+      </div>
+      {parts.length > 0 || streak ? (
+        <p className="m-0 mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs text-ink-2" data-testid="detail-points">
+          {parts.map((part, i) => (
+            <span key={part.label} className="whitespace-nowrap">
+              {i > 0 ? <span aria-hidden className="mr-2 text-sourd">·</span> : null}
+              {part.label} <b className="font-mono text-ink">+{formatPoints(part.points)}</b>
+            </span>
+          ))}
+          {streak ? (
+            <span className="whitespace-nowrap rounded border-[1.5px] border-line/60 px-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-terra-txt" data-testid="ma-serie">
+              {streak}
+            </span>
+          ) : null}
+        </p>
       ) : null}
-    </p>
+    </div>
   )
 }
 
@@ -93,7 +105,6 @@ function Row({ row, me, index, reduce }: { row: AnswerRow; me: boolean; index: n
             </>
           )}
         </p>
-        {me ? <PointsDetail row={row} /> : null}
       </div>
       <div className="flex flex-col items-end gap-1">
         <span className={`whitespace-nowrap font-mono text-lg font-bold tabular-nums ${row.gained > 0 ? "text-ink" : "text-sourd"}`}>+{formatPoints(row.gained)}</span>
@@ -166,8 +177,10 @@ export function RoundAnswerScreen({ track, players, meId, large = false }: Round
     </div>
   )
 
+  const mine = meId != null ? rows.find(r => r.userId === meId) : undefined
   const list = (
     <div className="min-w-0">
+      {mine ? <div className="mb-4"><MyPoints row={mine} /></div> : null}
       <div className="mb-1 flex items-baseline justify-between gap-3">
         <h3 className="m-0 font-display text-lg font-semibold text-ink sm:text-xl">Qui a répondu quoi</h3>
         <span className="text-xs text-ink-2">titre · artiste</span>

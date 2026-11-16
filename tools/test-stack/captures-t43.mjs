@@ -94,7 +94,7 @@ try {
     await until(() => lead.reveals.has(r), (SECONDS + 10) * 1000, `manche ${r} jamais revelee`)
     await until(() => sp.getByTestId("reponse-joueur").count().then(n => n >= 3), 10000, `manche ${r} : pas de reponses affichees`)
     await sleep(1800) // les lignes arrivent une par une
-    await sp.getByTestId("reponse-joueur").filter({ hasText: "toi" }).first().scrollIntoViewIfNeeded().catch(() => {})
+    if (!(await sp.getByTestId("mes-points").count())) problems.push(`manche ${r} : pas de « Tes points »`)
     await snap(sp, `distance-reponse-m${r}`)
     if (r === ROUNDS) break
     await until(() => sp.locator('[data-step="scores"]').count().then(n => n > 0), 12000, `pas de classement apres la manche ${r}`)
