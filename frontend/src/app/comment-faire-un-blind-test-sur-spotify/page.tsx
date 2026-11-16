@@ -16,7 +16,7 @@ const URL = "https://blindz.app/comment-faire-un-blind-test-sur-spotify/"
 const TITLE = "Comment faire un blind test sur Spotify : deux façons gratuites"
 const DESC =
   "Deux façons de faire un blind test avec Spotify : l'appli seule avec un animateur, ou Blindz, où chacun colle sa playlist et tout le monde joue. Gratuit."
-const UPDATED = "2026-11-06"
+const UPDATED = "2026-11-16"
 
 export const metadata: Metadata = {
   // Devient « Comment faire un blind test sur Spotify (gratuit) · Blindz » (gabarit du layout).
@@ -90,7 +90,7 @@ export default function Page() {
       tagColor={AMBER}
       title="Comment faire un blind test sur Spotify"
       intro="Il y a deux façons de faire. Avec l'appli Spotify seule, quelqu'un joue l'animateur et lance les morceaux. Avec Blindz, chacun colle le lien de sa playlist et tout le monde joue, autour d'une table ou à distance. Les deux sont gratuites, voilà comment faire l'une et l'autre."
-      updated="6 novembre 2026"
+      updated="16 novembre 2026"
       currentHref="/comment-faire-un-blind-test-sur-spotify/"
       heroCta
       jsonLd={[webPageJsonLd(URL, TITLE, DESC, UPDATED), howToJsonLd("Faire un blind test avec ses playlists Spotify sur Blindz", DESC, STEPS), faqJsonLd(FAQ)]}
@@ -106,6 +106,12 @@ export default function Page() {
           comptent à la main, et tout le monde devine sur la musique d'une seule personne. En version gratuite, il y
           a aussi des pubs entre les morceaux.
         </p>
+        <p>
+          Quelques repères pour que ça tourne bien : des extraits de 10 à 20 secondes, une trentaine de morceaux pour
+          une bonne partie de soirée, et un point pour le titre, un pour l'artiste. Pas le temps de préparer ? Il existe
+          sur Spotify des playlists « Blind test » toutes faites, par décennie ou par genre. L'animateur lance l'une
+          d'elles en aléatoire et, comme il ne la connaît pas, il peut deviner avec les autres.
+        </p>
       </Section>
 
       <Section tag="Façon 2" title="Avec Blindz, sur les playlists de tout le monde" tone="deep">
@@ -117,7 +123,9 @@ export default function Page() {
         <Steps items={STEPS.map(s => ({ t: s.t, b: s.text }))} />
         <p>
           Les formats de liens acceptés, les profils et les liens courts sont détaillés sur la page{" "}
-          <Link href="/blind-test-spotify/">blind test avec ses playlists Spotify</Link>.
+          <Link href="/blind-test-spotify/">blind test avec ses playlists Spotify</Link>. D'autres sites font aussi
+          des blind tests à partir d'une playlist, on les a passés en revue dans le{" "}
+          <Link href="/comparatif-blind-test/">comparatif des blind tests en ligne</Link>.
         </p>
       </Section>
 

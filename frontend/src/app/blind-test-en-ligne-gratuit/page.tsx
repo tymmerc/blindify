@@ -8,13 +8,13 @@ import { AMBER, BLUE, FaqList, GuideShell, Li, Section, faqJsonLd, webPageJsonLd
 // verifie dans le code (limites, prix, modes, correction).
 
 const URL = "https://blindz.app/blind-test-en-ligne-gratuit/"
-const TITLE = "Blind test en ligne gratuit, sans inscription : comment jouer"
+const TITLE = "Blind test en ligne gratuit, sans inscription, sur les playlists des joueurs"
 const DESC =
-  "Blind test en ligne gratuit, sans compte ni appli, sur les playlists Spotify ou Deezer des joueurs : à table, sur un seul tel ou à distance, 12 par salle."
-const UPDATED = "2026-10-28"
+  "Blind test en ligne gratuit, sans compte, sans appli ni pub : chaque joueur colle sa playlist Spotify ou Deezer, et on joue à table ou à distance, jusqu'à 12."
+const UPDATED = "2026-11-16"
 
 export const metadata: Metadata = {
-  title: "Blind test en ligne gratuit, sans inscription",
+  title: "Blind test en ligne gratuit avec vos playlists",
   description: DESC,
   alternates: { canonical: URL },
   openGraph: { title: TITLE, description: DESC, url: URL, type: "article", locale: "fr_FR" },
@@ -34,6 +34,10 @@ const FAQ = [
     a: "Des playlists des joueurs. Chacun colle le lien de son profil ou d'une playlist publique Spotify ou Deezer, et la partie est générée à partir de ces morceaux. Les deux plateformes peuvent se mélanger dans la même partie.",
   },
   {
+    q: "On peut jouer à distance, chacun chez soi ?",
+    a: "Oui. Celui qui crée la partie envoie le code à 6 caractères, chacun l'ouvre sur son téléphone ou son ordinateur et entend les extraits chez lui. Jusqu'à 12 joueurs. Si vous êtes déjà en appel Discord, la partie peut aussi se lancer directement dans le salon vocal.",
+  },
+  {
     q: "Combien de joueurs peuvent jouer ?",
     a: "Jusqu'à 12 par salle, autour d'une table comme à distance. Sur un seul téléphone (tout le monde pose un doigt sur l'écran), jusqu'à 5, parce que la plupart des téléphones ne suivent pas plus de cinq doigts à la fois.",
   },
@@ -45,9 +49,10 @@ export default function Page() {
       tag="Guide"
       tagColor={AMBER}
       title={<>Un blind test en ligne <em className="font-medium italic text-vermillon-txt">gratuit</em>, sans inscription</>}
-      intro="Il n'y a ni compte à créer, ni application à installer, ni carte bancaire à sortir. Il faut un navigateur, les téléphones des joueurs, et le lien d'une playlist publique Spotify ou Deezer. Voilà comment ça se passe."
-      updated="28 octobre 2026"
+      intro="Blindz est un blind test en ligne gratuit : pas de compte à créer, pas d'application, pas de pub. Chaque joueur colle le lien d'une playlist Spotify ou Deezer, et la partie se lance dans le navigateur, autour d'une table ou chacun chez soi. Voilà ce qu'il faut et comment ça se passe."
+      updated="16 novembre 2026"
       currentHref="/blind-test-en-ligne-gratuit/"
+      heroCta
       jsonLd={[webPageJsonLd(URL, TITLE, DESC, UPDATED), faqJsonLd(FAQ)]}
     >
       <Section tag="Ce qu'il faut" title="Trois choses, et c'est tout">
@@ -59,7 +64,7 @@ export default function Page() {
             <span><strong>Un pseudo.</strong> On ne te demande ni adresse mail ni mot de passe : tu le tapes et tu joues. Ton historique de parties reste un an sans compte, tant que tu restes sur le même navigateur.</span>
           </Li>
           <Li>
-            <span><strong>Un lien.</strong> Celui de ton profil Spotify ou Deezer, ou d'une playlist publique. C'est de là que viennent les morceaux. Il faut juste que ce soit public : les titres likés sur Spotify ne le sont pas, mets-les dans une playlist publique avant. Le pas-à-pas est dans le guide du <Link href="/blind-test-spotify/">blind test Spotify</Link>.</span>
+            <span><strong>Un lien.</strong> Celui de ton profil Spotify ou Deezer, ou d'une playlist publique. C'est de là que viennent les morceaux. Il faut juste que ce soit public : les titres likés sur Spotify ne le sont pas, mets-les dans une playlist publique avant. Le pas-à-pas est dans le guide du <Link href="/blind-test-spotify/">blind test Spotify</Link>, et le tuto{" "}<Link href="/comment-faire-un-blind-test-sur-spotify/">comment faire un blind test sur Spotify</Link> montre aussi la version sans site, avec un animateur.</span>
           </Li>
         </ul>
       </Section>
@@ -85,6 +90,10 @@ export default function Page() {
           automatiquement à partir des morceaux de tout le monde. Si personne n'a ramené de rap, il n'y a pas de rap. Si
           ton pote n'écoute que de la variété, toute la table va le savoir. Et c'est là que ça devient un jeu : en plus du
           titre et de l'artiste, il faut deviner <strong>qui a mis quoi</strong>.
+        </p>
+        <p>
+          Les autres sites, service par service (d'où vient la musique, gratuit ou pas, compte ou non), sont dans notre{" "}
+          <Link href="/comparatif-blind-test/">comparatif des blind tests en ligne</Link>.
         </p>
       </Section>
 
