@@ -81,12 +81,13 @@ try {
     await until(() => lead.rounds.has(r), 60000, `manche ${r} absente`)
     const truth = oracle(code, r)
     // Memes champs que browser.mjs (remoteCheck), qui sait repondre au telephone.
-    const title = sp.getByLabel("Titre du morceau")
-    await title.waitFor({ timeout: 15000 }).catch(() => problems.push(`manche ${r} : pas de champ titre`))
+    // L'ecran de la manche au telephone : champ « Titre du morceau » (libelle ou texte d'aide selon la vue).
+    const titleField = () => sp.getByLabel("Titre du morceau").or(sp.getByPlaceholder("Titre du morceau")).first()
+    await titleField().waitFor({ timeout: 15000 }).catch(() => problems.push(`manche ${r} : pas de champ titre`))
     await sleep(1200 + r * 400)
-    await title.fill(truth?.title ?? "jsp", { timeout: 3000 }).catch(e => problems.push(`manche ${r} : titre ${e.message.split("\n")[0]}`))
+    await titleField().fill(truth?.title ?? "jsp", { timeout: 3000 }).catch(e => problems.push(`manche ${r} : titre ${e.message.split("\n")[0]}`))
     // Manche 3 : le titre seul, la moitie des points.
-    if (truth && r !== 3) await sp.getByLabel("Artiste").fill(truth.artist, { timeout: 3000 }).catch(() => {})
+    if (truth && r !== 3) await sp.getByLabel("Artiste").or(sp.getByPlaceholder("Tape ici...")).first().fill(truth.artist, { timeout: 3000 }).catch(() => {})
     const owner = truth ? bots.find(b => b.id === truth.ownerId) : null
     if (owner) await sp.getByRole("button", { name: new RegExp(owner.name) }).first().click({ timeout: 2000 }).catch(() => {})
     await sp.locator('button[type="submit"]').first().click({ timeout: 3000 }).catch(e => problems.push(`manche ${r} : valider ${e.message.split("\n")[0]}`))
