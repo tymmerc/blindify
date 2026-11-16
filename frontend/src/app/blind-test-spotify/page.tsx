@@ -8,13 +8,13 @@ import { BLUE, FaqList, GuideShell, Li, Section, Steps, faqJsonLd, howToJsonLd, 
 // du joueur necessaire).
 
 const URL = "https://blindz.app/blind-test-spotify/"
-const TITLE = "Faire un blind test avec ses playlists Spotify"
+const TITLE = "Blind test Spotify : jouer entre amis sur vos playlists, gratuitement"
 const DESC =
-  "Un blind test entre amis sur ses playlists Spotify, sans que personne ne se connecte : copier le lien d'une playlist publique ou d'un profil, le coller, jouer."
-const UPDATED = "2026-09-08"
+  "Blind test Spotify gratuit entre amis, sur les playlists de chaque joueur : on colle le lien d'une playlist publique, sans se connecter à Spotify, et on joue."
+const UPDATED = "2026-11-16"
 
 export const metadata: Metadata = {
-  title: "Blind test avec ses playlists Spotify",
+  title: "Blind test Spotify gratuit avec vos playlists",
   description: DESC,
   alternates: { canonical: URL },
   openGraph: { title: TITLE, description: DESC, url: URL, type: "article", locale: "fr_FR" },
@@ -41,6 +41,10 @@ const STEPS = [
 
 const FAQ = [
   {
+    q: "C'est gratuit ?",
+    a: "Oui. Blindz n'a ni version payante, ni pub, ni achat dans le jeu. Côté Spotify, un compte gratuit suffit pour faire la playlist, et personne n'a besoin de Premium puisque personne ne se connecte.",
+  },
+  {
     q: "Faut-il que tout le monde ait Spotify ?",
     a: "Non. Personne ne se connecte à Spotify : chaque joueur colle simplement un lien public. Un joueur peut venir de Spotify et un autre de Deezer, les morceaux se mélangent dans la même partie. Et si quelqu'un n'a rien à importer, il joue quand même sur les morceaux des autres.",
   },
@@ -51,6 +55,10 @@ const FAQ = [
   {
     q: "Mes titres likés ne s'importent pas, pourquoi ?",
     a: "Les titres likés ne sont pas une playlist publique, Spotify ne les expose pas. Crée une playlist, mets-y les morceaux que tu veux, rends-la publique, et colle son lien.",
+  },
+  {
+    q: "Je n'ai pas de playlist à moi, je peux en prendre une toute faite ?",
+    a: "Oui, n'importe quelle playlist publique passe, pas seulement les tiennes : il suffit que ce soit un lien de playlist (open.spotify.com/playlist/…). On trouve sur Spotify des playlists « Blind test » par décennie ou par genre, faites par d'autres utilisateurs, et leur lien se colle comme un autre. Si une playlist ne s'importe pas, ajoute ses morceaux à une playlist publique à toi et colle celle-là.",
   },
   {
     q: "La musique est jouée en entier ?",
@@ -64,9 +72,10 @@ export default function Page() {
       tag="Guide Spotify"
       tagColor={BLUE}
       title={<>Un blind test avec <em className="font-medium italic text-vermillon-txt">vos</em> playlists Spotify</>}
-      intro="Le lien d'une playlist publique, un pseudo, et la partie se génère avec les morceaux de tout le monde, sans que personne ne se connecte à Spotify ni n'installe quoi que ce soit. Voilà comment faire, étape par étape."
-      updated="8 septembre 2026"
+      intro="Il suffit du lien d'une playlist Spotify publique. Tu le colles sur Blindz, tes potes collent le leur s'ils en ont un, et la partie se génère avec les morceaux de tout le monde. Personne ne se connecte à Spotify, il n'y a rien à installer et c'est gratuit. Voilà comment faire, étape par étape."
+      updated="16 novembre 2026"
       currentHref="/blind-test-spotify/"
+      heroCta
       jsonLd={[webPageJsonLd(URL, TITLE, DESC, UPDATED), howToJsonLd(TITLE, DESC, STEPS), faqJsonLd(FAQ)]}
     >
       <Section tag="En quatre étapes" title="Deux minutes, montre en main">
@@ -104,7 +113,8 @@ export default function Page() {
       <Section tag="Ensuite" title="Choisir comment jouer" tone="blue">
         <p>
           Une fois la musique importée, trois façons de jouer : autour d'une table avec un écran central et des QR codes,
-          sur un seul téléphone à doigt posé, ou à distance avec un code. Le détail est dans le guide{" "}
+          sur un seul téléphone à doigt posé, ou à distance avec un code (voir le{" "}
+          <Link href="/blind-test-en-ligne-gratuit/">blind test en ligne gratuit</Link>). Le détail est dans le guide{" "}
           <Link href="/blind-test-soiree/">organiser un blind test en soirée</Link>, et si tes potes sont sur Deezer,
           le guide <Link href="/blind-test-deezer/">blind test avec Deezer</Link> explique la même chose de leur côté.
           Et pour voir aussi comment faire avec l'appli Spotify seule, quelqu'un en animateur, il y a le tuto{" "}
