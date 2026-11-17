@@ -165,7 +165,7 @@ export function ShareButtons({ code, link }: { code: string; link: string }) {
           type="button"
           onClick={() => void invite()}
           data-testid="lobby-inviter"
-          className={`${base} py-3.5 text-base ${done === "link" ? "bg-sage text-on-ink" : "bg-terra text-on-ink"}`}
+          className={`${base} py-3.5 text-base ${done === "link" ? "bg-sage text-on-accent" : "bg-terra text-on-ink"}`}
         >
           {done === "link" ? <Check size={16} /> : <Share2 size={16} />}
           {done === "link" ? "Lien copié" : "Inviter"}
@@ -173,7 +173,7 @@ export function ShareButtons({ code, link }: { code: string; link: string }) {
         <button
           type="button"
           onClick={() => void copyCode()}
-          className={`${base} ${done === "code" ? "bg-sage text-on-ink" : "bg-paper text-ink"}`}
+          className={`${base} ${done === "code" ? "bg-sage text-on-accent" : "bg-paper text-ink"}`}
         >
           {done === "code" ? <Check size={15} /> : <Copy size={15} />}
           {done === "code" ? "Code copié" : "Copier le code"}
