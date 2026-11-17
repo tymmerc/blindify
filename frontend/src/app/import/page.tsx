@@ -169,7 +169,7 @@ export default function ImportPage() {
               {/* Spotify */}
               <div className="rounded-md border-[1.5px] border-[rgb(var(--c-line)/.25)] bg-well p-4">
                 <div className="mb-2 flex items-center gap-2">
-                  <span className="rounded-full border-[1.5px] border-line bg-sage px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-on-ink">Spotify</span>
+                  <span className="rounded-full border-[1.5px] border-line bg-sage px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-on-accent">Spotify</span>
                 </div>
                 <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-sourd">Sur ordinateur</p>
                 <ol className="mb-3 ml-4 list-decimal space-y-1 text-sm text-ink">

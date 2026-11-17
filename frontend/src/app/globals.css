@@ -7,7 +7,7 @@
      CLUB ANALOGIQUE, la DA de Blindz.
      Papier creme, encre espresso, terracotta, or. Serif Fraunces
      pour le display, Karla pour l'UI. Grain papier global.
-     Mode sombre (T30) : « nuit chaude », pose par data-theme="dark"
+     Mode sombre (T30, refait en T47 « noisette ») : pose par data-theme="dark"
      sur <html> avant le premier affichage (script du <head>, layout.tsx).
      Les jetons --c-* sont des triplets RGB : rgb(var(--c-ink) / .5)
      marche, et Tailwind les expose (text-ink, bg-paper, border-line...).
@@ -81,28 +81,33 @@
 }
 
 html[data-theme="dark"] {
-  --c-paper: 27 20 14;
-  --c-paper-deep: 38 28 20;
-  --c-well: 33 24 17;
-  --c-paper-strong: 51 38 27;
-  --c-paper-light: 34 26 19;
-  --c-ink: 216 200 170;
-  --c-line: 196 180 150;
-  --c-ink-block: 14 10 7;
-  --c-ink-block-hover: 6 4 3;
-  --c-ink-2: 184 165 134;
-  --c-sourd: 168 149 122;
-  --c-pale: 154 135 112;
-  --c-terra-txt: 232 113 79;
-  --c-vermillon-txt: 232 113 79;
-  --c-rouge-txt: 236 134 112;
-  --c-gold-txt: 232 176 74;
-  --c-gold-deep-txt: 224 163 46;
-  --c-ambre-txt: 232 154 53;
-  --c-sage-txt: 157 180 146;
-  --c-sage-deep-txt: 168 192 155;
-  --c-acier-txt: 147 170 219;
-  --c-shadow: 5 3 2;
+  /* T47 « noisette » : brun moyen et doux. Texte principal 7:1 au moins et
+     petit texte 4,5:1 au moins sur papier, puits, carte, surface appuyee. */
+  --c-paper: 73 58 43; /* #493a2b */
+  --c-paper-deep: 86 71 55; /* #564737 */
+  --c-well: 66 52 37; /* #423425 */
+  --c-paper-strong: 97 82 66; /* #615242 */
+  --c-paper-light: 80 64 49; /* #504031 */
+  --c-ink: 251 249 245; /* #fbf9f5 */
+  --c-line: 204 191 173; /* #ccbfad */
+  --c-ink-block: 43 32 22; /* #2b2016 */
+  --c-ink-block-hover: 33 24 15; /* #21180f */
+  --c-on-ink: 249 246 240; /* #f9f6f0 */
+  --c-ink-2: 240 233 222; /* #f0e9de */
+  --c-sourd: 222 216 206; /* #ded8ce */
+  --c-pale: 210 204 196; /* #d2ccc4 */
+  --c-terra: 191 74 44; /* #bf4a2c, texte clair dessus 4,6:1 */
+  --c-terra-txt: 255 191 157; /* #ffbf9d */
+  --c-vermillon: 198 66 43; /* #c6422b, texte clair dessus 4,6:1 */
+  --c-vermillon-txt: 255 195 164; /* #ffc3a4 */
+  --c-rouge-txt: 255 204 183; /* #ffccb7 */
+  --c-gold-txt: 255 237 129; /* #ffed81 */
+  --c-gold-deep-txt: 255 206 118; /* #ffce76 */
+  --c-ambre-txt: 255 211 118; /* #ffd376 */
+  --c-sage-txt: 193 221 179; /* #c1ddb3 */
+  --c-sage-deep-txt: 214 239 201; /* #d6efc9 */
+  --c-acier-txt: 189 215 255; /* #bdd7ff */
+  --c-shadow: 12 8 5; /* #0c0805 */
   --c-scrim: 0 0 0;
   color-scheme: dark;
 }
