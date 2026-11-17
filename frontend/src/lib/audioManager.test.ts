@@ -46,6 +46,24 @@ async function freshAudioManager() {
 }
 
 describe("audioManager", () => {
+  describe("warmup", () => {
+    it("ne coupe pas un morceau qui joue deja (premier tap pendant la manche)", async () => {
+      const am = await freshAudioManager()
+      const el = (await am.play({ src: "https://example.com/track.mp3", owner: "multiplayer", volume: 0.5 })) as unknown as MockAudio
+      el.paused = false
+      am.warmup()
+      expect(el.src).toBe("https://example.com/track.mp3")
+      expect(el.volume).toBe(0.5)
+      expect(mockPlay).toHaveBeenCalledTimes(1)
+    })
+
+    it("debloque toujours un element a l'arret", async () => {
+      const am = await freshAudioManager()
+      am.warmup()
+      expect(mockPlay).toHaveBeenCalledTimes(1)
+    })
+  })
+
   describe("play", () => {
     it("should create an Audio element and call play()", async () => {
       const am = await freshAudioManager()
