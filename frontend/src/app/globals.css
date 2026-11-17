@@ -27,9 +27,9 @@
   --c-sourd: 111 91 68; /* #6f5b44 texte sourd (etait #8a7558, 3,4:1 : remonte AA) */
   --c-pale: 116 96 74; /* #74604a indications (etait #b3a182, 1,9:1 : remonte AA) */
   --c-terra: 198 81 51; /* #c65133 terre cuite en fond */
-  --c-terra-txt: 198 81 51; /* #c65133 terre cuite en texte */
+  --c-terra-txt: 154 63 40; /* #9a3f28 terre cuite en texte, foncee pour 4,5:1 sur tous les papiers clairs */
   --c-vermillon: 204 72 48; /* #cc4830 vermillon en fond */
-  --c-vermillon-txt: 204 72 48; /* #cc4830 vermillon en texte */
+  --c-vermillon-txt: 159 56 37; /* #9f3825 vermillon en texte, fonce pour 4,5:1 sur tous les papiers clairs */
   --c-rouge: 156 47 29; /* #9c2f1d rouge en fond */
   --c-rouge-txt: 156 47 29; /* #9c2f1d rouge en texte */
   --c-gold: 224 163 46; /* #e0a32e or en fond */
@@ -125,9 +125,9 @@ html[data-theme="dark"] .reste-clair {
   --c-sourd: 111 91 68;
   --c-pale: 116 96 74;
   --c-terra: 198 81 51;
-  --c-terra-txt: 198 81 51;
+  --c-terra-txt: 154 63 40;
   --c-vermillon: 204 72 48;
-  --c-vermillon-txt: 204 72 48;
+  --c-vermillon-txt: 159 56 37;
   --c-rouge: 156 47 29;
   --c-rouge-txt: 156 47 29;
   --c-gold: 224 163 46;
