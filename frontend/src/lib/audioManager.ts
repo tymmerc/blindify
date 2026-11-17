@@ -114,6 +114,9 @@ class AudioManager {
    */
   warmup(): void {
     if (typeof Audio === "undefined") return;
+    // Un element qui joue deja est debloque : le reprendre couperait le morceau
+    // (premier tap d'un joueur pendant la manche 1, campagne du 17/11).
+    if (this.audio && !this.audio.paused) return;
     if (!this.audio) {
       this.audio = new Audio();
     }
