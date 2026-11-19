@@ -172,14 +172,14 @@ describe("persistGameResults", () => {
   it("ecrit les scores tels qu'au game over, meme si l'etat bouge pendant l'ecriture", async () => {
     const { revealed } = playRoundOne();
     const final = Object.values(revealed.players).map(p => ({ userId: p.userId, score: p.score, correct: p.correct }))
-    const first = deferred<{ rows: [] }>();
+    const first = deferred<{ rows: Array<{ id: number }>; rowCount: number }>();
     let calls = 0;
     query.mockImplementation(() => (calls++ === 0 ? first.promise : Promise.resolve({ rows: [] })));
 
     const pending = persistGameResults(revealed, SESSION_ID);
     for (const p of Object.values(revealed.players)) { p.score += 100; p.correct += 5; }
     revealed.totalRounds = 99;
-    first.resolve({ rows: [] });
+    first.resolve({ rows: [{ id: SESSION_ID }], rowCount: 1 });
     await pending;
 
     const participantUpdates = query.mock.calls

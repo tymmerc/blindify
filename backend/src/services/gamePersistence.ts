@@ -209,6 +209,19 @@ export async function persistGameResults(state: GameState, sessionId: number | u
     answered: (p.answeredRounds ?? 0) > 0,
   }));
   try {
+    // La partie passe « finie » d'abord, et une seule fois : un second appel
+    // (partie reprise apres un redemarrage, ADR-001) ne recompte pas les stats.
+    const claimed = await pool.query(
+      `UPDATE game_sessions
+       SET state = 'finished', ended_at = COALESCE(ended_at, NOW()), current_round = $2
+       WHERE id = $1 AND state <> 'finished'
+       RETURNING id`,
+      [sessionId, totalRounds],
+    );
+    if (!claimed.rowCount) {
+      logger.info("multiplayer_game_already_persisted", { roomCode, sessionId });
+      return;
+    }
     for (const player of players) {
       if (!player.answered) {
         // Ni ligne a 0 point (posee au lancement), ni partie de plus dans ses
@@ -246,12 +259,6 @@ export async function persistGameResults(state: GameState, sessionId: number | u
         [player.userId, player.correct, player.rounds, xpGain, player.bestStreak, Math.round(player.totalReactionMs ?? 0)],
       );
     }
-    await pool.query(
-      `UPDATE game_sessions
-       SET state = 'finished', ended_at = COALESCE(ended_at, NOW()), current_round = $2
-       WHERE id = $1 AND state <> 'finished'`,
-      [sessionId, totalRounds],
-    );
     // La room sort de "in_progress" en base : sans ca, elle servait le corrige
     // via /state pour toujours et s'accumulait en zombie (440 en prod avant ce
     // fix). Le "rejouer" la repasse en waiting puis in_progress normalement.

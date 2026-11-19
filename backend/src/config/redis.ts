@@ -49,6 +49,13 @@ function watch(c: Redis, role: string, consequence: string, isCurrent: () => boo
   });
 }
 
+const readyListeners = new Set<() => void>();
+
+/** A chaque connexion (ou reconnexion) du client principal. */
+export function onRedisReady(fn: () => void): void {
+  readyListeners.add(fn);
+}
+
 /**
  * Ouvre la connexion. Ne rejette jamais : renvoie false si Redis n'est pas
  * configure ou ne repond pas, et ioredis continue de retenter en fond.
@@ -77,6 +84,10 @@ export async function connectRedis(url: string | undefined): Promise<boolean> {
   });
   client = c;
   watch(c, 'principal', 'le jeu continue sans copie de secours', () => c === client);
+  c.on('ready', () => {
+    if (c !== client) return;
+    for (const fn of readyListeners) fn();
+  });
 
   try {
     await c.connect();
@@ -207,6 +218,18 @@ export async function getGameState(roomCode: string): Promise<string | null> {
 export async function deleteGameState(roomCode: string): Promise<void> {
   const key = `${GAME_STATE_PREFIX}${roomCode}`;
   await run(c => c.del(key));
+}
+
+/** Codes des salles qui ont une copie, par SCAN (jamais KEYS, qui bloque Redis). */
+export async function scanGameStateCodes(): Promise<string[]> {
+  const codes = new Set<string>();
+  let cursor = '0';
+  do {
+    const [next, keys] = await run(c => c.scan(cursor, 'MATCH', `${GAME_STATE_PREFIX}*`, 'COUNT', 100));
+    for (const key of keys) codes.add(key.slice(GAME_STATE_PREFIX.length));
+    cursor = next;
+  } while (cursor !== '0');
+  return Array.from(codes);
 }
 
 /**

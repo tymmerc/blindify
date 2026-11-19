@@ -134,6 +134,7 @@ function fullGame(): Full<LiveGame> {
     silentRounds: 1,
     emptySince: 1_700_000_001_000,
     pausedByIdle: true,
+    restoredRound: 2,
     pausedAt: 1_700_000_005_000,
   };
 }

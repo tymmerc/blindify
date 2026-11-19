@@ -52,6 +52,8 @@ import {
 import { expireOldInvitations, getAcceptedFriendIds, type ExpiredInvitation } from "./services/social";
 import { registerSocketHandlers, broadcastFriendPresence } from "./socketHandlers";
 import { startStallWatchdog } from "./services/realtimeOrchestrator";
+import { restoreGames } from "./services/gameRestore";
+import { gameBackupsSettled } from "./services/realtimeGame";
 import { startIdleWatch } from "./services/idleGames";
 import { stopIdleGame } from "./controllers/roomsController";
 import { reportGameStartNotifStatus } from "./services/gameStartAnnounce";
@@ -371,6 +373,10 @@ async function bootstrap() {
   } else {
     logger.info("socket_adapter : memoire");
   }
+  // Reprise des parties copiees dans Redis (ADR-001), avant server.listen et
+  // avant le menage periodique : aucun game:sync ne doit trouver la salle vide
+  // et la solder comme « partie perdue ». Ne fait jamais echouer le demarrage.
+  await restoreGames(io);
 
   // Schema de la bibliotheque de liens des le BOOT : le poll room details y fait
 // reference, un premier deploiement sans la table crash-loopait le serveur.
@@ -507,7 +513,8 @@ function shutdown(signal: string) {
   logger.info(`${signal} received — shutting down gracefully`);
   server.close(() => {
     logger.info("HTTP server closed");
-    Promise.all([pool.end(), closeRedis()]).then(() => {
+    // Les dernieres copies de secours partent avant de fermer Redis.
+    Promise.all([pool.end(), gameBackupsSettled().then(closeRedis)]).then(() => {
       logger.info("Database pool closed");
       process.exit(0);
     }).catch(() => process.exit(1));

@@ -11,7 +11,8 @@ import {
 } from "./lateJoiners";
 import { answerStep, stepAfter, type RoundPacing } from "./roundPacing";
 import { roundPoints, type RoundPoints } from "./roundScoring";
-import { createBackupWriter, serializeGame } from "./gameBackup";
+import { createBackupWriter, serializeGame, type RestoredGame } from "./gameBackup";
+import { onRedisReady } from "../config/redis";
 
 export type Verdict = "correct" | "close" | "wrong";
 
@@ -153,6 +154,11 @@ type GameContext = {
   emptySince: number | null;
   /** La pause en cours vient-elle de la veille (T22) plutot que de l'hote ? */
   pausedByIdle: boolean;
+  /**
+   * Manche coupee par un redemarrage du serveur (reprise depuis Redis) : a sa
+   * revelation, personne n'y est compte absent. null sinon.
+   */
+  restoredRound?: number | null;
 };
 
 /**
@@ -185,6 +191,14 @@ export const ABSENT_AFTER_MISSED_ROUNDS = 3;
 export const SILENT_ROUNDS_BEFORE_PAUSE = 3;
 export const EMPTY_PAUSE_MS = 15_000;
 export const IDLE_STOP_MS = 120_000;
+
+/**
+ * Reprise apres un redemarrage du serveur : le chrono de la partie repart
+ * 5 s apres la reprise. C'est le temps que met le client socket.io pour
+ * revenir (il retente toutes les 5 s au plus, a +/- 50 %), et la meme duree
+ * que la grace de reconnexion (DISCONNECT_GRACE_MS).
+ */
+export const RESTART_GRACE_MS = 5_000;
 
 /**
  * Absents par salle (T22), au-dela d'une partie : Rejouer ne les reprend pas.
@@ -257,10 +271,13 @@ const games = new Map<string, LiveGame>();
 
 // Copie de secours dans Redis (services/gameBackup.ts). Une partie finie n'a
 // plus de copie : rien a reprendre apres un redemarrage.
-const backup = createBackupWriter(roomCode => {
+const backup = createBackupWriter(roomCode => backupSnapshot(roomCode));
+
+/** La copie de secours d'une salle telle qu'elle partirait maintenant (null : rien a garder). */
+export function backupSnapshot(roomCode: string, now = Date.now()): string | null {
   const game = games.get(roomCode);
-  return game && game.state.phase !== "FINISHED" ? serializeGame(game, roomAbsent.get(roomCode)) : null;
-});
+  return game && game.state.phase !== "FINISHED" ? serializeGame(game, roomAbsent.get(roomCode), now) : null;
+}
 
 /** La partie a modifier : sa copie partira, groupee, au prochain tour de boucle. */
 function edit(roomCode: string): LiveGame | undefined {
@@ -273,6 +290,17 @@ function edit(roomCode: string): LiveGame | undefined {
 function touchIfLive(roomCode: string): void {
   if (games.has(roomCode)) backup.markDirty(roomCode);
 }
+
+/**
+ * Remet toutes les parties dans la file des copies : au retour de Redis, et
+ * toutes les 5 s par le filet de veille. Une copie identique n'est reecrite
+ * qu'au bout de 10 min (services/gameBackup.ts), ce qui remet sa duree de vie
+ * a zero meme pendant une longue pause sans aucun changement.
+ */
+export function refreshGameBackups(): void {
+  for (const roomCode of games.keys()) backup.markDirty(roomCode);
+}
+onRedisReady(refreshGameBackups);
 
 /** Attend que les copies de secours en cours soient parties (tests). */
 export function gameBackupsSettled(): Promise<void> {
@@ -358,6 +386,7 @@ export function bootstrapGameState(params: {
     silentRounds: 0,
     emptySince: null,
     pausedByIdle: false,
+    restoredRound: null,
   });
   syncAbsentees(games.get(params.roomCode)!);
   backup.markDirty(params.roomCode);
@@ -650,6 +679,50 @@ export function earlyRevealDecision(roomCode: string, now = Date.now()): EarlyRe
 export function clearGame(roomCode: string): void {
   games.delete(roomCode);
   backup.markDirty(roomCode);
+}
+
+/**
+ * Reprend en memoire une partie relue dans Redis apres un redemarrage
+ * (services/gameRestore.ts). Le temps perdu est rendu : toutes les heures
+ * absolues de la partie glissent de la duree de l'arret, plus RESTART_GRACE_MS.
+ * La manche, l'ecran du reveal, la pause et la veille reprennent donc ou ils en
+ * etaient. Tout le monde est marque coupe jusqu'a son room:join ; ceux qui
+ * n'avaient pas repondu ont une grace, pour qu'un retour plus lent qu'un autre
+ * ne declenche pas la revelation anticipee sans eux. L'appelant relance les
+ * minuteurs (rescheduleAfterResume).
+ */
+export function restoreGame(saved: Pick<RestoredGame, "game" | "roomAbsent" | "savedAt">, now = Date.now()): GameState {
+  const game = saved.game;
+  const state = game.state;
+  const shift = Math.max(0, now - saved.savedAt) + RESTART_GRACE_MS;
+  const later = (t: number | null) => (t == null ? null : t + shift);
+  state.timing = { startAt: later(state.timing.startAt), revealAt: later(state.timing.revealAt) };
+  if (state.pacing) state.pacing = { ...state.pacing, endsAt: state.pacing.endsAt + shift };
+  if (state.idle) state.idle = { ...state.idle, stopAt: state.idle.stopAt + shift };
+  if (game.emptySince != null) game.emptySince += shift;
+  if (game.pausedAt != null) game.pausedAt += shift;
+  const graces: Record<number, number> = {};
+  for (const [userId, until] of Object.entries(game.graceUntil)) graces[Number(userId)] = until + shift;
+  for (const player of Object.values(state.players)) {
+    if (player.answerAt != null) player.answerAt += shift;
+    player.disconnected = true;
+    if (state.phase === "GUESSING" && !player.hasAnswered) {
+      graces[player.userId] = Math.max(graces[player.userId] ?? 0, now + RESTART_GRACE_MS + game.reconnectGraceMs);
+    }
+  }
+  game.graceUntil = graces;
+  game.waiting = game.waiting.map(w => ({ ...w, disconnected: true }));
+  state.hostConnected = false;
+  if (state.phase === "GUESSING") game.restoredRound = state.currentRound;
+  games.set(state.roomCode, game);
+  if (saved.roomAbsent.size > 0) {
+    const users = new Map<number, { username: string | null; avatar: string | null; since: number }>();
+    for (const [userId, entry] of saved.roomAbsent) users.set(userId, { ...entry, since: entry.since + shift });
+    roomAbsent.set(state.roomCode, users);
+  }
+  // La copie suit : heures decalees, joueurs coupes.
+  backup.markDirty(state.roomCode);
+  return state;
 }
 
 export function startNextRound(roomCode: string, opts?: { forceRound?: number; startAt?: number }): GameState | undefined {
@@ -954,6 +1027,8 @@ export function revealRound(roomCode: string): GameState | undefined {
  */
 function trackAbsences(ctx: GameContext): void {
   let someoneAnswered = false;
+  // Manche coupee par un redemarrage : ne pas repondre n'y vaut pas absence.
+  const interrupted = ctx.restoredRound != null && ctx.restoredRound === ctx.state.currentRound;
   const missed = { ...ctx.missed };
   for (const player of playingPlayers(ctx)) {
     if (player.answerAt != null) {
@@ -962,6 +1037,7 @@ function trackAbsences(ctx: GameContext): void {
       player.answeredRounds = (player.answeredRounds ?? 0) + 1;
       continue;
     }
+    if (interrupted) continue;
     missed[player.userId] = (missed[player.userId] ?? 0) + 1;
     if (!player.absent && missed[player.userId] >= ABSENT_AFTER_MISSED_ROUNDS) {
       player.absent = true;
@@ -969,7 +1045,8 @@ function trackAbsences(ctx: GameContext): void {
     }
   }
   ctx.missed = missed;
-  ctx.silentRounds = someoneAnswered ? 0 : ctx.silentRounds + 1;
+  if (someoneAnswered) ctx.silentRounds = 0;
+  else if (!interrupted) ctx.silentRounds += 1;
 }
 
 /**

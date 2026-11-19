@@ -17,7 +17,7 @@
 import type { Server as IOServer } from "socket.io";
 import { logger } from "../utils/logger";
 import type { SessionContext } from "../utils/session";
-import { getGameState, idleCheck, liveRoomCodes, pruneRoomAbsences, type GameState, type IdleDecision } from "./realtimeGame";
+import { getGameState, idleCheck, liveRoomCodes, pruneRoomAbsences, refreshGameBackups, type GameState, type IdleDecision } from "./realtimeGame";
 import { broadcastState, rescheduleAfterResume, stopGameTimers } from "./realtimeOrchestrator";
 
 const IDLE_CHECK_MS = 5_000;
@@ -71,6 +71,8 @@ export function checkIdleGame(io: IOServer, roomCode: string, now = Date.now()):
 export function sweepIdleGames(io: IOServer, now = Date.now()): void {
   for (const roomCode of liveRoomCodes()) checkIdleGame(io, roomCode, now);
   pruneRoomAbsences(now);
+  // Duree de vie des copies de secours, meme sans aucun changement (longue pause).
+  refreshGameBackups();
 }
 
 let idleWatch: NodeJS.Timeout | null = null;
