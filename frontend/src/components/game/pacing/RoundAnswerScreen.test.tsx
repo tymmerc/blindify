@@ -30,6 +30,17 @@ describe("RoundAnswerScreen : ses points (T43)", () => {
     expect(screen.queryByTestId("mes-points")).toBeNull()
   })
 
+  it("le credit Deezer reste affiche, en bas apres la liste, sans sur-titre « La réponse »", () => {
+    for (const large of [false, true]) {
+      const { container, unmount } = render(<RoundAnswerScreen track={track} players={players} meId={large ? null : 1} large={large} />)
+      const logo = screen.getAllByAltText("Deezer")[0]
+      const list = container.querySelector("ol")!
+      expect(list.compareDocumentPosition(logo) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      expect(container.textContent).not.toContain("La réponse")
+      unmount()
+    }
+  })
+
   it("+0 sans detail quand on n'a rien trouve", () => {
     render(<RoundAnswerScreen track={track} players={players} meId={2} />)
     expect(screen.getByTestId("mes-points").textContent).toContain("+0")
