@@ -179,6 +179,7 @@ export async function requireRoomAccess(roomCode: string, userId: number): Promi
  */
 async function relayHostIfNeeded(io: Server, roomCode: string, leavingUserId: number): Promise<void> {
   const present = new Set<number>();
+  // Lecture locale (meme avec l'adaptateur Redis) : seulement les sockets de ce serveur.
   for (const id of io.sockets.adapter.rooms.get(roomCode) ?? []) {
     const auth = (io.sockets.sockets.get(id)?.data as { auth?: SessionContext } | undefined)?.auth;
     if (auth?.user?.id && auth.user.id !== leavingUserId) present.add(auth.user.id);
@@ -209,6 +210,7 @@ export function emitRoomError(socket: Socket, roomCode: string, message: string,
  * tardif ne doit pas marquer absent un joueur deja revenu.
  */
 function hasOtherSocketInRoom(io: Server, roomCode: string, userId: number, socketId: string): boolean {
+  // Lecture locale (meme avec l'adaptateur Redis) : seulement les sockets de ce serveur.
   const ids = io.sockets.adapter.rooms.get(roomCode);
   if (!ids) return false;
   for (const id of ids) {

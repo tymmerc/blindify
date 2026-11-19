@@ -9,9 +9,9 @@ import cookieSession from "cookie-session";
 import dotenv from "dotenv";
 
 import { pool } from "./config/db";
-import { closeRedis, connectRedis } from "./config/redis";
+import { closeRedis, connectPubSub, connectRedis } from "./config/redis";
 import { assertConnectedDatabase } from "./config/databaseGuard";
-import { initSocket } from "./socket";
+import { attachRedisAdapter, initSocket } from "./socket";
 import authRoutes from "./routes/auth";
 import gamesRoutes from "./routes/games";
 import likesRoutes from "./routes/likes";
@@ -362,6 +362,15 @@ async function bootstrap() {
   // Copie de secours des parties (ADR-001). Ne bloque pas plus de quelques
   // secondes et ne fait jamais echouer le demarrage : sans Redis, on joue quand meme.
   await connectRedis(process.env.REDIS_URL);
+  // Adaptateur Socket.IO par Redis, avant server.listen plus bas : aucun socket
+  // n'est encore entre dans une salle. Sans Redis, l'adaptateur memoire reste.
+  const pubSub = await connectPubSub();
+  if (pubSub) {
+    attachRedisAdapter(io, pubSub.pub, pubSub.sub);
+    logger.info("socket_adapter : redis");
+  } else {
+    logger.info("socket_adapter : memoire");
+  }
 
   // Schema de la bibliotheque de liens des le BOOT : le poll room details y fait
 // reference, un premier deploiement sans la table crash-loopait le serveur.

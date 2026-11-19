@@ -36,6 +36,7 @@ export function setIdleStopper(fn: IdleStopper | null): void {
 
 /** Le joueur a-t-il au moins un socket dans la salle ? (spectateurs et viewers n'ont pas de compte) */
 export function userSocketInRoom(io: IOServer, roomCode: string, userId: number): boolean {
+  // Lecture locale (meme avec l'adaptateur Redis) : seulement les sockets de ce serveur.
   for (const id of io.sockets.adapter.rooms.get(roomCode) ?? []) {
     const auth = (io.sockets.sockets.get(id)?.data as { auth?: SessionContext } | undefined)?.auth;
     if (auth?.user?.id === userId) return true;

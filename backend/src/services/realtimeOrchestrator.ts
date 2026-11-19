@@ -92,6 +92,7 @@ function emitState(io: IOServer, roomCode: string): GameState | undefined {
 
 function emitRoundStart(io: IOServer, state: GameState) {
   if (!state.currentTrack) return;
+  // Lecture locale (meme avec l'adaptateur Redis) : seulement les sockets de ce serveur.
   const room = io.sockets.adapter.rooms.get(state.roomCode);
   const socketCount = room ? room.size : 0;
   const socketIds = room ? Array.from(room) : [];

@@ -21,9 +21,33 @@ const COMMAND_TIMEOUT_MS = 1000;
 const HEALTH_TIMEOUT_MS = 500;
 
 let client: Redis | null = null;
-// Dernier etat journalise : une seule ligne par passage coupe/pret, pas une par
-// tentative de reconnexion.
-let loggedState: 'ready' | 'down' | null = null;
+// Clients de l'adaptateur Socket.IO (publication et abonnement), copies du
+// client principal avec les memes garanties.
+let pubClient: Redis | null = null;
+let subClient: Redis | null = null;
+
+/**
+ * Journalise une seule ligne par passage coupe/pret, pas une par tentative de
+ * reconnexion. Les ecouteurs ignorent un client deja ferme par closeRedis().
+ */
+function watch(c: Redis, role: string, consequence: string, isCurrent: () => boolean): void {
+  let logged: 'ready' | 'down' | null = null;
+  c.on('ready', () => {
+    if (!isCurrent() || logged === 'ready') return;
+    logged = 'ready';
+    logger.info('redis_pret', { client: role });
+  });
+  c.on('error', (err: Error) => {
+    if (!isCurrent() || logged === 'down') return;
+    logged = 'down';
+    logger.warn(`redis_injoignable : ${consequence}`, { client: role, error: err.message });
+  });
+  c.on('close', () => {
+    if (!isCurrent() || logged !== 'ready') return;
+    logged = 'down';
+    logger.warn(`redis_connexion_perdue : ${consequence}`, { client: role });
+  });
+}
 
 /**
  * Ouvre la connexion. Ne rejette jamais : renvoie false si Redis n'est pas
@@ -49,30 +73,40 @@ export async function connectRedis(url: string | undefined): Promise<boolean> {
     reconnectOnError: (err) => err.message.includes('READONLY'),
   });
   client = c;
-  loggedState = null;
-
-  // Les ecouteurs ignorent un client deja ferme par closeRedis().
-  c.on('ready', () => {
-    if (c !== client || loggedState === 'ready') return;
-    loggedState = 'ready';
-    logger.info('redis_pret');
-  });
-  c.on('error', (err: Error) => {
-    if (c !== client || loggedState === 'down') return;
-    loggedState = 'down';
-    logger.warn('redis_injoignable : le jeu continue sans copie de secours', { error: err.message });
-  });
-  c.on('close', () => {
-    if (c !== client || loggedState !== 'ready') return;
-    loggedState = 'down';
-    logger.warn('redis_connexion_perdue : le jeu continue sans copie de secours');
-  });
+  watch(c, 'principal', 'le jeu continue sans copie de secours', () => c === client);
 
   try {
     await c.connect();
     return true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Ouvre les clients de publication et d'abonnement de l'adaptateur Socket.IO,
+ * copies du client principal (memes options : pas de file d'attente, delais
+ * courts, reconnexion en fond). Renvoie null si le client principal n'est pas
+ * pret ou si l'un des deux ne se connecte pas : on reste alors en memoire.
+ */
+export async function connectPubSub(): Promise<{ pub: Redis; sub: Redis } | null> {
+  if (pubClient && subClient) return { pub: pubClient, sub: subClient };
+  if (!client || client.status !== 'ready') return null;
+  const pub = client.duplicate();
+  const sub = client.duplicate();
+  pubClient = pub;
+  subClient = sub;
+  const consequence = 'les emissions restent sur ce serveur';
+  watch(pub, 'pub', consequence, () => pub === pubClient);
+  watch(sub, 'sub', consequence, () => sub === subClient);
+  try {
+    await Promise.all([pub.connect(), sub.connect()]);
+    return { pub, sub };
+  } catch {
+    pubClient = null;
+    subClient = null;
+    await Promise.all([closeClient(pub), closeClient(sub)]);
+    return null;
   }
 }
 
@@ -91,22 +125,27 @@ export async function getRedisHealth(): Promise<RedisHealth> {
   }
 }
 
-/** Fermeture propre (shutdown du serveur, fin des tests). Ne rejette jamais. */
-export async function closeRedis(): Promise<void> {
-  const c = client;
-  client = null;
-  loggedState = null;
-  if (!c) return;
+async function closeClient(c: Redis): Promise<void> {
   if (c.status === 'ready') {
     try {
       await c.quit();
+      return;
     } catch {
-      c.disconnect();
+      // On coupe net ci-dessous.
     }
-  } else {
-    // Coupe aussi les tentatives de reconnexion en attente.
-    c.disconnect();
   }
+  // Coupe aussi les tentatives de reconnexion en attente.
+  c.disconnect();
+}
+
+/** Fermeture propre (shutdown du serveur, fin des tests). Ne rejette jamais. */
+export async function closeRedis(): Promise<void> {
+  const all = [client, pubClient, subClient].filter((c): c is Redis => c !== null);
+  client = null;
+  pubClient = null;
+  subClient = null;
+  if (!all.length) return;
+  await Promise.all(all.map(closeClient));
   logger.info('redis_ferme');
 }
 
