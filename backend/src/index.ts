@@ -9,12 +9,14 @@ import cookieSession from "cookie-session";
 import dotenv from "dotenv";
 
 import { pool } from "./config/db";
+import { closeRedis, connectPubSub, connectRedis } from "./config/redis";
 import { assertConnectedDatabase } from "./config/databaseGuard";
-import { initSocket } from "./socket";
+import { attachRedisAdapter, initSocket } from "./socket";
 import authRoutes from "./routes/auth";
 import gamesRoutes from "./routes/games";
 import likesRoutes from "./routes/likes";
 import roomsRoutes from "./routes/rooms";
+import { healthHandler } from "./routes/health";
 import streamerRoutes from "./routes/streamer";
 import { checkTwitchConfig } from "./services/twitchReader";
 import reportsRoutes from "./routes/reports";
@@ -50,6 +52,8 @@ import {
 import { expireOldInvitations, getAcceptedFriendIds, type ExpiredInvitation } from "./services/social";
 import { registerSocketHandlers, broadcastFriendPresence } from "./socketHandlers";
 import { startStallWatchdog } from "./services/realtimeOrchestrator";
+import { restoreGames } from "./services/gameRestore";
+import { gameBackupsSettled } from "./services/realtimeGame";
 import { startIdleWatch } from "./services/idleGames";
 import { stopIdleGame } from "./controllers/roomsController";
 import { reportGameStartNotifStatus } from "./services/gameStartAnnounce";
@@ -280,12 +284,8 @@ app.use((req, res, next) => {
   next();
 });
 
-app.get("/health", (_req, res) => {
-  ok(res, { status: "ok" });
-});
-app.get("/api/health", (_req, res) => {
-  ok(res, { status: "ok" });
-});
+app.get("/health", healthHandler);
+app.get("/api/health", healthHandler);
 
 app.get("/api/friends/activity", async (req, res) => {
   const context = await getSessionContext(req, res);
@@ -361,6 +361,18 @@ async function bootstrap() {
   // Second verrou du garde-fou (config/databaseGuard.ts) : la base reellement
   // ouverte, d'apres le serveur, avant tout schema.
   await assertConnectedDatabase(pool);
+  // Copie de secours des parties (ADR-001). Ne bloque pas plus de quelques
+  // secondes et ne fait jamais echouer le demarrage : sans Redis, on joue quand meme.
+  await connectRedis(process.env.REDIS_URL);
+  // Adaptateur Socket.IO par Redis, avant server.listen plus bas : aucun socket
+  // n'est encore entre dans une salle. Sans Redis, l'adaptateur memoire reste.
+  const pubSub = await connectPubSub();
+  if (pubSub) {
+    attachRedisAdapter(io, pubSub.pub, pubSub.sub);
+    logger.info("socket_adapter : redis");
+  } else {
+    logger.info("socket_adapter : memoire");
+  }
 
   // Schema de la bibliotheque de liens des le BOOT : le poll room details y fait
 // reference, un premier deploiement sans la table crash-loopait le serveur.
@@ -484,6 +496,11 @@ process.on("unhandledRejection", (reason) => {
 });
 
 await userTracksReady;
+// Reprise des parties copiees dans Redis (ADR-001), juste avant d'ouvrir :
+// la lenteur du demarrage ne mange pas la grace de reprise, et aucun game:sync
+// ne trouve la salle vide pour la solder en « partie perdue ». Le menage
+// periodique ne passe qu'apres. Ne fait jamais echouer le demarrage.
+await restoreGames(io);
 server.listen(PORT, "0.0.0.0", () => {
     logger.info(`🚀 Blindify API listening on port ${PORT}`);
     reportGameStartNotifStatus();
@@ -497,7 +514,8 @@ function shutdown(signal: string) {
   logger.info(`${signal} received — shutting down gracefully`);
   server.close(() => {
     logger.info("HTTP server closed");
-    pool.end().then(() => {
+    // Les dernieres copies de secours partent avant de fermer Redis.
+    Promise.all([pool.end(), gameBackupsSettled().then(closeRedis)]).then(() => {
       logger.info("Database pool closed");
       process.exit(0);
     }).catch(() => process.exit(1));

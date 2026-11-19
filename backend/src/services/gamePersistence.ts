@@ -1,4 +1,5 @@
 import { pool } from "../config/db";
+import type { PoolClient } from "pg";
 import { logger } from "../utils/logger";
 import type { GameState } from "./realtimeGame";
 import { roundOwnerIds } from "./roundOwners";
@@ -208,17 +209,36 @@ export async function persistGameResults(state: GameState, sessionId: number | u
     // Rien repondu de toute la partie (T22) : pas une partie jouee pour lui.
     answered: (p.answeredRounds ?? 0) > 0,
   }));
+  // Une seule transaction : la partie passe « finie », les stats et la salle
+  // suivent, ou rien ne bouge. Le passage en « finie » vient d'abord et une
+  // seule fois : un second appel (partie reprise apres un redemarrage,
+  // ADR-001) attend le premier puis ne trouve plus rien a faire.
+  let client: PoolClient | null = null;
   try {
+    client = await pool.connect();
+    await client.query("BEGIN");
+    const claimed = await client.query(
+      `UPDATE game_sessions
+       SET state = 'finished', ended_at = COALESCE(ended_at, NOW()), current_round = $2
+       WHERE id = $1 AND state <> 'finished'
+       RETURNING id`,
+      [sessionId, totalRounds],
+    );
+    if (!claimed.rowCount) {
+      await client.query("ROLLBACK");
+      logger.info("multiplayer_game_already_persisted", { roomCode, sessionId });
+      return;
+    }
     for (const player of players) {
       if (!player.answered) {
         // Ni ligne a 0 point (posee au lancement), ni partie de plus dans ses
         // stats : il etait absent, ou n'a jamais touche a la partie.
-        await pool.query(`DELETE FROM game_participants WHERE session_id = $1 AND user_id = $2`, [sessionId, player.userId]);
+        await client.query(`DELETE FROM game_participants WHERE session_id = $1 AND user_id = $2`, [sessionId, player.userId]);
         continue;
       }
       // Upsert : un joueur arrive en cours de partie (T19) n'a pas de ligne
       // posee au lancement. Avec un simple UPDATE, son score etait perdu sans bruit.
-      await pool.query(
+      await client.query(
         `INSERT INTO game_participants (session_id, user_id, score, accuracy, best_streak)
          VALUES ($1, $2, $3, $4, $5)
          ON CONFLICT (session_id, user_id) DO UPDATE
@@ -231,7 +251,7 @@ export async function persistGameResults(state: GameState, sessionId: number | u
       const xpGain = player.correct * 10 + player.bestStreak * 5;
       // Aggregate lifetime stats (mirrors the solo persistSoloResult pattern).
       // total_reaction_ms alimente la carte "Temps de reaction" (sinon = 0 a vie).
-      await pool.query(
+      await client.query(
         `INSERT INTO user_stats (user_id, total_games, total_correct, total_guesses, total_xp, total_reaction_ms, best_streak, last_played_at, updated_at)
          VALUES ($1, 1, $2, $3, $4, $6, $5, NOW(), NOW())
          ON CONFLICT (user_id) DO UPDATE SET
@@ -246,27 +266,25 @@ export async function persistGameResults(state: GameState, sessionId: number | u
         [player.userId, player.correct, player.rounds, xpGain, player.bestStreak, Math.round(player.totalReactionMs ?? 0)],
       );
     }
-    await pool.query(
-      `UPDATE game_sessions
-       SET state = 'finished', ended_at = COALESCE(ended_at, NOW()), current_round = $2
-       WHERE id = $1 AND state <> 'finished'`,
-      [sessionId, totalRounds],
-    );
     // La room sort de "in_progress" en base : sans ca, elle servait le corrige
     // via /state pour toujours et s'accumulait en zombie (440 en prod avant ce
     // fix). Le "rejouer" la repasse en waiting puis in_progress normalement.
     // Seulement si la salle porte encore CETTE partie : une revanche lancee
     // pendant cette ecriture (relance a 0 s, T27) ne doit pas passer « finie »
     // (le corrige serait servi par /state en pleine partie).
-    await pool.query(
+    await client.query(
       `UPDATE multiplayer_rooms
        SET status = 'finished', completed_at = COALESCE(completed_at, NOW())
        WHERE room_code = $1 AND status = 'in_progress'
          AND (session_id IS NULL OR session_id = $2)`,
       [roomCode, sessionId],
     );
+    await client.query("COMMIT");
     logger.info("multiplayer_game_persisted", { roomCode, sessionId, players: players.filter(p => p.answered).length, silent: players.filter(p => !p.answered).length });
   } catch (err) {
+    await client?.query("ROLLBACK").catch(() => undefined);
     logger.error("persist_game_results_failed", { roomCode, sessionId, error: err });
+  } finally {
+    client?.release();
   }
 }

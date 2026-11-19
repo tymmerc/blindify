@@ -138,6 +138,7 @@ export function spectatorOf(socket: Socket | undefined): SpectatorData | null {
 
 export function spectatorCount(io: Server, roomCode: string): number {
   let count = 0;
+  // Lecture locale (meme avec l'adaptateur Redis) : seulement les sockets de ce serveur.
   for (const id of io.sockets.adapter.rooms.get(roomCode) ?? []) {
     if (spectatorOf(io.sockets.sockets.get(id))?.roomCode === roomCode) count += 1;
   }

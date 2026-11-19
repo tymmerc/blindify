@@ -516,6 +516,7 @@ export function kickViewer(io: IOServer, roomCode: string, viewerId: string): bo
   if (!banned) return false;
   const self = viewerSelfRoom(roomCode, viewerId);
   io.to(self).emit("live:error", { code: "exclu" });
+  // Applique d'abord sur ce serveur, Redis coupe ou pas (voir attachRedisAdapter).
   io.in(self).disconnectSockets(true);
   const ctx = games.get(roomCode);
   if (ctx) {

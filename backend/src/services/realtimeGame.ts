@@ -11,6 +11,8 @@ import {
 } from "./lateJoiners";
 import { answerStep, stepAfter, type RoundPacing } from "./roundPacing";
 import { roundPoints, type RoundPoints } from "./roundScoring";
+import { createBackupWriter, serializeGame, type RestoredGame } from "./gameBackup";
+import { onRedisReady } from "../config/redis";
 
 export type Verdict = "correct" | "close" | "wrong";
 
@@ -127,6 +129,8 @@ export type GameState = {
 
 type GameContext = {
   state: GameState;
+  /** Id de la salle en base : la copie de secours reconnait ainsi sa salle. */
+  roomId?: number;
   tracks: RoundTrack[];
   mode: string;
   roundDurationMs: number;
@@ -150,6 +154,11 @@ type GameContext = {
   emptySince: number | null;
   /** La pause en cours vient-elle de la veille (T22) plutot que de l'hote ? */
   pausedByIdle: boolean;
+  /**
+   * Manche coupee par un redemarrage du serveur (reprise depuis Redis) : a sa
+   * revelation, personne n'y est compte absent. null sinon.
+   */
+  restoredRound?: number | null;
 };
 
 /**
@@ -184,6 +193,14 @@ export const EMPTY_PAUSE_MS = 15_000;
 export const IDLE_STOP_MS = 120_000;
 
 /**
+ * Reprise apres un redemarrage du serveur : le chrono de la partie repart
+ * 5 s apres la reprise. C'est le temps que met le client socket.io pour
+ * revenir (il retente toutes les 5 s au plus, a +/- 50 %), et la meme duree
+ * que la grace de reconnexion (DISCONNECT_GRACE_MS).
+ */
+export const RESTART_GRACE_MS = 5_000;
+
+/**
  * Absents par salle (T22), au-dela d'une partie : Rejouer ne les reprend pas.
  * En memoire seulement, comme les parties : un redemarrage les oublie.
  */
@@ -192,6 +209,7 @@ const roomAbsent = new Map<string, Map<number, { username: string | null; avatar
 const ROOM_ABSENT_TTL_MS = 6 * 60 * 60_000;
 
 function setRoomAbsent(roomCode: string, player: { userId: number; username: string | null; avatar?: string | null }, now = Date.now()): void {
+  touchIfLive(roomCode);
   let users = roomAbsent.get(roomCode);
   if (!users) {
     users = new Map();
@@ -202,7 +220,8 @@ function setRoomAbsent(roomCode: string, player: { userId: number; username: str
 
 function clearRoomAbsent(roomCode: string, userId: number): void {
   const users = roomAbsent.get(roomCode);
-  if (!users) return;
+  if (!users?.has(userId)) return;
+  touchIfLive(roomCode);
   users.delete(userId);
   if (users.size === 0) roomAbsent.delete(roomCode);
 }
@@ -220,7 +239,11 @@ export function forgetRoomAbsence(roomCode: string, userIds: readonly number[]):
 /** Menage des absences trop vieilles (appele par le filet de veille). */
 export function pruneRoomAbsences(now = Date.now()): void {
   for (const [roomCode, users] of roomAbsent) {
-    for (const [id, entry] of users) if (now - entry.since > ROOM_ABSENT_TTL_MS) users.delete(id);
+    for (const [id, entry] of users) {
+      if (now - entry.since <= ROOM_ABSENT_TTL_MS) continue;
+      users.delete(id);
+      touchIfLive(roomCode);
+    }
     if (users.size === 0) roomAbsent.delete(roomCode);
   }
 }
@@ -241,7 +264,48 @@ function graceMsOrDefault(value: number | undefined): number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : DISCONNECT_GRACE_MS;
 }
 
-const games = new Map<string, GameContext & { pausedAt?: number | null }>();
+/** Une partie en memoire, telle que la copie de secours la garde. */
+export type LiveGame = GameContext & { pausedAt?: number | null };
+
+const games = new Map<string, LiveGame>();
+
+// Copie de secours dans Redis (services/gameBackup.ts). Une partie finie n'a
+// plus de copie : rien a reprendre apres un redemarrage.
+const backup = createBackupWriter(roomCode => backupSnapshot(roomCode));
+
+/** La copie de secours d'une salle telle qu'elle partirait maintenant (null : rien a garder). */
+export function backupSnapshot(roomCode: string, now = Date.now()): string | null {
+  const game = games.get(roomCode);
+  return game && game.state.phase !== "FINISHED" ? serializeGame(game, roomAbsent.get(roomCode), now) : null;
+}
+
+/** La partie a modifier : sa copie partira, groupee, au prochain tour de boucle. */
+function edit(roomCode: string): LiveGame | undefined {
+  const game = games.get(roomCode);
+  if (game) backup.markDirty(roomCode);
+  return game;
+}
+
+/** Les absences de la salle changent : elles sont dans la copie de sa partie. */
+function touchIfLive(roomCode: string): void {
+  if (games.has(roomCode)) backup.markDirty(roomCode);
+}
+
+/**
+ * Remet toutes les parties dans la file des copies : au retour de Redis, et
+ * toutes les 5 s par le filet de veille. Chaque copie repart avec son heure
+ * (savedAt) a jour et sa duree de vie remise a zero, meme pendant une longue
+ * pause sans aucun changement (voir services/gameBackup.ts).
+ */
+export function refreshGameBackups(): void {
+  for (const roomCode of games.keys()) backup.markDirty(roomCode);
+}
+onRedisReady(refreshGameBackups);
+
+/** Attend que les copies de secours en cours soient parties (tests). */
+export function gameBackupsSettled(): Promise<void> {
+  return backup.settled();
+}
 
 export function bootstrapGameState(params: {
   roomCode: string;
@@ -257,6 +321,8 @@ export function bootstrapGameState(params: {
   mode?: string;
   config?: { roundDurationMs?: number; autoAdvance?: boolean };
   sessionId?: number;
+  /** Id de la salle en base (copie de secours). */
+  roomId?: number;
   /** Reglable pour les tests d'integration ; la prod garde DISCONNECT_GRACE_MS. */
   reconnectGraceMs?: number;
 }): GameState {
@@ -310,6 +376,7 @@ export function bootstrapGameState(params: {
     mode: params.mode ?? "friends",
     roundDurationMs,
     sessionId: params.sessionId,
+    roomId: params.roomId,
     pausedAt: null,
     reconnectGraceMs: graceMsOrDefault(params.reconnectGraceMs),
     graceUntil: {},
@@ -319,8 +386,10 @@ export function bootstrapGameState(params: {
     silentRounds: 0,
     emptySince: null,
     pausedByIdle: false,
+    restoredRound: null,
   });
   syncAbsentees(games.get(params.roomCode)!);
+  backup.markDirty(params.roomCode);
   return state;
 }
 
@@ -360,7 +429,7 @@ export function allAnswerablePlayers(roomCode: string): PlayerState[] {
 }
 
 export function pauseGame(roomCode: string, now = Date.now()): GameState | undefined {
-  const ctx = games.get(roomCode);
+  const ctx = edit(roomCode);
   if (!ctx) return undefined;
   if (ctx.state.paused) return ctx.state;
   if (ctx.state.phase !== "GUESSING" && ctx.state.phase !== "REVEAL") return ctx.state;
@@ -370,7 +439,7 @@ export function pauseGame(roomCode: string, now = Date.now()): GameState | undef
 }
 
 export function resumeGame(roomCode: string, now = Date.now()): GameState | undefined {
-  const ctx = games.get(roomCode);
+  const ctx = edit(roomCode);
   if (!ctx) return undefined;
   if (!ctx.state.paused) return ctx.state;
   // Decaler les horloges du temps passe en pause : le chrono reprend ou il en
@@ -431,8 +500,12 @@ export function idleCheck(roomCode: string, isConnected: (userId: number) => boo
   const ctx = games.get(roomCode);
   if (!ctx || (ctx.state.phase !== "GUESSING" && ctx.state.phase !== "REVEAL")) return "none";
   const someone = playingPlayers(ctx).some(p => !p.disconnected && isConnected(p.userId));
+  // Passe toutes les 5 s : la copie ne part que si quelque chose change.
   if (someone) {
-    ctx.emptySince = null;
+    if (ctx.emptySince !== null) {
+      ctx.emptySince = null;
+      backup.markDirty(roomCode);
+    }
     if (ctx.state.idle?.reason === "empty") {
       if (ctx.pausedByIdle) {
         resumeGame(roomCode, now);
@@ -440,12 +513,17 @@ export function idleCheck(roomCode: string, isConnected: (userId: number) => boo
       }
       // Pause de l'hote : elle reste, seule l'heure d'arret tombe.
       ctx.state.idle = null;
+      backup.markDirty(roomCode);
       return "clear";
     }
   } else {
-    ctx.emptySince ??= now;
+    if (ctx.emptySince === null) {
+      ctx.emptySince = now;
+      backup.markDirty(roomCode);
+    }
     if (!ctx.state.idle && now - ctx.emptySince >= EMPTY_PAUSE_MS) {
       idlePause(ctx, "empty", now);
+      backup.markDirty(roomCode);
       return "pause";
     }
   }
@@ -463,7 +541,7 @@ export function idleCheck(roomCode: string, isConnected: (userId: number) => boo
 export function markPresent(roomCode: string, userId: number, now = Date.now()): "player" | "back" | "none" {
   const wasRoomAbsent = isRoomAbsent(roomCode, userId);
   clearRoomAbsent(roomCode, userId);
-  const ctx = games.get(roomCode);
+  const ctx = edit(roomCode);
   if (!ctx) return "none";
   const player = ctx.state.players[userId];
   if (!player) {
@@ -496,7 +574,7 @@ function gracesAfterPause(
 }
 
 export function setHostConnected(roomCode: string, connected: boolean): GameState | undefined {
-  const ctx = games.get(roomCode);
+  const ctx = edit(roomCode);
   if (!ctx) return undefined;
   ctx.state.hostConnected = connected;
   return ctx.state;
@@ -508,7 +586,7 @@ export function setHostConnected(roomCode: string, connected: boolean): GameStat
  * bon joueur. Sans effet en pleine manche (le relais ne s'y fait jamais).
  */
 export function setHostUser(roomCode: string, userId: number): GameState | undefined {
-  const ctx = games.get(roomCode);
+  const ctx = edit(roomCode);
   if (!ctx) return undefined;
   if (ctx.state.phase === "GUESSING" || ctx.state.phase === "REVEAL") return ctx.state;
   ctx.state.hostUserId = userId;
@@ -517,7 +595,7 @@ export function setHostUser(roomCode: string, userId: number): GameState | undef
 }
 
 export function markDisconnected(roomCode: string, userId: number): GameState | undefined {
-  const ctx = games.get(roomCode);
+  const ctx = edit(roomCode);
   if (!ctx) return undefined;
   const player = ctx.state.players[userId];
   if (!player) {
@@ -529,7 +607,7 @@ export function markDisconnected(roomCode: string, userId: number): GameState | 
 }
 
 export function markReconnected(roomCode: string, userId: number): GameState | undefined {
-  const ctx = games.get(roomCode);
+  const ctx = edit(roomCode);
   if (!ctx) return undefined;
   const player = ctx.state.players[userId];
   if (!player) {
@@ -548,7 +626,7 @@ export function markReconnected(roomCode: string, userId: number): GameState | u
  * par "Quitter" (plus personne a attendre).
  */
 export function endReconnectGrace(roomCode: string, userId: number): void {
-  const ctx = games.get(roomCode);
+  const ctx = edit(roomCode);
   if (!ctx || !(userId in ctx.graceUntil)) return;
   const { [userId]: _ended, ...others } = ctx.graceUntil;
   ctx.graceUntil = others;
@@ -561,7 +639,7 @@ export function endReconnectGrace(roomCode: string, userId: number): void {
  * deja donnee avant la coupure.
  */
 export function startReconnectGrace(roomCode: string, userId: number, now = Date.now()): number | null {
-  const ctx = games.get(roomCode);
+  const ctx = edit(roomCode);
   if (!ctx || ctx.state.phase !== "GUESSING") return null;
   const player = ctx.state.players[userId];
   if (!player || player.hasAnswered) return null;
@@ -600,10 +678,55 @@ export function earlyRevealDecision(roomCode: string, now = Date.now()): EarlyRe
 
 export function clearGame(roomCode: string): void {
   games.delete(roomCode);
+  backup.markDirty(roomCode);
+}
+
+/**
+ * Reprend en memoire une partie relue dans Redis apres un redemarrage
+ * (services/gameRestore.ts). Le temps perdu est rendu : toutes les heures
+ * absolues de la partie glissent de la duree de l'arret, plus RESTART_GRACE_MS.
+ * La manche, l'ecran du reveal, la pause et la veille reprennent donc ou ils en
+ * etaient. Tout le monde est marque coupe jusqu'a son room:join ; ceux qui
+ * n'avaient pas repondu ont une grace, pour qu'un retour plus lent qu'un autre
+ * ne declenche pas la revelation anticipee sans eux. L'appelant relance les
+ * minuteurs (rescheduleAfterResume).
+ */
+export function restoreGame(saved: Pick<RestoredGame, "game" | "roomAbsent" | "savedAt">, now = Date.now()): GameState {
+  const game = saved.game;
+  const state = game.state;
+  const shift = Math.max(0, now - saved.savedAt) + RESTART_GRACE_MS;
+  const later = (t: number | null) => (t == null ? null : t + shift);
+  state.timing = { startAt: later(state.timing.startAt), revealAt: later(state.timing.revealAt) };
+  if (state.pacing) state.pacing = { ...state.pacing, endsAt: state.pacing.endsAt + shift };
+  if (state.idle) state.idle = { ...state.idle, stopAt: state.idle.stopAt + shift };
+  if (game.emptySince != null) game.emptySince += shift;
+  if (game.pausedAt != null) game.pausedAt += shift;
+  const graces: Record<number, number> = {};
+  for (const [userId, until] of Object.entries(game.graceUntil)) graces[Number(userId)] = until + shift;
+  for (const player of Object.values(state.players)) {
+    if (player.answerAt != null) player.answerAt += shift;
+    player.disconnected = true;
+    if (state.phase === "GUESSING" && !player.hasAnswered) {
+      graces[player.userId] = Math.max(graces[player.userId] ?? 0, now + RESTART_GRACE_MS + game.reconnectGraceMs);
+    }
+  }
+  game.graceUntil = graces;
+  game.waiting = game.waiting.map(w => ({ ...w, disconnected: true }));
+  state.hostConnected = false;
+  if (state.phase === "GUESSING") game.restoredRound = state.currentRound;
+  games.set(state.roomCode, game);
+  if (saved.roomAbsent.size > 0) {
+    const users = new Map<number, { username: string | null; avatar: string | null; since: number }>();
+    for (const [userId, entry] of saved.roomAbsent) users.set(userId, { ...entry, since: entry.since + shift });
+    roomAbsent.set(state.roomCode, users);
+  }
+  // La copie suit : heures decalees, joueurs coupes.
+  backup.markDirty(state.roomCode);
+  return state;
 }
 
 export function startNextRound(roomCode: string, opts?: { forceRound?: number; startAt?: number }): GameState | undefined {
-  const ctx = games.get(roomCode);
+  const ctx = edit(roomCode);
   if (!ctx) return undefined;
   // Les graces de reconnexion valent pour une manche : la suivante repart a zero.
   ctx.graceUntil = {};
@@ -681,7 +804,7 @@ export function upcomingTracks(roomCode: string, lookahead: number): RoundTrack[
  * joueurs doivent recevoir l'etat a jour.
  */
 export function replaceRoundPreview(roomCode: string, track: RoundTrack, previewUrl: string): boolean {
-  const ctx = games.get(roomCode);
+  const ctx = edit(roomCode);
   if (!ctx || !ctx.tracks.includes(track)) return false;
   track.previewUrl = previewUrl;
   return ctx.state.currentTrack === track;
@@ -695,7 +818,7 @@ export function recordAnswer(
   guessTitle?: string,
   guessArtist?: string,
 ): GameState | undefined {
-  const ctx = games.get(roomCode);
+  const ctx = edit(roomCode);
   if (!ctx) return undefined;
   if (ctx.state.phase !== "GUESSING") return ctx.state;
   const player = ctx.state.players[userId];
@@ -723,7 +846,7 @@ export function recordAnswer(
  * pour les onglets restes ouverts sur l'ancienne version.
  */
 export function markReady(roomCode: string, userId: number): GameState | undefined {
-  const ctx = games.get(roomCode);
+  const ctx = edit(roomCode);
   if (!ctx) return undefined;
   if (ctx.state.phase !== "REVEAL") return ctx.state;
   const player = ctx.state.players[userId];
@@ -738,7 +861,7 @@ export function markReady(roomCode: string, userId: number): GameState | undefin
  * null si rien a faire : pas de reveal en cours, ou partie en pause.
  */
 export function nextRevealStep(roomCode: string, now = Date.now()): "scores" | "next" | null {
-  const ctx = games.get(roomCode);
+  const ctx = edit(roomCode);
   if (!ctx || ctx.state.phase !== "REVEAL" || ctx.state.paused) return null;
   const next = stepAfter(ctx.state.pacing, now, ctx.state.currentRound >= ctx.state.totalRounds);
   if (next === "next") return "next";
@@ -772,7 +895,7 @@ export function admitToGame(
   roomCode: string,
   payload: { userId: number; username: string | null; avatar?: string | null },
 ): Admission {
-  const ctx = games.get(roomCode);
+  const ctx = edit(roomCode);
   if (!ctx) return "none";
   const inRound = ctx.state.phase === "GUESSING" || ctx.state.phase === "REVEAL";
   // Absent de la partie d'avant (T22) : une reconnexion ne le remet pas en
@@ -799,7 +922,7 @@ export function admitToGame(
 
 /** Le retardataire repart (Quitter) : il ne sera pas promu. */
 export function dropWaiting(roomCode: string, userId: number): void {
-  const ctx = games.get(roomCode);
+  const ctx = edit(roomCode);
   if (!ctx || !ctx.waiting.some(w => w.userId === userId)) return;
   setWaiting(ctx, withoutWaiting(ctx.waiting, userId));
 }
@@ -812,7 +935,7 @@ export function upsertPlayer(
   roomCode: string,
   payload: { userId: number; username: string | null; avatar?: string | null }
 ): GameState | undefined {
-  const ctx = games.get(roomCode);
+  const ctx = edit(roomCode);
   if (!ctx) return undefined;
   if (!ctx.state.players[payload.userId]) {
     ctx.state.players[payload.userId] = {
@@ -838,7 +961,7 @@ export function upsertPlayer(
 }
 
 export function removePlayer(roomCode: string, userId: number): GameState | undefined {
-  const ctx = games.get(roomCode);
+  const ctx = edit(roomCode);
   if (!ctx) return undefined;
   delete ctx.state.players[userId];
   const remaining = Object.keys(ctx.state.players).length;
@@ -849,7 +972,7 @@ export function removePlayer(roomCode: string, userId: number): GameState | unde
 }
 
 export function revealRound(roomCode: string): GameState | undefined {
-  const ctx = games.get(roomCode);
+  const ctx = edit(roomCode);
   if (!ctx) return undefined;
   if (ctx.state.phase !== "GUESSING") return ctx.state;
   const track = ctx.state.currentTrack;
@@ -904,6 +1027,8 @@ export function revealRound(roomCode: string): GameState | undefined {
  */
 function trackAbsences(ctx: GameContext): void {
   let someoneAnswered = false;
+  // Manche coupee par un redemarrage : ne pas repondre n'y vaut pas absence.
+  const interrupted = ctx.restoredRound != null && ctx.restoredRound === ctx.state.currentRound;
   const missed = { ...ctx.missed };
   for (const player of playingPlayers(ctx)) {
     if (player.answerAt != null) {
@@ -912,6 +1037,7 @@ function trackAbsences(ctx: GameContext): void {
       player.answeredRounds = (player.answeredRounds ?? 0) + 1;
       continue;
     }
+    if (interrupted) continue;
     missed[player.userId] = (missed[player.userId] ?? 0) + 1;
     if (!player.absent && missed[player.userId] >= ABSENT_AFTER_MISSED_ROUNDS) {
       player.absent = true;
@@ -919,7 +1045,8 @@ function trackAbsences(ctx: GameContext): void {
     }
   }
   ctx.missed = missed;
-  ctx.silentRounds = someoneAnswered ? 0 : ctx.silentRounds + 1;
+  if (someoneAnswered) ctx.silentRounds = 0;
+  else if (!interrupted) ctx.silentRounds += 1;
 }
 
 /**
@@ -1015,6 +1142,7 @@ export function clearGameIfFinished(roomCode: string, only?: GameState): void {
   // `only` : la partie visee par ce nettoyage. Une revanche (autre etat) reste.
   if (only && ctx.state !== only) return;
   games.delete(roomCode);
+  backup.markDirty(roomCode);
 }
 
 function computeScore(params: {

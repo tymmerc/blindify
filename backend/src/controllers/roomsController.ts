@@ -1518,6 +1518,7 @@ export const roomsController = {
           roundDurationMs,
         },
         sessionId: session.id,
+        roomId: room.id,
       });
 
       // Start round 1 immediately in a server-authoritative way
