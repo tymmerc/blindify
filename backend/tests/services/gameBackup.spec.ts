@@ -365,6 +365,17 @@ describe("copie de secours : Redis coupe", () => {
     clearGame(room);
   });
 
+  it("reecrit une partie inchangee : l'heure de la copie reste fraiche", async () => {
+    const writes: string[] = [];
+    const store: BackupStore = { ready: () => true, write: async (_c, json) => { writes.push(json); }, del: async () => undefined };
+    const writer = createBackupWriter(() => "{\"meme\":true}", store);
+    writer.markDirty("ZZ");
+    await writer.settled();
+    writer.markDirty("ZZ");
+    await writer.settled();
+    expect(writes).toHaveLength(2);
+  });
+
   it("une ecriture qui echoue (Redis tombe pendant l'envoi) est absorbee sans journal", async () => {
     const warn = jest.spyOn(logger, "warn");
     const error = jest.spyOn(logger, "error");

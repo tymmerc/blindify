@@ -113,15 +113,17 @@ const redisStore: BackupStore = {
   del: deleteGameState,
 };
 
-/** Une copie identique n'est pas reecrite, sauf pour remettre a zero sa duree de vie. */
-const REWRITE_SAME_AFTER_MS = 10 * 60_000;
-
+// Pas de dedoublonnage : chaque copie porte son heure (savedAt), et la reprise
+// rend le temps ecoule depuis. Une copie gardee parce qu'identique vieillirait,
+// et une manche sans changement pendant 60 s rendrait 60 s de trop. Le filet
+// de veille remet toutes les parties dans la file toutes les 5 s
+// (refreshGameBackups) : le temps rendu depasse donc de 5 s au plus.
 type Slot = {
   scheduled: boolean;
   inFlight: boolean;
   dirty: boolean;
-  /** Derniere copie confirmee par Redis ; null : cle supprimee ; undefined : inconnu. */
-  last: { json: string; at: number } | null | undefined;
+  /** DEL confirme par Redis : inutile de le refaire. */
+  deleted: boolean;
   loggedError: boolean;
 };
 
@@ -143,7 +145,7 @@ export function createBackupWriter(snapshot: (roomCode: string) => string | null
   function slotOf(roomCode: string): Slot {
     let slot = slots.get(roomCode);
     if (!slot) {
-      slot = { scheduled: false, inFlight: false, dirty: false, last: undefined, loggedError: false };
+      slot = { scheduled: false, inFlight: false, dirty: false, deleted: false, loggedError: false };
       slots.set(roomCode, slot);
     }
     return slot;
@@ -173,18 +175,17 @@ export function createBackupWriter(snapshot: (roomCode: string) => string | null
       slot.loggedError = true;
       return;
     }
-    const now = Date.now();
     slot.inFlight = true;
     try {
       if (json === null) {
-        if (slot.last !== null) await store.del(roomCode);
-        slot.last = null;
-      } else if (!slot.last || slot.last.json !== json || now - slot.last.at >= REWRITE_SAME_AFTER_MS) {
+        if (!slot.deleted) await store.del(roomCode);
+        slot.deleted = true;
+      } else {
         await store.write(roomCode, json);
-        slot.last = { json, at: now };
+        slot.deleted = false;
       }
     } catch (err) {
-      slot.last = undefined;
+      slot.deleted = false;
       if (!(err instanceof RedisUnavailableError) && !slot.loggedError) {
         slot.loggedError = true;
         logger.error("game_backup_write_failed", { roomCode, error: err });
@@ -196,7 +197,10 @@ export function createBackupWriter(snapshot: (roomCode: string) => string | null
     // seule operation en vol par salle, donc un DEL passe toujours apres la
     // derniere ecriture, et une vieille copie apres une plus recente jamais.
     if (slot.dirty) schedule(roomCode, slot);
-    else if (slot.last === null) slots.delete(roomCode);
+    // Partie finie ou effacee : le slot s'en va, DEL reussi ou pas. Un DEL
+    // rate laisse la cle a sa duree de vie, et la reprise jette de toute facon
+    // la copie d'une partie qui n'est plus en cours.
+    else if (json === null) slots.delete(roomCode);
   }
 
   return {

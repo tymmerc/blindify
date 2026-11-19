@@ -293,9 +293,9 @@ function touchIfLive(roomCode: string): void {
 
 /**
  * Remet toutes les parties dans la file des copies : au retour de Redis, et
- * toutes les 5 s par le filet de veille. Une copie identique n'est reecrite
- * qu'au bout de 10 min (services/gameBackup.ts), ce qui remet sa duree de vie
- * a zero meme pendant une longue pause sans aucun changement.
+ * toutes les 5 s par le filet de veille. Chaque copie repart avec son heure
+ * (savedAt) a jour et sa duree de vie remise a zero, meme pendant une longue
+ * pause sans aucun changement (voir services/gameBackup.ts).
  */
 export function refreshGameBackups(): void {
   for (const roomCode of games.keys()) backup.markDirty(roomCode);
