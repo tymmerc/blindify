@@ -92,7 +92,7 @@ describe("acces a Redis : injoignable n'est pas une cle absente", () => {
     const port = await freePort();
     await connectRedis(`redis://127.0.0.1:${port}`);
     await expect(getGameState("ABSENT")).rejects.toBeInstanceOf(RedisUnavailableError);
-    await expect(setGameState("ABSENT", { phase: "lobby" })).rejects.toBeInstanceOf(RedisUnavailableError);
+    await expect(setGameState("ABSENT", "{}")).rejects.toBeInstanceOf(RedisUnavailableError);
   });
 
   it("journalise une seule fois quand Redis reste injoignable", async () => {
@@ -116,8 +116,8 @@ describe("acces a Redis : injoignable n'est pas une cle absente", () => {
     await connectRedis(TEST_REDIS_URL);
     const code = `TEST-SANTE-${process.pid}`;
     await expect(getGameState(code)).resolves.toBeNull();
-    await setGameState(code, { phase: "lobby", round: 0 });
-    await expect(getGameState(code)).resolves.toEqual({ phase: "lobby", round: 0 });
+    await setGameState(code, JSON.stringify({ phase: "lobby", round: 0 }));
+    await expect(getGameState(code)).resolves.toBe(JSON.stringify({ phase: "lobby", round: 0 }));
     await deleteGameState(code);
     await expect(getGameState(code)).resolves.toBeNull();
   });

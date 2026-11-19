@@ -69,6 +69,9 @@ export async function connectRedis(url: string | undefined): Promise<boolean> {
     // A la fermeture, ioredis arme ce minuteur meme sur une socket deja morte :
     // 2 s par defaut retenaient Jest et le shutdown.
     disconnectTimeout: 200,
+    // Une commande non confirmee avant une coupure n'est jamais rejouee apres :
+    // une vieille copie de partie ne doit pas reecrire par-dessus un DEL.
+    autoResendUnfulfilledCommands: false,
     retryStrategy: (times: number) => Math.min(times * 200, 5000),
     reconnectOnError: (err) => err.message.includes('READONLY'),
   });
@@ -108,6 +111,11 @@ export async function connectPubSub(): Promise<{ pub: Redis; sub: Redis } | null
     await Promise.all([closeClient(pub), closeClient(sub)]);
     return null;
   }
+}
+
+/** Redis repond-il en ce moment ? (lecture locale, sans commande) */
+export function isRedisReady(): boolean {
+  return client?.status === 'ready';
 }
 
 /** Etat pour /health. Ne bloque jamais plus de HEALTH_TIMEOUT_MS. */
@@ -176,20 +184,21 @@ export const PRESENCE_TTL = 60; // 1 minute
 export const ROOM_TTL = 7200; // 2 hours
 
 /**
- * Store game state in Redis with TTL
+ * Ecrit la copie de secours d'une partie (JSON deja serialise, voir
+ * services/gameBackup.ts). Toujours avec sa duree de vie : jamais de SET sans EX.
  */
-export async function setGameState(roomCode: string, state: any): Promise<void> {
+export async function setGameState(roomCode: string, json: string): Promise<void> {
   const key = `${GAME_STATE_PREFIX}${roomCode}`;
-  await run(c => c.setex(key, GAME_STATE_TTL, JSON.stringify(state)));
+  await run(c => c.setex(key, GAME_STATE_TTL, json));
 }
 
 /**
- * Retrieve game state from Redis (null : pas de copie pour cette salle)
+ * Relit la copie brute d'une partie (null : pas de copie pour cette salle).
+ * La relecture et le controle de version sont dans services/gameBackup.ts.
  */
-export async function getGameState(roomCode: string): Promise<any | null> {
+export async function getGameState(roomCode: string): Promise<string | null> {
   const key = `${GAME_STATE_PREFIX}${roomCode}`;
-  const data = await run(c => c.get(key));
-  return data ? JSON.parse(data) : null;
+  return run(c => c.get(key));
 }
 
 /**
