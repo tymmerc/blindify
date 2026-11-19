@@ -14,6 +14,7 @@
 //   - la partie va au bout, les points de fin = la somme des points en base,
 //     aucune reponse en double, les stats de chacun comptees une seule fois.
 // Code de sortie 0 si tout est conforme, 1 sinon.
+// RECORD_VIDEO=/dossier : filme l'ecran du telephone (webm, taille de l'ecran).
 import { createRequire } from "node:module"
 import { execFile } from "node:child_process"
 import { promisify } from "node:util"
@@ -128,7 +129,9 @@ async function main() {
     }
     console.log(`salle ${code}`)
 
-    tel = await newPage(browser, { ...devices["iPhone 13"] }, "telephone", problems)
+    const phone = devices["iPhone 13"]
+    const video = process.env.RECORD_VIDEO ? { recordVideo: { dir: process.env.RECORD_VIDEO, size: phone.viewport } } : {}
+    tel = await newPage(browser, { ...phone, ...video }, "telephone", problems)
     const page = tel.page
     await wizard(page, "Distant", code)
     seedUser(page.__uid, [18, 19, 20, 21, 22, 23])
@@ -237,7 +240,9 @@ async function main() {
     if (!problems.length) ok("points de fin = points en base, une partie dans les stats de chacun")
   } finally {
     for (const b of bots) { b.left = true; b.close() }
+    // La video n'est ecrite qu'a la fermeture du contexte.
     await tel?.ctx.close().catch(() => {})
+    if (tel && process.env.RECORD_VIDEO) console.log(`video : ${await tel.page.video()?.path().catch(() => "?")}`)
     await browser.close().catch(() => {})
     await redis.quit().catch(() => {})
   }
