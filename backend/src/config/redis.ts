@@ -184,10 +184,30 @@ async function run<T>(command: (c: Redis) => Promise<T>): Promise<T> {
   }
 }
 
-// Game state storage keys
-export const GAME_STATE_PREFIX = 'game:state:';
-export const ROOM_PRESENCE_PREFIX = 'room:presence:';
-export const USER_PRESENCE_PREFIX = 'user:presence:';
+// Toutes les cles et tous les canaux de cette instance portent ce prefixe :
+// deux backends sur un meme Redis (dev et prod, pile de test) ne reprennent
+// jamais les parties de l'autre et ne recoivent pas ses emissions.
+// REDIS_KEY_PREFIX, sinon blindz:<NODE_ENV>: (prod « blindz:production: »).
+const SAFE_PREFIX = /^[A-Za-z0-9:_.-]{1,64}$/;
+let warnedPrefix = false;
+
+export function redisKeyPrefix(): string {
+  const raw = process.env.REDIS_KEY_PREFIX;
+  if (raw && SAFE_PREFIX.test(raw)) return raw;
+  if (raw && !warnedPrefix) {
+    warnedPrefix = true;
+    logger.warn('redis_prefixe_refuse : REDIS_KEY_PREFIX ignore (lettres, chiffres, : _ . - seulement)');
+  }
+  return `blindz:${(process.env.NODE_ENV || 'development').replace(/[^A-Za-z0-9_-]/g, '')}:`;
+}
+
+const GAME_STATE_PREFIX = 'game:state:';
+const USER_PRESENCE_PREFIX = 'user:presence:';
+
+/** Cle de la copie de secours d'une salle. */
+export function gameStateKey(roomCode: string): string {
+  return `${redisKeyPrefix()}${GAME_STATE_PREFIX}${roomCode}`;
+}
 
 // TTL constants (in seconds)
 export const GAME_STATE_TTL = 3600; // 1 hour
@@ -199,7 +219,7 @@ export const ROOM_TTL = 7200; // 2 hours
  * services/gameBackup.ts). Toujours avec sa duree de vie : jamais de SET sans EX.
  */
 export async function setGameState(roomCode: string, json: string): Promise<void> {
-  const key = `${GAME_STATE_PREFIX}${roomCode}`;
+  const key = gameStateKey(roomCode);
   await run(c => c.setex(key, GAME_STATE_TTL, json));
 }
 
@@ -208,7 +228,7 @@ export async function setGameState(roomCode: string, json: string): Promise<void
  * La relecture et le controle de version sont dans services/gameBackup.ts.
  */
 export async function getGameState(roomCode: string): Promise<string | null> {
-  const key = `${GAME_STATE_PREFIX}${roomCode}`;
+  const key = gameStateKey(roomCode);
   return run(c => c.get(key));
 }
 
@@ -216,17 +236,18 @@ export async function getGameState(roomCode: string): Promise<string | null> {
  * Delete game state from Redis
  */
 export async function deleteGameState(roomCode: string): Promise<void> {
-  const key = `${GAME_STATE_PREFIX}${roomCode}`;
+  const key = gameStateKey(roomCode);
   await run(c => c.del(key));
 }
 
 /** Codes des salles qui ont une copie, par SCAN (jamais KEYS, qui bloque Redis). */
 export async function scanGameStateCodes(): Promise<string[]> {
   const codes = new Set<string>();
+  const prefix = gameStateKey('');
   let cursor = '0';
   do {
-    const [next, keys] = await run(c => c.scan(cursor, 'MATCH', `${GAME_STATE_PREFIX}*`, 'COUNT', 100));
-    for (const key of keys) codes.add(key.slice(GAME_STATE_PREFIX.length));
+    const [next, keys] = await run(c => c.scan(cursor, 'MATCH', `${prefix}*`, 'COUNT', 100));
+    for (const key of keys) codes.add(key.slice(prefix.length));
     cursor = next;
   } while (cursor !== '0');
   return Array.from(codes);
@@ -236,7 +257,7 @@ export async function scanGameStateCodes(): Promise<string[]> {
  * Check if game state exists
  */
 export async function hasGameState(roomCode: string): Promise<boolean> {
-  const key = `${GAME_STATE_PREFIX}${roomCode}`;
+  const key = gameStateKey(roomCode);
   const exists = await run(c => c.exists(key));
   return exists === 1;
 }
@@ -245,7 +266,7 @@ export async function hasGameState(roomCode: string): Promise<boolean> {
  * Store user presence in Redis
  */
 export async function setUserPresence(userId: string, presence: any): Promise<void> {
-  const key = `${USER_PRESENCE_PREFIX}${userId}`;
+  const key = `${redisKeyPrefix()}${USER_PRESENCE_PREFIX}${userId}`;
   await run(c => c.setex(key, PRESENCE_TTL, JSON.stringify(presence)));
 }
 
@@ -253,7 +274,7 @@ export async function setUserPresence(userId: string, presence: any): Promise<vo
  * Get user presence from Redis
  */
 export async function getUserPresence(userId: string): Promise<any | null> {
-  const key = `${USER_PRESENCE_PREFIX}${userId}`;
+  const key = `${redisKeyPrefix()}${USER_PRESENCE_PREFIX}${userId}`;
   const data = await run(c => c.get(key));
   return data ? JSON.parse(data) : null;
 }
@@ -262,7 +283,7 @@ export async function getUserPresence(userId: string): Promise<any | null> {
  * Delete user presence
  */
 export async function deleteUserPresence(userId: string): Promise<void> {
-  const key = `${USER_PRESENCE_PREFIX}${userId}`;
+  const key = `${redisKeyPrefix()}${USER_PRESENCE_PREFIX}${userId}`;
   await run(c => c.del(key));
 }
 
@@ -270,7 +291,7 @@ export async function deleteUserPresence(userId: string): Promise<void> {
  * Extend game state TTL (e.g., when players are active)
  */
 export async function extendGameStateTTL(roomCode: string, seconds: number = GAME_STATE_TTL): Promise<void> {
-  const key = `${GAME_STATE_PREFIX}${roomCode}`;
+  const key = gameStateKey(roomCode);
   await run(c => c.expire(key, seconds));
 }
 
@@ -278,13 +299,13 @@ export async function extendGameStateTTL(roomCode: string, seconds: number = GAM
  * Store temporary data with custom TTL
  */
 export async function setTemp(key: string, value: any, ttl: number): Promise<void> {
-  await run(c => c.setex(key, ttl, JSON.stringify(value)));
+  await run(c => c.setex(`${redisKeyPrefix()}${key}`, ttl, JSON.stringify(value)));
 }
 
 /**
  * Get temporary data
  */
 export async function getTemp(key: string): Promise<any | null> {
-  const data = await run(c => c.get(key));
+  const data = await run(c => c.get(`${redisKeyPrefix()}${key}`));
   return data ? JSON.parse(data) : null;
 }

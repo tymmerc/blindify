@@ -142,7 +142,8 @@ SPECTATEUR_BASE_URL=http://$HOST:$PROXY_PORT/blindify
 OVERLAY_SECRET=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
 TWITCH_IRC_URL=ws://127.0.0.1:$PROXY_PORT/twitch-irc-stub
 EOF
-  if [ -n "$redis_port" ]; then echo "REDIS_URL=$STACK_REDIS_URL" >>"$env"; fi
+  # Prefixe propre a la pile : son NODE_ENV (production) donnerait sinon celui de la prod.
+  if [ -n "$redis_port" ]; then printf 'REDIS_URL=%s\nREDIS_KEY_PREFIX=blindz:pile-test:\n' "$STACK_REDIS_URL" >>"$env"; fi
   # Faux Resend (T18) : une cle factice, le mail part au serveur local.
   echo "RESEND_API_KEY=re_pile_de_test_factice" >"$RUN/run/resend-test.env"
   printf 'X-E2E-Key: %s\nContent-Type: application/json\nOrigin: http://%s:%s\n' "$(cat "$ROOT/.e2e-bypass-key")" "$HOST" "$PROXY_PORT" >"$RUN/run/headers"

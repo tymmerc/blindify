@@ -11,6 +11,7 @@ import {
   connectRedis,
   getGameState,
   RedisUnavailableError,
+  redisKeyPrefix,
   setGameState,
   deleteGameState,
 } from "../src/config/redis";
@@ -120,5 +121,26 @@ describe("acces a Redis : injoignable n'est pas une cle absente", () => {
     await expect(getGameState(code)).resolves.toBe(JSON.stringify({ phase: "lobby", round: 0 }));
     await deleteGameState(code);
     await expect(getGameState(code)).resolves.toBeNull();
+  });
+});
+
+describe("prefixe des cles et des canaux", () => {
+  const saved = process.env.REDIS_KEY_PREFIX;
+  afterEach(() => {
+    if (saved === undefined) delete process.env.REDIS_KEY_PREFIX;
+    else process.env.REDIS_KEY_PREFIX = saved;
+  });
+
+  it("par defaut, distinct par environnement", () => {
+    delete process.env.REDIS_KEY_PREFIX;
+    expect(redisKeyPrefix()).toBe("blindz:test:");
+  });
+
+  it("REDIS_KEY_PREFIX quand il est sur, le defaut sinon", () => {
+    process.env.REDIS_KEY_PREFIX = "blindz:pile-test:";
+    expect(redisKeyPrefix()).toBe("blindz:pile-test:");
+    // Un joker casserait le MATCH du SCAN et melangerait les instances.
+    process.env.REDIS_KEY_PREFIX = "blindz:*:";
+    expect(redisKeyPrefix()).toBe("blindz:test:");
   });
 });

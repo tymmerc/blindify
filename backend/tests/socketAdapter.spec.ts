@@ -146,6 +146,37 @@ describeWithRedis("adaptateur Redis de Socket.IO", () => {
     await expect(received).resolves.toEqual({ from: "B" });
   });
 
+  it("une instance d'un autre prefixe, sur le meme Redis, n'atteint pas la salle", async () => {
+    const saved = process.env.REDIS_KEY_PREFIX;
+    const pubC = new Redis(target.href);
+    const subC = pubC.duplicate();
+    const serverC = await startServer();
+    try {
+      process.env.REDIS_KEY_PREFIX = "blindz:autre-instance:";
+      attachRedisAdapter(serverC.io, pubC, subC);
+    } finally {
+      if (saved === undefined) delete process.env.REDIS_KEY_PREFIX;
+      else process.env.REDIS_KEY_PREFIX = saved;
+    }
+    try {
+      await waitFor(() => subC.status === "ready");
+      await new Promise(resolve => setTimeout(resolve, 100));
+      let leaked = false;
+      client!.on("round:start", (data: { from?: string }) => { if (data.from === "C") leaked = true; });
+      serverC.io.to(ROOM).emit("round:start", { from: "C" });
+      // Controle : la meme emission par B (meme prefixe que A) arrive bien.
+      const fromB = nextEvent<{ from: string }>(client!, "round:start");
+      serverB.io.to(ROOM).emit("round:start", { from: "B" });
+      await expect(fromB).resolves.toEqual({ from: "B" });
+      await new Promise(resolve => setTimeout(resolve, 300));
+      expect(leaked).toBe(false);
+    } finally {
+      await serverC.io.close();
+      pubC.disconnect();
+      subC.disconnect();
+    }
+  });
+
   it("Redis coupe : l'emission locale arrive vite, sans exception, puis l'abonnement revient", async () => {
     const { pub, sub } = (await connectPubSub())!;
     await relay.cut();

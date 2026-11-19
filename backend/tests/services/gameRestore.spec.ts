@@ -31,7 +31,7 @@ jest.mock("../../src/config/db", () => ({
   },
 }));
 
-import { closeRedis, connectRedis, setGameState } from "../../src/config/redis";
+import { closeRedis, connectRedis, gameStateKey, setGameState } from "../../src/config/redis";
 import { deserializeGame } from "../../src/services/gameBackup";
 import { persistGameResults } from "../../src/services/gamePersistence";
 import { restoreGames } from "../../src/services/gameRestore";
@@ -159,7 +159,7 @@ describeWithRedis("reprise depuis Redis", () => {
       { roomCode: v2Code, reason: "illisible_ou_version_inconnue" },
       { roomCode: junkCode, reason: "illisible_ou_version_inconnue" },
     ]));
-    for (const code of [ended.roomCode, v2Code, junkCode]) expect(await inspect.exists(`game:state:${code}`)).toBe(0);
+    for (const code of [ended.roomCode, v2Code, junkCode]) expect(await inspect.exists(gameStateKey(code))).toBe(0);
     // Jamais KEYS : la liste vient de SCAN (aucune requete en base n'en depend).
     expect(queries.filter(q => q.sql.includes("FROM multiplayer_rooms r"))).toHaveLength(4);
 
@@ -182,7 +182,7 @@ describeWithRedis("reprise depuis Redis", () => {
 
     // Les copies suivent la memoire : reecrites avec les heures decalees.
     await gameBackupsSettled();
-    const rewritten = deserializeGame((await inspect.get(`game:state:${guessing.roomCode}`))!)!;
+    const rewritten = deserializeGame((await inspect.get(gameStateKey(guessing.roomCode)))!)!;
     expect(rewritten.game.state.timing.revealAt).toBe(g.timing.revealAt);
     expect(rewritten.game.state.players[2].disconnected).toBe(true);
     expect(rewritten.game.restoredRound).toBe(1);

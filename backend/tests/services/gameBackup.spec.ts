@@ -10,6 +10,7 @@ import {
   closeRedis,
   connectRedis,
   deleteGameState,
+  gameStateKey,
   getGameState as readRaw,
   setGameState,
 } from "../../src/config/redis";
@@ -225,7 +226,7 @@ describeWithRedis("copie de secours dans Redis", () => {
 
   it("suit une partie jouee manche par manche, puis disparait a la fin", async () => {
     const room = nextRoom();
-    const key = `game:state:${room}`;
+    const key = gameStateKey(room);
     await playGame(room, async round => {
       await gameBackupsSettled();
       const raw = await inspect.get(key);
@@ -254,12 +255,12 @@ describeWithRedis("copie de secours dans Redis", () => {
     startReconnectGrace(room, 1);
     pauseGame(room);
     await gameBackupsSettled();
-    const restored = deserializeGame((await inspect.get(`game:state:${room}`))!);
+    const restored = deserializeGame((await inspect.get(gameStateKey(room)))!);
     expect(restored!.game.pausedAt).toEqual(expect.any(Number));
     expect(restored!.game.graceUntil[1]).toEqual(expect.any(Number));
     clearGame(room);
     await gameBackupsSettled();
-    expect(await inspect.exists(`game:state:${room}`)).toBe(0);
+    expect(await inspect.exists(gameStateKey(room))).toBe(0);
   });
 
   it("groupe une rafale de changements et garde la derniere version", async () => {

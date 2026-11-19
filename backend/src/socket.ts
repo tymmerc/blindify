@@ -2,6 +2,7 @@ import type { IncomingMessage } from "http";
 import { Server as SocketIOServer, type Namespace } from "socket.io";
 import { RedisAdapter } from "@socket.io/redis-adapter";
 import type Redis from "ioredis";
+import { redisKeyPrefix } from "./config/redis";
 import { isSocketOriginAllowed } from "./utils/origins";
 import { logger } from "./utils/logger";
 
@@ -61,7 +62,8 @@ export function attachRedisAdapter(server: SocketIOServer, pub: Redis, sub: Redi
 
   class LocalFirstRedisAdapter extends RedisAdapter {
     constructor(nsp: Namespace) {
-      super(nsp, pub, sub);
+      // Canaux prefixes par instance, comme les cles (config/redis.ts).
+      super(nsp, pub, sub, { key: `${redisKeyPrefix()}socket.io` });
     }
 
     // L'adaptateur Redis n'applique ces trois operations a ce serveur qu'a

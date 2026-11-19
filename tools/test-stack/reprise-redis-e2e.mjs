@@ -30,6 +30,8 @@ const Redis = createRequire("/opt/blindify/backend/package.json")("ioredis")
 // Le stack.sh qui a monte la pile (celui de ce dossier : backend-kill / backend-start).
 const STACK = path.join(path.dirname(fileURLToPath(import.meta.url)), "stack.sh")
 const REDIS_URL = process.env.STACK_REDIS_URL || "redis://127.0.0.1:6391"
+// Le prefixe que stack.sh donne au backend de la pile.
+const KEY_PREFIX = "blindz:pile-test:"
 const RESTART_GRACE_MS = 5_000
 const ROUND_S = 25
 const run = promisify(execFile)
@@ -152,7 +154,7 @@ async function main() {
     const early = await Promise.all([answer(host, code, 2), answer(alice, code, 2)])
     if (!early.every(a => a?.ok)) bad(`manche 2 : reponse refusee avant le plantage (${JSON.stringify(early)})`)
     await sleep(800)
-    const copy = JSON.parse((await redis.get(`game:state:${code}`)) ?? "null")
+    const copy = JSON.parse((await redis.get(`${KEY_PREFIX}game:state:${code}`)) ?? "null")
     if (!copy) throw new Error("aucune copie dans Redis avant le plantage")
     const before = copy.game.state
     if (before.currentRound !== 2 || before.phase !== "GUESSING") bad(`copie : manche ${before.currentRound} ${before.phase}, attendu 2 GUESSING`)
