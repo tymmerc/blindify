@@ -26,7 +26,8 @@ jest.mock("../../src/config/db", () => {
     if (sql.includes("FROM game_rounds")) return { rows: [{ id: 1 }], rowCount: 1 };
     return { rows: [], rowCount: 0 };
   });
-  return { pool: { query, connect: jest.fn() } };
+  // La fin de partie passe par une transaction sur un client dedie.
+  return { pool: { query, connect: jest.fn(async () => ({ query, release: jest.fn() })) } };
 });
 
 import { closeRedis, connectRedis, gameStateKey, setGameState } from "../../src/config/redis";

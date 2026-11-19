@@ -6,7 +6,7 @@
 // le test d'integration multiplayer-socket). Aucune base ici : pool est un faux.
 
 jest.mock("../../src/config/db", () => ({
-  pool: { query: jest.fn() },
+  pool: { query: jest.fn(), connect: jest.fn() },
 }));
 jest.mock("../../src/utils/logger", () => ({
   logger: { error: jest.fn(), warn: jest.fn(), info: jest.fn(), debug: jest.fn() },
@@ -88,8 +88,13 @@ function playRoundOne() {
   return { revealed, expected };
 }
 
+// La fin de partie passe par une transaction sur un client dedie : ses
+// requetes arrivent dans le meme faux que celles du pool.
+const release = jest.fn();
 beforeEach(() => {
   query.mockReset();
+  release.mockReset();
+  (pool.connect as jest.Mock).mockImplementation(async () => ({ query, release }));
 });
 
 afterAll(() => clearGame(ROOM));
@@ -174,7 +179,8 @@ describe("persistGameResults", () => {
     const final = Object.values(revealed.players).map(p => ({ userId: p.userId, score: p.score, correct: p.correct }))
     const first = deferred<{ rows: Array<{ id: number }>; rowCount: number }>();
     let calls = 0;
-    query.mockImplementation(() => (calls++ === 0 ? first.promise : Promise.resolve({ rows: [] })));
+    query.mockImplementation((sql: string) =>
+      (String(sql).includes("UPDATE game_sessions") && calls++ === 0 ? first.promise : Promise.resolve({ rows: [] })));
 
     const pending = persistGameResults(revealed, SESSION_ID);
     for (const p of Object.values(revealed.players)) { p.score += 100; p.correct += 5; }
@@ -194,6 +200,24 @@ describe("persistGameResults", () => {
     expect(stats).toEqual(final.map(f => ({ userId: f.userId, correct: f.correct })).sort((a, b) => a.userId - b.userId));
     const session = query.mock.calls.find(([sql]) => String(sql).includes("UPDATE game_sessions"));
     expect(session?.[1]).toEqual([SESSION_ID, 2]);
+  });
+
+  it("tout ou rien : un echec au milieu des stats defait le passage en « finie »", async () => {
+    const { revealed } = playRoundOne();
+    query.mockImplementation(async (sql: string) => {
+      if (String(sql).includes("UPDATE game_sessions")) return { rows: [{ id: SESSION_ID }], rowCount: 1 };
+      if (String(sql).includes("INSERT INTO user_stats")) throw new Error("base coupee au milieu");
+      return { rows: [], rowCount: 0 };
+    });
+    await expect(persistGameResults(revealed, SESSION_ID)).resolves.toBeUndefined();
+    const statements = query.mock.calls.map(([sql]) => String(sql).trim().split(/\s+/).slice(0, 2).join(" "));
+    expect(statements[0]).toBe("BEGIN");
+    expect(statements).toContain("ROLLBACK");
+    expect(statements).not.toContain("COMMIT");
+    // Le passage en « finie » etait dans la transaction : il est defait avec elle.
+    expect(statements.indexOf("UPDATE game_sessions")).toBeGreaterThan(0);
+    expect(statements.indexOf("UPDATE game_sessions")).toBeLessThan(statements.indexOf("ROLLBACK"));
+    expect(release).toHaveBeenCalledTimes(1);
   });
 
   it("ne leve jamais d'erreur : un echec de la base est seulement journalise", async () => {
