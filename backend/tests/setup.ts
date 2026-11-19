@@ -12,7 +12,13 @@ process.env.SESSION_SECRET = 'test-session-secret-for-testing-only';
 process.env.DATABASE_URL = process.env.TEST_DATABASE_URL
   ? resolveTestDatabaseUrl(process.env.TEST_DATABASE_URL)
   : 'postgres://aucune-base.invalid:1/aucune_base_test';
-process.env.REDIS_URL = process.env.TEST_REDIS_URL || 'redis://localhost:6379/1';
+// Pas de Redis par defaut non plus : localhost:6379 est le Redis systeme du VPS,
+// partage avec d'autres projets. Sans TEST_REDIS_URL, aucune adresse.
+if (process.env.TEST_REDIS_URL) {
+  process.env.REDIS_URL = process.env.TEST_REDIS_URL;
+} else {
+  delete process.env.REDIS_URL;
+}
 
 // Extend Jest timeout for integration tests
 jest.setTimeout(10000);

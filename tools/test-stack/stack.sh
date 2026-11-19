@@ -6,6 +6,12 @@
 #   stack.sh up       base neuve + backend de test + serveur local
 #   stack.sh down     arrete tout et jette la base (elle vit en memoire)
 #   stack.sh status
+#   stack.sh backend-kill   tue le backend de test (KILL, comme un plantage)
+#   stack.sh backend-start  le relance avec le meme environnement (memes secrets)
+#
+#   STACK_REDIS_URL=redis://127.0.0.1:6391 stack.sh up : le backend de test
+#   recoit ce Redis (copie de secours des parties, ADR-001). Sans elle, pas de
+#   Redis, comme la campagne de nuit. Jamais 6379, 6380 ni 6381.
 #
 # Pourquoi : le backend de dev (:3097) ecrit dans la base de PROD. Une campagne
 # de tests a l'echelle doit avoir sa propre base, son propre backend, et ne
@@ -98,6 +104,15 @@ start_backend() {
   [ -e "$be/.env" ] && { log "ECHEC : un .env existe dans $be, il pourrait viser la prod"; exit 1; }
   ln -sfn "$(cat "$RUN/backend.deps" 2>/dev/null || echo "$ROOT/backend/node_modules")" "$be/node_modules"
   local env="$RUN/run/backend.env"
+  local redis_port=""
+  if [ -n "${STACK_REDIS_URL:-}" ]; then
+    redis_port=$(echo "$STACK_REDIS_URL" | sed -nE 's#^redis://([^@/]*@)?127\.0\.0\.1:([0-9]{1,5})(/.*)?$#\2#p')
+    # En base 10 : « 06379 » est le port 6379 et doit etre refuse comme lui.
+    [ -n "$redis_port" ] && redis_port=$((10#$redis_port))
+    case "$redis_port" in
+      ""|6379|6380|6381) log "ECHEC : STACK_REDIS_URL doit viser 127.0.0.1 hors 6379, 6380 et 6381"; exit 1 ;;
+    esac
+  fi
   umask 077
   cat >"$env" <<EOF
 NODE_ENV=production
@@ -111,7 +126,7 @@ SESSION_SECRET=$(openssl rand -hex 32)
 JWT_SECRET=$(openssl rand -hex 32)
 E2E_BYPASS_KEY=$(cat "$ROOT/.e2e-bypass-key")
 NO_EGRESS_LOG=$RUN/logs/egress.log
-NO_EGRESS_ALLOW_PORTS=$PGPORT,$PROXY_PORT,$BACKEND_PORT
+NO_EGRESS_ALLOW_PORTS=$PGPORT,$PROXY_PORT,$BACKEND_PORT${redis_port:+,$redis_port}
 DEEZER_API_BASE=http://127.0.0.1:$PROXY_PORT/deezer-stub
 SHORT_LINK_TEST_BASE=http://127.0.0.1:$PROXY_PORT/short-link-stub
 YOUTUBE_API_BASE=http://127.0.0.1:$PROXY_PORT/youtube-stub
@@ -129,19 +144,31 @@ SPECTATEUR_BASE_URL=http://$HOST:$PROXY_PORT/blindify
 OVERLAY_SECRET=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
 TWITCH_IRC_URL=ws://127.0.0.1:$PROXY_PORT/twitch-irc-stub
 EOF
+  # Prefixe propre a la pile : son NODE_ENV (production) donnerait sinon celui de la prod.
+  if [ -n "$redis_port" ]; then printf 'REDIS_URL=%s\nREDIS_KEY_PREFIX=blindz:pile-test:\n' "$STACK_REDIS_URL" >>"$env"; fi
   # Faux Resend (T18) : une cle factice, le mail part au serveur local.
   echo "RESEND_API_KEY=re_pile_de_test_factice" >"$RUN/run/resend-test.env"
   printf 'X-E2E-Key: %s\nContent-Type: application/json\nOrigin: http://%s:%s\n' "$(cat "$ROOT/.e2e-bypass-key")" "$HOST" "$PROXY_PORT" >"$RUN/run/headers"
   umask 022
   : >"$RUN/logs/egress.log"
   git -C "$WT" rev-parse HEAD >"$RUN/run/backend.commit"
+  : >"$RUN/logs/backend.log"
+  launch_backend
+}
+
+# Lance le backend de test avec l'environnement deja ecrit par start_backend.
+launch_backend() {
+  local be="$WT/backend" env="$RUN/run/backend.env"
+  [ -f "$env" ] || { log "ECHEC : pas d'environnement de backend, lancer d'abord : stack.sh up"; exit 1; }
   (
     cd "$be"
+    # Rien du shell appelant : sans STACK_REDIS_URL, pas de Redis du tout.
+    unset REDIS_URL REDIS_KEY_PREFIX
     set -a; . "$env"; set +a
     # 9>&- : ne pas heriter du verrou de heavy (sinon un backend oublie le
     # garderait et bloquerait toutes les taches lourdes de la machine).
     nohup "$NODE" -r "$HERE/no-egress.cjs" node_modules/ts-node/dist/bin.js --transpile-only src/index.ts \
-      >"$RUN/logs/backend.log" 2>&1 9>&- &
+      >>"$RUN/logs/backend.log" 2>&1 9>&- &
     echo $! >"$RUN/run/backend.pid"
   )
   if ! wait_http "http://127.0.0.1:$BACKEND_PORT/api/health" 90; then
@@ -241,11 +268,20 @@ build_front() {
 case "${1:-status}" in
   up) start_db; start_backend; start_proxy ;;
   down) stop ;;
+  backend-kill)
+    if alive backend; then kill -9 "$(cat "$RUN/run/backend.pid")"; log "backend de test tue (KILL)"; else log "backend de test deja arrete"; fi
+    rm -f "$RUN/run/backend.pid"
+    ;;
+  backend-start)
+    if alive backend; then log "backend deja lance"; exit 0; fi
+    if port_busy "$BACKEND_PORT"; then log "ECHEC : le port $BACKEND_PORT est deja pris par un autre processus"; exit 1; fi
+    launch_backend
+    ;;
   front) build_front ;;
   status)
     docker ps --format '{{.Names}} {{.Status}}' | grep "^$PG" || echo "base : arretee"
     for p in backend proxy; do alive "$p" && echo "$p : en marche (pid $(cat "$RUN/run/$p.pid"))" || echo "$p : arrete"; done
     echo "sorties refusees : $(wc -l <"$RUN/logs/egress.log" 2>/dev/null || echo 0)"
     ;;
-  *) echo "usage : stack.sh up|down|status|front" >&2; exit 2 ;;
+  *) echo "usage : stack.sh up|down|status|front|backend-kill|backend-start" >&2; exit 2 ;;
 esac

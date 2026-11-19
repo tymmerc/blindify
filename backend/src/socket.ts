@@ -1,5 +1,8 @@
 import type { IncomingMessage } from "http";
-import { Server as SocketIOServer } from "socket.io";
+import { Server as SocketIOServer, type Namespace } from "socket.io";
+import { RedisAdapter } from "@socket.io/redis-adapter";
+import type Redis from "ioredis";
+import { redisKeyPrefix } from "./config/redis";
 import { isSocketOriginAllowed } from "./utils/origins";
 import { logger } from "./utils/logger";
 
@@ -28,4 +31,64 @@ export function initSocket(server: any, allowedOrigins: string[]): SocketIOServe
     pingTimeout: 15_000,
   });
   return io;
+}
+
+// Commandes que l'adaptateur Redis lance sans attendre ni rattraper l'erreur.
+// Redis coupe, elles echouent tout de suite (pas de file d'attente) : chaque
+// emission vers une salle deviendrait un unhandledRejection. La coupure est deja
+// journalisee une fois par les ecouteurs de config/redis.ts. Le reabonnement
+// automatique d'ioredis, au retour de Redis, passe aussi par subscribe.
+const FIRE_AND_FORGET = ["publish", "subscribe", "psubscribe", "unsubscribe", "punsubscribe"] as const;
+
+function neverReject(client: Redis): void {
+  const methods = client as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>;
+  for (const name of FIRE_AND_FORGET) {
+    const original = methods[name].bind(client);
+    methods[name] = (...args: unknown[]) => original(...args).catch(() => null);
+  }
+}
+
+type BroadcastOptions = Parameters<RedisAdapter["disconnectSockets"]>[0];
+
+/**
+ * Branche l'adaptateur Redis : les emissions vers une salle passent aussi par
+ * Redis, vers les autres serveurs. A appeler avant que le serveur accepte des
+ * sockets : io.adapter() remplace l'adaptateur des namespaces existants, et les
+ * salles de l'ancien sont perdues.
+ */
+export function attachRedisAdapter(server: SocketIOServer, pub: Redis, sub: Redis): void {
+  neverReject(pub);
+  neverReject(sub);
+
+  class LocalFirstRedisAdapter extends RedisAdapter {
+    constructor(nsp: Namespace) {
+      // Canaux prefixes par instance, comme les cles (config/redis.ts).
+      super(nsp, pub, sub, { key: `${redisKeyPrefix()}socket.io` });
+    }
+
+    // L'adaptateur Redis n'applique ces trois operations a ce serveur qu'a
+    // l'echo de sa propre publication : Redis coupe, un disconnectSockets ne
+    // coupait plus personne. On applique d'abord en local, puis on publie pour
+    // les autres serveurs (l'echo ne trouve plus rien a faire ici).
+    override addSockets(opts: BroadcastOptions, rooms: string[]): void {
+      super.addSockets(localOnly(opts), rooms);
+      if (!opts.flags?.local) super.addSockets(opts, rooms);
+    }
+
+    override delSockets(opts: BroadcastOptions, rooms: string[]): void {
+      super.delSockets(localOnly(opts), rooms);
+      if (!opts.flags?.local) super.delSockets(opts, rooms);
+    }
+
+    override disconnectSockets(opts: BroadcastOptions, close: boolean): void {
+      super.disconnectSockets(localOnly(opts), close);
+      if (!opts.flags?.local) super.disconnectSockets(opts, close);
+    }
+  }
+
+  server.adapter(LocalFirstRedisAdapter);
+}
+
+function localOnly(opts: BroadcastOptions): BroadcastOptions {
+  return { ...opts, flags: { ...opts.flags, local: true } };
 }
