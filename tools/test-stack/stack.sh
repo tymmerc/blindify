@@ -106,7 +106,9 @@ start_backend() {
   local env="$RUN/run/backend.env"
   local redis_port=""
   if [ -n "${STACK_REDIS_URL:-}" ]; then
-    redis_port=$(echo "$STACK_REDIS_URL" | sed -nE 's#^redis://([^@/]*@)?127\.0\.0\.1:([0-9]+)(/.*)?$#\2#p')
+    redis_port=$(echo "$STACK_REDIS_URL" | sed -nE 's#^redis://([^@/]*@)?127\.0\.0\.1:([0-9]{1,5})(/.*)?$#\2#p')
+    # En base 10 : « 06379 » est le port 6379 et doit etre refuse comme lui.
+    [ -n "$redis_port" ] && redis_port=$((10#$redis_port))
     case "$redis_port" in
       ""|6379|6380|6381) log "ECHEC : STACK_REDIS_URL doit viser 127.0.0.1 hors 6379, 6380 et 6381"; exit 1 ;;
     esac
@@ -160,6 +162,8 @@ launch_backend() {
   [ -f "$env" ] || { log "ECHEC : pas d'environnement de backend, lancer d'abord : stack.sh up"; exit 1; }
   (
     cd "$be"
+    # Rien du shell appelant : sans STACK_REDIS_URL, pas de Redis du tout.
+    unset REDIS_URL REDIS_KEY_PREFIX
     set -a; . "$env"; set +a
     # 9>&- : ne pas heriter du verrou de heavy (sinon un backend oublie le
     # garderait et bloquerait toutes les taches lourdes de la machine).
