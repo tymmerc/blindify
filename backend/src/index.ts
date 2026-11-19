@@ -9,12 +9,14 @@ import cookieSession from "cookie-session";
 import dotenv from "dotenv";
 
 import { pool } from "./config/db";
+import { closeRedis, connectRedis } from "./config/redis";
 import { assertConnectedDatabase } from "./config/databaseGuard";
 import { initSocket } from "./socket";
 import authRoutes from "./routes/auth";
 import gamesRoutes from "./routes/games";
 import likesRoutes from "./routes/likes";
 import roomsRoutes from "./routes/rooms";
+import { healthHandler } from "./routes/health";
 import streamerRoutes from "./routes/streamer";
 import { checkTwitchConfig } from "./services/twitchReader";
 import reportsRoutes from "./routes/reports";
@@ -280,12 +282,8 @@ app.use((req, res, next) => {
   next();
 });
 
-app.get("/health", (_req, res) => {
-  ok(res, { status: "ok" });
-});
-app.get("/api/health", (_req, res) => {
-  ok(res, { status: "ok" });
-});
+app.get("/health", healthHandler);
+app.get("/api/health", healthHandler);
 
 app.get("/api/friends/activity", async (req, res) => {
   const context = await getSessionContext(req, res);
@@ -361,6 +359,9 @@ async function bootstrap() {
   // Second verrou du garde-fou (config/databaseGuard.ts) : la base reellement
   // ouverte, d'apres le serveur, avant tout schema.
   await assertConnectedDatabase(pool);
+  // Copie de secours des parties (ADR-001). Ne bloque pas plus de quelques
+  // secondes et ne fait jamais echouer le demarrage : sans Redis, on joue quand meme.
+  await connectRedis(process.env.REDIS_URL);
 
   // Schema de la bibliotheque de liens des le BOOT : le poll room details y fait
 // reference, un premier deploiement sans la table crash-loopait le serveur.
@@ -497,7 +498,7 @@ function shutdown(signal: string) {
   logger.info(`${signal} received — shutting down gracefully`);
   server.close(() => {
     logger.info("HTTP server closed");
-    pool.end().then(() => {
+    Promise.all([pool.end(), closeRedis()]).then(() => {
       logger.info("Database pool closed");
       process.exit(0);
     }).catch(() => process.exit(1));

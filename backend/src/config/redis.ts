@@ -1,44 +1,130 @@
 import Redis from 'ioredis';
 import { logger } from '../utils/logger';
 
-const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
+// Redis garde une copie de secours de l'etat des parties (docs/adr/ADR-001).
+// Le jeu doit tourner sans lui : aucune connexion a l'import, aucune adresse par
+// defaut (localhost:6379 est le Redis systeme du VPS, partage avec d'autres
+// projets), et aucune commande mise en file d'attente quand il est coupe.
 
-// Create Redis client for general use
-export const redis = new Redis(REDIS_URL, {
-  maxRetriesPerRequest: 3,
-  retryStrategy: (times: number) => {
-    const delay = Math.min(times * 50, 2000);
-    return delay;
-  },
-  reconnectOnError: (err) => {
-    const targetError = 'READONLY';
-    if (err.message.includes(targetError)) {
-      // Reconnect on READONLY errors
-      return true;
-    }
+/** Redis pas configure, coupe ou trop lent : a distinguer d'une cle absente. */
+export class RedisUnavailableError extends Error {
+  constructor(message: string, readonly cause?: unknown) {
+    super(message);
+    this.name = 'RedisUnavailableError';
+  }
+}
+
+export type RedisHealth = 'ok' | 'absent';
+
+const CONNECT_TIMEOUT_MS = 2000;
+const COMMAND_TIMEOUT_MS = 1000;
+const HEALTH_TIMEOUT_MS = 500;
+
+let client: Redis | null = null;
+// Dernier etat journalise : une seule ligne par passage coupe/pret, pas une par
+// tentative de reconnexion.
+let loggedState: 'ready' | 'down' | null = null;
+
+/**
+ * Ouvre la connexion. Ne rejette jamais : renvoie false si Redis n'est pas
+ * configure ou ne repond pas, et ioredis continue de retenter en fond.
+ */
+export async function connectRedis(url: string | undefined): Promise<boolean> {
+  if (client) return client.status === 'ready';
+  if (!url) {
+    logger.warn('redis_non_configure : REDIS_URL absente, les parties ne seront pas sauvegardees');
     return false;
   }
-});
 
-redis.on('connect', () => {
-  logger.info('Redis client connected');
-});
+  const c = new Redis(url, {
+    lazyConnect: true,
+    enableOfflineQueue: false,
+    maxRetriesPerRequest: 1,
+    connectTimeout: CONNECT_TIMEOUT_MS,
+    commandTimeout: COMMAND_TIMEOUT_MS,
+    // A la fermeture, ioredis arme ce minuteur meme sur une socket deja morte :
+    // 2 s par defaut retenaient Jest et le shutdown.
+    disconnectTimeout: 200,
+    retryStrategy: (times: number) => Math.min(times * 200, 5000),
+    reconnectOnError: (err) => err.message.includes('READONLY'),
+  });
+  client = c;
+  loggedState = null;
 
-redis.on('error', (err) => {
-  logger.error('Redis client error:', err);
-});
+  // Les ecouteurs ignorent un client deja ferme par closeRedis().
+  c.on('ready', () => {
+    if (c !== client || loggedState === 'ready') return;
+    loggedState = 'ready';
+    logger.info('redis_pret');
+  });
+  c.on('error', (err: Error) => {
+    if (c !== client || loggedState === 'down') return;
+    loggedState = 'down';
+    logger.warn('redis_injoignable : le jeu continue sans copie de secours', { error: err.message });
+  });
+  c.on('close', () => {
+    if (c !== client || loggedState !== 'ready') return;
+    loggedState = 'down';
+    logger.warn('redis_connexion_perdue : le jeu continue sans copie de secours');
+  });
 
-redis.on('ready', () => {
-  logger.info('Redis client ready');
-});
+  try {
+    await c.connect();
+    return true;
+  } catch {
+    return false;
+  }
+}
 
-redis.on('reconnecting', () => {
-  logger.warn('Redis client reconnecting');
-});
+/** Etat pour /health. Ne bloque jamais plus de HEALTH_TIMEOUT_MS. */
+export async function getRedisHealth(): Promise<RedisHealth> {
+  if (!client || client.status !== 'ready') return 'absent';
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<'absent'>(resolve => {
+    timer = setTimeout(() => resolve('absent'), HEALTH_TIMEOUT_MS);
+  });
+  const ping = client.ping().then(() => 'ok' as const, () => 'absent' as const);
+  try {
+    return await Promise.race([ping, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
-// Create separate Redis client for pub/sub
-export const redisPubClient = new Redis(REDIS_URL);
-export const redisSubClient = redisPubClient.duplicate();
+/** Fermeture propre (shutdown du serveur, fin des tests). Ne rejette jamais. */
+export async function closeRedis(): Promise<void> {
+  const c = client;
+  client = null;
+  loggedState = null;
+  if (!c) return;
+  if (c.status === 'ready') {
+    try {
+      await c.quit();
+    } catch {
+      c.disconnect();
+    }
+  } else {
+    // Coupe aussi les tentatives de reconnexion en attente.
+    c.disconnect();
+  }
+  logger.info('redis_ferme');
+}
+
+/**
+ * Execute une commande, ou leve RedisUnavailableError si Redis n'est pas pret
+ * ou ne repond pas. Une cle absente reste un resultat normal (null, false).
+ */
+async function run<T>(command: (c: Redis) => Promise<T>): Promise<T> {
+  const c = client;
+  if (!c || c.status !== 'ready') {
+    throw new RedisUnavailableError('Redis indisponible');
+  }
+  try {
+    return await command(c);
+  } catch (err) {
+    throw new RedisUnavailableError('Commande Redis en echec', err);
+  }
+}
 
 // Game state storage keys
 export const GAME_STATE_PREFIX = 'game:state:';
@@ -55,15 +141,15 @@ export const ROOM_TTL = 7200; // 2 hours
  */
 export async function setGameState(roomCode: string, state: any): Promise<void> {
   const key = `${GAME_STATE_PREFIX}${roomCode}`;
-  await redis.setex(key, GAME_STATE_TTL, JSON.stringify(state));
+  await run(c => c.setex(key, GAME_STATE_TTL, JSON.stringify(state)));
 }
 
 /**
- * Retrieve game state from Redis
+ * Retrieve game state from Redis (null : pas de copie pour cette salle)
  */
 export async function getGameState(roomCode: string): Promise<any | null> {
   const key = `${GAME_STATE_PREFIX}${roomCode}`;
-  const data = await redis.get(key);
+  const data = await run(c => c.get(key));
   return data ? JSON.parse(data) : null;
 }
 
@@ -72,7 +158,7 @@ export async function getGameState(roomCode: string): Promise<any | null> {
  */
 export async function deleteGameState(roomCode: string): Promise<void> {
   const key = `${GAME_STATE_PREFIX}${roomCode}`;
-  await redis.del(key);
+  await run(c => c.del(key));
 }
 
 /**
@@ -80,7 +166,7 @@ export async function deleteGameState(roomCode: string): Promise<void> {
  */
 export async function hasGameState(roomCode: string): Promise<boolean> {
   const key = `${GAME_STATE_PREFIX}${roomCode}`;
-  const exists = await redis.exists(key);
+  const exists = await run(c => c.exists(key));
   return exists === 1;
 }
 
@@ -89,7 +175,7 @@ export async function hasGameState(roomCode: string): Promise<boolean> {
  */
 export async function setUserPresence(userId: string, presence: any): Promise<void> {
   const key = `${USER_PRESENCE_PREFIX}${userId}`;
-  await redis.setex(key, PRESENCE_TTL, JSON.stringify(presence));
+  await run(c => c.setex(key, PRESENCE_TTL, JSON.stringify(presence)));
 }
 
 /**
@@ -97,7 +183,7 @@ export async function setUserPresence(userId: string, presence: any): Promise<vo
  */
 export async function getUserPresence(userId: string): Promise<any | null> {
   const key = `${USER_PRESENCE_PREFIX}${userId}`;
-  const data = await redis.get(key);
+  const data = await run(c => c.get(key));
   return data ? JSON.parse(data) : null;
 }
 
@@ -106,15 +192,7 @@ export async function getUserPresence(userId: string): Promise<any | null> {
  */
 export async function deleteUserPresence(userId: string): Promise<void> {
   const key = `${USER_PRESENCE_PREFIX}${userId}`;
-  await redis.del(key);
-}
-
-/**
- * Get all active game room codes
- */
-export async function getActiveGameRooms(): Promise<string[]> {
-  const keys = await redis.keys(`${GAME_STATE_PREFIX}*`);
-  return keys.map(key => key.replace(GAME_STATE_PREFIX, ''));
+  await run(c => c.del(key));
 }
 
 /**
@@ -122,30 +200,20 @@ export async function getActiveGameRooms(): Promise<string[]> {
  */
 export async function extendGameStateTTL(roomCode: string, seconds: number = GAME_STATE_TTL): Promise<void> {
   const key = `${GAME_STATE_PREFIX}${roomCode}`;
-  await redis.expire(key, seconds);
+  await run(c => c.expire(key, seconds));
 }
 
 /**
  * Store temporary data with custom TTL
  */
 export async function setTemp(key: string, value: any, ttl: number): Promise<void> {
-  await redis.setex(key, ttl, JSON.stringify(value));
+  await run(c => c.setex(key, ttl, JSON.stringify(value)));
 }
 
 /**
  * Get temporary data
  */
 export async function getTemp(key: string): Promise<any | null> {
-  const data = await redis.get(key);
+  const data = await run(c => c.get(key));
   return data ? JSON.parse(data) : null;
-}
-
-/**
- * Graceful shutdown
- */
-export async function closeRedis(): Promise<void> {
-  await redis.quit();
-  await redisPubClient.quit();
-  await redisSubClient.quit();
-  logger.info('Redis connections closed');
 }
