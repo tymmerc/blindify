@@ -373,10 +373,6 @@ async function bootstrap() {
   } else {
     logger.info("socket_adapter : memoire");
   }
-  // Reprise des parties copiees dans Redis (ADR-001), avant server.listen et
-  // avant le menage periodique : aucun game:sync ne doit trouver la salle vide
-  // et la solder comme « partie perdue ». Ne fait jamais echouer le demarrage.
-  await restoreGames(io);
 
   // Schema de la bibliotheque de liens des le BOOT : le poll room details y fait
 // reference, un premier deploiement sans la table crash-loopait le serveur.
@@ -500,6 +496,11 @@ process.on("unhandledRejection", (reason) => {
 });
 
 await userTracksReady;
+// Reprise des parties copiees dans Redis (ADR-001), juste avant d'ouvrir :
+// la lenteur du demarrage ne mange pas la grace de reprise, et aucun game:sync
+// ne trouve la salle vide pour la solder en « partie perdue ». Le menage
+// periodique ne passe qu'apres. Ne fait jamais echouer le demarrage.
+await restoreGames(io);
 server.listen(PORT, "0.0.0.0", () => {
     logger.info(`🚀 Blindify API listening on port ${PORT}`);
     reportGameStartNotifStatus();

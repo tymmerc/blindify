@@ -10,26 +10,24 @@ const runningSessions = new Set<number>();
 const claimedSessions = new Set<number>();
 const queries: Array<{ sql: string; params: unknown[] }> = [];
 
-jest.mock("../../src/config/db", () => ({
-  pool: {
-    query: jest.fn(async (sql: string, params: unknown[] = []) => {
-      queries.push({ sql, params });
-      if (sql.includes("FROM multiplayer_rooms r")) {
-        const ok = runningSessions.has(Number(params[2]));
-        return { rows: ok ? [{ "?column?": 1 }] : [], rowCount: ok ? 1 : 0 };
-      }
-      if (sql.includes("UPDATE game_sessions") && sql.includes("RETURNING id")) {
-        const id = Number(params[0]);
-        if (claimedSessions.has(id)) return { rows: [], rowCount: 0 };
-        claimedSessions.add(id);
-        return { rows: [{ id }], rowCount: 1 };
-      }
-      if (sql.includes("FROM game_rounds")) return { rows: [{ id: 1 }], rowCount: 1 };
-      return { rows: [], rowCount: 0 };
-    }),
-    connect: jest.fn(),
-  },
-}));
+jest.mock("../../src/config/db", () => {
+  const query = jest.fn(async (sql: string, params: unknown[] = []) => {
+    queries.push({ sql, params });
+    if (sql.includes("FROM multiplayer_rooms r")) {
+      const ok = runningSessions.has(Number(params[2]));
+      return { rows: ok ? [{ "?column?": 1 }] : [], rowCount: ok ? 1 : 0 };
+    }
+    if (sql.includes("UPDATE game_sessions") && sql.includes("RETURNING id")) {
+      const id = Number(params[0]);
+      if (claimedSessions.has(id)) return { rows: [], rowCount: 0 };
+      claimedSessions.add(id);
+      return { rows: [{ id }], rowCount: 1 };
+    }
+    if (sql.includes("FROM game_rounds")) return { rows: [{ id: 1 }], rowCount: 1 };
+    return { rows: [], rowCount: 0 };
+  });
+  return { pool: { query, connect: jest.fn() } };
+});
 
 import { closeRedis, connectRedis, gameStateKey, setGameState } from "../../src/config/redis";
 import { deserializeGame } from "../../src/services/gameBackup";
@@ -139,10 +137,15 @@ describeWithRedis("reprise depuis Redis", () => {
     const reveal = savedGame({ phase: "REVEAL", savedAt, sessionId: 9002 });
     const paused = savedGame({ phase: "GUESSING", paused: true, savedAt, sessionId: 9003 });
     const ended = savedGame({ phase: "GUESSING", savedAt, sessionId: 9004 });
-    runningSessions.add(9001).add(9002).add(9003);
+    // Redis lent pendant 20 min : la copie a 3 min de retard sur la partie.
+    const stale = savedGame({ phase: "GUESSING", savedAt: Date.now() - 3 * 60_000, sessionId: 9005 });
+    runningSessions.add(9001).add(9002).add(9003).add(9005);
     // Les copies de ces parties (creees puis effacees ci-dessus) sont parties.
     await gameBackupsSettled();
-    for (const s of [guessing, reveal, paused, ended]) await setGameState(s.roomCode, s.json);
+    for (const s of [guessing, reveal, paused, ended, stale]) await setGameState(s.roomCode, s.json);
+    // Copie d'une autre instance sur le meme Redis (autre prefixe) : jamais vue.
+    const otherKey = `blindz:autre-instance:game:state:${guessing.roomCode}X`;
+    await inspect.set(otherKey, guessing.json, "EX", 60);
     const v2Code = `RSV2${seq}`;
     await setGameState(v2Code, JSON.stringify({ ...JSON.parse(guessing.json), roomCode: v2Code, v: 2 }));
     const junkCode = `RSJK${seq}`;
@@ -156,11 +159,16 @@ describeWithRedis("reprise depuis Redis", () => {
     expect(summary.restored.sort()).toEqual([guessing.roomCode, reveal.roomCode, paused.roomCode].sort());
     expect(summary.skipped).toEqual(expect.arrayContaining([
       { roomCode: ended.roomCode, reason: "partie_plus_en_cours" },
+      { roomCode: stale.roomCode, reason: "copie_trop_ancienne" },
       { roomCode: v2Code, reason: "illisible_ou_version_inconnue" },
       { roomCode: junkCode, reason: "illisible_ou_version_inconnue" },
     ]));
-    for (const code of [ended.roomCode, v2Code, junkCode]) expect(await inspect.exists(gameStateKey(code))).toBe(0);
+    for (const code of [ended.roomCode, stale.roomCode, v2Code, junkCode]) expect(await inspect.exists(gameStateKey(code))).toBe(0);
+    expect(summary.skipped.map(x => x.roomCode)).not.toContain(`${guessing.roomCode}X`);
+    expect(await inspect.exists(otherKey)).toBe(1);
+    await inspect.del(otherKey);
     // Jamais KEYS : la liste vient de SCAN (aucune requete en base n'en depend).
+    // La copie trop ancienne est ecartee avant toute requete en base.
     expect(queries.filter(q => q.sql.includes("FROM multiplayer_rooms r"))).toHaveLength(4);
 
     const g = getGameState(guessing.roomCode)!;
