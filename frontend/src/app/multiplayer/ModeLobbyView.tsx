@@ -16,10 +16,12 @@ import { MultiplayerGameClient } from "@/components/game/MultiplayerGameClient"
 import { useRoomChat } from "./hooks/useRoomChat"
 import { useSpectatorCount } from "./hooks/useSpectatorCount"
 import { SpectatorBadge } from "@/components/game/SpectatorBadge"
+import { ConnectionBanner } from "@/components/game/ConnectionBanner"
 import { useLobbyRps } from "./hooks/useLobbyRps"
 import { ProfileImportBlock } from "@/components/import/ProfileImportBlock"
 import { MusicLibrary } from "@/components/import/MusicLibrary"
 import { Button } from "@/components/ui/button"
+import { useConnectionStatus } from "@/hooks/useConnectionStatus"
 import { useServerTime } from "@/hooks/useServerTime"
 import { useMode } from "@/contexts/ModeContext"
 import type { GameMode, GameModeConfig } from "@/lib/gameModes"
@@ -286,6 +288,9 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
 
   const [joinCode, setJoinCode] = useState(initialJoinCode?.toUpperCase() ?? "")
   const serverNow = useServerTime(socketRef.current)
+  // « Connexion perdue, on se reconnecte… » pendant une coupure (redemarrage du
+  // serveur : la partie reprend depuis Redis apres quelques secondes).
+  const connection = useConnectionStatus(socketRef.current)
   // Quelqu'un arrive en pleine partie (T19) : les autres le voient arriver.
   const streamerFeed = useStreamerFeed(socketConnected ? socketRef.current : null, room?.room_code ?? null, mode === "streamer")
   useLateArrivals(
@@ -1915,6 +1920,7 @@ export function ModeLobbyView({ mode, modeConfig, intent, initialJoinCode, autoj
       stage={stage}
       isGuest={isGuest}
     >
+      <ConnectionBanner status={connection} />
       <div className="flex flex-col gap-4">
         {socketNotice ? (
           <div

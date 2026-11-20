@@ -14,7 +14,10 @@
 //   - la partie va au bout, les points de fin = la somme des points en base,
 //     aucune reponse en double, les stats de chacun comptees une seule fois.
 // Code de sortie 0 si tout est conforme, 1 sinon.
+// Cote telephone, le bandeau « Connexion perdue, on se reconnecte… » doit
+// apparaitre pendant la coupure, dire « Reconnecté » au retour, puis disparaitre.
 // RECORD_VIDEO=/dossier : filme l'ecran du telephone (webm, taille de l'ecran).
+// SHOTS_DIR=/dossier : captures du telephone, bandeau visible puis disparu.
 import { createRequire } from "node:module"
 import { execFile } from "node:child_process"
 import { promisify } from "node:util"
@@ -41,6 +44,8 @@ const problems = []
 const bad = m => { problems.push(m); console.log(`  !! ${m}`) }
 const ok = m => console.log(`  [ok] ${m}`)
 const s = ms => `${(ms / 1000).toFixed(1)} s`
+const SHOTS_DIR = process.env.SHOTS_DIR
+const BANNER = '[data-testid="bandeau-reconnexion"]'
 
 async function until(predicate, timeoutMs, label) {
   const end = Date.now() + timeoutMs
@@ -166,6 +171,17 @@ async function main() {
 
     const logs = new Map(bots.map(b => [b, { joins: [], watchId: page.__uid }]))
     for (const b of bots) keepAlive(b, code, logs.get(b))
+    if (await page.locator(BANNER).count()) bad("bandeau de reconnexion affiche avant la coupure")
+    // Le bandeau pendant la coupure, puis « Reconnecté » : guettes en parallele
+    // du KILL et de la relance.
+    const bannerWatch = page.locator(`${BANNER}[data-etat="reconnecting"]`).waitFor({ state: "visible", timeout: 30_000 })
+      .then(async () => {
+        const at = Date.now()
+        if (SHOTS_DIR) await page.screenshot({ path: path.join(SHOTS_DIR, "bandeau-visible.png") }).catch(() => {})
+        const back = await page.locator(`${BANNER}[data-etat="back"]`).waitFor({ state: "visible", timeout: 60_000 })
+          .then(() => Date.now(), () => null)
+        return { at, back }
+      }, () => null)
     const tKill = Date.now()
     await run(STACK, ["backend-kill"])
     await run(STACK, ["backend-start"], { timeout: 120_000 })
@@ -173,6 +189,17 @@ async function main() {
     ok(`backend relance, sante OK ${s(tUp - tKill)} apres le KILL`)
 
     await until(() => bots.every(b => logs.get(b).state), 30_000, "retour des trois bots")
+    const seen = await bannerWatch
+    if (!seen) bad("telephone : le bandeau de reconnexion n'est pas apparu pendant la coupure")
+    else {
+      ok(`telephone : bandeau visible ${s(seen.at - tKill)} apres le KILL`)
+      if (seen.back) ok(`telephone : « Reconnecté » ${s(seen.back - tKill)} apres le KILL`)
+      else bad("telephone : « Reconnecté » jamais affiche au retour")
+    }
+    if (await page.locator(BANNER).waitFor({ state: "hidden", timeout: 15_000 }).then(() => true, () => false)) {
+      ok("telephone : bandeau disparu apres la reprise")
+      if (SHOTS_DIR) await page.screenshot({ path: path.join(SHOTS_DIR, "bandeau-disparu.png") }).catch(() => {})
+    } else bad("telephone : le bandeau reste affiche apres la reprise")
     const after = logs.get(host).stateAfter
     if (!after || after.currentRound !== 2 || after.phase !== "GUESSING") bad(`apres la reprise : manche ${after?.currentRound} ${after?.phase}, attendu 2 GUESSING`)
     // Temps rendu : revealAt' = revealAt + (reprise - savedAt) + grace, la reprise
