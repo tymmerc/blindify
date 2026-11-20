@@ -8,6 +8,8 @@ import { socketEndpoint } from "@/lib/socket"
 import { publicPath } from "@/lib/publicPath"
 import { Label } from "@/app/multiplayer/lobbyKit"
 import { SpectatorStage, useNow } from "@/components/game/SpectatorStage"
+import { ConnectionBanner } from "@/components/game/ConnectionBanner"
+import { useConnectionStatus, type ConnectionStatus } from "@/hooks/useConnectionStatus"
 import {
   SPECTATOR_ERROR_TEXT,
   initialSpectatorView,
@@ -24,8 +26,9 @@ const MODE_LABEL: Record<string, string> = { friends: "À distance", event: "Aut
 /** Les trames que la page ecoute. Aucune n'est emise vers le serveur, sauf la resynchro. */
 const FORWARDED = ["game:state", "game:round:start", "game:round:reveal", "game:over", "room:presence", "room:lobby"] as const
 
-function useSpectatorSocket(salle: string | null, jeton: string | null): SpectatorView {
+function useSpectatorSocket(salle: string | null, jeton: string | null): { view: SpectatorView; connection: ConnectionStatus } {
   const [view, dispatch] = useReducer(spectatorReducer, initialSpectatorView)
+  const [socket, setSocket] = useState<Socket | null>(null)
 
   useEffect(() => {
     if (!salle || !jeton) {
@@ -58,13 +61,16 @@ function useSpectatorSocket(salle: string | null, jeton: string | null): Spectat
       if (document.visibilityState === "visible" && socket.connected) socket.emit("spectator:sync")
     }
     document.addEventListener("visibilitychange", onVisible)
+    setSocket(socket)
     return () => {
       document.removeEventListener("visibilitychange", onVisible)
       socket.close()
+      setSocket(null)
     }
   }, [salle, jeton])
 
-  return view
+  const connection = useConnectionStatus(socket)
+  return { view, connection }
 }
 
 /** Son optionnel : le meme extrait que les joueurs, coupe par defaut (lecture auto bloquee). */
@@ -89,7 +95,7 @@ export function SpectatorClient() {
   const params = useSearchParams()
   const salle = params.get("salle")
   const jeton = params.get("jeton")
-  const view = useSpectatorSocket(salle, jeton)
+  const { view, connection } = useSpectatorSocket(salle, jeton)
   const [sound, setSound] = useState(false)
   const now = useNow(view.status === "live" && view.game?.phase === "GUESSING")
   usePreview(view.game, sound && view.status === "live")
@@ -101,6 +107,7 @@ export function SpectatorClient() {
 
   return (
     <main className="min-h-screen bg-paper text-ink" data-testid="spectator-view">
+      <ConnectionBanner status={connection} />
       <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-5 px-4 py-5 sm:gap-6 sm:px-6 sm:py-8">
         <header className="flex flex-wrap items-center justify-between gap-3 border-b-2 border-line pb-3 sm:pb-4">
           <div className="flex min-w-0 items-center gap-3">
