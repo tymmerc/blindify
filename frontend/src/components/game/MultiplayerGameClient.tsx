@@ -198,12 +198,6 @@ export function MultiplayerGameClient({
   }, [state?.timing?.startAt, state?.timing?.revealAt])
 
   const currentTrack = state?.currentTrack ?? null
-  const trackOwnerUsername =
-    currentTrack?.metadata &&
-    typeof currentTrack.metadata === "object" &&
-    typeof (currentTrack.metadata as { owner_username?: unknown }).owner_username === "string"
-      ? (currentTrack.metadata as { owner_username?: string }).owner_username ?? null
-      : null
 
   const player = state?.players?.[user.id] ?? null
   const backendPhase = state?.phase

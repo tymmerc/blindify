@@ -67,6 +67,20 @@ describe("le morceau de X", () => {
     expect(owner?.avatar).toBeNull()
   })
 
+  // Event, hote qui presente : le serveur dit qui montrer (le proprietaire qu'on pouvait designer).
+  it("montre le proprietaire choisi par le serveur, pas un autre co-proprietaire ni l'hote", () => {
+    const shared = { ...track({ owner_user_id: 1, owner_username: "Hote", owner_user_ids: [1, 3, 5] }), shownOwner: { userId: 3, username: "Clem" } }
+    const owner = trackOwner(shared, [player(5), player(2), player(3, { username: "Clem" })])
+    expect(owner).toMatchObject({ userId: 3, name: "Clem" })
+    // Parti pendant la manche : le nom envoye par le serveur, jamais celui de l'hote.
+    expect(trackOwner(shared, [player(5), player(2)])).toMatchObject({ userId: 3, name: "Clem" })
+  })
+
+  it("personne de proposable (shownOwner null) : le vrai proprietaire, sans question", () => {
+    const hostOnly = { ...track({ owner_user_id: 1, owner_username: "Hote", owner_user_ids: [1] }, false), shownOwner: null }
+    expect(trackOwner(hostOnly, [player(2), player(3)])).toMatchObject({ userId: 1, name: "Hote", question: false })
+  })
+
   it("rien sans proprietaire connu", () => {
     expect(trackOwner(track({}), [player(1)])).toBeNull()
   })

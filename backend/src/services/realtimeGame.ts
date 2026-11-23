@@ -1,4 +1,4 @@
-import { isOwnerGuess, ownerChoices, ownerQuestionOpen } from "./roundOwners";
+import { isOwnerGuess, ownerChoices, ownerQuestionOpen, proposableOwnerId } from "./roundOwners";
 import { evaluateGuessDetail, type GuessDetail } from "./guessMatching";
 import {
   promoteWaiting,
@@ -28,6 +28,13 @@ export type RoundTrack = {
   ownerChoices?: number[];
   /** false : pas de « qui a ajoute ? » cette manche (moins de 3 joueurs, T7). */
   ownerQuestion?: boolean;
+  /**
+   * « Le morceau de X » a la revelation : le proprietaire qu'on pouvait designer
+   * cette manche (roundOwners.proposableOwnerId), jamais l'hote qui presente.
+   * null : personne de proposable, la question n'est pas posee et les vues
+   * montrent le vrai proprietaire (metadata). Reveal seulement (pas dans redactedGuessingTrack).
+   */
+  shownOwner?: { userId: number; username: string | null } | null;
   // Source du morceau : jamais copiee par redactedGuessingTrack (reveal seulement).
   provider?: string | null;
 };
@@ -763,8 +770,13 @@ export function startNextRound(roomCode: string, opts?: { forceRound?: number; s
   // monde. Seulement parmi les joueurs du lancement : un retardataire n'a mis
   // aucun morceau dans cette partie, il n'est jamais propose.
   const candidates = Object.keys(ctx.state.players).map(Number).filter(id => ctx.launchPlayerIds.has(id));
-  track.ownerQuestion = ownerQuestionOpen(candidates.length, ctx.state.singleContributor === true);
+  // Le morceau n'est a aucun candidat (hote qui presente sans jouer, joueur
+  // parti) : la question n'aurait pas de bonne reponse, on ne la pose pas.
+  const ownerId = proposableOwnerId(track.metadata, candidates);
+  track.ownerQuestion = ownerId !== null && ownerQuestionOpen(candidates.length, ctx.state.singleContributor === true);
   track.ownerChoices = track.ownerQuestion ? ownerChoices(track.metadata, candidates) : [];
+  const shown = ownerId !== null ? ctx.state.players[ownerId] : undefined;
+  track.shownOwner = shown ? { userId: shown.userId, username: shown.username } : null;
 
   Object.values(ctx.state.players).forEach(player => {
     player.hasAnswered = false;

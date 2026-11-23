@@ -92,12 +92,17 @@ export function trackOwner(
   const ids = trackOwnerIds(track?.metadata)
   const metaName = typeof track?.metadata?.owner_username === "string" ? track.metadata.owner_username.trim() : ""
   if (ids.length === 0 && !metaName) return null
-  const owner = players.find(p => ids.includes(p.userId)) ?? null
+  // Le serveur dit qui montrer (le proprietaire qu'on pouvait designer) ;
+  // sans lui (serveur d'avant), le premier joueur a qui revient le morceau.
+  const shown = track?.shownOwner ?? null
+  const owner = shown
+    ? players.find(p => p.userId === shown.userId) ?? null
+    : players.find(p => ids.includes(p.userId)) ?? null
   const question = track?.ownerQuestion !== false
   const askedPlayers = players.filter(p => !ids.includes(p.userId))
   return {
-    userId: owner?.userId ?? ids[0] ?? null,
-    name: owner?.username?.trim() || metaName || "Un joueur",
+    userId: shown?.userId ?? owner?.userId ?? ids[0] ?? null,
+    name: owner?.username?.trim() || shown?.username?.trim() || metaName || "Un joueur",
     avatar: owner?.avatar ?? null,
     guessed: askedPlayers.filter(p => p.lastSourceGuess != null && ids.includes(p.lastSourceGuess)).length,
     asked: askedPlayers.length,
