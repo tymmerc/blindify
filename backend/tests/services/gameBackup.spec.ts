@@ -91,6 +91,7 @@ function fullTrack(round: number): Full<RoundTrack> {
     metadata: { owner_user_id: 2, owner_username: "Joueur 2", co_owner_ids: [1, 2], album: "Album" },
     ownerChoices: [1, 2, 3],
     ownerQuestion: true,
+    shownOwner: { userId: 2, username: "Joueur 2" },
     provider: "deezer",
   };
 }

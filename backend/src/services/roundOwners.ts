@@ -39,9 +39,20 @@ function shuffled<T>(items: readonly T[]): T[] {
 }
 
 /**
- * Les candidats du picker : un bon (le contributeur s'il joue, sinon un autre
- * importeur present) et deux leurres qui n'ont PAS le morceau. S'il manque de
- * leurres, on complete avec les autres importeurs, qui sont aussi justes.
+ * Le proprietaire qu'on pouvait designer cette manche : le premier de
+ * roundOwnerIds parmi les joueurs proposables (le contributeur s'il joue, sinon
+ * un autre importeur present). C'est le « bon » du picker et le nom montre a la
+ * revelation. null : le morceau n'est a personne de proposable (hote qui
+ * presente sans jouer, joueur parti), la question n'a pas de bonne reponse.
+ */
+export function proposableOwnerId(metadata: unknown, playerIds: number[]): number | null {
+  return roundOwnerIds(metadata).find(id => playerIds.includes(id)) ?? null;
+}
+
+/**
+ * Les candidats du picker : le bon (proposableOwnerId) et deux leurres qui
+ * n'ont PAS le morceau. S'il manque de leurres, on complete avec les autres
+ * importeurs, qui sont aussi justes.
  * Moins de 3 joueurs, ou personne de la salle a qui il revient : tout le monde.
  */
 export function ownerChoices(metadata: unknown, playerIds: number[]): number[] {

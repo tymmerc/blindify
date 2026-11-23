@@ -346,6 +346,68 @@ describe("startNextRound - owner choices", () => {
   });
 });
 
+// Soiree du 22/11, « Autour d'une table » sans « je joue aussi » : l'ecran de
+// l'hote apporte aussi des morceaux mais n'est jamais propose. La revelation
+// affichait quand meme son nom (« celui a qui appartient la musique
+// n'apparait pas dans le choix »).
+describe("startNextRound - proprietaire montre a la revelation (event, hote qui presente)", () => {
+  const players = [
+    { userId: 2, username: "Player2" },
+    { userId: 3, username: "Player3" },
+    { userId: 4, username: "Player4" },
+    { userId: 5, username: "Player5" },
+  ];
+  const eventGame = (metadata: Record<string, unknown>) =>
+    setupGame({
+      mode: "event",
+      participants: players,
+      tracks: [{ round: 1, trackId: "t1", title: "S", artist: "A", previewUrl: null, metadata: { owner_username: "Host", ...metadata } }],
+    });
+
+  it("morceau de l'hote et d'un joueur : on montre le joueur, qui est dans les choix", () => {
+    for (let i = 0; i < 20; i++) {
+      eventGame({ owner_user_id: 1, owner_user_ids: [1, 3] });
+      const track = startNextRound(ROOM)?.currentTrack;
+      expect(track?.ownerQuestion).toBe(true);
+      expect(track?.ownerChoices).toContain(3);
+      expect(track?.shownOwner).toEqual({ userId: 3, username: "Player3" });
+    }
+  });
+
+  it("plusieurs proprietaires qui jouent : le premier dans l'ordre (le contributeur d'abord)", () => {
+    eventGame({ owner_user_id: 4, owner_user_ids: [2, 4] });
+    const track = startNextRound(ROOM)?.currentTrack;
+    expect(track?.shownOwner).toEqual({ userId: 4, username: "Player4" });
+    expect(track?.ownerChoices).toContain(4);
+  });
+
+  it("morceau du seul hote : pas de question, personne a montrer, aucun point", () => {
+    eventGame({ owner_user_id: 1, owner_user_ids: [1] });
+    const track = startNextRound(ROOM)?.currentTrack;
+    expect(track?.ownerQuestion).toBe(false);
+    expect(track?.ownerChoices).toEqual([]);
+    expect(track?.shownOwner).toBeNull();
+    recordAnswer(ROOM, 2, "", 1, "", "");
+    expect(revealRound(ROOM)?.players[2].lastGained).toBe(0);
+  });
+
+  it("proprietaire parti avant la manche : pas de question non plus", () => {
+    eventGame({ owner_user_id: 3, owner_user_ids: [3] });
+    removePlayer(ROOM, 3);
+    const track = startNextRound(ROOM)?.currentTrack;
+    expect(track?.ownerQuestion).toBe(false);
+    expect(track?.shownOwner).toBeNull();
+  });
+
+  it("anti-triche : le proprietaire montre ne part qu'a la revelation", () => {
+    eventGame({ owner_user_id: 1, owner_user_ids: [1, 3] });
+    startNextRound(ROOM);
+    expect(gameStateSnapshot(ROOM)?.currentTrack).not.toHaveProperty("shownOwner");
+    revealRound(ROOM);
+    expect(gameStateSnapshot(ROOM)?.currentTrack?.shownOwner).toEqual({ userId: 3, username: "Player3" });
+  });
+});
+
 // T7 (soiree du 01/11, sessions 752 a 754) : a deux, « qui a ajoute ce titre ? »
 // n'a pas de sens, si ce n'est pas toi c'est forcement l'autre.
 describe("startNextRound - « qui a ajoute ? » seulement a 3 joueurs ou plus", () => {

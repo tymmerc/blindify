@@ -179,6 +179,8 @@ export type MultiplayerGameState = {
     ownerChoices?: number[]
     /** false : pas de « qui a ajoute ? » cette manche (moins de 3 joueurs, T7). */
     ownerQuestion?: boolean
+    /** « Le morceau de X » : le proprietaire qu'on pouvait designer cette manche (reveal seulement). */
+    shownOwner?: { userId: number; username: string | null } | null
     /** Source du morceau : seulement au reveal (caviardee pendant la manche). */
     provider?: string | null
   } | null
