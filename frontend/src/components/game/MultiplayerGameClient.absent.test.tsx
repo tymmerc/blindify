@@ -64,9 +64,9 @@ describe.each(["event", "friends"] as const)("mode %s", mode => {
     const onPresent = vi.fn()
     const state = guessing(mode, now, { paused: true, idle: { reason: "silent", stopAt: now + 120_000 } })
     render(<MultiplayerGameClient user={joueur} state={state} serverNow={now} onAnswer={vi.fn()} mode={mode} onPresent={onPresent} />)
-    expect(screen.getByTestId("pause-reason").textContent).toBe(
-      "Personne n'a répondu depuis 3 manches. La partie s'arrête dans 2 min si personne ne revient.",
-    )
+    const reason = screen.getByTestId("pause-reason").textContent
+    expect(reason).toContain("Personne n'a répondu.")
+    expect(reason).toContain("La partie s'arrête dans 2 min si personne ne reprend.")
     fireEvent.click(screen.getByTestId("idle-present"))
     expect(onPresent).toHaveBeenCalledTimes(1)
   })

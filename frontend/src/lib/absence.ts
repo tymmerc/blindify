@@ -44,8 +44,40 @@ export function idlePauseText(idle: MultiplayerGameState["idle"], now: number): 
   return `${why} ${when}`
 }
 
+/** D'ou on regarde la pause : l'ecran de la table, un telephone a la table, ou son propre appareil (entre amis, Discord). */
+export type PauseViewer = "screen" | "phone" | "own"
+
 /** Le bouton des joueurs sur l'ecran de veille. */
 export const IDLE_PRESENT_ACTION = "Je suis là"
+
+// La partie est figee : chaque texte dit aussi comment la relancer.
+const SILENT_HELP: Record<PauseViewer, string> = {
+  screen: "Vous entendez la musique ? Chacun tape le titre ou l'artiste sur son téléphone, puis valide. Relance quand tout le monde a compris.",
+  phone: `Tu entends la musique du grand écran ? Le titre ou l'artiste, tu le tapes ici, sur ton téléphone. Touche « ${IDLE_PRESENT_ACTION} » pour repartir.`,
+  own: `Tu entends la musique ? Monte le son, puis tape le titre ou l'artiste et valide. Touche « ${IDLE_PRESENT_ACTION} » pour repartir.`,
+}
+
+/**
+ * Veille parce que personne n'a repondu : on dit quoi faire, pas seulement
+ * pourquoi. Le 24/11, des nouveaux venus n'avaient pas compris ou repondre.
+ * null pour les autres pauses.
+ */
+export function silentPauseText(
+  idle: MultiplayerGameState["idle"],
+  now: number,
+  viewer: PauseViewer,
+): { title: string; help: string; when: string } | null {
+  if (idle?.reason !== "silent") return null
+  const left = minutesLeft(idle.stopAt, now)
+  return {
+    title: "Personne n'a répondu.",
+    help: SILENT_HELP[viewer],
+    when: left > 0 ? `La partie s'arrête dans ${left} min si personne ne reprend.` : "La partie va s'arrêter.",
+  }
+}
+
+/** Le gros bouton de l'hote sur cette pause. */
+export const SILENT_RESUME_ACTION = "Reprendre la partie"
 
 /** Ce qu'on dit en revenant dans la salle d'attente apres un arret automatique. */
 export const IDLE_STOP_NOTICE = "Plus personne ne jouait, la partie s'est arrêtée. Vous êtes de retour dans la salle."

@@ -2,6 +2,7 @@
 
 import { useRef } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
+import type { TableIntro } from "@/lib/tableIntro"
 
 export interface RoundCountdownProps {
   round: number
@@ -12,6 +13,8 @@ export interface RoundCountdownProps {
   now: number
   /** Ecran central : plus grand. */
   large?: boolean
+  /** Autour d'une table : ou sort la musique et ou repondre, avant la 1re manche seulement. */
+  intro?: TableIntro | null
 }
 
 const RADIUS = 100
@@ -34,7 +37,7 @@ function caption(round: number, total: number): { strong: string; rest: string }
  * jusqu'a l'heure de depart decidee par le serveur : la musique part pile a
  * la fin, chez tout le monde en meme temps.
  */
-export function RoundCountdown({ round, totalRounds, startAt, now, large = false }: RoundCountdownProps) {
+export function RoundCountdown({ round, totalRounds, startAt, now, large = false, intro = null }: RoundCountdownProps) {
   const reduce = useReducedMotion() === true
   const left = startAt ? startAt - now : 0
   const visible = left > 0 && round > 0
@@ -44,6 +47,9 @@ export function RoundCountdown({ round, totalRounds, startAt, now, large = false
   const progress = visible && spanRef.current ? Math.min(1, left / spanRef.current.span) : 0
   const digit = Math.max(1, Math.ceil(left / 1000))
   const text = caption(round, totalRounds)
+  const explain = round === 1 ? intro : null
+  const ringSize = explain ? (large ? "h-56 w-56" : "h-36 w-36") : large ? "h-72 w-72" : "h-52 w-52"
+  const digitSize = explain ? (large ? "text-8xl" : "text-6xl") : large ? "text-[9rem]" : "text-8xl"
 
   return (
     <AnimatePresence>
@@ -52,7 +58,7 @@ export function RoundCountdown({ round, totalRounds, startAt, now, large = false
           key="decompte"
           role="status"
           aria-live="polite"
-          aria-label={`Manche ${round} sur ${totalRounds}, départ dans ${digit}`}
+          aria-label={`${explain ? `${explain.lead} ${explain.body} ` : ""}Manche ${round} sur ${totalRounds}, départ dans ${digit}`}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0, transition: { duration: 0.2 } }}
@@ -63,7 +69,13 @@ export function RoundCountdown({ round, totalRounds, startAt, now, large = false
           <h2 className={`m-0 font-display font-semibold leading-none text-ink ${large ? "text-7xl" : "text-5xl"}`}>
             Manche {round} <em className="font-normal text-ink-2" style={{ fontSize: "0.55em" }}>sur {totalRounds}</em>
           </h2>
-          <div className={`relative ${large ? "h-72 w-72" : "h-52 w-52"}`}>
+          {explain ? (
+            <div className="flex max-w-2xl flex-col gap-2" data-testid="explication-table">
+              <p className={`m-0 font-display font-semibold leading-tight text-ink ${large ? "text-5xl" : "text-2xl"}`}>{explain.lead}</p>
+              <p className={`m-0 font-semibold text-ink-2 ${large ? "text-3xl leading-snug" : "text-lg leading-snug"}`}>{explain.body}</p>
+            </div>
+          ) : null}
+          <div className={`relative ${ringSize}`}>
             <svg viewBox="0 0 220 220" className="h-full w-full -rotate-90" aria-hidden>
               <circle cx="110" cy="110" r={RADIUS} fill="none" stroke="rgb(var(--c-line) / .15)" strokeWidth="8" />
               <circle
@@ -84,15 +96,17 @@ export function RoundCountdown({ round, totalRounds, startAt, now, large = false
               initial={reduce ? false : { scale: 1.6, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ duration: 0.3, ease: [0.2, 0.8, 0.2, 1] }}
-              className={`absolute inset-0 grid place-items-center font-display font-bold text-ink ${large ? "text-[9rem]" : "text-8xl"}`}
+              className={`absolute inset-0 grid place-items-center font-display font-bold text-ink ${digitSize}`}
             >
               {digit}
             </motion.span>
           </div>
-          <p className="m-0 text-base text-ink-2">
-            <b className="text-ink">{text.strong}</b>
-            {text.rest}
-          </p>
+          {explain ? null : (
+            <p className="m-0 text-base text-ink-2">
+              <b className="text-ink">{text.strong}</b>
+              {text.rest}
+            </p>
+          )}
           <div className="flex flex-wrap justify-center gap-1.5" aria-hidden>
             {Array.from({ length: totalRounds }, (_, i) => (
               <i

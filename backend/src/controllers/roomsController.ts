@@ -18,7 +18,7 @@ import {
   type GameState,
 } from "../services/realtimeGame";
 import { startRoundAndBroadcast, stopGameTimers } from "../services/realtimeOrchestrator";
-import { ROUND_PACING } from "../services/roundPacing";
+import { firstRoundPrerollMs } from "../services/roundPacing";
 import { GameMode, type RoundTrack } from "../types/game";
 import { initStreamerGame } from "../services/streamerOrchestrator";
 import { maxStreamerGames, streamerModeEnabled } from "../services/streamerConfig";
@@ -58,10 +58,6 @@ async function ensureRoomFlags(): Promise<void> {
   // Config de partie reglable par l'hote depuis le lobby (NULL = defaut du mode).
   await pool.query(`ALTER TABLE multiplayer_rooms ADD COLUMN IF NOT EXISTS round_duration_ms INTEGER`);
 }
-
-// Decompte 3-2-1 avant la toute premiere manche (audio + chrono demarrent
-// apres), le meme qu'entre les manches (T38).
-const FIRST_ROUND_PREROLL_MS = ROUND_PACING.countdownMs;
 
 /**
  * Manche non revelee, telle qu'elle sort de l'API REST (/state, /start) : son
@@ -1522,11 +1518,11 @@ export const roomsController = {
       });
 
       // Start round 1 immediately in a server-authoritative way
-      // Pre-roll : la 1re manche demarre 3s plus tard pour laisser passer le
-      // decompte 3-2-1 (avant, la musique jouait PENDANT le decompte). Le chrono
-      // et l'audio partent donc ensemble, a la fin du decompte.
+      // Pre-roll : la 1re manche demarre apres le decompte 3-2-1 (et
+      // l'explication en mode event). Le chrono et l'audio partent ensemble, a
+      // la fin du decompte.
       const firstRound = startRoundAndBroadcast(io, room.room_code, {
-        startAt: Date.now() + FIRST_ROUND_PREROLL_MS,
+        startAt: Date.now() + firstRoundPrerollMs(session.mode),
       });
       // La manche 1 doit etre en jeu, chrono pose : sinon personne ne verrait
       // jamais de reveal (T27). On defait et l'hote relance.
