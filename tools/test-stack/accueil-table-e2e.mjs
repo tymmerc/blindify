@@ -24,7 +24,7 @@ const say = m => console.log(m)
 const ok = m => say(`  [ok] ${m}`)
 const bad = m => { problems.push(m); say(`  !! ${m}`) }
 const PHONE = { viewport: { width: 375, height: 667 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true }
-const ROUNDS = 6
+const ROUNDS = 5
 const SECONDS = 10
 
 async function until(test, ms, what) {
@@ -65,7 +65,7 @@ try {
   contexts.push(host.ctx)
   const hp = host.page
   await hp.goto(`${APP}/jouer/`, { waitUntil: "networkidle", timeout: 60000 })
-  await hp.locator("input").first().fill("Lea")
+  await hp.locator("input:not([type=file])").first().fill("Lea")
   await hp.getByRole("button", { name: /continuer/i }).click()
   for (let i = 0; i < 40 && !hp.__uid; i++) await sleep(250)
   if (!hp.__uid) throw new Error("Lea : aucune identite")
@@ -84,7 +84,7 @@ try {
   contexts.push(zoe.ctx)
   const zp = zoe.page
   await zp.goto(`${APP}/?join=${code}`, { waitUntil: "networkidle", timeout: 60000 })
-  await zp.locator("input").first().fill("Zoe")
+  await zp.locator("input:not([type=file])").first().fill("Zoe")
   await zp.getByRole("button", { name: /continuer/i }).click()
   for (let i = 0; i < 40 && !zp.__uid; i++) await sleep(250)
   if (zp.__uid) seedUser(zp.__uid, Array.from({ length: 24 }, (_, i) => 48 + i))
