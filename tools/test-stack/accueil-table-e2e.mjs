@@ -171,7 +171,8 @@ try {
   for (const [tag, page] of pages) {
     const label = (await page.getByTestId("decompte-manche").getAttribute("aria-label").catch(() => "")) ?? ""
     const left = Number(/départ dans (\d+)/.exec(label)?.[1] ?? NaN)
-    if (left <= 3) ok(`${tag} : revanche avec le 3-2-1 habituel (${label})`)
+    // 4 tolere : l'horloge serveur estimee peut retarder de quelques ms (ceil). L'explication en montrerait 9 ou 10.
+    if (left <= 4) ok(`${tag} : revanche avec le 3-2-1 habituel (${label})`)
     else bad(`${tag} : decompte de revanche inattendu (${label})`)
     if (await page.getByTestId("explication-table").count()) bad(`${tag} : explication affichee a la revanche`)
     else ok(`${tag} : pas d'explication a la revanche`)
