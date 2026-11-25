@@ -1310,8 +1310,23 @@ export const roomsController = {
       title: string; artist: string; album: string | null; album_cover: string | null;
       audio_url: string | null; metadata: Record<string, any>;
     }>;
+    // Autour d'une table, l'explication n'accompagne que la 1re partie de la
+    // salle : une revanche part avec le 3-2-1 habituel. Lu en base, donc juste
+    // apres un redemarrage ; created_at ecarte une ancienne salle au meme code.
+    let tableIntro = false;
     try {
       await client.query("BEGIN");
+
+      if (room.mode === GameMode.EVENT) {
+        const { rows: prior } = await client.query<{ played: boolean }>(
+          `SELECT EXISTS (
+             SELECT 1 FROM game_sessions s JOIN multiplayer_rooms m ON m.room_code = s.room_code
+             WHERE m.id = $1 AND s.started_at >= m.created_at
+           ) AS played`,
+          [room.id]
+        );
+        tableIntro = prior[0]?.played !== true;
+      }
 
       const { rows: sessionRows } = await client.query(
         `INSERT INTO game_sessions (host_user_id, mode, difficulty, source_provider, total_rounds, state, room_code)
@@ -1499,6 +1514,7 @@ export const roomsController = {
         roomCode: room.room_code,
         hostUserId: room.host_user_id,
         hostPlays: room.mode === GameMode.EVENT && room.host_plays === true,
+        tableIntro,
         singleContributor,
         mode: session.mode as GameMode,
         tracks: roundTracks,
@@ -1519,10 +1535,10 @@ export const roomsController = {
 
       // Start round 1 immediately in a server-authoritative way
       // Pre-roll : la 1re manche demarre apres le decompte 3-2-1 (et
-      // l'explication en mode event). Le chrono et l'audio partent ensemble, a
-      // la fin du decompte.
+      // l'explication de la 1re partie autour d'une table). Le chrono et
+      // l'audio partent ensemble, a la fin du decompte.
       const firstRound = startRoundAndBroadcast(io, room.room_code, {
-        startAt: Date.now() + firstRoundPrerollMs(session.mode),
+        startAt: Date.now() + firstRoundPrerollMs(tableIntro),
       });
       // La manche 1 doit etre en jeu, chrono pose : sinon personne ne verrait
       // jamais de reveal (T27). On defait et l'hote relance.

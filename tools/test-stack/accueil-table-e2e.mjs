@@ -6,7 +6,8 @@
 // - avant la manche 1, l'ecran et le telephone expliquent ou sort la musique
 //   et ou repondre, puis la manche part seule, sans clic, chrono entier ;
 // - apres 3 manches muettes, la pause dit quoi faire chez tout le monde, et
-//   seul l'hote a le gros bouton « Reprendre la partie », qui relance.
+//   seul l'hote a le gros bouton « Reprendre la partie », qui relance ;
+// - revanche dans la meme salle : le 3-2-1 habituel, sans explication.
 // Captures claires et sombres de l'ecran et du telephone.
 //
 //   campagne-ref.sh <branche> --script /chemin/accueil-table-e2e.mjs /dossier/des/captures
@@ -138,12 +139,14 @@ try {
     const role = await reason.getAttribute("role").catch(() => null)
     if (text.includes("Personne n'a répondu.") && text.includes("téléphone") && /s'arrête dans \d+ min/.test(text)) ok(`${tag} : message clair (${text})`)
     else bad(`${tag} : message de pause inattendu (${text})`)
-    if (role === "status") ok(`${tag} : message annonce (role=status)`)
-    else bad(`${tag} : message sans role=status`)
+    if (role === "alert") ok(`${tag} : message annonce a l'apparition (role=alert)`)
+    else bad(`${tag} : message sans role=alert`)
   }
   const resume = hp.getByRole("button", { name: "Reprendre la partie", exact: true })
   if (await resume.isVisible().catch(() => false)) ok("ecran : gros bouton « Reprendre la partie »")
   else bad("ecran : pas de bouton « Reprendre la partie »")
+  if (await resume.evaluate(el => el === document.activeElement).catch(() => false)) ok("ecran : le focus est deja sur « Reprendre la partie »")
+  else bad("ecran : le focus n'est pas sur « Reprendre la partie »")
   if (await zp.getByRole("button", { name: "Reprendre la partie", exact: true }).count()) bad("telephone : le bouton de l'hote est la")
   else ok("telephone : pas le bouton de l'hote")
   if (await zp.getByTestId("idle-present").isVisible().catch(() => false)) ok("telephone : « Je suis là » pour repartir")
@@ -151,11 +154,29 @@ try {
   await snap(pages, "pause")
   await noOverflow(zp, "telephone pendant la pause")
 
-  // Au clavier : le bouton se focalise et Entree relance la partie.
-  await resume.focus()
+  // Au clavier : Entree sur le bouton deja focalise relance la partie.
   await hp.keyboard.press("Enter")
   await until(async () => !(await zp.getByTestId("pause-reason").isVisible().catch(() => false)), 10000, "la partie ne repart pas apres « Reprendre la partie »")
   ok("« Reprendre la partie » (clavier) relance la partie pour tout le monde")
+
+  // ---- revanche dans la meme salle : le 3-2-1 habituel, sans explication ----
+  await hp.getByRole("button", { name: "Arrêter la partie", exact: true }).first().click()
+  const dialog = hp.getByRole("alertdialog")
+  await dialog.waitFor({ timeout: 5000 })
+  await dialog.getByRole("button", { name: "Arrêter la partie", exact: true }).click()
+  await until(async () => await hp.getByRole("button", { name: /lancer la partie/i }).isVisible().catch(() => false), 15000, "l'hote n'est pas revenu dans la salle")
+  await sleep(1500)
+  await hp.getByRole("button", { name: /lancer la partie/i }).click()
+  await until(() => zp.getByTestId("decompte-manche").isVisible().catch(() => false), 15000, "revanche : pas de decompte sur le telephone")
+  for (const [tag, page] of pages) {
+    const label = (await page.getByTestId("decompte-manche").getAttribute("aria-label").catch(() => "")) ?? ""
+    const left = Number(/départ dans (\d+)/.exec(label)?.[1] ?? NaN)
+    if (left <= 3) ok(`${tag} : revanche avec le 3-2-1 habituel (${label})`)
+    else bad(`${tag} : decompte de revanche inattendu (${label})`)
+    if (await page.getByTestId("explication-table").count()) bad(`${tag} : explication affichee a la revanche`)
+    else ok(`${tag} : pas d'explication a la revanche`)
+  }
+  await snap(pages, "revanche")
 } catch (err) {
   bad(`arret du scenario : ${err.message}`)
 } finally {

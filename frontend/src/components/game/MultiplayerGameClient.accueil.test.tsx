@@ -44,6 +44,7 @@ function game(mode: "event" | "friends", now: number, extra: Partial<Multiplayer
     },
     // Lancement : 7 s d'explication puis le 3-2-1, la manche part a startAt.
     timing: { startAt: now + 10_000, revealAt: now + 40_000 },
+    tableIntro: true,
     config: { autoAdvance: false, roundDurationMs: 30_000 },
     ...extra,
   }
@@ -77,9 +78,25 @@ describe("explication avant la 1re manche", () => {
     expect(screen.getByTestId("explication-table").textContent).toContain("La musique va sortir de cet écran.")
   })
 
+  it("sur l'appareil de l'hote qui joue aussi : il repond ici", () => {
+    const now = Date.now()
+    render(<MultiplayerGameClient user={hote} state={game("event", now, { hostPlays: true })} serverNow={now} onAnswer={vi.fn()} mode="event" />)
+    const intro = screen.getByTestId("explication-table").textContent
+    expect(intro).toContain("La musique va sortir de cet appareil.")
+    expect(intro).toContain("Tu tapes ici")
+  })
+
+  it("pas a la revanche : le serveur ne la demande pas, decompte habituel sans texte", () => {
+    const now = Date.now()
+    const revanche = game("event", now, { tableIntro: false, timing: { startAt: now + 3_000, revealAt: now + 33_000 } })
+    render(<MultiplayerGameClient user={joueur} state={revanche} serverNow={now} onAnswer={vi.fn()} mode="event" />)
+    expect(screen.getByTestId("decompte-manche")).toBeTruthy()
+    expect(screen.queryByTestId("explication-table")).toBeNull()
+  })
+
   it("pas entre amis, ni avant les manches suivantes", () => {
     const now = Date.now()
-    const { unmount } = render(<MultiplayerGameClient user={joueur} state={game("friends", now)} serverNow={now} onAnswer={vi.fn()} mode="friends" />)
+    const { unmount } = render(<MultiplayerGameClient user={joueur} state={game("friends", now, { tableIntro: false })} serverNow={now} onAnswer={vi.fn()} mode="friends" />)
     expect(screen.getByTestId("decompte-manche")).toBeTruthy()
     expect(screen.queryByTestId("explication-table")).toBeNull()
     unmount()
@@ -99,20 +116,35 @@ describe("explication avant la 1re manche", () => {
 })
 
 describe("pause parce que personne n'a repondu", () => {
-  const paused = (mode: "event" | "friends", now: number) =>
-    game(mode, now, { currentRound: 4, timing: { startAt: now - 30_000, revealAt: now }, paused: true, idle: { reason: "silent", stopAt: now + 120_000 } })
+  const paused = (mode: "event" | "friends", now: number, extra: Partial<MultiplayerGameState> = {}) =>
+    game(mode, now, { currentRound: 4, timing: { startAt: now - 30_000, revealAt: now }, paused: true, idle: { reason: "silent", stopAt: now + 120_000 }, ...extra })
 
-  it("l'hote : le message et le gros bouton pour reprendre", () => {
+  it("l'hote : le message annonce, le gros bouton pour reprendre, focus dessus", () => {
     const now = Date.now()
     const onPauseToggle = vi.fn()
     render(<MultiplayerGameClient user={hote} state={paused("event", now)} serverNow={now} onAnswer={vi.fn()} mode="event" onPresent={vi.fn()} onPauseToggle={onPauseToggle} />)
     const reason = screen.getByTestId("pause-reason")
-    expect(reason.getAttribute("role")).toBe("status")
+    expect(reason.getAttribute("role")).toBe("alert")
     expect(reason.textContent).toContain("Personne n'a répondu.")
     expect(reason.textContent).toContain("Chacun tape le titre ou l'artiste sur son téléphone")
+    expect(reason.textContent).toContain("« Reprendre la partie »")
     expect(reason.textContent).toContain("dans 2 min")
-    fireEvent.click(screen.getByRole("button", { name: "Reprendre la partie" }))
+    const resume = screen.getByRole("button", { name: "Reprendre la partie" })
+    expect(document.activeElement).toBe(resume)
+    fireEvent.click(resume)
     expect(onPauseToggle).toHaveBeenCalledTimes(1)
+  })
+
+  it("l'hote qui joue aussi : un texte pour lui et un seul bouton", () => {
+    const now = Date.now()
+    const players = { ...game("event", now).players, 1: { userId: 1, username: "hote", score: 0, hasAnswered: false, isReady: false } }
+    render(<MultiplayerGameClient user={hote} state={paused("event", now, { hostPlays: true, players })} serverNow={now} onAnswer={vi.fn()} mode="event" onPresent={vi.fn()} onPauseToggle={vi.fn()} />)
+    const reason = screen.getByTestId("pause-reason").textContent
+    expect(reason).toContain("toi ici")
+    expect(reason).toContain("« Reprendre la partie »")
+    expect(reason).not.toContain("Je suis là")
+    expect(screen.getByRole("button", { name: "Reprendre la partie" })).toBeTruthy()
+    expect(screen.queryByTestId("idle-present")).toBeNull()
   })
 
   it("le joueur au telephone : le message, sans le bouton de l'hote", () => {
@@ -121,8 +153,16 @@ describe("pause parce que personne n'a repondu", () => {
     const reason = screen.getByTestId("pause-reason").textContent
     expect(reason).toContain("Personne n'a répondu.")
     expect(reason).toContain("sur ton téléphone")
+    expect(reason).toContain("« Je suis là »")
     expect(screen.queryByRole("button", { name: "Reprendre la partie" })).toBeNull()
     expect(screen.getByTestId("idle-present")).toBeTruthy()
+  })
+
+  it("sans bouton pour repartir (rien a toucher), le texte n'en parle pas", () => {
+    const now = Date.now()
+    render(<MultiplayerGameClient user={joueur} state={paused("friends", now)} serverNow={now} onAnswer={vi.fn()} mode="friends" />)
+    expect(screen.queryByTestId("idle-present")).toBeNull()
+    expect(screen.getByTestId("pause-reason").textContent).not.toContain("Touche")
   })
 
   it("entre amis aussi, avec le texte de son propre appareil", () => {

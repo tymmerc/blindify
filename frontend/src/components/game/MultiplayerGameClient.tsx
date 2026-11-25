@@ -639,15 +639,20 @@ export function MultiplayerGameClient({
   const stopHandler = isHost ? onStop : undefined
   // Veille posee par le serveur (T22) : on dit pourquoi, et un joueur la relance d'un clic.
   const idleText = idlePauseText(state?.idle, serverNow)
-  // Personne n'a repondu : on dit quoi faire, selon l'appareil qu'on tient.
-  const silent = silentPauseText(state?.idle, serverNow, mode !== "event" ? "own" : isHost ? "screen" : "phone")
   const canSayPresent = Boolean(onPresent) && !isEventPresenter && Boolean(player)
+  // Un seul bouton pour repartir : l'hote a « Reprendre », qui leve aussi la veille.
+  const hostResume = isHost && Boolean(onPauseToggle)
+  const showPresent = Boolean(idleText) && canSayPresent && !hostResume
+  // Personne n'a repondu : on dit quoi faire, selon l'appareil qu'on tient.
+  const silentViewer = mode !== "event" ? "own" : isEventPresenter ? "screen" : isHost ? "hostPlays" : "phone"
+  const silent = silentPauseText(state?.idle, serverNow, silentViewer, hostResume ? SILENT_RESUME_ACTION : showPresent ? IDLE_PRESENT_ACTION : null)
   const pauseOverlay = isPaused ? (
     <div className="fixed inset-0 z-[80] flex flex-col items-center justify-center gap-4 px-6 text-center sm:px-8" style={{ background: "rgb(var(--c-ink-block) / .92)" }}>
       {silent ? (
         <>
           <p className="m-0 text-xs font-bold uppercase tracking-[0.3em] text-on-ink/80">Pause</p>
-          <div role="status" aria-live="polite" className="flex max-w-2xl flex-col gap-3" data-testid="pause-reason">
+          {/* role=alert : annonce des l'apparition (le calque vient d'etre monte). */}
+          <div role="alert" className="flex max-w-2xl flex-col gap-3" data-testid="pause-reason">
             <p className={`m-0 font-display font-bold leading-tight text-on-ink ${isEventPresenter ? "text-6xl" : "text-4xl"}`}>{silent.title}</p>
             <p className={`m-0 font-semibold leading-snug text-on-ink ${isEventPresenter ? "text-3xl" : "text-lg"}`}>{silent.help}</p>
             <p className="m-0 text-sm font-semibold text-on-ink/80">{silent.when}</p>
@@ -661,7 +666,7 @@ export function MultiplayerGameClient({
           </p>
         </>
       )}
-      {idleText && canSayPresent && (
+      {showPresent && (
         <button
           type="button"
           onClick={onPresent}
@@ -671,10 +676,13 @@ export function MultiplayerGameClient({
           {IDLE_PRESENT_ACTION}
         </button>
       )}
-      {isHost && onPauseToggle && (
+      {hostResume && (
         <button
           type="button"
           onClick={onPauseToggle}
+          // La partie est figee jusqu'a ce clic : le focus y va tout de suite.
+          // eslint-disable-next-line jsx-a11y/no-autofocus
+          autoFocus={Boolean(silent)}
           className={silent
             ? "w-full max-w-sm rounded-md border-2 border-on-ink bg-paper px-8 py-5 font-display text-2xl font-bold text-ink shadow-[6px_6px_0_rgba(244,236,219,.3)] outline-none focus-visible:ring-4 focus-visible:ring-on-ink/70 motion-safe:transition-transform motion-safe:active:scale-95"
             : "rounded-md border-2 border-on-ink bg-paper px-6 py-3 font-display text-lg font-bold text-ink shadow-[4px_4px_0_rgba(244,236,219,.3)]"}
@@ -724,7 +732,7 @@ export function MultiplayerGameClient({
       startAt={state.phase === "GUESSING" ? state.timing?.startAt : null}
       now={clock}
       large={isEventPresenter}
-      intro={mode === "event" ? tableIntro(isHost) : null}
+      intro={mode === "event" && state.tableIntro ? tableIntro(isEventPresenter ? "presenter" : isHost ? "hostPlays" : "phone") : null}
     />
   ) : null
 

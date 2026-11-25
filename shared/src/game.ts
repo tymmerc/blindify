@@ -118,6 +118,8 @@ export interface GameState {
   roomCode: string
   hostUserId: number | null
   hostPlays?: boolean
+  /** Autour d'une table, 1re partie de la salle : explication avant la manche 1. */
+  tableIntro?: boolean
   singleContributor?: boolean
   mode: GameMode
   phase: GamePhase

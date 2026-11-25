@@ -1,6 +1,7 @@
 /**
  * Autour d'une table, l'explication avant la 1re manche (24/11) : la manche 1
  * part toute seule apres l'explication et le 3-2-1, et son chrono reste entier.
+ * Quand l'explication est demandee : tests/integration/room-relance.spec.ts.
  *
  * Horloge factice et faux serveur socket.io, comme realtimeOrchestrator-relance.
  */
@@ -48,14 +49,14 @@ afterEach(() => {
 });
 
 describe("firstRoundPrerollMs", () => {
-  it("ajoute l'explication au 3-2-1 seulement autour d'une table", () => {
-    expect(firstRoundPrerollMs("event")).toBe(ROUND_PACING.countdownMs + ROUND_PACING.tableIntroMs);
-    expect(firstRoundPrerollMs("friends")).toBe(ROUND_PACING.countdownMs);
+  it("ajoute l'explication au 3-2-1 seulement quand il y en a une", () => {
+    expect(firstRoundPrerollMs(true)).toBe(ROUND_PACING.countdownMs + ROUND_PACING.tableIntroMs);
+    expect(firstRoundPrerollMs(false)).toBe(ROUND_PACING.countdownMs);
   });
 
   it("reste entre 5 et 10 s autour d'une table (choix de Tym)", () => {
     expect(ROUND_PACING.tableIntroMs).toBeGreaterThanOrEqual(5_000);
-    expect(firstRoundPrerollMs("event")).toBeLessThanOrEqual(10_000);
+    expect(firstRoundPrerollMs(true)).toBeLessThanOrEqual(10_000);
   });
 });
 
@@ -68,13 +69,15 @@ describe("1re manche autour d'une table", () => {
       tracks: makeTracks(3),
       participants: [1, 2, 3].map(id => ({ userId: id, username: `P${id}` })),
       mode: "event",
+      tableIntro: true,
       config: { roundDurationMs: ROUND_MS },
     });
     const launchedAt = Date.now();
-    const preroll = firstRoundPrerollMs("event");
+    const preroll = firstRoundPrerollMs(true);
     startRoundAndBroadcast(io, ROOM, { startAt: launchedAt + preroll });
 
     const state = getGameState(ROOM)!;
+    expect(state.tableIntro).toBe(true);
     expect(state.phase).toBe("GUESSING");
     expect(state.currentRound).toBe(1);
     expect(state.timing.startAt).toBe(launchedAt + preroll);

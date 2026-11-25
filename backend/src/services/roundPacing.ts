@@ -18,19 +18,20 @@ export const ROUND_PACING = {
   /** Le 3-2-1 : la manche suivante part a la fin (musique et chrono). */
   countdownMs: 3_000,
   /**
-   * Autour d'une table, avant la 1re manche : l'explication (la musique sort
-   * de l'ecran, on repond sur son telephone), puis le 3-2-1. Le 24/11, trois
-   * nouveaux venus n'avaient rien tape en quatre manches.
+   * Autour d'une table, avant la 1re manche de la 1re partie de la salle :
+   * l'explication (la musique sort de l'ecran, on repond sur son telephone),
+   * puis le 3-2-1. Le 24/11, trois nouveaux venus n'avaient rien tape en
+   * quatre manches. Les revanches dans la meme salle n'en ont pas besoin.
    */
   tableIntroMs: 7_000,
 } as const;
 
 /**
  * Attente avant la 1re manche (musique et chrono partent a la fin) : le 3-2-1,
- * precede de l'explication en mode event. Le chrono de la manche reste entier.
+ * precede de l'explication quand il y en a une. Le chrono de la manche reste entier.
  */
-export function firstRoundPrerollMs(mode: string): number {
-  return ROUND_PACING.countdownMs + (mode === "event" ? ROUND_PACING.tableIntroMs : 0);
+export function firstRoundPrerollMs(withTableIntro: boolean): number {
+  return ROUND_PACING.countdownMs + (withTableIntro ? ROUND_PACING.tableIntroMs : 0);
 }
 
 /** Les deux ecrans de la phase REVEAL. Le 3-2-1 est le debut de la manche suivante. */
