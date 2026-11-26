@@ -18,7 +18,7 @@ import {
   type GameState,
 } from "../services/realtimeGame";
 import { startRoundAndBroadcast, stopGameTimers } from "../services/realtimeOrchestrator";
-import { ROUND_PACING } from "../services/roundPacing";
+import { firstRoundPrerollMs } from "../services/roundPacing";
 import { GameMode, type RoundTrack } from "../types/game";
 import { initStreamerGame } from "../services/streamerOrchestrator";
 import { maxStreamerGames, streamerModeEnabled } from "../services/streamerConfig";
@@ -58,10 +58,6 @@ async function ensureRoomFlags(): Promise<void> {
   // Config de partie reglable par l'hote depuis le lobby (NULL = defaut du mode).
   await pool.query(`ALTER TABLE multiplayer_rooms ADD COLUMN IF NOT EXISTS round_duration_ms INTEGER`);
 }
-
-// Decompte 3-2-1 avant la toute premiere manche (audio + chrono demarrent
-// apres), le meme qu'entre les manches (T38).
-const FIRST_ROUND_PREROLL_MS = ROUND_PACING.countdownMs;
 
 /**
  * Manche non revelee, telle qu'elle sort de l'API REST (/state, /start) : son
@@ -1314,8 +1310,23 @@ export const roomsController = {
       title: string; artist: string; album: string | null; album_cover: string | null;
       audio_url: string | null; metadata: Record<string, any>;
     }>;
+    // Autour d'une table, l'explication n'accompagne que la 1re partie de la
+    // salle : une revanche part avec le 3-2-1 habituel. Lu en base, donc juste
+    // apres un redemarrage ; created_at ecarte une ancienne salle au meme code.
+    let tableIntro = false;
     try {
       await client.query("BEGIN");
+
+      if (room.mode === GameMode.EVENT) {
+        const { rows: prior } = await client.query<{ played: boolean }>(
+          `SELECT EXISTS (
+             SELECT 1 FROM game_sessions s JOIN multiplayer_rooms m ON m.room_code = s.room_code
+             WHERE m.id = $1 AND s.started_at >= m.created_at
+           ) AS played`,
+          [room.id]
+        );
+        tableIntro = prior[0]?.played !== true;
+      }
 
       const { rows: sessionRows } = await client.query(
         `INSERT INTO game_sessions (host_user_id, mode, difficulty, source_provider, total_rounds, state, room_code)
@@ -1503,6 +1514,7 @@ export const roomsController = {
         roomCode: room.room_code,
         hostUserId: room.host_user_id,
         hostPlays: room.mode === GameMode.EVENT && room.host_plays === true,
+        tableIntro,
         singleContributor,
         mode: session.mode as GameMode,
         tracks: roundTracks,
@@ -1522,11 +1534,11 @@ export const roomsController = {
       });
 
       // Start round 1 immediately in a server-authoritative way
-      // Pre-roll : la 1re manche demarre 3s plus tard pour laisser passer le
-      // decompte 3-2-1 (avant, la musique jouait PENDANT le decompte). Le chrono
-      // et l'audio partent donc ensemble, a la fin du decompte.
+      // Pre-roll : la 1re manche demarre apres le decompte 3-2-1 (et
+      // l'explication de la 1re partie autour d'une table). Le chrono et
+      // l'audio partent ensemble, a la fin du decompte.
       const firstRound = startRoundAndBroadcast(io, room.room_code, {
-        startAt: Date.now() + FIRST_ROUND_PREROLL_MS,
+        startAt: Date.now() + firstRoundPrerollMs(tableIntro),
       });
       // La manche 1 doit etre en jeu, chrono pose : sinon personne ne verrait
       // jamais de reveal (T27). On defait et l'hote relance.

@@ -52,6 +52,7 @@ import { gamesController } from "../../src/controllers/gamesController";
 import { heardTonight } from "../../src/services/roundOrder";
 import { EMPTY_PAUSE_MS, IDLE_STOP_MS, clearGame, forgetRoomAbsence, getGameState, idleCheck, markPresent, recordAnswer } from "../../src/services/realtimeGame";
 import * as orchestrator from "../../src/services/realtimeOrchestrator";
+import { firstRoundPrerollMs } from "../../src/services/roundPacing";
 
 resolveTestDatabaseUrl(process.env.TEST_DATABASE_URL);
 jest.setTimeout(30000);
@@ -231,6 +232,58 @@ describe("relancer dans la meme salle (T27)", () => {
     expect(retry.status).toBe(200);
     expect(getGameState(code)?.phase).toBe("GUESSING");
     expect((await room(code)).status).toBe("in_progress");
+  });
+});
+
+describe("explication autour d'une table : 1re partie de la salle seulement (24/11)", () => {
+  async function setMode(code: string, mode: string): Promise<void> {
+    // L'hote joue aussi : deux joueurs suffisent pour lancer.
+    await pool.query(`UPDATE multiplayer_rooms SET mode = $2, host_plays = TRUE WHERE room_code = $1`, [code, mode]);
+  }
+
+  /** Lance, et rend l'attente avant la manche 1 telle que le controleur l'a posee. */
+  async function launch(code: string): Promise<{ preroll: number; tableIntro: boolean | undefined }> {
+    const before = Date.now();
+    expect((await start(code, hote)).status).toBe(200);
+    const after = Date.now();
+    const state = getGameState(code)!;
+    const startAt = state.timing.startAt!;
+    const preroll = [firstRoundPrerollMs(true), firstRoundPrerollMs(false)].find(p => startAt >= before + p && startAt <= after + p);
+    expect(preroll).toBeDefined();
+    return { preroll: preroll!, tableIntro: state.tableIntro };
+  }
+
+  it("1re partie : explication (10 s), revanche dans la meme salle : 3-2-1 seul", async () => {
+    const code = await newRoom([hote, invite]);
+    await setMode(code, "event");
+    expect(await launch(code)).toEqual({ preroll: firstRoundPrerollMs(true), tableIntro: true });
+    playToTheEnd(io, code);
+    expect(await launch(code)).toEqual({ preroll: firstRoundPrerollMs(false), tableIntro: false });
+  });
+
+  it("revanche apres un redemarrage (partie oubliee en memoire) : toujours sans explication", async () => {
+    const code = await newRoom([hote, invite]);
+    await setMode(code, "event");
+    expect((await launch(code)).tableIntro).toBe(true);
+    orchestrator.clearRevealTimer(code);
+    clearGame(code);
+    expect(await launch(code)).toEqual({ preroll: firstRoundPrerollMs(false), tableIntro: false });
+  });
+
+  it("une ancienne salle au meme code ne compte pas : explication", async () => {
+    const code = await newRoom([hote, invite]);
+    await setMode(code, "event");
+    await pool.query(
+      `INSERT INTO game_sessions (host_user_id, mode, total_rounds, state, room_code, started_at)
+       VALUES ($1, 'event', 3, 'finished', $2, NOW() - INTERVAL '2 days')`,
+      [hote, code],
+    );
+    expect(await launch(code)).toEqual({ preroll: firstRoundPrerollMs(true), tableIntro: true });
+  });
+
+  it("entre amis : jamais d'explication", async () => {
+    const code = await newRoom([hote, invite]);
+    expect(await launch(code)).toEqual({ preroll: firstRoundPrerollMs(false), tableIntro: false });
   });
 });
 

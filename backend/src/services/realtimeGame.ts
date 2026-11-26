@@ -89,6 +89,11 @@ export type GameState = {
   hostUserId: number | null;
   hostPlays?: boolean;
   /**
+   * Autour d'une table, 1re partie de la salle : la manche 1 s'ouvre sur
+   * l'explication (ROUND_PACING.tableIntroMs). Les ecrans l'affichent.
+   */
+  tableIntro?: boolean;
+  /**
    * L'hote est-il toujours connecte ? En mode event il diffuse la musique pour
    * toute la table, et quand il presente seulement il n'apparait PAS dans
    * `players` : sa presence ne peut donc pas se deduire de cette liste.
@@ -318,6 +323,7 @@ export function bootstrapGameState(params: {
   roomCode: string;
   hostUserId: number;
   hostPlays?: boolean;
+  tableIntro?: boolean;
   singleContributor?: boolean;
   tracks: RoundTrack[];
   /** Manches demandees (question_count) ; par defaut, le nombre de pistes. */
@@ -354,6 +360,7 @@ export function bootstrapGameState(params: {
     roomCode: params.roomCode,
     hostUserId: params.hostUserId,
     hostPlays: params.hostPlays ?? false,
+    tableIntro: params.tableIntro ?? false,
     hostConnected: true,
     singleContributor: params.singleContributor ?? false,
     mode: params.mode ?? "friends",
