@@ -28,7 +28,7 @@ export default function ConfidentialitePage() {
           <h1 className="font-display text-4xl font-semibold md:text-5xl">
             Politique de <em className="font-medium italic text-terra-txt">confidentialité</em>
           </h1>
-          <p className="text-sm text-sourd">Dernière mise à jour : 8 novembre 2026</p>
+          <p className="text-sm text-sourd">Dernière mise à jour : 18 novembre 2026</p>
         </div>
 
         <div className="space-y-6">
@@ -171,8 +171,17 @@ export default function ConfidentialitePage() {
           <Section title="Hébergement" accent="#c65133">
             <p>
               Le site et ses données sont hébergés en Allemagne, chez Hetzner Online GmbH, dans son
-              centre de données de Falkenstein. Les données restent donc dans l'Union européenne, où
-              s'applique le RGPD.
+              centre de données de Falkenstein.
+            </p>
+            <p className="mt-3">
+              Chaque nuit, une copie de la base de données part aussi chez Scaleway SAS, à Paris, pour
+              pouvoir tout remettre en route après une grosse panne. Elle est chiffrée avant de quitter
+              notre serveur, Scaleway ne peut donc pas la lire. Chaque copie est effacée automatiquement
+              au bout d'un mois au plus : des données supprimées entre-temps disparaissent aussi de ces
+              copies dans ce délai.
+            </p>
+            <p className="mt-3">
+              Dans les deux cas, les données restent dans l'Union européenne, où s'applique le RGPD.
             </p>
           </Section>
 
